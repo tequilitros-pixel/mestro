@@ -6,6 +6,18 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
+type MillingUpdateData = {
+  brix?: number | null;
+  ph?: number | null;
+  temperature?: number | null;
+  waterLiters?: number;
+  bagasseKg?: number | null;
+  washBagasse?: boolean;
+  washRecoveredLiters?: number | null;
+  status?: MillingStatus;
+  finishedAt?: Date;
+};
+
 export default async function MillingDetailPage({ params }: Props) {
   const { id } = await params;
 
@@ -29,8 +41,13 @@ export default async function MillingDetailPage({ params }: Props) {
     const valueRaw = formData.get("value");
     const notes = formData.get("notes") as string;
 
-    const value =
-      valueRaw && valueRaw !== "" ? Number(valueRaw) : null;
+    const currentMilling = await prisma.milling.findUnique({
+      where: { id },
+    });
+
+    if (!currentMilling) return;
+
+    const value = valueRaw && valueRaw !== "" ? Number(valueRaw) : null;
 
     await prisma.millingEvent.create({
       data: {
@@ -41,21 +58,34 @@ export default async function MillingDetailPage({ params }: Props) {
       },
     });
 
-   const updateData: {
-  brix?: number | null;
-  ph?: number | null;
-  temperature?: number | null;
-  waterLiters?: number;
-  bagasseKg?: number | null;
-  status?: MillingStatus;
-  finishedAt?: Date;
-} = {};
+    const updateData: MillingUpdateData = {};
 
-    if (type === MillingEventType.REGISTRO_BRIX) updateData.brix = value;
-    if (type === MillingEventType.REGISTRO_PH) updateData.ph = value;
-    if (type === MillingEventType.REGISTRO_TEMPERATURA) updateData.temperature = value;
-    if (type === MillingEventType.AGREGAR_AGUA) updateData.waterLiters = ((milling?.waterLiters ?? 0) + (value ?? 0));
-    if (type === MillingEventType.REGISTRO_BAGAZO) updateData.bagasseKg = value;
+    if (type === MillingEventType.REGISTRO_BRIX) {
+      updateData.brix = value;
+    }
+
+    if (type === MillingEventType.REGISTRO_PH) {
+      updateData.ph = value;
+    }
+
+    if (type === MillingEventType.REGISTRO_TEMPERATURA) {
+      updateData.temperature = value;
+    }
+
+    if (type === MillingEventType.AGREGAR_AGUA) {
+      updateData.waterLiters =
+        (currentMilling.waterLiters ?? 0) + (value ?? 0);
+    }
+
+    if (type === MillingEventType.REGISTRO_BAGAZO) {
+      updateData.bagasseKg = value;
+    }
+
+    if (type === MillingEventType.LAVADO_BAGAZO) {
+      updateData.washBagasse = true;
+      updateData.washRecoveredLiters = value;
+    }
+
     if (type === MillingEventType.FIN_MOLIENDA) {
       updateData.status = MillingStatus.TERMINADA;
       updateData.finishedAt = new Date();
@@ -71,6 +101,11 @@ export default async function MillingDetailPage({ params }: Props) {
     redirect(`/milling/${id}`);
   }
 
+  const efficiency =
+    milling.cookedKg > 0 && milling.waterLiters
+      ? ((milling.waterLiters / milling.cookedKg) * 100).toFixed(2)
+      : "-";
+
   const actions: {
     type: MillingEventType;
     label: string;
@@ -79,7 +114,7 @@ export default async function MillingDetailPage({ params }: Props) {
   }[] = [
     {
       type: MillingEventType.REGISTRO_BRIX,
-      label: "🌡 Registrar °Brix",
+      label: "📈 Registrar °Brix",
       placeholder: "Valor °Brix",
       needsValue: true,
     },
@@ -91,7 +126,7 @@ export default async function MillingDetailPage({ params }: Props) {
     },
     {
       type: MillingEventType.REGISTRO_TEMPERATURA,
-      label: "🔥 Registrar temperatura",
+      label: "🌡 Registrar temperatura",
       placeholder: "Temperatura °C",
       needsValue: true,
     },
@@ -103,14 +138,14 @@ export default async function MillingDetailPage({ params }: Props) {
     },
     {
       type: MillingEventType.REGISTRO_BAGAZO,
-      label: "🟤 Registrar bagazo",
+      label: "🌿 Registrar bagazo",
       placeholder: "Kg de bagazo",
       needsValue: true,
     },
     {
       type: MillingEventType.LAVADO_BAGAZO,
       label: "🚿 Lavado de bagazo",
-      placeholder: "Litros recuperados u observación",
+      placeholder: "Litros recuperados",
       needsValue: true,
     },
     {
@@ -166,7 +201,7 @@ export default async function MillingDetailPage({ params }: Props) {
           </div>
         </section>
 
-        <section className="mt-8 grid gap-4 md:grid-cols-5">
+        <section className="mt-8 grid gap-4 md:grid-cols-6">
           <div className="rounded-2xl bg-slate-900 p-5">
             <p className="text-sm text-slate-400">°Brix</p>
             <p className="text-2xl font-bold">{milling.brix ?? "-"}</p>
@@ -178,24 +213,23 @@ export default async function MillingDetailPage({ params }: Props) {
           </div>
 
           <div className="rounded-2xl bg-slate-900 p-5">
-            <p className="text-sm text-slate-400">Temperatura</p>
-            <p className="text-2xl font-bold">
-              {milling.temperature ?? "-"}°C
-            </p>
+            <p className="text-sm text-slate-400">Temp.</p>
+            <p className="text-2xl font-bold">{milling.temperature ?? "-"}°C</p>
           </div>
 
           <div className="rounded-2xl bg-slate-900 p-5">
             <p className="text-sm text-slate-400">Agua</p>
-            <p className="text-2xl font-bold">
-              {milling.waterLiters ?? 0} L
-            </p>
+            <p className="text-2xl font-bold">{milling.waterLiters ?? 0} L</p>
           </div>
 
           <div className="rounded-2xl bg-slate-900 p-5">
             <p className="text-sm text-slate-400">Bagazo</p>
-            <p className="text-2xl font-bold">
-              {milling.bagasseKg ?? "-"} kg
-            </p>
+            <p className="text-2xl font-bold">{milling.bagasseKg ?? "-"} kg</p>
+          </div>
+
+          <div className="rounded-2xl bg-slate-900 p-5">
+            <p className="text-sm text-slate-400">Agua/kg</p>
+            <p className="text-2xl font-bold">{efficiency}</p>
           </div>
         </section>
 
