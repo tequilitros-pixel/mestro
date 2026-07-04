@@ -1,9 +1,10 @@
-import "dotenv/config";
 
 import {
   PrismaClient,
   EquipmentStatus,
   EquipmentType,
+  UserRole,
+  LotStage,
 } from "@prisma/client";
 
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
@@ -17,9 +18,23 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-  console.log("🧹 Limpiando equipos...");
+  console.log("🧹 Limpiando base de datos...");
 
+  await prisma.lot.deleteMany();
   await prisma.equipment.deleteMany();
+  await prisma.user.deleteMany();
+
+  console.log("👤 Creando usuario...");
+
+  const user = await prisma.user.create({
+    data: {
+      name: "Jose Adan Sanchez",
+      email: "tequilitros@gmail.com",
+      password: "admin",
+      role: UserRole.DIRECTOR,
+      active: true,
+    },
+  });
 
   console.log("🏭 Creando equipos...");
 
@@ -29,7 +44,7 @@ async function main() {
         name: "Horno 1",
         type: EquipmentType.HORNO,
         status: EquipmentStatus.OPERANDO,
-        capacity: 3500,
+        capacity: 7000,
         currentLoad: 3500,
         unit: "kg",
         location: "Cocción",
@@ -138,14 +153,25 @@ async function main() {
     ],
   });
 
-  console.log("✅ Equipos cargados correctamente.");
+  console.log("📦 Creando lote inicial...");
+
+  await prisma.lot.create({
+    data: {
+      code: "AG-2026-001",
+      stage: LotStage.RECEPCION,
+      agaveKg: 3500,
+      art: 28,
+      startedAt: new Date(),
+      observations: "Lote inicial del sistema MAESTRO.",
+      ownerId: user.id,
+    },
+  });
+
+  console.log("✅ Base de datos inicializada.");
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
+  .catch(console.error)
   .finally(async () => {
     await prisma.$disconnect();
   });

@@ -75,7 +75,7 @@ export default async function Home() {
               {equipment.map((item) => (
                 <EquipmentCard
                   key={item.id}
-                  name={item.name}
+                  id={item.id}                  name={item.name}
                   status={item.status}
                   current={item.currentLoad}
                   max={item.capacity}
