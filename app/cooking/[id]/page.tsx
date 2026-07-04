@@ -26,13 +26,15 @@ export default async function CookingDetailPage({ params }: Props) {
 
   const hasFinished = cooking.status === "TERMINADA";
 
-  async function addEvent(formData: FormData) {
+  const lastTemperature = [...cooking.events]
+    .reverse()
+    .find((event) => event.type === "TEMPERATURA");
+
+  async function addSimpleEvent(formData: FormData) {
     "use server";
 
     const type = formData.get("type") as CookingEventType;
     const notes = formData.get("notes") as string;
-
-    if (!type) return;
 
     await prisma.cookingEvent.create({
       data: {
@@ -55,9 +57,31 @@ export default async function CookingDetailPage({ params }: Props) {
     redirect(`/cooking/${id}`);
   }
 
+  async function addTemperatureEvent(formData: FormData) {
+    "use server";
+
+    const temperatureTop = Number(formData.get("temperatureTop"));
+    const temperatureMiddle = Number(formData.get("temperatureMiddle"));
+    const temperatureBottom = Number(formData.get("temperatureBottom"));
+    const notes = formData.get("notes") as string;
+
+    await prisma.cookingEvent.create({
+      data: {
+        cookingId: id,
+        type: CookingEventType.TEMPERATURA,
+        temperatureTop,
+        temperatureMiddle,
+        temperatureBottom,
+        notes: notes || null,
+      },
+    });
+
+    redirect(`/cooking/${id}`);
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 p-10 text-white">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-6xl">
         <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
           MAESTRO
         </p>
@@ -66,54 +90,160 @@ export default async function CookingDetailPage({ params }: Props) {
           Cocción {cooking.lot.code}
         </h1>
 
+        <section className="mt-8 grid gap-4 md:grid-cols-4">
+          <div className="rounded-2xl bg-slate-900 p-6">
+            <p className="text-sm text-slate-400">Horno</p>
+            <p className="mt-2 text-2xl font-bold">{cooking.equipment.name}</p>
+          </div>
+
+          <div className="rounded-2xl bg-slate-900 p-6">
+            <p className="text-sm text-slate-400">Kg cargados</p>
+            <p className="mt-2 text-2xl font-bold">
+              {cooking.agaveKg.toLocaleString()} kg
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-slate-900 p-6">
+            <p className="text-sm text-slate-400">Estado</p>
+            <p className="mt-2 text-2xl font-bold text-green-400">
+              {cooking.status}
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-slate-900 p-6">
+            <p className="text-sm text-slate-400">Vapor</p>
+            <p className="mt-2 text-2xl font-bold">
+              {hasStartedVapor ? "Iniciado" : "Pendiente"}
+            </p>
+          </div>
+        </section>
+
         <section className="mt-8 rounded-2xl bg-slate-900 p-8">
-          <p>Horno: {cooking.equipment.name}</p>
-          <p>Kg cargados: {cooking.agaveKg.toLocaleString()} kg</p>
-          <p>Estado: {cooking.status}</p>
-          <p>Notas: {cooking.notes || "Sin observaciones"}</p>
+          <h2 className="mb-4 text-2xl font-bold">Última temperatura</h2>
+
+          {lastTemperature ? (
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-xl bg-slate-800 p-5">
+                <p className="text-sm text-slate-400">Superior</p>
+                <p className="text-3xl font-bold">
+                  {lastTemperature.temperatureTop ?? "-"}°C
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-slate-800 p-5">
+                <p className="text-sm text-slate-400">Media</p>
+                <p className="text-3xl font-bold">
+                  {lastTemperature.temperatureMiddle ?? "-"}°C
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-slate-800 p-5">
+                <p className="text-sm text-slate-400">Inferior</p>
+                <p className="text-3xl font-bold">
+                  {lastTemperature.temperatureBottom ?? "-"}°C
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-slate-400">
+              Todavía no hay temperaturas registradas.
+            </p>
+          )}
         </section>
 
         {!hasFinished && (
           <section className="mt-8 rounded-2xl bg-slate-900 p-8">
-            <h2 className="mb-4 text-2xl font-bold">Agregar evento</h2>
+            <h2 className="mb-6 text-2xl font-bold">Acciones de cocción</h2>
 
-            <form action={addEvent} className="grid gap-4 md:grid-cols-2">
-              <select
-                name="type"
-                required
-                className="rounded-xl bg-slate-800 p-3 text-white"
-              >
-                {!hasStartedVapor && (
-                  <option value="INICIO_VAPOR">Iniciar vapor</option>
-                )}
+            {!hasStartedVapor ? (
+              <form action={addSimpleEvent}>
+                <input
+                  type="hidden"
+                  name="type"
+                  value="INICIO_VAPOR"
+                />
 
-                {hasStartedVapor && (
-                  <>
-                    <option value="TEMPERATURA">Registrar temperatura</option>
-                    <option value="BAJAR_VAPOR">Disminuir vapor</option>
-                    <option value="SUSPENDER_VAPOR">Suspender vapor</option>
-                    <option value="MIELES_AMARGAS">
-                      Extraer mieles amargas
-                    </option>
-                    <option value="MIELES_DULCES">
-                      Extraer mieles dulces
-                    </option>
-                    <option value="OBSERVACION">Observación</option>
-                    <option value="FIN_COCCION">Finalizar cocción</option>
-                  </>
-                )}
-              </select>
+                <button className="w-full rounded-xl bg-amber-400 px-6 py-4 text-lg font-bold text-black">
+                  🔥 Iniciar vapor
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-8">
+                <form
+                  action={addTemperatureEvent}
+                  className="rounded-2xl bg-slate-800 p-6"
+                >
+                  <h3 className="mb-4 text-xl font-bold">
+                    🌡 Registrar temperaturas
+                  </h3>
 
-              <input
-                name="notes"
-                placeholder="Observaciones"
-                className="rounded-xl bg-slate-800 p-3 text-white"
-              />
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <input
+                      name="temperatureTop"
+                      type="number"
+                      step="0.1"
+                      required
+                      placeholder="Superior °C"
+                      className="rounded-xl bg-slate-900 p-3"
+                    />
 
-              <button className="rounded-xl bg-amber-400 px-6 py-3 font-bold text-black md:col-span-2">
-                Guardar evento
-              </button>
-            </form>
+                    <input
+                      name="temperatureMiddle"
+                      type="number"
+                      step="0.1"
+                      required
+                      placeholder="Media °C"
+                      className="rounded-xl bg-slate-900 p-3"
+                    />
+
+                    <input
+                      name="temperatureBottom"
+                      type="number"
+                      step="0.1"
+                      required
+                      placeholder="Inferior °C"
+                      className="rounded-xl bg-slate-900 p-3"
+                    />
+                  </div>
+
+                  <input
+                    name="notes"
+                    placeholder="Observaciones"
+                    className="mt-4 w-full rounded-xl bg-slate-900 p-3"
+                  />
+
+                  <button className="mt-4 rounded-xl bg-amber-400 px-6 py-3 font-bold text-black">
+                    Guardar temperaturas
+                  </button>
+                </form>
+
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {[
+                    ["AUMENTAR_VAPOR", "⬆️ Aumentar vapor"],
+                    ["BAJAR_VAPOR", "⬇️ Disminuir vapor"],
+                    ["SUSPENDER_VAPOR", "⏸ Suspender vapor"],
+                    ["MIELES_AMARGAS", "🟤 Extraer mieles amargas"],
+                    ["MIELES_DULCES", "🟡 Extraer mieles dulces"],
+                    ["OBSERVACION", "📝 Observación"],
+                    ["FIN_COCCION", "🏁 Finalizar cocción"],
+                  ].map(([type, label]) => (
+                    <form key={type} action={addSimpleEvent}>
+                      <input type="hidden" name="type" value={type} />
+
+                      <input
+                        name="notes"
+                        placeholder="Observación opcional"
+                        className="mb-2 w-full rounded-xl bg-slate-800 p-3"
+                      />
+
+                      <button className="w-full rounded-xl bg-slate-800 px-5 py-4 font-bold hover:bg-slate-700">
+                        {label}
+                      </button>
+                    </form>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
@@ -126,10 +256,20 @@ export default async function CookingDetailPage({ params }: Props) {
             cooking.events.map((event) => (
               <div key={event.id} className="border-b border-slate-800 py-4">
                 <p className="font-semibold text-amber-400">{event.type}</p>
+
                 <p className="text-sm text-slate-400">
                   {event.createdAt.toLocaleString()}
                 </p>
-                {event.notes && <p className="mt-1">{event.notes}</p>}
+
+                {event.type === "TEMPERATURA" && (
+                  <div className="mt-2 text-sm text-slate-300">
+                    <p>Superior: {event.temperatureTop}°C</p>
+                    <p>Media: {event.temperatureMiddle}°C</p>
+                    <p>Inferior: {event.temperatureBottom}°C</p>
+                  </div>
+                )}
+
+                {event.notes && <p className="mt-2">{event.notes}</p>}
               </div>
             ))
           )}
