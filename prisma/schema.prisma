@@ -79,6 +79,7 @@ model Equipment {
   updatedAt DateTime @updatedAt
 
   cookings Cooking[]
+  millings Milling[]
 }
 
 model Lot {
@@ -99,6 +100,7 @@ model Lot {
   owner   User   @relation(fields: [ownerId], references: [id])
 
   cookings Cooking[]
+  millings Milling[]
 }
 
 enum CookingStatus {
@@ -114,6 +116,7 @@ enum CookingEventType {
   MIELES_AMARGAS
   MIELES_DULCES
   BAJAR_VAPOR
+  AUMENTAR_VAPOR
   SUSPENDER_VAPOR
   FIN_COCCION
   OBSERVACION
@@ -153,4 +156,66 @@ model CookingEvent {
   createdAt DateTime @default(now())
 
   cooking Cooking @relation(fields: [cookingId], references: [id])
+}
+
+enum MillingStatus {
+  ACTIVA
+  PAUSADA
+  TERMINADA
+}
+
+enum MillingEventType {
+  INICIO_MOLIENDA
+  REGISTRO_BRIX
+  REGISTRO_PH
+  REGISTRO_TEMPERATURA
+  AGREGAR_AGUA
+  CAMBIO_PRENSA
+  LAVADO_BAGAZO
+  REGISTRO_BAGAZO
+  FIN_MOLIENDA
+  OBSERVACION
+}
+
+model Milling {
+  id          String @id @default(cuid())
+  lotId       String
+  equipmentId String
+
+  status   MillingStatus @default(ACTIVA)
+  operator String?
+
+  cookedKg            Float
+  waterLiters         Float?
+  mashLiters          Float?
+  bagasseKg           Float?
+  brix                Float?
+  ph                  Float?
+  temperature         Float?
+  pressPasses         Int?
+  washBagasse         Boolean @default(false)
+  washRecoveredLiters Float?
+  observations        String?
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lot       Lot            @relation(fields: [lotId], references: [id])
+  equipment Equipment      @relation(fields: [equipmentId], references: [id])
+  events    MillingEvent[]
+}
+
+model MillingEvent {
+  id        String @id @default(cuid())
+  millingId String
+
+  type      MillingEventType
+  value     Float?
+  notes     String?
+  createdAt DateTime         @default(now())
+
+  milling Milling @relation(fields: [millingId], references: [id])
 }
