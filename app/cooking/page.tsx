@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import CookingCharts from "@/components/CookingCharts";
 
 export default async function CookingPage() {
   const cookings = await prisma.cooking.findMany({
@@ -13,6 +14,7 @@ export default async function CookingPage() {
   return (
     <main className="min-h-screen bg-slate-950 p-10 text-white">
       <div className="mx-auto max-w-6xl">
+       
         <div className="mb-8 flex items-center justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.4em] text-amber-400">

@@ -1,6 +1,5 @@
 import { prisma } from "../lib/prisma";
 import { EquipmentCard } from "../components/EquipmentCard";
-import { Sidebar } from "../components/Sidebar";
 import { TopBar } from "../components/TopBar";
 
 export default async function Home() {
@@ -24,7 +23,7 @@ export default async function Home() {
 
   return (
     <main className="flex min-h-screen bg-slate-950 text-white">
-      <Sidebar />
+    
 
       <div className="flex-1">
         <TopBar />

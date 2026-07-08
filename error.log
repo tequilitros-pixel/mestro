@@ -1,0 +1,42 @@
+
+> maestro@0.1.0 dev
+> next dev --webpack
+
+▲ Next.js 16.2.10 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.2.170:3000
+- Environments: .env
+✓ Ready in 300ms
+
+Error: Cannot find module '/Users/joseadansanchez/Documents/maestro/.next/dev/server/middleware-manifest.json'
+Require stack:
+- /Users/joseadansanchez/Documents/maestro/node_modules/next/dist/server/next-server.js
+- /Users/joseadansanchez/Documents/maestro/node_modules/next/dist/server/dev/next-dev-server.js
+- /Users/joseadansanchez/Documents/maestro/node_modules/next/dist/server/next.js
+- /Users/joseadansanchez/Documents/maestro/node_modules/next/dist/server/lib/start-server.js
+    at ignore-listed frames {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    '/Users/joseadansanchez/Documents/maestro/node_modules/next/dist/server/next-server.js',
+    '/Users/joseadansanchez/Documents/maestro/node_modules/next/dist/server/dev/next-dev-server.js',
+    '/Users/joseadansanchez/Documents/maestro/node_modules/next/dist/server/next.js',
+    '/Users/joseadansanchez/Documents/maestro/node_modules/next/dist/server/lib/start-server.js'
+  ]
+}
+⨯ Error: ENOENT: no such file or directory, open '/Users/joseadansanchez/Documents/maestro/.next/dev/routes-manifest.json'
+    at ignore-listed frames {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/Users/joseadansanchez/Documents/maestro/.next/dev/routes-manifest.json'
+}
+Error: ENOENT: no such file or directory, open '/Users/joseadansanchez/Documents/maestro/.next/dev/routes-manifest.json'
+    at ignore-listed frames {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/Users/joseadansanchez/Documents/maestro/.next/dev/routes-manifest.json'
+}
+ GET /plant 500 in 4.6s (next.js: 4.5s, application-code: 29ms)
+ GET /plant 500 in 4.6s (next.js: 4.5s, application-code: 29ms)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, open '/Users/joseadansanchez/Documents/maestro/.next/dev/cache/webpack/client-development-fallback/index.pack.gz_'

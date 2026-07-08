@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { CookingEventType, CookingStatus } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
+import MainNav from "@/components/MainNav";
+import CookingCharts from "@/components/CookingCharts";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -33,15 +35,30 @@ export default async function CookingDetailPage({ params }: Props) {
   async function addSimpleEvent(formData: FormData) {
     "use server";
 
-    const type = formData.get("type") as CookingEventType;
-    const notes = formData.get("notes") as string;
+ const type = formData.get("type") as CookingEventType;
+const notes = formData.get("notes") as string;
+
+const litersRaw = formData.get("liters");
+const phRaw = formData.get("ph");
+const brixRaw = formData.get("brix");
+const temperatureRaw = formData.get("temperature");
+
+const liters = litersRaw ? Number(litersRaw) : null;
+const ph = phRaw ? Number(phRaw) : null;
+const brix = brixRaw ? Number(brixRaw) : null;
+const temperature = temperatureRaw ? Number(temperatureRaw) : null;
 
     await prisma.cookingEvent.create({
       data: {
-        cookingId: id,
-        type,
-        notes: notes || null,
-      },
+  cookingId: id,
+  type,
+  liters,
+  ph,
+  brix,
+  temperature,
+  notes: notes || null,
+},
+      
     });
 
     if (type === CookingEventType.FIN_COCCION) {
@@ -82,6 +99,7 @@ export default async function CookingDetailPage({ params }: Props) {
   return (
     <main className="min-h-screen bg-slate-950 p-10 text-white">
       <div className="mx-auto max-w-6xl">
+        <MainNav />
         <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
           MAESTRO
         </p>
@@ -117,6 +135,79 @@ export default async function CookingDetailPage({ params }: Props) {
             </p>
           </div>
         </section>
+
+        <section className="mt-8 rounded-2xl bg-slate-900 p-6">
+  <div className="flex items-center justify-between">
+    <div>
+      <p className="text-sm text-slate-400">Avance de cocción</p>
+      <h2 className="mt-1 text-3xl font-bold">
+        {Math.min(cooking.events.filter(e => e.type === "TEMPERATURA").length * 5, 100)}%
+      </h2>
+    </div>
+
+    <div className="text-right text-sm text-slate-400">
+      <p>Meta: 32 horas</p>
+      <p>{cooking.events.length} eventos registrados</p>
+    </div>
+  </div>
+
+  <div className="mt-5 h-4 overflow-hidden rounded-full bg-slate-800">
+    <div
+      className="h-full rounded-full bg-amber-400 transition-all"
+      style={{
+        width: `${Math.min(
+          cooking.events.filter(e => e.type === "TEMPERATURA").length * 5,
+          100
+        )}%`,
+      }}
+    />
+  </div>
+</section>
+<section className="mt-6 rounded-2xl bg-slate-900 p-6">
+  <h2 className="text-xl font-bold text-amber-400">
+    Estado inteligente
+  </h2>
+
+  <div className="mt-5 grid gap-4 md:grid-cols-3">
+
+    <div className="rounded-xl bg-slate-800 p-5">
+      <p className="text-sm text-slate-400">
+        Temperatura
+      </p>
+
+      <p className="mt-2 text-2xl font-bold text-green-400">
+        {
+  lastTemperature &&
+  (lastTemperature.temperatureTop ?? 0) >= 90 &&
+  (lastTemperature.temperatureBottom ?? 0) >= 90
+    ? "OK"
+    : "Calentando"
+}
+      </p>
+    </div>
+
+    <div className="rounded-xl bg-slate-800 p-5">
+      <p className="text-sm text-slate-400">
+        Vapor
+      </p>
+
+      <p className="mt-2 text-2xl font-bold text-green-400">
+        {hasStartedVapor ? "Activo" : "Pendiente"}
+      </p>
+    </div>
+
+    <div className="rounded-xl bg-slate-800 p-5">
+      <p className="text-sm text-slate-400">
+        Cocción
+      </p>
+
+      <p className="mt-2 text-2xl font-bold text-amber-400">
+        {cooking.status}
+      </p>
+    </div>
+
+  </div>
+</section>
 
         <section className="mt-8 rounded-2xl bg-slate-900 p-8">
           <h2 className="mb-4 text-2xl font-bold">Última temperatura</h2>
@@ -222,13 +313,60 @@ export default async function CookingDetailPage({ params }: Props) {
                     ["AUMENTAR_VAPOR", "⬆️ Aumentar vapor"],
                     ["BAJAR_VAPOR", "⬇️ Disminuir vapor"],
                     ["SUSPENDER_VAPOR", "⏸ Suspender vapor"],
-                    ["MIELES_AMARGAS", "🟤 Extraer mieles amargas"],
-                    ["MIELES_DULCES", "🟡 Extraer mieles dulces"],
+                    ["MIELES_AMARGAS_FORM","🟠 Extraer mieles amargas"],
+                    ["MIELES_DULCES_FORM","🟡 Extraer mieles dulces"],
                     ["OBSERVACION", "📝 Observación"],
                     ["FIN_COCCION", "🏁 Finalizar cocción"],
                   ].map(([type, label]) => (
                     <form key={type} action={addSimpleEvent}>
-                      <input type="hidden" name="type" value={type} />
+                    
+  <input
+    type="hidden"
+    name="type"
+    value={
+      type === "MIELES_AMARGAS_FORM"
+        ? "MIELES_AMARGAS"
+        : type === "MIELES_DULCES_FORM"
+          ? "MIELES_DULCES"
+          : type
+    }
+  />
+
+  {(type === "MIELES_AMARGAS_FORM" || type === "MIELES_DULCES_FORM") && (
+<>
+    <input
+      name="liters"
+      type="number"
+      step="0.01"
+      placeholder="Litros extraídos"
+      className="mb-2 w-full rounded-xl bg-slate-800 p-3"
+    />
+
+    <input
+      name="temperature"
+      type="number"
+      step="0.01"
+      placeholder="Temperatura °C"
+      className="mb-2 w-full rounded-xl bg-slate-800 p-3"
+    />
+
+    <input
+      name="ph"
+      type="number"
+      step="0.01"
+      placeholder="pH"
+      className="mb-2 w-full rounded-xl bg-slate-800 p-3"
+    />
+
+    <input
+      name="brix"
+      type="number"
+      step="0.01"
+      placeholder="°Brix"
+      className="mb-2 w-full rounded-xl bg-slate-800 p-3"
+    />
+  </>
+)}
 
                       <input
                         name="notes"
@@ -246,7 +384,47 @@ export default async function CookingDetailPage({ params }: Props) {
             )}
           </section>
         )}
+<section className="mb-8 rounded-2xl bg-slate-900 p-6">
+  <h2 className="mb-6 text-2xl font-bold">📊 Resumen del cocimiento</h2>
 
+  <div className="grid gap-4 md:grid-cols-4">
+
+    <div className="rounded-xl bg-slate-800 p-4">
+      <p className="text-slate-400 text-sm">🟠 Mieles amargas</p>
+      <p className="text-3xl font-bold">
+        {cooking.events
+          .filter(e => e.type === "MIELES_AMARGAS")
+          .reduce((t, e) => t + (e.liters ?? 0), 0)} L
+      </p>
+    </div>
+
+    <div className="rounded-xl bg-slate-800 p-4">
+      <p className="text-slate-400 text-sm">🟡 Mieles dulces</p>
+      <p className="text-3xl font-bold">
+        {cooking.events
+          .filter(e => e.type === "MIELES_DULCES")
+          .reduce((t, e) => t + (e.liters ?? 0), 0)} L
+      </p>
+    </div>
+
+    <div className="rounded-xl bg-slate-800 p-4">
+      <p className="text-slate-400 text-sm">🌡 Última temperatura</p>
+      <p className="text-3xl font-bold">
+        {cooking.events
+          .filter(e => e.type === "TEMPERATURA")
+          .at(-1)?.temperatureTop ?? "--"}°C
+      </p>
+    </div>
+
+    <div className="rounded-xl bg-slate-800 p-4">
+      <p className="text-slate-400 text-sm">📋 Eventos</p>
+      <p className="text-3xl font-bold">
+        {cooking.events.length}
+      </p>
+    </div>
+
+  </div>
+</section>
         <section className="mt-8 rounded-2xl bg-slate-900 p-8">
           <h2 className="mb-4 text-2xl font-bold">Bitácora</h2>
 
@@ -255,8 +433,29 @@ export default async function CookingDetailPage({ params }: Props) {
           ) : (
             cooking.events.map((event) => (
               <div key={event.id} className="border-b border-slate-800 py-4">
-                <p className="font-semibold text-amber-400">{event.type}</p>
+              
+ <p className="font-semibold text-amber-400">
+ {(
+  {
+    TEMPERATURA: "🌡️ Temperatura",
+    AUMENTAR_VAPOR: "⬆️ Aumentar vapor",
+    BAJAR_VAPOR: "⬇️ Disminuir vapor",
+    SUSPENDER_VAPOR: "⏸️ Suspender vapor",
+    MIELES_AMARGAS: "🟠 Mieles amargas",
+    MIELES_DULCES: "🟡 Mieles dulces",
+    OBSERVACION: "📝 Observación",
+    FIN_COCCION: "🏁 Finalizar cocción",
+  } as Record<string, string>
+)[event.type] ?? event.type}
 
+</p>
+<div className="mt-2 grid grid-cols-2 gap-2 text-sm text-slate-300 md:grid-cols-4">
+  {event.liters !== null && <p>💧 Litros: {event.liters} L</p>}
+  {event.temperature !== null && <p>🌡️ Temp: {event.temperature} °C</p>}
+  {event.ph !== null && <p>🧪 pH: {event.ph}</p>}
+  {event.brix !== null && <p>🍬 °Brix: {event.brix}</p>}
+  {event.notes && <p className="col-span-2 md:col-span-4">📝 {event.notes}</p>}
+</div>
                 <p className="text-sm text-slate-400">
                   {event.createdAt.toLocaleString()}
                 </p>
@@ -274,6 +473,7 @@ export default async function CookingDetailPage({ params }: Props) {
             ))
           )}
         </section>
+        <CookingCharts events={cooking.events} />
       </div>
     </main>
   );
