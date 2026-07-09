@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import MainNav from "@/components/MainNav";
 import { DistillationEventType, DistillationStatus } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import {
@@ -165,7 +164,7 @@ const smartStatus = getSmartStatus(distillation.events);
   return (
     <main className="min-h-screen bg-slate-950 p-10 text-white">
       <div className="mx-auto max-w-6xl">
-        <MainNav />
+      
 
         <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
           MAESTRO

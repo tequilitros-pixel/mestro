@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
 enum UserRole {
   ADMIN
   OPERATOR
@@ -41,17 +42,18 @@ enum LotStage {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  username  String   @unique
-  email     String?  @unique
-  password  String
-  role      UserRole
-  active    Boolean  @default(true)
+  id       String   @id @default(cuid())
+  name     String
+  username String   @unique
+  email    String?  @unique
+  password String
+  role     UserRole
+  active   Boolean  @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  lastLogin DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  lastLogin         DateTime?
+  millingDischarges MillingDischarge[]
 
   lots Lot[]
 }
@@ -71,9 +73,10 @@ model Equipment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  cookings      Cooking[]
-  millings      Milling[]
-  distillations Distillation[]
+  cookings          Cooking[]
+  millings          Milling[]
+  distillations     Distillation[]
+  millingDischarges MillingDischarge[]
 }
 
 model Lot {
@@ -205,9 +208,10 @@ model Milling {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lot       Lot            @relation(fields: [lotId], references: [id])
-  equipment Equipment      @relation(fields: [equipmentId], references: [id])
-  events    MillingEvent[]
+  lot        Lot                @relation(fields: [lotId], references: [id])
+  equipment  Equipment          @relation(fields: [equipmentId], references: [id])
+  events     MillingEvent[]
+  discharges MillingDischarge[]
 }
 
 model MillingEvent {
@@ -374,4 +378,29 @@ model LotExpense {
   notes String?
 
   @@index([lotId])
+}
+
+model MillingDischarge {
+  id String @id @default(cuid())
+
+  millingId String
+  milling   Milling @relation(fields: [millingId], references: [id], onDelete: Cascade)
+
+  tankId String?
+  tank   Equipment? @relation(fields: [tankId], references: [id])
+
+  litersRecovered Float
+  brix            Float
+  ph              Float
+  temperature     Float
+
+  notes String?
+
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([millingId])
+  @@index([tankId])
 }

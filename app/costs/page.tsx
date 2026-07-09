@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import MainNav from "@/components/MainNav";
+
 
 export default async function CostsPage() {
   const lots = await prisma.lot.findMany({
@@ -45,7 +45,7 @@ export default async function CostsPage() {
   return (
     <main className="min-h-screen bg-slate-950 p-10 text-white">
       <div className="mx-auto max-w-7xl">
-        <MainNav />
+      
 
         <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
           MAESTRO

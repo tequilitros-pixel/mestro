@@ -99,7 +99,7 @@ const temperature = temperatureRaw ? Number(temperatureRaw) : null;
   return (
     <main className="min-h-screen bg-slate-950 p-10 text-white">
       <div className="mx-auto max-w-6xl">
-        <MainNav />
+        
         <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
           MAESTRO
         </p>
@@ -425,6 +425,7 @@ const temperature = temperatureRaw ? Number(temperatureRaw) : null;
 
   </div>
 </section>
+ <CookingCharts events={cooking.events} />
         <section className="mt-8 rounded-2xl bg-slate-900 p-8">
           <h2 className="mb-4 text-2xl font-bold">Bitácora</h2>
 
@@ -461,19 +462,25 @@ const temperature = temperatureRaw ? Number(temperatureRaw) : null;
                 </p>
 
                 {event.type === "TEMPERATURA" && (
-                  <div className="mt-2 text-sm text-slate-300">
-                    <p>Superior: {event.temperatureTop}°C</p>
-                    <p>Media: {event.temperatureMiddle}°C</p>
-                    <p>Inferior: {event.temperatureBottom}°C</p>
-                  </div>
-                )}
+  <div className="mt-2 flex flex-wrap gap-6 text-sm">
+    <span className="text-red-400">
+      🌡 Superior: {event.temperatureTop}°C
+    </span>
+    <span className="text-yellow-400">
+      🌡 Media: {event.temperatureMiddle}°C
+    </span>
+    <span className="text-blue-400">
+      🌡 Inferior: {event.temperatureBottom}°C
+    </span>
+  </div>
+)}
 
                 {event.notes && <p className="mt-2">{event.notes}</p>}
               </div>
             ))
           )}
         </section>
-        <CookingCharts events={cooking.events} />
+       
       </div>
     </main>
   );

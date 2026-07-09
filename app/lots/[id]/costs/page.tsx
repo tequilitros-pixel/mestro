@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import MainNav from "@/components/MainNav";
 import { notFound, redirect } from "next/navigation";
 import LotMenu from "@/components/LotMenu";
 
@@ -57,8 +56,7 @@ export default async function LotCostsPage({ params }: Props) {
   return (
     <main className="min-h-screen bg-slate-950 p-10 text-white">
       <div className="mx-auto max-w-6xl">
-        <MainNav />
-
+        
         <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
           MAESTRO
         </p>
