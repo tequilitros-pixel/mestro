@@ -1,6 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { EquipmentCard } from "../components/EquipmentCard";
-import { TopBar } from "../components/TopBar";
+
 
 export default async function Home() {
   const equipment = await prisma.equipment.findMany({
@@ -26,7 +26,7 @@ export default async function Home() {
     
 
       <div className="flex-1">
-        <TopBar />
+        
 
         <section className="mx-auto max-w-7xl px-8 py-8">
           <header className="mb-8">

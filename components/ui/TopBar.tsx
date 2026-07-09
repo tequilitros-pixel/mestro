@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { logoutAction } from "@/app/actions/login";
 
-const links = [
+const ALL_LINKS = [
   { href: "/", label: "🏠 Dashboard" },
   { href: "/plant", label: "🏭 Planta" },
   { href: "/lots", label: "📦 Lotes" },
@@ -14,15 +15,21 @@ const links = [
   { href: "/costs", label: "💰 Costos" },
   { href: "/control-room", label: "🧠 Sala" },
 ];
+
+const OPERATOR_LINKS = ["/cooking", "/milling", "/fermentation", "/distillation"];
+
 type TopBarUser = {
   name: string;
   role: string;
 } | null;
 
 export default function TopBar({ user }: { user: TopBarUser }) {
-
-
   const pathname = usePathname();
+
+  const links =
+    user?.role === "OPERATOR"
+      ? ALL_LINKS.filter((link) => OPERATOR_LINKS.includes(link.href))
+      : ALL_LINKS;
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
@@ -45,7 +52,7 @@ export default function TopBar({ user }: { user: TopBarUser }) {
 
             <button className="text-xl">🔔</button>
 
-                      <div className="text-right">
+            <div className="text-right">
               <p className="font-semibold text-white">
                 {user?.name ?? "Invitado"}
               </p>
@@ -54,6 +61,16 @@ export default function TopBar({ user }: { user: TopBarUser }) {
               </p>
             </div>
 
+            {user && (
+              <form action={logoutAction}>
+                <button
+                  type="submit"
+                  className="rounded-xl border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                >
+                  Salir
+                </button>
+              </form>
+            )}
           </div>
         </div>
 

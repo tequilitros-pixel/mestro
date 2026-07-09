@@ -25,5 +25,25 @@ export async function loginAction(formData: FormData) {
     maxAge: 60 * 60 * 24 * 7,
   });
 
+  cookieStore.set("maestro_role", user.role, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+
+  if (user.role === "OPERATOR") {
+    redirect("/cooking");
+  }
+
   redirect("/dashboard");
+}
+
+export async function logoutAction() {
+  const cookieStore = await cookies();
+
+  cookieStore.delete("maestro_user");
+  cookieStore.delete("maestro_role");
+
+  redirect("/login");
 }
