@@ -14,8 +14,14 @@ const links = [
   { href: "/costs", label: "💰 Costos" },
   { href: "/control-room", label: "🧠 Sala" },
 ];
+type TopBarUser = {
+  name: string;
+  role: string;
+} | null;
 
-export default function TopBar() {
+export default function TopBar({ user }: { user: TopBarUser }) {
+
+
   const pathname = usePathname();
 
   return (
@@ -39,10 +45,15 @@ export default function TopBar() {
 
             <button className="text-xl">🔔</button>
 
-            <div className="text-right">
-              <p className="font-semibold text-white">José Sánchez</p>
-              <p className="text-xs text-slate-400">Director</p>
+                      <div className="text-right">
+              <p className="font-semibold text-white">
+                {user?.name ?? "Invitado"}
+              </p>
+              <p className="text-xs text-slate-400">
+                {user?.role === "ADMIN" ? "Administrador" : user?.role === "OPERATOR" ? "Operador" : "Sin sesión"}
+              </p>
             </div>
+
           </div>
         </div>
 

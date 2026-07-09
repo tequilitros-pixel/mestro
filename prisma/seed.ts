@@ -1,4 +1,3 @@
-
 import {
   PrismaClient,
   EquipmentStatus,
@@ -6,16 +5,12 @@ import {
   UserRole,
   LotStage,
 } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-
-const adapter = new PrismaBetterSqlite3({
-  url: "file:./dev.db",
-});
-
-const prisma = new PrismaClient({
-  adapter,
-});
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   console.log("🧹 Limpiando base de datos...");
@@ -26,15 +21,52 @@ async function main() {
 
   console.log("👤 Creando usuario...");
 
-  const user = await prisma.user.create({
-    data: {
-      name: "Jose Adan Sanchez",
-      email: "tequilitros@gmail.com",
-      password: "admin",
-      role: UserRole.DIRECTOR,
+  await prisma.user.createMany({
+  data: [
+    {
+      name: "Adán Sánchez",
+      username: "adan",
+      email: "adan@maestro.local",
+      password: "adan123",
+      role: UserRole.ADMIN,
       active: true,
     },
-  });
+    {
+      name: "Adrián Sánchez",
+      username: "adrian",
+      email: "adrian@maestro.local",
+      password: "adrian123",
+      role: UserRole.ADMIN,
+      active: true,
+    },
+    {
+      name: "Rubí Ramos",
+      username: "rubi",
+      email: "rubi@maestro.local",
+      password: "rubi123",
+      role: UserRole.OPERATOR,
+      active: true,
+    },
+    {
+      name: "Operador 1",
+      username: "operador1",
+      email: "operador1@maestro.local",
+      password: "operador123",
+      role: UserRole.OPERATOR,
+      active: true,
+    },
+  ],
+});
+
+  const user = await prisma.user.findUnique({
+  where: {
+    username: "adan",
+  },
+});
+
+if (!user) {
+  throw new Error("No se encontró el usuario administrador inicial");
+}
 
   console.log("🏭 Creando equipos...");
 
