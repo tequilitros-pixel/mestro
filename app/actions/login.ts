@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import bcrypt from "bcryptjs";
 
 export async function loginAction(formData: FormData) {
   const username = String(formData.get("username") || "").trim();
@@ -12,7 +13,13 @@ export async function loginAction(formData: FormData) {
     where: { username },
   });
 
-  if (!user || !user.active || user.password !== password) {
+  if (!user || !user.active) {
+    redirect("/login?error=1");
+  }
+
+  const passwordMatches = await bcrypt.compare(password, user.password);
+
+  if (!passwordMatches) {
     redirect("/login?error=1");
   }
 

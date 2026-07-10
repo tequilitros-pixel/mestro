@@ -52,14 +52,16 @@ export default function TopBar({ user }: { user: TopBarUser }) {
 
             <button className="text-xl">🔔</button>
 
-            <div className="text-right">
+                        <Link href="/profile" className="text-right hover:opacity-80">
               <p className="font-semibold text-white">
                 {user?.name ?? "Invitado"}
               </p>
+
               <p className="text-xs text-slate-400">
                 {user?.role === "ADMIN" ? "Administrador" : user?.role === "OPERATOR" ? "Operador" : "Sin sesión"}
               </p>
-            </div>
+                          </Link>
+
 
             {user && (
               <form action={logoutAction}>
