@@ -3,6 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import TopBar from "@/components/ui/TopBar";
 import { getCurrentUser } from "@/lib/auth";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,7 +27,14 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await getCurrentUser();
+    const user = await getCurrentUser();
+  const cookieStore = await cookies();
+  const hasSessionCookie = cookieStore.has("maestro_user");
+
+  if (hasSessionCookie && !user) {
+    redirect("/api/session/clear");
+  }
+
 
   return (
     <html

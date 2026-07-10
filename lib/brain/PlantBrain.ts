@@ -3,8 +3,8 @@ import { ProductionEngineer } from "./specialists/ProductionEngineer";
 import { Thought } from "./Thought";
 
 export class PlantBrain {
-  static think(): Thought {
-    const production = ProductionEngineer.analyze();
+  static async think(): Promise<Thought> {
+    const production = await ProductionEngineer.analyze();
     const operating = PlantModel.operating();
 
     return {
@@ -13,6 +13,8 @@ export class PlantBrain {
       summary:
         operating.length === 0
           ? "La planta se encuentra detenida."
+          : production.alerts.length > 0
+          ? "La planta opera con observaciones que requieren atención."
           : "La planta opera normalmente.",
 
       priority:

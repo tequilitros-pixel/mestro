@@ -1,7 +1,7 @@
 import { PlantBrain } from "./PlantBrain";
 
 export class Brain {
-  static think() {
+  static async think() {
     return PlantBrain.think();
   }
 }

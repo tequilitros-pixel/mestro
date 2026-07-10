@@ -1,26 +1,23 @@
-import { ProcessMonitor } from "../ProcessMonitor";
+import { analyzeActiveProcesses } from "../analyzeActiveProcesses";
 import { Predictor } from "../Predictor";
+import { getActiveProcesses } from "../data/getActiveProcesses";
 
 export class ProductionEngineer {
-  static analyze() {
-    const monitor = ProcessMonitor.analyze({
-      cookingTemp: 92,
-      cookingHours: 33,
-      fermentationAlcohol: 5.4,
-      fermentationPH: 4.6,
-      extraction: 90,
-    });
+  static async analyze() {
+    const { alerts, recommendations } = await analyzeActiveProcesses();
+    const { cookings } = await getActiveProcesses();
+
+    const totalAgaveKg = cookings.reduce((sum, c) => sum + c.agaveKg, 0);
 
     const prediction = Predictor.fromAgave({
-      agaveKg: 3500,
-      totalCost: 22000,
+      agaveKg: totalAgaveKg,
     });
 
     return {
-      priority: monitor.alerts.length > 0 ? "ALTA" : "NORMAL",
+      priority: alerts.length > 0 ? "ALTA" : "NORMAL",
       expectedLiters: prediction.expectedLiters,
-      alerts: monitor.alerts,
-      actions: monitor.recommendations,
+      alerts: alerts.map((a) => `${a.source}: ${a.message}`),
+      actions: recommendations,
     };
   }
 }

@@ -74,6 +74,7 @@ export default async function FermentationDetailPage({ params }: Props) {
   const currentTemp = last?.temperature ?? fermentation.initialTemperature;
   const currentAlcohol = last?.alcohol ?? "-";
   const currentSaccharometer = last?.saccharometer ?? "-";
+  
 
   const totalAcid = fermentation.readings.reduce(
     (sum, reading) => sum + (reading.citricAcidGrams ?? 0),
