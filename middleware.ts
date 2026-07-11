@@ -15,8 +15,8 @@ const OPERATOR_ALLOWED_PATHS = [
 function matchesPath(pathname: string, path: string) {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
+export function middleware(request: NextRequest) {
 
-export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublicPage = PUBLIC_PATHS.some((path) =>
