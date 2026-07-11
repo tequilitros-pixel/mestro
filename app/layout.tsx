@@ -5,6 +5,8 @@ import TopBar from "@/components/ui/TopBar";
 import { getCurrentUser } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+
 
 
 const geistSans = Geist({
@@ -20,6 +22,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "MAESTRO",
   description: "Sistema Operativo para Destilerías",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/icon-192.png",
+  },
 };
 
 export default async function RootLayout({
@@ -42,7 +49,11 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-screen bg-slate-950 text-white">
+            
+        <ServiceWorkerRegister />
         <TopBar user={user} />
+
+       
 
         <main className="mx-auto w-full max-w-7xl p-6">
           {children}
@@ -51,4 +62,3 @@ export default async function RootLayout({
     </html>
   );
 }
- 

@@ -9,10 +9,13 @@ import { LearningEngine } from "@/lib/brain";
 import MissionControl from "@/components/intelligence/MissionControl";
 import { getActiveProcesses } from "@/lib/brain/data/getActiveProcesses";
 import { analyzeActiveProcesses } from "@/lib/brain/analyzeActiveProcesses";
+import { getRecordingStatus } from "@/lib/brain/getRecordingStatus";
+import RecordingBadge from "@/components/ui/RecordingBadge";
 
 export default async function PlantPage() {
   const { cookings, fermentations, distillations } = await getActiveProcesses();
   const { alerts, recommendations } = await analyzeActiveProcesses();
+  const recordingStatus = await getRecordingStatus();
 
   const totalAgaveKg = cookings.reduce((sum, c) => sum + c.agaveKg, 0);
 
@@ -53,14 +56,24 @@ export default async function PlantPage() {
           {cookings.map((cooking) => {
             const temp = cooking.events.find((e) => e.temperature != null)
               ?.temperature;
+            const recording = recordingStatus.cooking.find(
+              (r) => r.id === cooking.id
+            );
             return (
-              <PlantStatusCard
-                key={cooking.id}
-                icon="🔥"
-                title={cooking.equipment.name}
-                value={temp != null ? `${temp}°C` : "Sin lectura"}
-                status="ok"
-              />
+              <div key={cooking.id} className="space-y-2">
+                <PlantStatusCard
+                  icon="🔥"
+                  title={cooking.equipment.name}
+                  value={temp != null ? `${temp}°C` : "Sin lectura"}
+                  status="ok"
+                />
+                {recording && (
+                  <RecordingBadge
+                    minutesSinceLastRecord={recording.minutesSinceLastRecord}
+                    isOverdue={recording.isOverdue}
+                  />
+                )}
+              </div>
             );
           })}
 
@@ -71,14 +84,24 @@ export default async function PlantPage() {
             const hasAlert = alertMessages.some((m) =>
               m.startsWith(fermentation.tank)
             );
+            const recording = recordingStatus.fermentation.find(
+              (r) => r.id === fermentation.id
+            );
             return (
-              <PlantStatusCard
-                key={fermentation.id}
-                icon="🧪"
-                title={fermentation.tank}
-                value={alcohol != null ? `${alcohol}%` : "Sin lectura"}
-                status={hasAlert ? "warning" : "ok"}
-              />
+              <div key={fermentation.id} className="space-y-2">
+                <PlantStatusCard
+                  icon="🧪"
+                  title={fermentation.tank}
+                  value={alcohol != null ? `${alcohol}%` : "Sin lectura"}
+                  status={hasAlert ? "warning" : "ok"}
+                />
+                {recording && (
+                  <RecordingBadge
+                    minutesSinceLastRecord={recording.minutesSinceLastRecord}
+                    isOverdue={recording.isOverdue}
+                  />
+                )}
+              </div>
             );
           })}
 

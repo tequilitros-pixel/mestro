@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logoutAction } from "@/app/actions/login";
+import PushNotificationSetup from "@/components/PushNotificationSetup";
+
+
 
 const ALL_LINKS = [
   { href: "/", label: "🏠 Dashboard" },
@@ -62,6 +65,7 @@ export default function TopBar({ user }: { user: TopBarUser }) {
               </p>
                           </Link>
 
+            {user && <PushNotificationSetup />}
 
             {user && (
               <form action={logoutAction}>
@@ -73,6 +77,7 @@ export default function TopBar({ user }: { user: TopBarUser }) {
                 </button>
               </form>
             )}
+
           </div>
         </div>
 
