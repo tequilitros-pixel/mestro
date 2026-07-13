@@ -39,7 +39,8 @@ export default async function PlantPage() {
     fermentationAlcohol: latestAlcohol ?? undefined,
   });
 
-  const learning = LearningEngine.summary();
+   const learning = await LearningEngine.summary();
+
   const alertMessages = alerts.map((a) => `${a.source}: ${a.message}`);
 
   return (

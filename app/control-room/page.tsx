@@ -1,5 +1,7 @@
 import { analyzeLotHistory } from "@/lib/brain/analyzeLotHistory";
 import LotComparisonCharts from "@/components/ui/LotComparisonCharts";
+import { getSalaInsights } from "@/lib/ai/getSalaInsights";
+import AIInsightsCard from "@/components/ui/AIInsightsCard";
 
 const TREND_LABEL: Record<string, string> = {
   MEJORANDO: "📈 Mejorando",
@@ -19,6 +21,8 @@ export default async function ControlRoomPage() {
     trend,
   } = await analyzeLotHistory();
 
+  const aiInsights = await getSalaInsights();
+
   return (
     <main className="space-y-8">
       <section>
@@ -34,6 +38,8 @@ export default async function ControlRoomPage() {
           Historial y comparación de lotes terminados. Aquí MAESTRO aprende de la producción a lo largo del tiempo.
         </p>
       </section>
+
+      <AIInsightsCard insights={aiInsights} />
 
       <section className="grid gap-6 md:grid-cols-4">
         <Kpi title="Lotes terminados" value={lots.length} />
