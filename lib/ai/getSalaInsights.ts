@@ -39,25 +39,38 @@ export async function getSalaInsights(): Promise<SalaInsights | null> {
     })),
   };
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-5",
-    max_tokens: 1500,
-    system:
-      "Eres MAESTRO, el asistente de inteligencia de una destiladora de tequila artesanal llamada Destiladora del Norte. Analizas datos reales de producción y das observaciones prácticas, directas y útiles para el dueño. Hablas en español de México, tono profesional pero cercano, sin tecnicismos innecesarios.",
-    messages: [
-      {
-        role: "user",
-        content: `Aquí están los datos históricos de producción de la destiladora:\n\n${JSON.stringify(datosParaIA, null, 2)}\n\nResponde ÚNICAMENTE con un JSON válido (sin texto antes ni después, sin markdown) con esta forma exacta:\n{\n  "resumen": "un párrafo breve resumiendo el estado general de la producción",\n  "fortalezas": ["punto 1", "punto 2"],\n  "riesgos": ["punto 1", "punto 2"],\n  "recomendaciones": ["punto 1", "punto 2", "punto 3"],\n  "prediccion": "una frase sobre hacia dónde va la tendencia si todo sigue igual"\n}`,
-      },
-    ],
-  });
+  let message;
+  try {
+    message = await anthropic.messages.create({
+      model: "claude-sonnet-5",
+      max_tokens: 1500,
+      system:
+        "Eres MAESTRO, el asistente de inteligencia de una destiladora de tequila artesanal llamada Destiladora del Norte. Analizas datos reales de producción y das observaciones prácticas, directas y útiles para el dueño. Hablas en español de México, tono profesional pero cercano, sin tecnicismos innecesarios.",
+      messages: [
+        {
+          role: "user",
+          content: `Aquí están los datos históricos de producción de la destiladora:\n\n${JSON.stringify(datosParaIA, null, 2)}\n\nResponde ÚNICAMENTE con un JSON válido (sin texto antes ni después, sin markdown) con esta forma exacta:\n{\n  "resumen": "un párrafo breve resumiendo el estado general de la producción",\n  "fortalezas": ["punto 1", "punto 2"],\n  "riesgos": ["punto 1", "punto 2"],\n  "recomendaciones": ["punto 1", "punto 2", "punto 3"],\n  "prediccion": "una frase sobre hacia dónde va la tendencia si todo sigue igual"\n}`,
+        },
+      ],
+    });
+  } catch (err) {
+    console.error("Error llamando a la API de Anthropic:", err);
+    return null;
+  }
 
   const textBlock = message.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") return null;
 
   try {
-    return JSON.parse(textBlock.text);
-  } catch {
+    const cleanText = textBlock.text
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+    return JSON.parse(cleanText);
+  } catch (err) {
+
+    console.error("Error parseando respuesta de Claude:", err);
+    console.error("Texto recibido:", textBlock.text);
     return null;
   }
 }

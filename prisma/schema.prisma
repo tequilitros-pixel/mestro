@@ -50,14 +50,17 @@ model User {
   role     UserRole
   active   Boolean  @default(true)
 
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  lastLogin         DateTime?
-  millingDischarges MillingDischarge[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  lastLogin DateTime?
 
-  lots Lot[]
-    pushSubscriptions PushSubscription[]
-
+  lots                  Lot[]
+  millingDischarges     MillingDischarge[]
+  pushSubscriptions     PushSubscription[]
+  cookingsFinished      Cooking[]          @relation("CookingFinishedBy")
+  fermentationsFinished Fermentation[]     @relation("FermentationFinishedBy")
+  distillationsFinished Distillation[]     @relation("DistillationFinishedBy")
+  millingsFinished      Milling[]          @relation("MillingFinishedBy")
 }
 
 model Equipment {
@@ -137,19 +140,34 @@ model Cooking {
 
   notes String?
 
+  finalAgaveKg          Float?
+  finalSweetHoneyLiters Float?
+  finalSweetHoneyBrix   Float?
+  finalNotes            String?
+
+  closureCode String? @unique
+
+  finishedById String?
+  finishedBy   User?   @relation("CookingFinishedBy", fields: [finishedById], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   lot       Lot            @relation(fields: [lotId], references: [id])
   equipment Equipment      @relation(fields: [equipmentId], references: [id])
   events    CookingEvent[]
+
+  @@index([lotId])
+  @@index([equipmentId])
+  @@index([finishedById])
 }
 
 model CookingEvent {
   id        String @id @default(cuid())
   cookingId String
 
-  type              CookingEventType
+  type CookingEventType
+
   temperatureTop    Float?
   temperatureMiddle Float?
   temperatureBottom Float?
@@ -163,6 +181,8 @@ model CookingEvent {
   createdAt DateTime @default(now())
 
   cooking Cooking @relation(fields: [cookingId], references: [id])
+
+  @@index([cookingId])
 }
 
 enum MillingStatus {
@@ -207,6 +227,20 @@ model Milling {
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
 
+  finalMashLiters  Float?
+  finalAverageBrix Float?
+  finalAveragePh   Float?
+  finalAverageTemp Float?
+  finalBagasseKg   Float?
+  finalWaterLiters Float?
+  finalPressPasses Int?
+  finalNotes       String?
+
+  closureCode String? @unique
+
+  finishedById String?
+  finishedBy   User?   @relation("MillingFinishedBy", fields: [finishedById], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -214,6 +248,10 @@ model Milling {
   equipment  Equipment          @relation(fields: [equipmentId], references: [id])
   events     MillingEvent[]
   discharges MillingDischarge[]
+
+  @@index([lotId])
+  @@index([equipmentId])
+  @@index([finishedById])
 }
 
 model MillingEvent {
@@ -237,14 +275,18 @@ model MillingEvent {
   milling Milling @relation(fields: [millingId], references: [id])
 }
 
+enum FermentationStatus {
+  ACTIVA
+  TERMINADA
+}
+
 model Fermentation {
   id String @id @default(cuid())
 
   lotId String
   lot   Lot    @relation(fields: [lotId], references: [id])
 
-  tank String
-
+  tank       String
   mustLiters Float
 
   initialBrix        Float
@@ -260,10 +302,23 @@ model Fermentation {
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
 
+  finalBrix    Float?
+  finalPh      Float?
+  finalAlcohol Float?
+  finalNotes   String?
+
+  closureCode String? @unique
+
+  finishedById String?
+  finishedBy   User?   @relation("FermentationFinishedBy", fields: [finishedById], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   readings FermentationReading[]
+
+  @@index([lotId])
+  @@index([finishedById])
 }
 
 model FermentationReading {
@@ -287,11 +342,6 @@ model FermentationReading {
   notes String?
 
   createdAt DateTime @default(now())
-}
-
-enum FermentationStatus {
-  ACTIVA
-  TERMINADA
 }
 
 enum DistillationStatus {
@@ -337,6 +387,17 @@ model Distillation {
 
   finalAlcohol Float?
 
+  finalLiters      Float?
+  finalHeadsLiters Float?
+  finalHeartLiters Float?
+  finalTailsLiters Float?
+  finalNotes       String?
+
+  closureCode String? @unique
+
+  finishedById String?
+  finishedBy   User?   @relation("DistillationFinishedBy", fields: [finishedById], references: [id])
+
   status DistillationStatus @default(ACTIVA)
 
   startedAt  DateTime  @default(now())
@@ -346,6 +407,10 @@ model Distillation {
   updatedAt DateTime @updatedAt
 
   events DistillationEvent[]
+
+  @@index([lotId])
+  @@index([equipmentId])
+  @@index([finishedById])
 }
 
 model DistillationEvent {
@@ -364,6 +429,8 @@ model DistillationEvent {
   notes             String?
 
   createdAt DateTime @default(now())
+
+  @@index([distillationId])
 }
 
 model LotExpense {
@@ -406,14 +473,16 @@ model MillingDischarge {
   @@index([millingId])
   @@index([tankId])
 }
-model PushSubscription {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
+model PushSubscription {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint String @unique
+  p256dh   String
+  auth     String
 
   createdAt DateTime @default(now())
 }

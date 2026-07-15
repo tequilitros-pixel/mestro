@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import MainNav from "@/components/MainNav";
 import LotMenu from "@/components/LotMenu";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -43,8 +42,7 @@ const engine = getLotEngine(lot);
   return (
     <main className="min-h-screen bg-slate-950 p-10 text-white">
       <div className="mx-auto max-w-7xl">
-        <MainNav />
-
+       
         <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
           MAESTRO
         </p>
