@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import TopBar from "@/components/ui/TopBar";
-import { getCurrentUser } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
-
-
+import AppShell from "@/components/layout/AppShell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,7 +19,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "MAESTRO",
-  description: "Sistema Operativo para Destilerías",
+  description: "Sistema Inteligente de Destiladora del Norte",
   manifest: "/manifest.json",
   icons: {
     icon: "/icon-192.png",
@@ -34,14 +32,16 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-    const user = await getCurrentUser();
+  const user = await getCurrentUser();
+
   const cookieStore = await cookies();
-  const hasSessionCookie = cookieStore.has("maestro_user");
+
+  const hasSessionCookie =
+    cookieStore.has("maestro_user");
 
   if (hasSessionCookie && !user) {
     redirect("/api/session/clear");
   }
-
 
   return (
     <html
@@ -49,15 +49,15 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-screen bg-slate-950 text-white">
-            
         <ServiceWorkerRegister />
-        <TopBar user={user} />
 
-       
-
-        <main className="mx-auto w-full max-w-7xl p-6">
-          {children}
-        </main>
+        {user ? (
+          <AppShell user={user}>
+            {children}
+          </AppShell>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );

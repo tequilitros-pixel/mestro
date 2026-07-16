@@ -1,13 +1,22 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
-import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 
 export async function loginAction(formData: FormData) {
-  const username = String(formData.get("username") || "").trim();
-  const password = String(formData.get("password") || "").trim();
+  const username = String(
+    formData.get("username") ?? ""
+  ).trim();
+
+  const password = String(
+    formData.get("password") ?? ""
+  );
+
+  if (!username || !password) {
+    redirect("/login?error=1");
+  }
 
   const user = await prisma.user.findUnique({
     where: { username },
@@ -17,7 +26,10 @@ export async function loginAction(formData: FormData) {
     redirect("/login?error=1");
   }
 
-  const passwordMatches = await bcrypt.compare(password, user.password);
+  const passwordMatches = await bcrypt.compare(
+    password,
+    user.password
+  );
 
   if (!passwordMatches) {
     redirect("/login?error=1");
@@ -25,25 +37,31 @@ export async function loginAction(formData: FormData) {
 
   const cookieStore = await cookies();
 
-  cookieStore.set("maestro_user", user.id, {
+  const cookieOptions = {
     httpOnly: true,
-    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
-  });
+  };
 
-  cookieStore.set("maestro_role", user.role, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
-  });
+  cookieStore.set(
+    "maestro_user",
+    user.id,
+    cookieOptions
+  );
+
+  cookieStore.set(
+    "maestro_role",
+    user.role,
+    cookieOptions
+  );
 
   if (user.role === "OPERATOR") {
     redirect("/cooking");
   }
 
-  redirect("/dashboard");
+  redirect("/");
 }
 
 export async function logoutAction() {
