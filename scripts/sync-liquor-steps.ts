@@ -62,8 +62,8 @@ async function main() {
     title: step.title,
     instruction: step.instruction,
 
-    actions: [],
-    checks: [],
+    actions: step.procedure,
+checks: step.checks,
 
     recipeIngredientId,
 

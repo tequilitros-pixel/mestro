@@ -114,8 +114,10 @@ enum DistillationEventType {
 enum LiquorBatchStatus {
   PLANEADO
   EN_ELABORACION
+  PAUSADO
   EN_REPOSO
   LISTO_PARA_EMBOTELLAR
+  EMBOTELLANDO
   TERMINADO
   CANCELADO
 }
@@ -202,6 +204,7 @@ model User {
 
   liquorBottlingsCreated  LiquorBottling[] @relation("LiquorBottlingCreatedBy")
   liquorBottlingsFinished LiquorBottling[] @relation("LiquorBottlingFinishedBy")
+  liquorBatchsPaused      LiquorBatch[]    @relation("LiquorBatchPausedBy")
 
   liquorBatchStepsCompleted LiquorBatchStep[] @relation("LiquorBatchStepCompletedBy")
 }
@@ -768,6 +771,15 @@ model LiquorBatch {
 
   finishedById String?
   finishedBy   User?   @relation("LiquorBatchFinishedBy", fields: [finishedById], references: [id])
+
+  pausedAt DateTime?
+
+  pausedById String?
+
+  pausedBy    User?   @relation("LiquorBatchPausedBy", fields: [pausedById], references: [id])
+  pauseReason String?
+
+  pauseNotes String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

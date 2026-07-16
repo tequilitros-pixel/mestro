@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
-export async function completeLiquorIngredientAction(
+export async function completeLiquorBatchStepAction(
   formData: FormData
 ) {
   const user = await getCurrentUser();
@@ -14,76 +14,184 @@ export async function completeLiquorIngredientAction(
     redirect("/login");
   }
 
-  const batchId = String(formData.get("batchId") ?? "");
-  const ingredientId = String(formData.get("ingredientId") ?? "");
+  const batchId = String(formData.get("batchId") ?? "").trim();
+  const stepId = String(formData.get("stepId") ?? "").trim();
 
-  const actualQuantityValue = String(
+  const actualQuantityText = String(
     formData.get("actualQuantity") ?? ""
   ).trim();
 
-  const actualQuantity =
-    actualQuantityValue === ""
-      ? null
-      : Number(actualQuantityValue);
+  const completedCheckIndexes = formData
+    .getAll("completedCheckIndexes")
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value));
 
-  if (!batchId || !ingredientId) {
-    throw new Error("Falta identificar el lote o el ingrediente.");
+  if (!batchId || !stepId) {
+    throw new Error("Falta identificar el lote o el paso.");
   }
 
-  if (
-    actualQuantity !== null &&
-    (!Number.isFinite(actualQuantity) || actualQuantity < 0)
-  ) {
-    throw new Error("La cantidad real no es válida.");
+  const step = await prisma.liquorBatchStep.findFirst({
+    where: {
+      id: stepId,
+      batchId,
+    },
+    include: {
+      batch: true,
+      batchIngredient: true,
+    },
+  });
+
+  if (!step) {
+    throw new Error("No se encontró el paso solicitado.");
   }
 
-  const ingredient =
-    await prisma.liquorBatchIngredient.findFirst({
-      where: {
-        id: ingredientId,
-        batchId,
-      },
-      include: {
-        batch: true,
-      },
-    });
-
-  if (!ingredient) {
-    throw new Error("No se encontró el ingrediente.");
-  }
-
-  if (ingredient.batch.status !== "EN_ELABORACION") {
+  if (step.batch.status !== "EN_ELABORACION") {
     throw new Error(
       "Este lote ya no se encuentra en elaboración."
     );
   }
 
-  await prisma.$transaction([
-    prisma.liquorBatchIngredient.update({
+  if (step.status === "COMPLETADO") {
+    revalidatePath(`/liquors/batches/${batchId}`);
+    return;
+  }
+
+  const previousPendingStep =
+    await prisma.liquorBatchStep.findFirst({
       where: {
-        id: ingredient.id,
+        batchId,
+        position: {
+          lt: step.position,
+        },
+        status: {
+          not: "COMPLETADO",
+        },
+      },
+      orderBy: {
+        position: "asc",
+      },
+    });
+
+  if (previousPendingStep) {
+    throw new Error(
+      "Debes completar los pasos anteriores antes de continuar."
+    );
+  }
+
+  const requiredCheckIndexes = step.checks.map(
+    (_, index) => index
+  );
+
+  const allChecksCompleted = requiredCheckIndexes.every(
+    (index) => completedCheckIndexes.includes(index)
+  );
+
+  if (!allChecksCompleted) {
+    throw new Error(
+      "Debes confirmar todas las verificaciones antes de finalizar el paso."
+    );
+  }
+
+  let actualQuantity: number | null = null;
+
+  if (step.plannedQuantity !== null) {
+    actualQuantity =
+      actualQuantityText === ""
+        ? step.plannedQuantity
+        : Number(actualQuantityText);
+
+    if (
+      !Number.isFinite(actualQuantity) ||
+      actualQuantity < 0
+    ) {
+      throw new Error("La cantidad real utilizada no es válida.");
+    }
+  }
+
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.liquorBatchStep.update({
+      where: {
+        id: step.id,
       },
       data: {
-        completed: true,
-        actualQuantity:
-          actualQuantity ?? ingredient.scaledQuantity,
-        completedAt: new Date(),
+        status: "COMPLETADO",
+        actualQuantity,
+        completedActionIndexes: step.actions.map(
+          (_, index) => index
+        ),
+        completedCheckIndexes,
+        startedAt: step.startedAt ?? now,
+        completedAt: now,
+        completedById: user.id,
+        validationPassed: true,
       },
-    }),
+    });
 
-    prisma.liquorBatchEvent.create({
+    if (step.batchIngredientId) {
+      await tx.liquorBatchIngredient.update({
+        where: {
+          id: step.batchIngredientId,
+        },
+        data: {
+          completed: true,
+          actualQuantity:
+            actualQuantity ??
+            step.batchIngredient?.scaledQuantity ??
+            null,
+          completedAt: now,
+        },
+      });
+    }
+
+    await tx.liquorBatchEvent.create({
       data: {
         batchId,
-        type: "INGREDIENTE_AGREGADO",
-        ingredientName: ingredient.name,
-        ingredientQuantity:
-          actualQuantity ?? ingredient.scaledQuantity,
-        ingredientUnit: ingredient.unit,
+        type: "OBSERVACION",
         createdById: user.id,
-        notes: "Ingrediente confirmado por el operador.",
+        ingredientName:
+          step.batchIngredient?.name ?? null,
+        ingredientQuantity: actualQuantity,
+        ingredientUnit: step.unit,
+        notes: `Paso ${step.position} completado: ${step.title}.`,
       },
-    }),
-  ]);
+    });
+
+    const remainingSteps =
+      await tx.liquorBatchStep.count({
+        where: {
+          batchId,
+          id: {
+            not: step.id,
+          },
+          status: {
+            not: "COMPLETADO",
+          },
+        },
+      });
+
+    if (remainingSteps === 0) {
+      await tx.liquorBatch.update({
+        where: {
+          id: batchId,
+        },
+        data: {
+          status: "LISTO_PARA_EMBOTELLAR",
+        },
+      });
+
+      await tx.liquorBatchEvent.create({
+        data: {
+          batchId,
+          type: "FIN_ELABORACION",
+          createdById: user.id,
+          notes:
+            "Todos los pasos del procedimiento fueron completados.",
+        },
+      });
+    }
+  });
 
   revalidatePath(`/liquors/batches/${batchId}`);
 }

@@ -2,35 +2,44 @@
 
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
-import { completeLiquorIngredientAction } from "@/app/actions/liquorBatchAssistant";
+import { completeLiquorBatchStepAction } from "@/app/actions/liquorBatchAssistant";
+import LiquorPauseModal from "@/components/liquors/LiquorPauseModal";
 
-type Ingredient = {
+type BatchStep = {
   id: string;
-  name: string;
-  scaledQuantity: number;
+  position: number;
+  type: string;
+  status: string;
+
+  title: string;
+  instruction: string | null;
+
+  actions: string[];
+  checks: string[];
+
+  plannedQuantity: number | null;
   actualQuantity: number | null;
-  unit: string;
-  completed: boolean;
-  notes: string | null;
+  unit: string | null;
 };
 
 type Props = {
   batchId: string;
-  ingredients: Ingredient[];
+  steps: BatchStep[];
 };
 
 export default function LiquorBatchAssistant({
   batchId,
-  ingredients,
+  steps,
 }: Props) {
-  const completedCount = ingredients.filter(
-    (ingredient) => ingredient.completed
+    const [pauseModalOpen, setPauseModalOpen] = useState(false);
+  const completedCount = steps.filter(
+    (step) => step.status === "COMPLETADO"
   ).length;
 
-  const totalCount = ingredients.length;
+  const totalCount = steps.length;
 
-  const currentIngredient = ingredients.find(
-    (ingredient) => !ingredient.completed
+  const currentStep = steps.find(
+    (step) => step.status !== "COMPLETADO"
   );
 
   const progress =
@@ -38,19 +47,19 @@ export default function LiquorBatchAssistant({
       ? Math.round((completedCount / totalCount) * 100)
       : 0;
 
-  if (!currentIngredient) {
+  if (!currentStep) {
     return (
       <section className="rounded-3xl border border-green-500/30 bg-green-500/10 p-8 text-center">
         <p className="text-sm font-semibold uppercase tracking-[0.3em] text-green-400">
-          Ingredientes completados
+          Elaboración completada
         </p>
 
         <h2 className="mt-3 text-3xl font-black text-white">
-          Todo listo para continuar
+          Todos los pasos fueron realizados
         </h2>
 
         <p className="mt-3 text-slate-300">
-          Ya se agregaron todos los ingredientes de la orden.
+          El lote está listo para continuar con el embotellado.
         </p>
       </section>
     );
@@ -76,7 +85,7 @@ export default function LiquorBatchAssistant({
 
       <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-800">
         <div
-          className="h-full rounded-full bg-purple-500 transition-all"
+          className="h-full rounded-full bg-purple-500 transition-all duration-500"
           style={{
             width: `${progress}%`,
           }}
@@ -84,49 +93,95 @@ export default function LiquorBatchAssistant({
       </div>
 
       <div className="mt-8 rounded-3xl border border-slate-800 bg-slate-950/60 p-6 sm:p-8">
-        <p className="text-sm uppercase tracking-wider text-slate-500">
-          Agrega
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+          {formatStepType(currentStep.type)}
         </p>
 
         <h3 className="mt-3 text-3xl font-black text-white">
-          {currentIngredient.name}
+          {currentStep.title}
         </h3>
 
-        <p className="mt-5 text-5xl font-black text-purple-300">
-          {formatNumber(currentIngredient.scaledQuantity)}{" "}
-          {currentIngredient.unit}
-        </p>
+        {currentStep.plannedQuantity !== null &&
+          currentStep.unit && (
+            <div className="mt-6 rounded-2xl border border-purple-500/20 bg-purple-500/10 p-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-purple-300/70">
+                Cantidad requerida
+              </p>
 
-        {currentIngredient.notes && (
-          <p className="mt-4 text-slate-400">
-            {currentIngredient.notes}
-          </p>
+              <p className="mt-2 text-4xl font-black text-purple-200">
+                {formatNumber(currentStep.plannedQuantity)}{" "}
+                {currentStep.unit}
+              </p>
+            </div>
+          )}
+
+        {currentStep.instruction && (
+          <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Objetivo del paso
+            </p>
+
+            <p className="mt-3 leading-7 text-slate-300">
+              {currentStep.instruction}
+            </p>
+          </div>
         )}
 
-        <IngredientForm
+        <StepForm
+          key={currentStep.id}
           batchId={batchId}
-          ingredient={currentIngredient}
+          step={currentStep}
         />
+        <button
+  type="button"
+  onClick={() => setPauseModalOpen(true)}
+  className="mt-4 w-full rounded-2xl border border-amber-500 bg-amber-500/10 py-4 text-lg font-bold text-amber-300 transition hover:bg-amber-500/20"
+>
+  ⏸ Pausar elaboración
+</button>
+
+<LiquorPauseModal
+  batchId={batchId}
+  open={pauseModalOpen}
+  onClose={() => setPauseModalOpen(false)}
+/>
       </div>
     </section>
   );
 }
 
-function IngredientForm({
+function StepForm({
   batchId,
-  ingredient,
+  step,
 }: {
   batchId: string;
-  ingredient: Ingredient;
+  step: BatchStep;
 }) {
   const [actualQuantity, setActualQuantity] = useState(
-    String(ingredient.scaledQuantity)
+    step.plannedQuantity !== null
+      ? String(step.actualQuantity ?? step.plannedQuantity)
+      : ""
   );
+
+  const [completedChecks, setCompletedChecks] =
+    useState<number[]>([]);
+
+  const allChecksCompleted = step.checks.every(
+    (_, index) => completedChecks.includes(index)
+  );
+
+  function toggleCheck(index: number) {
+    setCompletedChecks((current) =>
+      current.includes(index)
+        ? current.filter((item) => item !== index)
+        : [...current, index]
+    );
+  }
 
   return (
     <form
-      action={completeLiquorIngredientAction}
-      className="mt-8 space-y-5"
+      action={completeLiquorBatchStepAction}
+      className="mt-8 space-y-7"
     >
       <input
         type="hidden"
@@ -136,55 +191,155 @@ function IngredientForm({
 
       <input
         type="hidden"
-        name="ingredientId"
-        value={ingredient.id}
+        name="stepId"
+        value={step.id}
       />
 
-      <div>
-        <label
-          htmlFor="actualQuantity"
-          className="text-sm font-semibold text-slate-300"
-        >
-          Cantidad real utilizada
-        </label>
+      {step.actions.length > 0 && (
+        <div>
+          <p className="text-sm font-black uppercase tracking-[0.2em] text-purple-300">
+            Procedimiento
+          </p>
 
-        <div className="mt-2 flex items-center gap-3">
-          <input
-            id="actualQuantity"
-            name="actualQuantity"
-            type="number"
-            min="0"
-            step="0.01"
-            value={actualQuantity}
-            onChange={(event) =>
-              setActualQuantity(event.target.value)
-            }
-            className="w-full rounded-2xl border border-slate-700 bg-slate-900 p-4 text-2xl font-bold text-white outline-none focus:border-purple-400"
-          />
+          <ol className="mt-4 space-y-3">
+            {step.actions.map((action, index) => (
+              <li
+                key={`${step.id}-action-${index}`}
+                className="flex gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-500/15 text-sm font-black text-purple-300">
+                  {index + 1}
+                </span>
 
-          <span className="shrink-0 text-lg font-bold text-slate-400">
-            {ingredient.unit}
-          </span>
+                <p className="pt-1 leading-6 text-slate-200">
+                  {action}
+                </p>
+              </li>
+            ))}
+          </ol>
         </div>
-      </div>
+      )}
 
-      <SubmitButton />
+      {step.plannedQuantity !== null && step.unit && (
+        <div>
+          <label
+            htmlFor={`actualQuantity-${step.id}`}
+            className="text-sm font-semibold text-slate-300"
+          >
+            Cantidad real utilizada
+          </label>
+
+          <div className="mt-2 flex items-center gap-3">
+            <input
+              id={`actualQuantity-${step.id}`}
+              name="actualQuantity"
+              type="number"
+              min="0"
+              step="0.01"
+              value={actualQuantity}
+              onChange={(event) =>
+                setActualQuantity(event.target.value)
+              }
+              className="w-full rounded-2xl border border-slate-700 bg-slate-900 p-4 text-2xl font-bold text-white outline-none transition focus:border-purple-400"
+            />
+
+            <span className="shrink-0 text-lg font-bold text-slate-400">
+              {step.unit}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {step.checks.length > 0 && (
+        <div>
+          <p className="text-sm font-black uppercase tracking-[0.2em] text-green-300">
+            Verificar antes de continuar
+          </p>
+
+          <div className="mt-4 space-y-3">
+            {step.checks.map((check, index) => {
+              const checked =
+                completedChecks.includes(index);
+
+              return (
+                <label
+                  key={`${step.id}-check-${index}`}
+                  className={`flex cursor-pointer items-start gap-4 rounded-2xl border p-4 transition ${
+                    checked
+                      ? "border-green-500/30 bg-green-500/10"
+                      : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    name="completedCheckIndexes"
+                    value={index}
+                    checked={checked}
+                    onChange={() => toggleCheck(index)}
+                    className="mt-1 h-5 w-5 accent-green-500"
+                  />
+
+                  <span
+                    className={
+                      checked
+                        ? "text-green-100"
+                        : "text-slate-300"
+                    }
+                  >
+                    {check}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <SubmitButton
+        disabled={
+          !allChecksCompleted ||
+          (step.plannedQuantity !== null &&
+            (!actualQuantity ||
+              Number(actualQuantity) < 0))
+        }
+      />
+    
     </form>
   );
 }
 
-function SubmitButton() {
+function SubmitButton({
+  disabled,
+}: {
+  disabled: boolean;
+}) {
   const { pending } = useFormStatus();
 
   return (
     <button
       type="submit"
-      disabled={pending}
-      className="w-full rounded-2xl bg-purple-500 py-4 text-lg font-bold text-white transition hover:bg-purple-400 disabled:cursor-not-allowed disabled:opacity-60"
+      disabled={pending || disabled}
+      className="w-full rounded-2xl bg-purple-500 py-4 text-lg font-bold text-white transition hover:bg-purple-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
     >
-      {pending ? "Guardando..." : "✓ Marcar como agregado"}
+      {pending
+        ? "Guardando paso..."
+        : "✓ Finalizar paso"}
     </button>
   );
+}
+
+function formatStepType(type: string) {
+  const labels: Record<string, string> = {
+    PREPARATION: "Preparación",
+    INGREDIENT: "Ingrediente",
+    MIXING: "Mezclado",
+    WAIT: "Reposo",
+    MEASUREMENT: "Medición",
+    QUALITY_CHECK: "Control de calidad",
+    FINISH: "Finalización",
+  };
+
+  return labels[type] ?? "Paso de elaboración";
 }
 
 function formatNumber(value: number) {

@@ -16,8 +16,8 @@ export async function createLiquorBatchAction(formData: FormData) {
     redirect("/login");
   }
 
-  const productId = String(formData.get("productId") ?? "");
-  const recipeId = String(formData.get("recipeId") ?? "");
+  const productId = String(formData.get("productId") ?? "").trim();
+  const recipeId = String(formData.get("recipeId") ?? "").trim();
   const requestedLiters = Number(formData.get("requestedLiters"));
 
   if (!productId || !recipeId) {
@@ -36,7 +36,17 @@ export async function createLiquorBatchAction(formData: FormData) {
     },
     include: {
       product: true,
+
       ingredients: {
+        orderBy: {
+          position: "asc",
+        },
+      },
+
+      steps: {
+        where: {
+          active: true,
+        },
         orderBy: {
           position: "asc",
         },
@@ -50,6 +60,12 @@ export async function createLiquorBatchAction(formData: FormData) {
 
   if (recipe.targetLiters === null || recipe.targetLiters <= 0) {
     throw new Error("La receta no tiene un volumen base válido.");
+  }
+
+  if (recipe.steps.length === 0) {
+    throw new Error(
+      "La receta todavía no tiene pasos sincronizados. Ejecuta npm run sync:liquor-steps."
+    );
   }
 
   const calculatedRecipe = scaleRecipe(
@@ -91,7 +107,7 @@ export async function createLiquorBatchAction(formData: FormData) {
           date: now,
         });
 
-        return tx.liquorBatch.create({
+        const batch = await tx.liquorBatch.create({
           data: {
             code,
             sequence,
@@ -113,17 +129,6 @@ export async function createLiquorBatchAction(formData: FormData) {
               `Orden calculada automáticamente con factor ` +
               `${calculatedRecipe.factor.toFixed(6)}.`,
 
-            executionIngredients: {
-              create: calculatedRecipe.ingredients.map((ingredient) => ({
-                recipeIngredientId: ingredient.id,
-                name: ingredient.name,
-                baseQuantity: ingredient.quantity,
-                scaledQuantity: ingredient.scaledQuantity,
-                unit: ingredient.unit,
-                notes: ingredient.notes ?? null,
-              })),
-            },
-
             events: {
               create: {
                 type: "INICIO_ELABORACION",
@@ -136,7 +141,113 @@ export async function createLiquorBatchAction(formData: FormData) {
             },
           },
         });
-      });
+
+        /*
+         * Guarda cada ingrediente calculado para este lote.
+         *
+         * El Map permite encontrar después el ingrediente
+         * correspondiente a cada paso de la receta.
+         */
+        const batchIngredientsByRecipeIngredientId = new Map<
+          string,
+          {
+            id: string;
+            scaledQuantity: number;
+            unit: string;
+          }
+        >();
+
+        for (const ingredient of calculatedRecipe.ingredients) {
+          const createdIngredient =
+            await tx.liquorBatchIngredient.create({
+              data: {
+                batchId: batch.id,
+                recipeIngredientId: ingredient.id,
+
+                name: ingredient.name,
+
+                baseQuantity: ingredient.quantity,
+                scaledQuantity: ingredient.scaledQuantity,
+                unit: ingredient.unit,
+
+                notes: ingredient.notes ?? null,
+              },
+            });
+
+          batchIngredientsByRecipeIngredientId.set(ingredient.id, {
+            id: createdIngredient.id,
+            scaledQuantity: createdIngredient.scaledQuantity,
+            unit: createdIngredient.unit,
+          });
+        }
+
+        /*
+         * Copia los pasos oficiales hacia el lote.
+         *
+         * Desde este momento quedan congelados:
+         * si la receta cambia después, este lote conserva
+         * exactamente las instrucciones con las que nació.
+         */
+        for (const step of recipe.steps) {
+          const relatedIngredient = step.recipeIngredientId
+            ? batchIngredientsByRecipeIngredientId.get(
+                step.recipeIngredientId
+              )
+            : undefined;
+
+          await tx.liquorBatchStep.create({
+            data: {
+              batchId: batch.id,
+              recipeStepId: step.id,
+
+              position: step.position,
+              type: step.type,
+              status: "PENDIENTE",
+
+              title: step.title,
+              instruction: step.instruction,
+
+              actions: step.actions,
+              checks: step.checks,
+
+              completedActionIndexes: [],
+              completedCheckIndexes: [],
+
+              batchIngredientId: relatedIngredient?.id ?? null,
+
+              plannedQuantity:
+                relatedIngredient?.scaledQuantity ?? null,
+
+              actualQuantity: null,
+
+              unit: relatedIngredient?.unit ?? null,
+
+              durationMinutes: step.durationMinutes,
+              minimumMinutes: step.minimumMinutes,
+              maximumMinutes: step.maximumMinutes,
+
+              actualMinutes: null,
+
+              measurementLabel: step.measurementLabel,
+              measurementUnit: step.measurementUnit,
+              minimumValue: step.minimumValue,
+              maximumValue: step.maximumValue,
+
+              measuredValue: null,
+              validationPassed: null,
+
+              observations: step.notes,
+            },
+          });
+        }
+
+      return batch;
+},
+{
+  maxWait: 10000,
+  timeout: 30000,
+}
+);
 
       createdBatchId = createdBatch.id;
       break;
