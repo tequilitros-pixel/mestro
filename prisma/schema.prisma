@@ -41,6 +41,137 @@ enum LotStage {
   TERMINADO
 }
 
+enum CookingStatus {
+  ACTIVA
+  PAUSADA
+  TERMINADA
+}
+
+enum CookingEventType {
+  INICIO_COCCION
+  INICIO_VAPOR
+  TEMPERATURA
+  MIELES_AMARGAS
+  MIELES_DULCES
+  BAJAR_VAPOR
+  AUMENTAR_VAPOR
+  SUSPENDER_VAPOR
+  FIN_COCCION
+  OBSERVACION
+}
+
+enum MillingStatus {
+  ACTIVA
+  PAUSADA
+  TERMINADA
+}
+
+enum MillingEventType {
+  INICIO_MOLIENDA
+  REGISTRO_BRIX
+  REGISTRO_PH
+  REGISTRO_TEMPERATURA
+  AGREGAR_AGUA
+  CAMBIO_PRENSA
+  LAVADO_BAGAZO
+  REGISTRO_BAGAZO
+  FIN_MOLIENDA
+  OBSERVACION
+}
+
+enum FermentationStatus {
+  ACTIVA
+  TERMINADA
+}
+
+enum DistillationStatus {
+  ACTIVA
+  TERMINADA
+}
+
+enum DistillationType {
+  DESTROZADO
+  RECTIFICACION
+}
+
+enum DistillationEventType {
+  INICIO_CALENTAMIENTO
+  TEMPERATURA
+  ALCOHOL
+  LITROS
+  CORTE_CABEZAS
+  INICIO_CORAZON
+  FIN_CORAZON
+  INICIO_COLAS
+  FIN_DESTILACION
+  OBSERVACION
+}
+
+/**
+ * ELABORACIÓN DE LICORES
+ */
+
+enum LiquorBatchStatus {
+  PLANEADO
+  EN_ELABORACION
+  EN_REPOSO
+  LISTO_PARA_EMBOTELLAR
+  TERMINADO
+  CANCELADO
+}
+
+enum LiquorBatchEventType {
+  INICIO_ELABORACION
+  INGREDIENTE_AGREGADO
+  MEZCLADO
+  MEDICION
+  CORRECCION
+  FILTRADO
+  INICIO_REPOSO
+  FIN_REPOSO
+  CONTROL_CALIDAD
+  OBSERVACION
+  FIN_ELABORACION
+}
+
+enum LiquorQualityStatus {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
+enum LiquorBottlingStatus {
+  PLANEADO
+  ACTIVO
+  TERMINADO
+  CANCELADO
+}
+
+enum LiquorBottleStatus {
+  DISPONIBLE
+  RESERVADA
+  VENDIDA
+  MERMA
+  RETIRADA
+}
+
+enum LiquorStepType {
+  PREPARATION
+  INGREDIENT
+  MIXING
+  WAIT
+  MEASUREMENT
+  QUALITY_CHECK
+  FINISH
+}
+
+enum LiquorBatchStepStatus {
+  PENDIENTE
+  EN_PROCESO
+  COMPLETADO
+  OMITIDO
+}
+
 model User {
   id       String   @id @default(cuid())
   name     String
@@ -54,13 +185,25 @@ model User {
   updatedAt DateTime  @updatedAt
   lastLogin DateTime?
 
-  lots                  Lot[]
-  millingDischarges     MillingDischarge[]
-  pushSubscriptions     PushSubscription[]
-  cookingsFinished      Cooking[]          @relation("CookingFinishedBy")
-  fermentationsFinished Fermentation[]     @relation("FermentationFinishedBy")
-  distillationsFinished Distillation[]     @relation("DistillationFinishedBy")
-  millingsFinished      Milling[]          @relation("MillingFinishedBy")
+  lots              Lot[]
+  millingDischarges MillingDischarge[]
+  pushSubscriptions PushSubscription[]
+
+  cookingsFinished      Cooking[]      @relation("CookingFinishedBy")
+  millingsFinished      Milling[]      @relation("MillingFinishedBy")
+  fermentationsFinished Fermentation[] @relation("FermentationFinishedBy")
+  distillationsFinished Distillation[] @relation("DistillationFinishedBy")
+
+  liquorProductsCreated LiquorProduct[]    @relation("LiquorProductCreatedBy")
+  liquorRecipesCreated  LiquorRecipe[]     @relation("LiquorRecipeCreatedBy")
+  liquorBatchesCreated  LiquorBatch[]      @relation("LiquorBatchCreatedBy")
+  liquorBatchesFinished LiquorBatch[]      @relation("LiquorBatchFinishedBy")
+  liquorEventsCreated   LiquorBatchEvent[] @relation("LiquorBatchEventCreatedBy")
+
+  liquorBottlingsCreated  LiquorBottling[] @relation("LiquorBottlingCreatedBy")
+  liquorBottlingsFinished LiquorBottling[] @relation("LiquorBottlingFinishedBy")
+
+  liquorBatchStepsCompleted LiquorBatchStep[] @relation("LiquorBatchStepCompletedBy")
 }
 
 model Equipment {
@@ -106,25 +249,6 @@ model Lot {
   fermentations Fermentation[]
   distillations Distillation[]
   expenses      LotExpense[]
-}
-
-enum CookingStatus {
-  ACTIVA
-  PAUSADA
-  TERMINADA
-}
-
-enum CookingEventType {
-  INICIO_COCCION
-  INICIO_VAPOR
-  TEMPERATURA
-  MIELES_AMARGAS
-  MIELES_DULCES
-  BAJAR_VAPOR
-  AUMENTAR_VAPOR
-  SUSPENDER_VAPOR
-  FIN_COCCION
-  OBSERVACION
 }
 
 model Cooking {
@@ -183,25 +307,6 @@ model CookingEvent {
   cooking Cooking @relation(fields: [cookingId], references: [id])
 
   @@index([cookingId])
-}
-
-enum MillingStatus {
-  ACTIVA
-  PAUSADA
-  TERMINADA
-}
-
-enum MillingEventType {
-  INICIO_MOLIENDA
-  REGISTRO_BRIX
-  REGISTRO_PH
-  REGISTRO_TEMPERATURA
-  AGREGAR_AGUA
-  CAMBIO_PRENSA
-  LAVADO_BAGAZO
-  REGISTRO_BAGAZO
-  FIN_MOLIENDA
-  OBSERVACION
 }
 
 model Milling {
@@ -273,11 +378,8 @@ model MillingEvent {
   createdAt DateTime @default(now())
 
   milling Milling @relation(fields: [millingId], references: [id])
-}
 
-enum FermentationStatus {
-  ACTIVA
-  TERMINADA
+  @@index([millingId])
 }
 
 model Fermentation {
@@ -342,29 +444,8 @@ model FermentationReading {
   notes String?
 
   createdAt DateTime @default(now())
-}
 
-enum DistillationStatus {
-  ACTIVA
-  TERMINADA
-}
-
-enum DistillationType {
-  DESTROZADO
-  RECTIFICACION
-}
-
-enum DistillationEventType {
-  INICIO_CALENTAMIENTO
-  TEMPERATURA
-  ALCOHOL
-  LITROS
-  CORTE_CABEZAS
-  INICIO_CORAZON
-  FIN_CORAZON
-  INICIO_COLAS
-  FIN_DESTILACION
-  OBSERVACION
+  @@index([fermentationId])
 }
 
 model Distillation {
@@ -472,6 +553,7 @@ model MillingDischarge {
 
   @@index([millingId])
   @@index([tankId])
+  @@index([createdById])
 }
 
 model PushSubscription {
@@ -485,4 +567,431 @@ model PushSubscription {
   auth     String
 
   createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/**
+ * ============================================================
+ * ELABORACIÓN DE LICORES
+ * ============================================================
+ */
+
+/**
+ * Representa un producto permanente:
+ * Zarzamora, Mango, Café, Jamaica, Mojito, Granada,
+ * Tequimiche, Sangría o Destilado para Coscorrón.
+ * Al entrar a un producto se mostrará todo su historial.
+ */
+model LiquorProduct {
+  id String @id @default(cuid())
+
+  name   String @unique
+  slug   String @unique
+  prefix String @unique
+
+  description String?
+  icon        String?
+
+  defaultAlcohol       Float?
+  defaultShelfLifeDays Int?
+
+  active Boolean @default(true)
+
+  createdById String?
+  createdBy   User?   @relation("LiquorProductCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  recipes LiquorRecipe[]
+  batches LiquorBatch[]
+
+  @@index([createdById])
+  @@index([active])
+}
+
+/**
+ * Una misma clase de licor puede tener varias versiones de receta.
+ * Ejemplo:
+ * Zarzamora V1
+ * Zarzamora V2
+ * Zarzamora V3
+ * Los lotes anteriores conservan la receta que utilizaron.
+ */
+model LiquorRecipe {
+  id String @id @default(cuid())
+
+  productId String
+  product   LiquorProduct @relation(fields: [productId], references: [id])
+
+  name    String
+  version Int
+
+  targetLiters  Float?
+  targetAlcohol Float?
+
+  instructions String?
+  notes        String?
+
+  active Boolean @default(true)
+
+  createdById String?
+  createdBy   User?   @relation("LiquorRecipeCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ingredients LiquorRecipeIngredient[]
+  steps       LiquorRecipeStep[]
+  batches     LiquorBatch[]
+
+  @@unique([productId, version])
+  @@index([productId])
+  @@index([createdById])
+  @@index([active])
+}
+
+model LiquorRecipeStep {
+  id String @id @default(cuid())
+
+  recipeId String
+  recipe   LiquorRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  position Int
+  type     LiquorStepType
+
+  title       String
+  instruction String?
+
+  actions String[]
+  checks  String[]
+
+  recipeIngredientId String?
+  recipeIngredient   LiquorRecipeIngredient? @relation(fields: [recipeIngredientId], references: [id], onDelete: SetNull)
+
+  durationMinutes Int?
+  minimumMinutes  Int?
+  maximumMinutes  Int?
+
+  measurementLabel String?
+  measurementUnit  String?
+  minimumValue     Float?
+  maximumValue     Float?
+
+  required Boolean @default(true)
+  active   Boolean @default(true)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batchSteps LiquorBatchStep[]
+
+  @@unique([recipeId, position])
+  @@index([recipeId])
+  @@index([recipeIngredientId])
+  @@index([type])
+}
+
+/**
+ * Ingredientes oficiales de cada versión de receta.
+ */
+model LiquorRecipeIngredient {
+  id String @id @default(cuid())
+
+  recipeId String
+  recipe   LiquorRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  name     String
+  quantity Float
+  unit     String
+
+  position Int     @default(0)
+  optional Boolean @default(false)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batchIngredients LiquorBatchIngredient[]
+  recipeSteps      LiquorRecipeStep[]
+
+  @@index([recipeId])
+  @@index([position])
+}
+
+/**
+ * Cada elaboración física de un licor.
+ * El campo sequence mantiene el consecutivo permanente global:
+ * LZ-15-07-2026-001
+ * LM-16-07-2026-002
+ * LC-18-07-2026-003
+ */
+model LiquorBatch {
+  id String @id @default(cuid())
+
+  code     String @unique
+  sequence Int    @unique
+
+  productId String
+  product   LiquorProduct @relation(fields: [productId], references: [id])
+
+  recipeId String
+  recipe   LiquorRecipe @relation(fields: [recipeId], references: [id])
+
+  status LiquorBatchStatus @default(PLANEADO)
+
+  plannedLiters Float
+  actualLiters  Float?
+
+  initialAlcohol Float?
+  finalAlcohol   Float?
+
+  productionDate DateTime  @default(now())
+  expirationDate DateTime?
+
+  qualityStatus LiquorQualityStatus @default(PENDIENTE)
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  closureCode String? @unique
+
+  observations String?
+  finalNotes   String?
+
+  createdById String
+  createdBy   User   @relation("LiquorBatchCreatedBy", fields: [createdById], references: [id])
+
+  finishedById String?
+  finishedBy   User?   @relation("LiquorBatchFinishedBy", fields: [finishedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events               LiquorBatchEvent[]
+  bottlings            LiquorBottling[]
+  executionIngredients LiquorBatchIngredient[]
+  steps                LiquorBatchStep[]
+
+  @@index([productId])
+  @@index([recipeId])
+  @@index([status])
+  @@index([qualityStatus])
+  @@index([productionDate])
+  @@index([createdById])
+  @@index([finishedById])
+}
+
+/**
+ * Bitácora completa de elaboración.
+ */
+model LiquorBatchEvent {
+  id String @id @default(cuid())
+
+  batchId String
+  batch   LiquorBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  type LiquorBatchEventType
+
+  temperature Float?
+  alcohol     Float?
+  brix        Float?
+  ph          Float?
+  liters      Float?
+
+  ingredientName     String?
+  ingredientQuantity Float?
+  ingredientUnit     String?
+
+  qualityStatus LiquorQualityStatus?
+
+  notes String?
+
+  createdById String?
+  createdBy   User?   @relation("LiquorBatchEventCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([batchId])
+  @@index([type])
+  @@index([createdById])
+  @@index([createdAt])
+}
+
+/**
+ * Cada corrida de embotellado.
+ * Un lote puede embotellarse en distintas presentaciones:
+ * 250 ml, 500 ml, 750 ml, 1 litro, 2 litros, etc.
+ */
+
+model LiquorBatchIngredient {
+  id String @id @default(cuid())
+
+  batchId String
+  batch   LiquorBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  recipeIngredientId String?
+
+  recipeIngredient LiquorRecipeIngredient? @relation(fields: [recipeIngredientId], references: [id])
+  name             String
+
+  baseQuantity   Float
+  scaledQuantity Float
+  unit           String
+
+  completed      Boolean   @default(false)
+  actualQuantity Float?
+  completedAt    DateTime?
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batchSteps LiquorBatchStep[]
+
+  @@index([batchId])
+  @@index([recipeIngredientId])
+}
+
+model LiquorBatchStep {
+  id String @id @default(cuid())
+
+  batchId String
+  batch   LiquorBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  recipeStepId String?
+  recipeStep   LiquorRecipeStep? @relation(fields: [recipeStepId], references: [id], onDelete: SetNull)
+
+  position Int
+  type     LiquorStepType
+  status   LiquorBatchStepStatus @default(PENDIENTE)
+
+  title       String
+  instruction String?
+
+  actions String[]
+  checks  String[]
+
+  completedActionIndexes Int[]
+  completedCheckIndexes  Int[]
+
+  batchIngredientId String?
+  batchIngredient   LiquorBatchIngredient? @relation(fields: [batchIngredientId], references: [id], onDelete: SetNull)
+
+  plannedQuantity Float?
+  actualQuantity  Float?
+  unit            String?
+
+  durationMinutes Int?
+  minimumMinutes  Int?
+  maximumMinutes  Int?
+  actualMinutes   Int?
+
+  measurementLabel String?
+  measurementUnit  String?
+  minimumValue     Float?
+  maximumValue     Float?
+  measuredValue    Float?
+
+  validationPassed Boolean?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  completedById String?
+  completedBy   User?   @relation("LiquorBatchStepCompletedBy", fields: [completedById], references: [id])
+
+  observations String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([batchId, position])
+  @@index([batchId])
+  @@index([recipeStepId])
+  @@index([batchIngredientId])
+  @@index([status])
+  @@index([completedById])
+}
+
+model LiquorBottling {
+  id String @id @default(cuid())
+
+  code String @unique
+
+  batchId String
+  batch   LiquorBatch @relation(fields: [batchId], references: [id])
+
+  status LiquorBottlingStatus @default(PLANEADO)
+
+  bottleSizeMl Int
+
+  plannedBottles  Int?
+  producedBottles Int  @default(0)
+  rejectedBottles Int  @default(0)
+
+  litersUsed Float?
+  lossLiters Float?
+
+  bottledAt      DateTime?
+  expirationDate DateTime?
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  notes String?
+
+  createdById String
+  createdBy   User   @relation("LiquorBottlingCreatedBy", fields: [createdById], references: [id])
+
+  finishedById String?
+  finishedBy   User?   @relation("LiquorBottlingFinishedBy", fields: [finishedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bottles LiquorBottle[]
+
+  @@index([batchId])
+  @@index([status])
+  @@index([createdById])
+  @@index([finishedById])
+  @@index([bottledAt])
+}
+
+/**
+ * Cada botella individual tendrá identidad propia y un QR único.
+ */
+model LiquorBottle {
+  id String @id @default(cuid())
+
+  bottlingId String
+  bottling   LiquorBottling @relation(fields: [bottlingId], references: [id], onDelete: Cascade)
+
+  code         String @unique
+  serialNumber Int
+
+  qrToken String @unique @default(cuid())
+
+  status LiquorBottleStatus @default(DISPONIBLE)
+
+  bottledAt      DateTime
+  expirationDate DateTime?
+
+  currentLocation String?
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([bottlingId, serialNumber])
+  @@index([bottlingId])
+  @@index([status])
+  @@index([expirationDate])
+  @@index([currentLocation])
 }
