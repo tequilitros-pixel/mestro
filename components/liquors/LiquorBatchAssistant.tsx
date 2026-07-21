@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { completeLiquorBatchStepAction } from "@/app/actions/liquorBatchAssistant";
 import LiquorPauseModal from "@/components/liquors/LiquorPauseModal";
+import LiquorFinishModal from "@/components/liquors/LiquorFinishModal";
 
 type BatchStep = {
   id: string;
@@ -25,13 +26,18 @@ type BatchStep = {
 type Props = {
   batchId: string;
   steps: BatchStep[];
-};
+  plannedLiters: number;
+  targetAlcohol: number | null;
+}; 
 
 export default function LiquorBatchAssistant({
   batchId,
   steps,
+  plannedLiters,
+  targetAlcohol,
 }: Props) {
     const [pauseModalOpen, setPauseModalOpen] = useState(false);
+    const [finishModalOpen, setFinishModalOpen] = useState(false);
   const completedCount = steps.filter(
     (step) => step.status === "COMPLETADO"
   ).length;
@@ -54,6 +60,7 @@ export default function LiquorBatchAssistant({
           Elaboración completada
         </p>
 
+
         <h2 className="mt-3 text-3xl font-black text-white">
           Todos los pasos fueron realizados
         </h2>
@@ -61,6 +68,20 @@ export default function LiquorBatchAssistant({
         <p className="mt-3 text-slate-300">
           El lote está listo para continuar con el embotellado.
         </p>
+        <button
+  type="button"
+  onClick={() => setFinishModalOpen(true)}
+  className="mt-8 w-full rounded-2xl bg-green-600 py-4 text-xl font-black text-white transition hover:bg-green-500"
+>
+  ✅ Finalizar lote
+</button>
+<LiquorFinishModal
+  batchId={batchId}
+  open={finishModalOpen}
+  plannedLiters={plannedLiters}
+  targetAlcohol={targetAlcohol}
+  onClose={() => setFinishModalOpen(false)}
+/>
       </section>
     );
   }

@@ -158,39 +158,7 @@ export async function completeLiquorBatchStepAction(
       },
     });
 
-    const remainingSteps =
-      await tx.liquorBatchStep.count({
-        where: {
-          batchId,
-          id: {
-            not: step.id,
-          },
-          status: {
-            not: "COMPLETADO",
-          },
-        },
-      });
-
-    if (remainingSteps === 0) {
-      await tx.liquorBatch.update({
-        where: {
-          id: batchId,
-        },
-        data: {
-          status: "LISTO_PARA_EMBOTELLAR",
-        },
-      });
-
-      await tx.liquorBatchEvent.create({
-        data: {
-          batchId,
-          type: "FIN_ELABORACION",
-          createdById: user.id,
-          notes:
-            "Todos los pasos del procedimiento fueron completados.",
-        },
-      });
-    }
+   
   });
 
   revalidatePath(`/liquors/batches/${batchId}`);

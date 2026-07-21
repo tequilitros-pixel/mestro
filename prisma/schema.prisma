@@ -174,6 +174,18 @@ enum LiquorBatchStepStatus {
   OMITIDO
 }
 
+enum LiquorBottleMovementType {
+  CREADA
+  RESERVADA
+  LIBERADA
+  TRASPASADA
+  VENDIDA
+  DEVUELTA
+  MERMA
+  RETIRADA
+  AJUSTE
+}
+
 model User {
   id       String   @id @default(cuid())
   name     String
@@ -996,14 +1008,49 @@ model LiquorBottle {
   expirationDate DateTime?
 
   currentLocation String?
-  notes           String?
+
+  reservedAt DateTime?
+  soldAt     DateTime?
+  removedAt  DateTime?
+
+  soldById String?
+  branchId String?
+
+  notes String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  movements LiquorBottleMovement[]
 
   @@unique([bottlingId, serialNumber])
   @@index([bottlingId])
   @@index([status])
   @@index([expirationDate])
   @@index([currentLocation])
+  @@index([soldAt])
+  @@index([soldById])
+  @@index([branchId])
+}
+
+model LiquorBottleMovement {
+  id String @id @default(cuid())
+
+  bottleId String
+  bottle   LiquorBottle @relation(fields: [bottleId], references: [id], onDelete: Cascade)
+
+  type LiquorBottleMovementType
+
+  fromLocation String?
+  toLocation   String?
+
+  userId String?
+  notes  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([bottleId])
+  @@index([type])
+  @@index([userId])
+  @@index([createdAt])
 }
