@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/q"];
 
 const PUBLIC_API_PATHS = ["/api/push/check-overdue"];
 
@@ -15,8 +15,8 @@ const OPERATOR_ALLOWED_PATHS = [
 function matchesPath(pathname: string, path: string) {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
-export function middleware(request: NextRequest) {
 
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublicPage = PUBLIC_PATHS.some((path) =>
@@ -35,22 +35,28 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  /*
+   * Las páginas públicas pueden abrirse sin iniciar sesión.
+   * Esto incluye /login y cualquier QR bajo /q/[token].
+   */
+  if (isPublicPage) {
+    return NextResponse.next();
+  }
+
   const hasSession = request.cookies.has("maestro_user");
 
-  if (!hasSession && !isPublicPage) {
+  if (!hasSession) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (hasSession && !isPublicPage) {
-    const role = request.cookies.get("maestro_role")?.value;
+  const role = request.cookies.get("maestro_role")?.value;
 
-    const isAllowedForOperator = OPERATOR_ALLOWED_PATHS.some((path) =>
-      matchesPath(pathname, path)
-    );
+  const isAllowedForOperator = OPERATOR_ALLOWED_PATHS.some((path) =>
+    matchesPath(pathname, path)
+  );
 
-    if (role === "OPERATOR" && !isAllowedForOperator) {
-      return NextResponse.redirect(new URL("/cooking", request.url));
-    }
+  if (role === "OPERATOR" && !isAllowedForOperator) {
+    return NextResponse.redirect(new URL("/cooking", request.url));
   }
 
   return NextResponse.next();
