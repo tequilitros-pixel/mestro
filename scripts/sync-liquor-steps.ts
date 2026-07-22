@@ -126,7 +126,34 @@ function getStepType(step: {
   title: string;
 }): LiquorStepType {
   if (step.type) {
-    return LiquorStepType[step.type];
+    switch (step.type) {
+      case "PREPARATION":
+        return LiquorStepType.PREPARATION;
+
+      case "INGREDIENT":
+        return LiquorStepType.INGREDIENT;
+
+      case "HEATING":
+        return LiquorStepType.PREPARATION;
+
+      case "COOLING":
+        return LiquorStepType.PREPARATION;
+
+      case "MIXING":
+        return LiquorStepType.MIXING;
+
+      case "WAIT":
+        return LiquorStepType.WAIT;
+
+      case "MEASUREMENT":
+        return LiquorStepType.MEASUREMENT;
+
+      case "QUALITY_CHECK":
+        return LiquorStepType.QUALITY_CHECK;
+
+      case "FINISH":
+        return LiquorStepType.FINISH;
+    }
   }
 
   if (step.ingredient) {
@@ -141,13 +168,33 @@ function getStepType(step: {
     return LiquorStepType.MIXING;
   }
 
-  if (step.title.toLowerCase().includes("preparar")) {
-    return LiquorStepType.PREPARATION;
-  }
+  const normalizedTitle = step.title.toLowerCase();
 
-  if (step.title.toLowerCase().includes("liberar")) {
+  if (
+    normalizedTitle.includes("finalizar") ||
+    normalizedTitle.includes("terminar") ||
+    normalizedTitle.includes("liberar")
+  ) {
     return LiquorStepType.FINISH;
   }
 
-  return LiquorStepType.QUALITY_CHECK;
+  if (
+    normalizedTitle.includes("medir") ||
+    normalizedTitle.includes("alcohol") ||
+    normalizedTitle.includes("brix") ||
+    normalizedTitle.includes("ph") ||
+    normalizedTitle.includes("temperatura")
+  ) {
+    return LiquorStepType.MEASUREMENT;
+  }
+
+  if (
+    normalizedTitle.includes("calidad") ||
+    normalizedTitle.includes("verificar") ||
+    normalizedTitle.includes("inspeccionar")
+  ) {
+    return LiquorStepType.QUALITY_CHECK;
+  }
+
+  return LiquorStepType.PREPARATION;
 }

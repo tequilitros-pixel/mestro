@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import RecipeIngredientsEditor from "@/components/liquors/RecipeIngredientsEditor";
+import RecipeStepsEditor from "../../RecipeStepsEditor";
 
 type Props = {
   params: Promise<{
@@ -33,11 +34,36 @@ export default async function LiquorRecipeDetailPage({
           optional: true,
           notes: true,
           rawMaterialId: true,
+          rawMaterial: {
+            select: {
+              id: true,
+              name: true,
+              baseUnit: true,
+            },
+          },
         },
       },
       steps: {
         orderBy: {
           position: "asc",
+        },
+        include: {
+          recipeIngredient: {
+            select: {
+              id: true,
+              name: true,
+              quantity: true,
+              unit: true,
+              position: true,
+              rawMaterial: {
+                select: {
+                  id: true,
+                  name: true,
+                  baseUnit: true,
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -67,6 +93,55 @@ export default async function LiquorRecipeDetailPage({
       category: true,
     },
   });
+
+  const ingredientsForSteps = recipe.ingredients.map((ingredient) => ({
+    id: ingredient.id,
+    name: ingredient.name,
+    quantity: ingredient.quantity,
+    unit: ingredient.unit,
+    position: ingredient.position,
+    rawMaterial: ingredient.rawMaterial
+      ? {
+          id: ingredient.rawMaterial.id,
+          name: ingredient.rawMaterial.name,
+          unit: ingredient.rawMaterial.baseUnit,
+        }
+      : null,
+  }));
+
+  const stepsForEditor = recipe.steps.map((step) => ({
+    id: step.id,
+    position: step.position,
+    type: step.type,
+    title: step.title,
+    instruction: step.instruction,
+    actions: step.actions,
+    checks: step.checks,
+    recipeIngredientId: step.recipeIngredientId,
+    durationMinutes: step.durationMinutes,
+    measurementLabel: step.measurementLabel,
+    measurementUnit: step.measurementUnit,
+    minimumValue: step.minimumValue,
+    maximumValue: step.maximumValue,
+    required: step.required,
+    active: step.active,
+    recipeIngredient: step.recipeIngredient
+      ? {
+          id: step.recipeIngredient.id,
+          name: step.recipeIngredient.name,
+          quantity: step.recipeIngredient.quantity,
+          unit: step.recipeIngredient.unit,
+          position: step.recipeIngredient.position,
+          rawMaterial: step.recipeIngredient.rawMaterial
+            ? {
+                id: step.recipeIngredient.rawMaterial.id,
+                name: step.recipeIngredient.rawMaterial.name,
+                unit: step.recipeIngredient.rawMaterial.baseUnit,
+              }
+            : null,
+        }
+      : null,
+  }));
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
@@ -128,7 +203,10 @@ export default async function LiquorRecipeDetailPage({
             value={String(recipe.ingredients.length)}
           />
 
-          <Metric label="Pasos" value={String(recipe.steps.length)} />
+          <Metric
+            label="Pasos"
+            value={String(recipe.steps.length)}
+          />
         </div>
 
         {(recipe.instructions || recipe.notes) && (
@@ -158,42 +236,13 @@ export default async function LiquorRecipeDetailPage({
         />
       </div>
 
-      <section className="mt-8 rounded-3xl border border-slate-800 bg-slate-900/60 p-6 sm:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-sm font-black uppercase tracking-[0.2em] text-purple-300">
-              Procedimiento
-            </p>
-
-            <h2 className="mt-2 text-2xl font-black text-white">
-              📋 Constructor de pasos
-            </h2>
-
-            <p className="mt-3 max-w-2xl text-slate-400">
-              Aquí configuraremos el orden de elaboración, las
-              instrucciones, mediciones, tiempos y controles de
-              calidad de la receta.
-            </p>
-          </div>
-
-          <span className="w-fit rounded-full border border-slate-700 bg-slate-950/50 px-4 py-2 text-sm font-bold text-slate-500">
-            Próximo módulo
-          </span>
-        </div>
-
-        <div className="mt-8 rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 p-8 text-center">
-          <div className="text-4xl">🧠</div>
-
-          <h3 className="mt-4 text-lg font-black text-white">
-            Procedimiento inteligente
-          </h3>
-
-          <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
-            Después de registrar los ingredientes construiremos el
-            editor de pasos que utilizará el asistente de producción.
-          </p>
-        </div>
-      </section>
+      <div className="mt-8">
+        <RecipeStepsEditor
+          recipeId={recipe.id}
+          steps={stepsForEditor}
+          ingredients={ingredientsForSteps}
+        />
+      </div>
     </main>
   );
 }
@@ -211,7 +260,9 @@ function Metric({
         {label}
       </p>
 
-      <p className="mt-2 text-xl font-black text-white">{value}</p>
+      <p className="mt-2 text-xl font-black text-white">
+        {value}
+      </p>
     </div>
   );
 }
