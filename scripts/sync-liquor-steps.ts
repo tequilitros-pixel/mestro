@@ -1,5 +1,8 @@
 import "dotenv/config";
-import { PrismaClient } from "@prisma/client";
+import {
+  LiquorStepType,
+  PrismaClient,
+} from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
@@ -76,6 +79,26 @@ checks: step.checks,
       "hours" in step && typeof step.hours === "number"
         ? step.hours * 60
         : null,
+
+        measurementLabel:
+  "measurementLabel" in step
+    ? step.measurementLabel ?? null
+    : null,
+
+measurementUnit:
+  "measurementUnit" in step
+    ? step.measurementUnit ?? null
+    : null,
+
+minimumValue:
+  "minimumValue" in step
+    ? step.minimumValue ?? null
+    : null,
+
+maximumValue:
+  "maximumValue" in step
+    ? step.maximumValue ?? null
+    : null,
   },
 });
     }
@@ -86,35 +109,45 @@ checks: step.checks,
   console.log("🎉 Pasos sincronizados.");
 }
 function getStepType(step: {
+  type?:
+    | "PREPARATION"
+    | "INGREDIENT"
+    | "HEATING"
+    | "COOLING"
+    | "MIXING"
+    | "WAIT"
+    | "MEASUREMENT"
+    | "QUALITY_CHECK"
+    | "FINISH";
+
   ingredient?: string;
   minutes?: number;
   hours?: number;
   title: string;
-}) {
+}): LiquorStepType {
+  if (step.type) {
+    return LiquorStepType[step.type];
+  }
+
   if (step.ingredient) {
-    return "INGREDIENT" as const;
+    return LiquorStepType.INGREDIENT;
   }
 
   if (typeof step.hours === "number") {
-    return "WAIT" as const;
+    return LiquorStepType.WAIT;
   }
 
   if (typeof step.minutes === "number") {
-    return "MIXING" as const;
+    return LiquorStepType.MIXING;
   }
 
   if (step.title.toLowerCase().includes("preparar")) {
-    return "PREPARATION" as const;
+    return LiquorStepType.PREPARATION;
   }
 
   if (step.title.toLowerCase().includes("liberar")) {
-    return "FINISH" as const;
+    return LiquorStepType.FINISH;
   }
 
-  return "QUALITY_CHECK" as const;
+  return LiquorStepType.QUALITY_CHECK;
 }
-main()
-  .catch(console.error)
-  .finally(async () => {
-    await prisma.$disconnect();
-  });

@@ -1,15 +1,19 @@
+import Image from "next/image";
 import { loginAction } from "@/app/actions/login";
 
 const TIME_ZONE = "America/Mexico_City";
 
-export default function LoginPage({
+export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: {
+  searchParams?: Promise<{
     error?: string;
-  };
+    reset?: string;
+  }>;
 }) {
+  const params = await searchParams;
   const now = new Date();
+
 
   const hour = Number(
     new Intl.DateTimeFormat("es-MX", {
@@ -21,10 +25,10 @@ export default function LoginPage({
 
   const greeting =
     hour >= 6 && hour < 12
-      ? "Buenos días 👋"
+      ? "Buenos días"
       : hour >= 12 && hour < 19
-        ? "Buenas tardes ☀️"
-        : "Buenas noches 🌙";
+        ? "Buenas tardes"
+        : "Buenas noches";
 
   const currentDate = new Intl.DateTimeFormat("es-MX", {
     weekday: "long",
@@ -40,12 +44,27 @@ export default function LoginPage({
     timeZone: TIME_ZONE,
   }).format(now);
 
-  const hasError = searchParams?.error === "1";
+  const hasError = params?.error === "1";
+  const justReset = params?.reset === "1";
+
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-8 text-white sm:px-6">
-      <section className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/90 shadow-2xl">
-        <div className="border-b border-slate-800 bg-slate-950/40 p-6 text-center sm:p-8">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8 text-white sm:px-6">
+      {/* Fondo: campo de agave / destiladora */}
+      <div className="absolute inset-0 -z-10">
+        <Image
+          src="/images/agave-field.jpg"
+          alt="Campo de agave, Destiladora del Norte"
+          fill
+          priority
+          className="object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/70 to-slate-950/90" />
+        <div className="absolute inset-0 bg-gradient-to-t from-amber-950/30 via-transparent to-transparent" />
+      </div>
+
+      <section className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-slate-950/50 shadow-2xl backdrop-blur-xl">
+        <div className="border-b border-white/10 p-6 text-center sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.45em] text-amber-400">
             MAESTRO
           </p>
@@ -63,7 +82,7 @@ export default function LoginPage({
               {greeting}
             </h2>
 
-            <p className="mt-3 capitalize text-slate-400">
+            <p className="mt-3 capitalize text-slate-300">
               {currentDate}
             </p>
 
@@ -83,37 +102,52 @@ export default function LoginPage({
         <div className="p-6 sm:p-8">
           {hasError && (
             <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
-              Usuario o contraseña incorrectos.
+              Correo o contraseña incorrectos.
+            </div>
+          )}
+
+          {justReset && (
+            <div className="mb-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">
+              Contraseña actualizada. Ya puedes iniciar sesión.
             </div>
           )}
 
           <form action={loginAction} className="space-y-5">
             <div>
               <label
-                htmlFor="username"
+                htmlFor="email"
                 className="mb-2 block text-sm font-medium text-slate-300"
               >
-                Usuario
+                Correo electrónico
               </label>
 
               <input
-                id="username"
-                name="username"
-                type="text"
-                autoComplete="username"
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
                 required
-                placeholder="adan"
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-amber-400"
+                placeholder="tu@correo.com"
+                className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-amber-400"
               />
             </div>
 
             <div>
-              <label
-                htmlFor="password"
-                className="mb-2 block text-sm font-medium text-slate-300"
-              >
-                Contraseña
-              </label>
+              <div className="mb-2 flex items-center justify-between">
+                <label
+                  htmlFor="password"
+                  className="text-sm font-medium text-slate-300"
+                >
+                  Contraseña
+                </label>
+
+                <a
+                  href="/forgot-password"
+                  className="text-xs font-medium text-amber-400 transition hover:text-amber-300"
+                >
+                  ¿Olvidaste tu contraseña?
+                </a>
+              </div>
 
               <input
                 id="password"
@@ -122,7 +156,7 @@ export default function LoginPage({
                 autoComplete="current-password"
                 required
                 placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-amber-400"
+                className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-amber-400"
               />
             </div>
 
@@ -134,7 +168,7 @@ export default function LoginPage({
             </button>
           </form>
 
-          <div className="mt-8 border-t border-slate-800 pt-6 text-center">
+          <div className="mt-8 border-t border-white/10 pt-6 text-center">
             <p className="text-xs leading-5 text-slate-500">
               Hecho con ☕, código y mucho ❤️ para
               Destiladora del Norte.

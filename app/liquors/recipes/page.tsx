@@ -3,11 +3,22 @@ import { prisma } from "@/lib/prisma";
 
 export default async function LiquorRecipesPage() {
   const recipes = await prisma.liquorRecipe.findMany({
-    orderBy: {
-      createdAt: "desc",
-    },
+    orderBy: [
+      {
+        active: "desc",
+      },
+      {
+        createdAt: "desc",
+      },
+    ],
     include: {
       product: true,
+      _count: {
+        select: {
+          ingredients: true,
+          steps: true,
+        },
+      },
     },
   });
 
@@ -24,12 +35,12 @@ export default async function LiquorRecipesPage() {
           </h1>
 
           <p className="mt-2 text-slate-400">
-            Consulta las fórmulas registradas para cada producto.
+            Crea, consulta y configura las fórmulas de cada licor.
           </p>
         </div>
 
         <Link
-          href="/liquors"
+          href="/liquors/recipes/new"
           className="rounded-2xl bg-purple-600 px-5 py-3 text-center font-black text-white transition hover:bg-purple-500"
         >
           + Nueva receta
@@ -45,14 +56,15 @@ export default async function LiquorRecipesPage() {
           </h2>
 
           <p className="mt-3 text-slate-400">
-            Las recetas creadas aparecerán en esta sección.
+            Crea la primera receta para comenzar a configurar sus
+            ingredientes y procedimiento.
           </p>
 
           <Link
-            href="/liquors"
+            href="/liquors/recipes/new"
             className="mt-6 inline-flex rounded-2xl bg-purple-600 px-5 py-3 font-black text-white transition hover:bg-purple-500"
           >
-            Ir al inicio de licores
+            + Crear primera receta
           </Link>
         </section>
       ) : (
@@ -60,16 +72,22 @@ export default async function LiquorRecipesPage() {
           {recipes.map((recipe) => (
             <Link
               key={recipe.id}
-              href={`/liquors/products/${recipe.product.slug}`}
-              className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 transition hover:border-purple-500/40 hover:bg-slate-900"
+              href={`/liquors/recipes/${recipe.id}`}
+              className="group rounded-3xl border border-slate-800 bg-slate-900/70 p-6 transition hover:border-purple-500/40 hover:bg-slate-900"
             >
               <div className="flex items-start justify-between gap-4">
                 <span className="text-4xl">
                   {recipe.product.icon ?? "🍹"}
                 </span>
 
-                <span className="rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1 text-xs font-black text-purple-300">
-                  {recipe.targetAlcohol}% Alc.
+                <span
+                  className={
+                    recipe.active
+                      ? "rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1 text-xs font-black text-green-300"
+                      : "rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-black text-slate-400"
+                  }
+                >
+                  {recipe.active ? "Activa" : "Inactiva"}
                 </span>
               </div>
 
@@ -78,11 +96,41 @@ export default async function LiquorRecipesPage() {
               </h2>
 
               <p className="mt-2 text-sm font-semibold text-purple-300">
-                {recipe.product.name}
+                {recipe.product.name} · Versión {recipe.version}
               </p>
 
-              <p className="mt-5 font-black text-white">
-                Ver producto y receta →
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <Metric
+                  label="Volumen base"
+                  value={
+                    recipe.targetLiters !== null
+                      ? `${formatNumber(recipe.targetLiters)} L`
+                      : "Sin definir"
+                  }
+                />
+
+                <Metric
+                  label="Alcohol"
+                  value={
+                    recipe.targetAlcohol !== null
+                      ? `${formatNumber(recipe.targetAlcohol)}%`
+                      : "Sin definir"
+                  }
+                />
+
+                <Metric
+                  label="Ingredientes"
+                  value={String(recipe._count.ingredients)}
+                />
+
+                <Metric
+                  label="Pasos"
+                  value={String(recipe._count.steps)}
+                />
+              </div>
+
+              <p className="mt-6 font-black text-purple-200 transition group-hover:text-purple-100">
+                Configurar receta →
               </p>
             </Link>
           ))}
@@ -90,4 +138,30 @@ export default async function LiquorRecipesPage() {
       )}
     </main>
   );
+}
+
+function Metric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        {label}
+      </p>
+
+      <p className="mt-1 font-black text-white">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("es-MX", {
+    maximumFractionDigits: 2,
+  }).format(value);
 }

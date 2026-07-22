@@ -4,9 +4,26 @@ export type LiquorRecipeStepDefinition = {
   instruction: string;
   procedure: string[];
   checks: string[];
+
+  type?:
+    | "PREPARATION"
+    | "INGREDIENT"
+    | "HEATING"
+    | "COOLING"
+    | "MIXING"
+    | "WAIT"
+    | "MEASUREMENT"
+    | "QUALITY_CHECK"
+    | "FINISH";
+
   ingredient?: string;
   minutes?: number;
   hours?: number;
+
+  measurementLabel?: string;
+  measurementUnit?: string;
+  minimumValue?: number;
+  maximumValue?: number;
 };
 
 export const recipeSteps: Record<

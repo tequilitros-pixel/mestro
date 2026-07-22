@@ -6,20 +6,20 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 
 export async function loginAction(formData: FormData) {
-  const username = String(
-    formData.get("username") ?? ""
-  ).trim();
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
 
   const password = String(
     formData.get("password") ?? ""
   );
 
-  if (!username || !password) {
+  if (!email || !password) {
     redirect("/login?error=1");
   }
 
   const user = await prisma.user.findUnique({
-    where: { username },
+    where: { email },
   });
 
   if (!user || !user.active) {

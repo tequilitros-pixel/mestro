@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/q"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/q",
+  "/forgot-password",
+  "/reset-password",
+];
 
 const PUBLIC_API_PATHS = ["/api/push/check-overdue"];
 
@@ -37,7 +42,8 @@ export function middleware(request: NextRequest) {
 
   /*
    * Las páginas públicas pueden abrirse sin iniciar sesión.
-   * Esto incluye /login y cualquier QR bajo /q/[token].
+   * Esto incluye /login, /forgot-password, /reset-password,
+   * y cualquier QR bajo /q/[token].
    */
   if (isPublicPage) {
     return NextResponse.next();
