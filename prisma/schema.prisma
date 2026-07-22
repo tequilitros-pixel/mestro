@@ -598,6 +598,38 @@ model PushSubscription {
  * Tequimiche, Sangría o Destilado para Coscorrón.
  * Al entrar a un producto se mostrará todo su historial.
  */
+ /**
+ * ============================================================
+ * MATERIAS PRIMAS
+ * ============================================================
+ */
+
+model RawMaterial {
+  id String @id @default(cuid())
+
+  code String @unique
+  name String @unique
+
+  category String?
+  description String?
+
+  baseUnit String
+
+  currentStock Float @default(0)
+  minimumStock Float @default(0)
+
+  averageCost Float?
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  recipeIngredients LiquorRecipeIngredient[]
+
+  @@index([active])
+  @@index([category])
+}
 model LiquorProduct {
   id String @id @default(cuid())
 
@@ -719,7 +751,11 @@ model LiquorRecipeIngredient {
   recipeId String
   recipe   LiquorRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 
-  name     String
+  name String
+
+  rawMaterialId String?
+  rawMaterial   RawMaterial? @relation(fields: [rawMaterialId], references: [id], onDelete: SetNull)
+
   quantity Float
   unit     String
 
@@ -735,6 +771,7 @@ model LiquorRecipeIngredient {
   recipeSteps      LiquorRecipeStep[]
 
   @@index([recipeId])
+  @@index([rawMaterialId])
   @@index([position])
 }
 
