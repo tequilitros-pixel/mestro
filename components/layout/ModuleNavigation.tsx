@@ -7,6 +7,7 @@ import {
   getCurrentModule,
   matchesRoute,
   type AppModule,
+  type SubMenuItem,
 } from "./navigation";
 
 export default function ModuleNavigation({
@@ -31,31 +32,59 @@ export default function ModuleNavigation({
 
   return (
     <nav
-      className={`overflow-x-auto border-t ${getBorderStyle(
-        currentModule
-      )}`}
+      aria-label="Navegación del módulo"
+      className={`border-t ${getBorderStyle(currentModule)}`}
     >
-      <div className="flex min-w-max gap-1 px-4 py-2.5">
-        {items.map((item) => {
-          const isActive = matchesRoute(pathname, item.href);
+      <div className="overflow-x-auto">
+        <div className="flex min-w-max items-center gap-1 px-4 py-2.5">
+          {items.map((item) => {
+            const isActive = isMenuItemActive(
+              pathname,
+              item,
+              items
+            );
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                isActive
-                  ? getActiveStyle(currentModule)
-                  : "text-slate-400 hover:bg-slate-900 hover:text-white"
-              }`}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={isActive ? "page" : undefined}
+                className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  isActive
+                    ? getActiveStyle(currentModule)
+                    : "text-slate-400 hover:bg-slate-900 hover:text-white"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </nav>
   );
+}
+
+function isMenuItemActive(
+  pathname: string,
+  item: SubMenuItem,
+  items: SubMenuItem[]
+) {
+  /*
+   * La página inicial de cada módulo solo queda activa
+   * cuando la ruta coincide exactamente.
+   *
+   * Ejemplo:
+   * /liquors queda activo únicamente en /liquors,
+   * no en /liquors/recipes ni en otras secciones.
+   */
+  const isModuleHome = items[0]?.href === item.href;
+
+  if (isModuleHome) {
+    return pathname === item.href;
+  }
+
+  return matchesRoute(pathname, item.href);
 }
 
 function getActiveStyle(
@@ -66,13 +95,13 @@ function getActiveStyle(
     string
   > = {
     production:
-      "bg-amber-400/15 text-amber-300",
+      "bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/20",
     liquors:
-      "bg-purple-500/15 text-purple-300",
+      "bg-purple-500/15 text-purple-300 ring-1 ring-purple-500/20",
     "cash-cuts":
-      "bg-green-500/15 text-green-300",
+      "bg-green-500/15 text-green-300 ring-1 ring-green-500/20",
     administration:
-      "bg-blue-500/15 text-blue-300",
+      "bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/20",
   };
 
   return styles[module];

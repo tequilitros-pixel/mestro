@@ -8,9 +8,7 @@ type Props = {
   }>;
 };
 
-export default async function PublicBottleTracePage({
-  params,
-}: Props) {
+export default async function PublicBottleTracePage({ params }: Props) {
   const { token } = await params;
 
   const bottle = await prisma.liquorBottle.findUnique({
@@ -19,6 +17,7 @@ export default async function PublicBottleTracePage({
     },
     select: {
       code: true,
+      qrToken: true,
       serialNumber: true,
       status: true,
       bottledAt: true,
@@ -75,6 +74,14 @@ export default async function PublicBottleTracePage({
     bottle.expirationDate ?? batch.expirationDate;
 
   const statusStyle = getPublicStatusStyle(bottle.status);
+  const authenticityCode = createAuthenticityCode(
+    bottle.qrToken,
+    bottle.serialNumber
+  );
+
+  const isCirculating =
+    bottle.status !== LiquorBottleStatus.MERMA &&
+    bottle.status !== LiquorBottleStatus.RETIRADA;
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6">
@@ -106,17 +113,10 @@ export default async function PublicBottleTracePage({
         </header>
 
         <div className="p-6 sm:p-8">
-          <section className="rounded-3xl border border-green-500/25 bg-green-500/10 p-6 text-center">
-            <div className="text-4xl">✓</div>
-
-            <p className="mt-3 text-sm font-black uppercase tracking-[0.25em] text-green-300">
-              Producto identificado
-            </p>
-
-            <p className="mt-3 text-slate-300">
-              Este código corresponde a una botella registrada en MAESTRO.
-            </p>
-          </section>
+          <AuthenticityCertificate
+            authenticityCode={authenticityCode}
+            isCirculating={isCirculating}
+          />
 
           <section className="mt-6 grid gap-4 sm:grid-cols-2">
             <InfoCard
@@ -135,13 +135,10 @@ export default async function PublicBottleTracePage({
               }
             />
 
-            <InfoCard
-              label="Lote"
-              value={batch.code}
-            />
+            <InfoCard label="Lote" value={batch.code} />
 
             <InfoCard
-              label="Serie"
+              label="Número de serie"
               value={`#${formatSerialNumber(
                 bottle.serialNumber
               )}`}
@@ -163,7 +160,7 @@ export default async function PublicBottleTracePage({
             />
 
             <InfoCard
-              label="Ubicación"
+              label="Ubicación registrada"
               value={
                 bottle.currentLocation ?? "Almacén principal"
               }
@@ -173,7 +170,7 @@ export default async function PublicBottleTracePage({
           {product.description ? (
             <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
               <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
-                Producto
+                Descripción del producto
               </p>
 
               <p className="mt-3 leading-7 text-slate-300">
@@ -182,18 +179,108 @@ export default async function PublicBottleTracePage({
             </section>
           ) : null}
 
+          <section className="mt-6 rounded-2xl border border-purple-500/20 bg-purple-500/5 p-5">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-purple-300">
+              Trazabilidad
+            </p>
+
+            <p className="mt-3 leading-7 text-slate-300">
+              Esta botella fue registrada individualmente durante el
+              proceso de embotellado. Su lote, número de serie y código
+              digital permiten comprobar su origen dentro de MAESTRO.
+            </p>
+          </section>
+
           <footer className="mt-8 border-t border-slate-800 pt-6 text-center">
             <p className="font-black text-white">
               Casa Destiladora del Norte
             </p>
 
             <p className="mt-2 text-sm text-slate-500">
-              Trazabilidad digital administrada por MAESTRO
+              Certificado digital administrado por MAESTRO
+            </p>
+
+            <p className="mt-3 font-mono text-xs text-slate-600">
+              {authenticityCode}
             </p>
           </footer>
         </div>
       </section>
     </main>
+  );
+}
+
+function AuthenticityCertificate({
+  authenticityCode,
+  isCirculating,
+}: {
+  authenticityCode: string;
+  isCirculating: boolean;
+}) {
+  if (!isCirculating) {
+    return (
+      <section className="rounded-3xl border border-red-500/30 bg-red-500/10 p-6 text-center sm:p-8">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-2 border-red-400/40 bg-red-500/15 text-4xl">
+          !
+        </div>
+
+        <p className="mt-5 text-sm font-black uppercase tracking-[0.25em] text-red-300">
+          Producto fuera de circulación
+        </p>
+
+        <h2 className="mt-3 text-2xl font-black text-white">
+          Botella retirada
+        </h2>
+
+        <p className="mx-auto mt-3 max-w-xl leading-7 text-slate-300">
+          Esta botella existe en el sistema, pero fue marcada como
+          retirada o merma. No debe considerarse disponible para venta.
+        </p>
+
+        <CertificateCode value={authenticityCode} />
+      </section>
+    );
+  }
+
+  return (
+    <section className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-green-500/5 to-slate-950 p-6 text-center sm:p-8">
+      <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-500/10 blur-3xl" />
+
+      <div className="relative">
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border-4 border-emerald-400/50 bg-emerald-500/15 text-5xl shadow-xl shadow-emerald-950/40">
+          ✓
+        </div>
+
+        <p className="mt-5 text-sm font-black uppercase tracking-[0.3em] text-emerald-300">
+          Certificado de autenticidad
+        </p>
+
+        <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">
+          Botella original
+        </h2>
+
+        <p className="mx-auto mt-4 max-w-xl leading-7 text-slate-300">
+          El código escaneado corresponde a una botella registrada por
+          Casa Destiladora del Norte dentro del sistema MAESTRO.
+        </p>
+
+        <CertificateCode value={authenticityCode} />
+      </div>
+    </section>
+  );
+}
+
+function CertificateCode({ value }: { value: string }) {
+  return (
+    <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-4">
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+        Código de autenticidad
+      </p>
+
+      <p className="mt-2 break-all font-mono text-lg font-black tracking-wider text-white">
+        {value}
+      </p>
+    </div>
   );
 }
 
@@ -259,6 +346,22 @@ function getPublicStatusStyle(status: LiquorBottleStatus) {
     default:
       return "border-slate-600 bg-slate-800 text-slate-300";
   }
+}
+
+function createAuthenticityCode(
+  qrToken: string,
+  serialNumber: number
+) {
+  const tokenPart = qrToken
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(-8)
+    .toUpperCase();
+
+  const serialPart = serialNumber
+    .toString()
+    .padStart(6, "0");
+
+  return `CDN-${serialPart}-${tokenPart}`;
 }
 
 function formatSerialNumber(value: number) {

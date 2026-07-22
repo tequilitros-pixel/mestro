@@ -62,8 +62,14 @@ export const SUBMENUS: Record<
   SubMenuItem[]
 > = {
   production: [
-    { href: "/plant", label: "🏭 Planta" },
-    { href: "/lots", label: "📦 Lotes" },
+    {
+      href: "/plant",
+      label: "🏭 Planta",
+    },
+    {
+      href: "/lots",
+      label: "📦 Lotes",
+    },
     {
       href: "/cooking",
       label: "🔥 Cocción",
@@ -84,39 +90,111 @@ export const SUBMENUS: Record<
       label: "🥃 Destilación",
       operatorAllowed: true,
     },
-    { href: "/costs", label: "💰 Costos" },
-    { href: "/control-room", label: "🧠 Sala" },
+    {
+      href: "/costs",
+      label: "💰 Costos",
+    },
+    {
+      href: "/control-room",
+      label: "🧠 Sala",
+    },
   ],
 
   liquors: [
-    { href: "/liquors", label: "Inicio" },
-    { href: "/liquors/recipes", label: "📖 Recetas" },
-    { href: "/liquors/lots", label: "🏷️ Lotes" },
-    { href: "/liquors/production", label: "🍹 Producción" },
-    { href: "/liquors/bottling", label: "🍾 Embotellado" },
-    { href: "/liquors/inventory", label: "📦 Inventario" },
-    { href: "/liquors/qr", label: "▣ QR" },
-    { href: "/liquors/expiration", label: "📅 Caducidad" },
+    {
+      href: "/liquors",
+      label: "🏠 Inicio",
+    },
+    {
+      href: "/liquors/recipes",
+      label: "📖 Recetas",
+    },
+    {
+      href: "/liquors/batches",
+      label: "🏷️ Lotes",
+    },
+    {
+      href: "/liquors/production",
+      label: "🍹 Producción",
+    },
+    {
+      href: "/liquors/bottling",
+      label: "🍾 Embotellado",
+    },
+    {
+      href: "/liquors/inventory",
+      label: "📦 Inventario",
+    },
+    {
+      href: "/liquors/qr",
+      label: "▣ QR",
+    },
+    {
+      href: "/liquors/expiration",
+      label: "📅 Caducidad",
+    },
   ],
 
   "cash-cuts": [
-    { href: "/cash-cuts", label: "Inicio" },
-    { href: "/cash-cuts/branches", label: "🏪 Sucursales" },
-    { href: "/cash-cuts/registers", label: "💵 Cajas" },
-    { href: "/cash-cuts/daily", label: "🧾 Cortes" },
-    { href: "/cash-cuts/expenses", label: "📤 Salidas" },
-    { href: "/cash-cuts/envelopes", label: "✉️ Sobres" },
-    { href: "/cash-cuts/safe", label: "🔐 Caja fuerte" },
-    { href: "/cash-cuts/history", label: "📊 Historial" },
+    {
+      href: "/cash-cuts",
+      label: "🏠 Inicio",
+    },
+    {
+      href: "/cash-cuts/branches",
+      label: "🏪 Sucursales",
+    },
+    {
+      href: "/cash-cuts/registers",
+      label: "💵 Cajas",
+    },
+    {
+      href: "/cash-cuts/daily",
+      label: "🧾 Cortes",
+    },
+    {
+      href: "/cash-cuts/expenses",
+      label: "📤 Salidas",
+    },
+    {
+      href: "/cash-cuts/envelopes",
+      label: "✉️ Sobres",
+    },
+    {
+      href: "/cash-cuts/safe",
+      label: "🔐 Caja fuerte",
+    },
+    {
+      href: "/cash-cuts/history",
+      label: "📊 Historial",
+    },
   ],
 
   administration: [
-    { href: "/administration", label: "Inicio" },
-    { href: "/administration/finances", label: "💰 Finanzas" },
-    { href: "/administration/purchases", label: "🛒 Compras" },
-    { href: "/administration/suppliers", label: "🚚 Proveedores" },
-    { href: "/administration/personnel", label: "👥 Personal" },
-    { href: "/administration/reports", label: "📊 Reportes" },
+    {
+      href: "/administration",
+      label: "🏠 Inicio",
+    },
+    {
+      href: "/administration/finances",
+      label: "💰 Finanzas",
+    },
+    {
+      href: "/administration/purchases",
+      label: "🛒 Compras",
+    },
+    {
+      href: "/administration/suppliers",
+      label: "🚚 Proveedores",
+    },
+    {
+      href: "/administration/personnel",
+      label: "👥 Personal",
+    },
+    {
+      href: "/administration/reports",
+      label: "📊 Reportes",
+    },
     {
       href: "/administration/settings",
       label: "⚙️ Configuración",
@@ -164,8 +242,13 @@ export function getCurrentModule(pathname: string): AppModule {
 }
 
 export function formatRole(role: string) {
-  if (role === "ADMIN") return "Administrador";
-  if (role === "OPERATOR") return "Operador";
+  if (role === "ADMIN") {
+    return "Administrador";
+  }
+
+  if (role === "OPERATOR") {
+    return "Operador";
+  }
 
   return role;
 }

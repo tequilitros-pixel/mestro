@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
-export default async function LiquorRecipesPage() {
-  const recipes = await prisma.liquorRecipe.findMany({
+export default async function LiquorBatchesPage() {
+  const batches = await prisma.liquorBatch.findMany({
     orderBy: {
       createdAt: "desc",
     },
     include: {
       product: true,
+      recipe: true,
     },
   });
 
@@ -20,11 +21,11 @@ export default async function LiquorRecipesPage() {
           </p>
 
           <h1 className="mt-2 text-3xl font-black text-white">
-            Recetas
+            Lotes
           </h1>
 
           <p className="mt-2 text-slate-400">
-            Consulta las fórmulas registradas para cada producto.
+            Consulta y continúa los lotes registrados.
           </p>
         </div>
 
@@ -32,20 +33,20 @@ export default async function LiquorRecipesPage() {
           href="/liquors"
           className="rounded-2xl bg-purple-600 px-5 py-3 text-center font-black text-white transition hover:bg-purple-500"
         >
-          + Nueva receta
+          + Crear lote
         </Link>
       </header>
 
-      {recipes.length === 0 ? (
+      {batches.length === 0 ? (
         <section className="mt-8 rounded-3xl border border-dashed border-slate-700 bg-slate-900/50 p-10 text-center">
-          <div className="text-5xl">📖</div>
+          <div className="text-5xl">🏷️</div>
 
           <h2 className="mt-5 text-2xl font-black text-white">
-            No hay recetas registradas
+            No hay lotes registrados
           </h2>
 
           <p className="mt-3 text-slate-400">
-            Las recetas creadas aparecerán en esta sección.
+            Cuando crees un lote aparecerá en esta sección.
           </p>
 
           <Link
@@ -57,32 +58,42 @@ export default async function LiquorRecipesPage() {
         </section>
       ) : (
         <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {recipes.map((recipe) => (
+          {batches.map((batch) => (
             <Link
-              key={recipe.id}
-              href={`/liquors/products/${recipe.product.slug}`}
+              key={batch.id}
+              href={`/liquors/batches/${batch.id}`}
               className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 transition hover:border-purple-500/40 hover:bg-slate-900"
             >
               <div className="flex items-start justify-between gap-4">
                 <span className="text-4xl">
-                  {recipe.product.icon ?? "🍹"}
+                  {batch.product.icon ?? "🍹"}
                 </span>
 
                 <span className="rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1 text-xs font-black text-purple-300">
-                  {recipe.targetAlcohol}% Alc.
+                  {formatStatus(batch.status)}
                 </span>
               </div>
 
               <h2 className="mt-5 text-xl font-black text-white">
-                {recipe.name}
+                {batch.product.name}
               </h2>
 
-              <p className="mt-2 text-sm font-semibold text-purple-300">
-                {recipe.product.name}
+              <p className="mt-2 font-mono text-sm font-bold text-purple-300">
+                {batch.code}
               </p>
 
+              <div className="mt-5 border-t border-slate-800 pt-4">
+                <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+                  Receta
+                </p>
+
+                <p className="mt-2 text-sm font-semibold text-slate-300">
+                  {batch.recipe.name}
+                </p>
+              </div>
+
               <p className="mt-5 font-black text-white">
-                Ver producto y receta →
+                Ver lote →
               </p>
             </Link>
           ))}
@@ -90,4 +101,11 @@ export default async function LiquorRecipesPage() {
       )}
     </main>
   );
+}
+
+function formatStatus(status: string) {
+  return status
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/^\w/, (letter) => letter.toUpperCase());
 }
