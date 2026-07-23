@@ -7,34 +7,40 @@ datasource db {
 }
 
 model User {
-  id                        String             @id @default(cuid())
+  id                        String              @id @default(cuid())
   name                      String
-  username                  String             @unique
-  email                     String?            @unique
+  username                  String              @unique
+  email                     String?             @unique
   password                  String
   role                      UserRole
-  active                    Boolean            @default(true)
-  createdAt                 DateTime           @default(now())
-  updatedAt                 DateTime           @updatedAt
+  active                    Boolean             @default(true)
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
   lastLogin                 DateTime?
-  cookingsFinished          Cooking[]          @relation("CookingFinishedBy")
-  distillationsFinished     Distillation[]     @relation("DistillationFinishedBy")
-  fermentationsFinished     Fermentation[]     @relation("FermentationFinishedBy")
-  liquorBatchesCreated      LiquorBatch[]      @relation("LiquorBatchCreatedBy")
-  liquorBatchesFinished     LiquorBatch[]      @relation("LiquorBatchFinishedBy")
-  liquorBatchsPaused        LiquorBatch[]      @relation("LiquorBatchPausedBy")
-  liquorEventsCreated       LiquorBatchEvent[] @relation("LiquorBatchEventCreatedBy")
-  liquorBatchStepsCompleted LiquorBatchStep[]  @relation("LiquorBatchStepCompletedBy")
-  liquorBottlingsCreated    LiquorBottling[]   @relation("LiquorBottlingCreatedBy")
-  liquorBottlingsFinished   LiquorBottling[]   @relation("LiquorBottlingFinishedBy")
-  liquorProductsCreated     LiquorProduct[]    @relation("LiquorProductCreatedBy")
-  liquorRecipesCreated      LiquorRecipe[]     @relation("LiquorRecipeCreatedBy")
+  cookingsFinished          Cooking[]           @relation("CookingFinishedBy")
+  distillationsFinished     Distillation[]      @relation("DistillationFinishedBy")
+  fermentationsFinished     Fermentation[]      @relation("FermentationFinishedBy")
+  liquorBatchesCreated      LiquorBatch[]       @relation("LiquorBatchCreatedBy")
+  liquorBatchesFinished     LiquorBatch[]       @relation("LiquorBatchFinishedBy")
+  liquorBatchsPaused        LiquorBatch[]       @relation("LiquorBatchPausedBy")
+  liquorEventsCreated       LiquorBatchEvent[]  @relation("LiquorBatchEventCreatedBy")
+  liquorBatchStepsCompleted LiquorBatchStep[]   @relation("LiquorBatchStepCompletedBy")
+  liquorBottlingsCreated    LiquorBottling[]    @relation("LiquorBottlingCreatedBy")
+  liquorBottlingsFinished   LiquorBottling[]    @relation("LiquorBottlingFinishedBy")
+  liquorProductsCreated     LiquorProduct[]     @relation("LiquorProductCreatedBy")
+  liquorRecipesCreated      LiquorRecipe[]      @relation("LiquorRecipeCreatedBy")
   lots                      Lot[]
-  millingsFinished          Milling[]          @relation("MillingFinishedBy")
-  millingDischarges         MillingDischarge[]
-  pushSubscriptions         PushSubscription[]
-  passwordResetCodes PasswordResetCode[]
+  branches                  UserBranch[]
+  cashCutsResponsible       CashCut[]           @relation("CashCutResponsible")
+  cashCutsCreated           CashCut[]           @relation("CashCutCreatedBy")
+  cashCutsUpdated           CashCut[]           @relation("CashCutUpdatedBy")
+  cashOutflowsAuthorized    CashOutflow[]       @relation("CashOutflowAuthorizedBy")
+  cashCutAuditEntries       CashCutAuditEntry[] @relation("CashCutAuditBy")
 
+  millingsFinished   Milling[]           @relation("MillingFinishedBy")
+  millingDischarges  MillingDischarge[]
+  pushSubscriptions  PushSubscription[]
+  passwordResetCodes PasswordResetCode[]
 }
 
 model Equipment {
@@ -696,9 +702,218 @@ model LiquorBottleMovement {
   @@index([createdAt])
 }
 
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique // ej. "CENTRO", "NORTE"
+  address   String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users    UserBranch[]
+  cashCuts CashCut[]
+
+  @@index([active])
+}
+
+model UserBranch {
+  id       String @id @default(cuid())
+  userId   String
+  branchId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, branchId])
+  @@index([userId])
+  @@index([branchId])
+}
+
+model CashCut {
+  id       String @id @default(cuid())
+  code     String @unique
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  responsibleId String
+  responsible   User   @relation("CashCutResponsible", fields: [responsibleId], references: [id])
+
+  date     DateTime
+  openedAt DateTime      @default(now())
+  closedAt DateTime?
+  status   CashCutStatus @default(ABIERTO)
+
+  startingFund Float
+  nextFund     Float?
+
+  cashCounted  Float?
+  cashExpected Float?
+  difference   Float?
+
+  envelopeAmount Float?
+  envelopeNumber String?
+  envelopeNotes  String?
+
+  totalSales       Float?
+  totalOutflows    Float?
+  totalInflows     Float?
+  totalCostOfGoods Float?
+  netProfit        Float?
+
+  notes String?
+
+  createdById String
+  createdBy   User    @relation("CashCutCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?   @relation("CashCutUpdatedBy", fields: [updatedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  salesByMethod CashSalePayment[]
+  outflows      CashOutflow[]
+  inflows       CashInflow[]
+  evidences     CashCutEvidence[]
+  auditEntries  CashCutAuditEntry[]
+
+  @@index([branchId])
+  @@index([responsibleId])
+  @@index([createdById])
+  @@index([status])
+  @@index([date])
+}
+
+enum CashCutStatus {
+  ABIERTO
+  CERRADO
+  AUDITADO
+}
+
+model CashSalePayment {
+  id        String  @id @default(cuid())
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
+
+  method PaymentMethod
+  amount Float
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cashCutId, method])
+  @@index([cashCutId])
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TARJETA
+  TRANSFERENCIA
+  DIDI
+  UBER
+  RAPPI
+  VALES
+  OTRO
+}
+
+model CashOutflow {
+  id        String  @id @default(cuid())
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
+
+  concept         String
+  category        String
+  amount          Float
+  authorizedById  String?
+  authorizedBy    User?   @relation("CashOutflowAuthorizedBy", fields: [authorizedById], references: [id])
+  notes           String?
+  receiptPhotoUrl String?
+
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([cashCutId])
+  @@index([authorizedById])
+  @@index([category])
+}
+
+model CashInflow {
+  id        String  @id @default(cuid())
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
+
+  type   CashInflowType
+  amount Float
+  notes  String?
+
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([cashCutId])
+}
+
+enum CashInflowType {
+  CAMBIO_RECIBIDO
+  REEMBOLSO
+  AJUSTE
+  PRESTAMO
+  OTRO
+}
+
+model CashCutEvidence {
+  id        String  @id @default(cuid())
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
+
+  type  CashEvidenceType
+  url   String
+  notes String?
+
+  createdAt DateTime @default(now())
+
+  @@index([cashCutId])
+  @@index([type])
+}
+
+enum CashEvidenceType {
+  DINERO_CONTADO
+  SOBRE
+  TICKET
+  NOTA
+  FACTURA
+  OTRO
+}
+
+model CashCutAuditEntry {
+  id        String  @id @default(cuid())
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
+
+  action   String
+  field    String?
+  oldValue String?
+  newValue String?
+
+  userId String
+  user   User   @relation("CashCutAuditBy", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([cashCutId])
+  @@index([userId])
+}
+
 enum UserRole {
   ADMIN
   OPERATOR
+  GERENTE
+  ENCARGADO
+  CONSULTA
 }
 
 enum EquipmentType {
@@ -871,6 +1086,7 @@ enum LiquorBottleMovementType {
   RETIRADA
   AJUSTE
 }
+
 model PasswordResetCode {
   id        String   @id @default(cuid())
   userId    String

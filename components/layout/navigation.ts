@@ -144,10 +144,7 @@ export const SUBMENUS: Record<
       href: "/cash-cuts/branches",
       label: "🏪 Sucursales",
     },
-    {
-      href: "/cash-cuts/registers",
-      label: "💵 Cajas",
-    },
+    
     {
       href: "/cash-cuts/daily",
       label: "🧾 Cortes",

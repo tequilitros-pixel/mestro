@@ -1,0 +1,73 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
+
+const ROLES_QUE_PUEDEN_EDITAR = ["ADMIN", "GERENTE", "ENCARGADO"];
+
+const TIPOS_VALIDOS = ["CAMBIO_RECIBIDO", "REEMBOLSO", "AJUSTE", "PRESTAMO", "OTRO"];
+
+async function recalcularTotalEntradas(cashCutId: string) {
+  const entradas = await prisma.cashInflow.findMany({ where: { cashCutId } });
+  const totalInflows = entradas.reduce((sum, e) => sum + e.amount, 0);
+  await prisma.cashCut.update({
+    where: { id: cashCutId },
+    data: { totalInflows },
+  });
+  return totalInflows;
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const { id: cashCutId } = await params;
+  const entradas = await prisma.cashInflow.findMany({
+    where: { cashCutId },
+    orderBy: { occurredAt: "asc" },
+  });
+
+  return NextResponse.json(entradas);
+}
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+  if (!ROLES_QUE_PUEDEN_EDITAR.includes(user.role)) {
+    return NextResponse.json({ error: "No tienes permiso" }, { status: 403 });
+  }
+
+  const { id: cashCutId } = await params;
+
+  const cashCut = await prisma.cashCut.findUnique({ where: { id: cashCutId } });
+  if (!cashCut) {
+    return NextResponse.json({ error: "Corte no encontrado" }, { status: 404 });
+  }
+  if (cashCut.status !== "ABIERTO") {
+    return NextResponse.json({ error: "Este corte ya está cerrado" }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const { type, amount, notes } = body;
+
+  if (!TIPOS_VALIDOS.includes(type) || typeof amount !== "number") {
+    return NextResponse.json({ error: "type inválido o amount faltante" }, { status: 400 });
+  }
+
+  const entrada = await prisma.cashInflow.create({
+    data: { cashCutId, type, amount, notes },
+  });
+
+  const totalInflows = await recalcularTotalEntradas(cashCutId);
+
+  return NextResponse.json({ entrada, totalInflows }, { status: 201 });
+}
