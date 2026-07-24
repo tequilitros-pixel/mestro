@@ -192,9 +192,9 @@ export default async function LiquorLabelsPreviewPage({
               bottle.expirationDate ??
               bottling.expirationDate;
 
-            const qrUrl = `${baseUrl}/bottle/${encodeURIComponent(
-              bottle.qrToken
-            )}`;
+            const qrUrl = `${baseUrl}/q/${encodeURIComponent(
+  bottle.qrToken
+)}`;
 
             return (
               <article

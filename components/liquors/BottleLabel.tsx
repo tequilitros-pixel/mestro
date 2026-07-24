@@ -29,9 +29,9 @@ export default function BottleLabel({
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-  const qrUrl = bottle.qrToken
-    ? `${baseUrl}/bottle/${encodeURIComponent(bottle.qrToken)}`
-    : "";
+  const qrUrl = `${baseUrl}/q/${encodeURIComponent(
+  bottle.qrToken
+)}`;
 
   return (
     <article
