@@ -431,7 +431,34 @@ const isReleased = releasedStatuses.includes(currentStatus);
           detail="Merma de embotellado"
         />
       </section>
+{totalProducedBottles > 0 && (
+  <section className="mt-6 rounded-3xl border border-purple-500/25 bg-purple-500/10 p-6 sm:p-8">
+    <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <div>
+        <p className="text-sm font-black uppercase tracking-[0.25em] text-purple-300">
+          Etiquetas disponibles
+        </p>
 
+        <h2 className="mt-3 text-2xl font-black text-white">
+          🏷️ Imprimir etiquetas de las botellas producidas
+        </h2>
+
+        <p className="mt-2 max-w-2xl text-slate-300">
+          Este lote tiene {formatNumber(totalProducedBottles, 0)}{" "}
+          {totalProducedBottles === 1 ? "botella registrada" : "botellas registradas"}.
+          Puedes imprimir sus etiquetas aunque el lote todavía no esté terminado.
+        </p>
+      </div>
+
+      <Link
+        href={`/liquors/batches/${batch.id}/labels`}
+        className="shrink-0 rounded-2xl bg-purple-600 px-7 py-4 text-center text-lg font-black text-white transition hover:bg-purple-500"
+      >
+        🏷️ Ir al centro de impresión
+      </Link>
+    </div>
+  </section>
+)}
       <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
         <p className="text-sm font-semibold uppercase tracking-[0.3em] text-purple-400">
           Historial del lote
