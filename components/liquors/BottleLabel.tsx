@@ -28,11 +28,9 @@ export default function BottleLabel({
 }: BottleLabelProps) {
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-  const qrUrl = `${baseUrl}/q/${encodeURIComponent(
-  bottle.qrToken
-)}`;
-
+const qrUrl = bottle.qrToken
+  ? `${baseUrl}/q/${encodeURIComponent(bottle.qrToken)}`
+  : "";
   return (
     <article
       className={`label-card break-inside-avoid bg-white text-black ${
