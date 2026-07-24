@@ -32,23 +32,26 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await getCurrentUser();
-
-  const cookieStore = await cookies();
   const headerStore = await headers();
-
-  const hasSessionCookie = cookieStore.has("maestro_user");
 
   const isPublicRoute =
     headerStore.get("x-maestro-public-route") === "true";
 
   /*
-   * Si existe una sesión inválida, se limpia solamente dentro
-   * de las páginas privadas. Las páginas públicas, como /q/[token],
-   * deben abrir aunque el navegador conserve una cookie anterior.
+   * En rutas públicas no consultamos la sesión.
+   * Así evitamos cualquier redirección producida por getCurrentUser().
    */
-  if (hasSessionCookie && !user && !isPublicRoute) {
-    redirect("/api/session/clear");
+  const user = isPublicRoute
+    ? null
+    : await getCurrentUser();
+
+  if (!isPublicRoute) {
+    const cookieStore = await cookies();
+    const hasSessionCookie = cookieStore.has("maestro_user");
+
+    if (hasSessionCookie && !user) {
+      redirect("/api/session/clear");
+    }
   }
 
   return (
@@ -57,10 +60,12 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-screen bg-slate-950 text-white">
-        <ServiceWorkerRegister />
+        {!isPublicRoute && <ServiceWorkerRegister />}
 
         {user && !isPublicRoute ? (
-          <AppShell user={user}>{children}</AppShell>
+          <AppShell user={user}>
+            {children}
+          </AppShell>
         ) : (
           children
         )}
