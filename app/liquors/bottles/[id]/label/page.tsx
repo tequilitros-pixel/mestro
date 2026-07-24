@@ -106,7 +106,6 @@ export default async function BottleLabelPage({ params }: Props) {
                 totalBottles,
                 alcohol,
                 qrToken: bottle.qrToken,
-                qrUrl: `${appUrl}/liquors/qr/${bottle.qrToken}`,
               }}
             />
           </div>

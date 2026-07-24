@@ -156,7 +156,7 @@ export default async function BottlingLabelsPage({
                     totalBottles,
                     alcohol,
                     qrToken: bottle.qrToken,
-                    qrUrl: `${appUrl}/liquors/qr/${bottle.qrToken}`,
+                
                   }}
                 />
               </div>
