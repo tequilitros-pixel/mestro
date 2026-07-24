@@ -1,4 +1,4 @@
-import BottleQRCode from "@/components/liquors/BottleQRCode";
+import BottleQrCode from "@/components/liquors/BottleQrCode";
 
 export type BottleLabelData = {
   productName: string;
@@ -10,7 +10,9 @@ export type BottleLabelData = {
   totalBottles: number;
   alcohol?: number | null;
   qrToken: string;
-  qrUrl: string;
+  authenticityCode?: string | null;
+  manufacturedAt?: Date | null;
+  expirationDate?: Date | null;
 };
 
 type BottleLabelProps = {
@@ -24,237 +26,145 @@ export default function BottleLabel({
   className = "",
   showBorder = true,
 }: BottleLabelProps) {
-  const authenticityCode = createAuthenticityCode(
-    bottle.qrToken,
-    bottle.serialNumber
-  );
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-  const serialNumber = formatSerialNumber(
-    bottle.serialNumber,
-    bottle.totalBottles
-  );
-
-  const totalBottles = formatSerialNumber(
-    bottle.totalBottles,
-    bottle.totalBottles
-  );
+  const qrUrl = bottle.qrToken
+    ? `${baseUrl}/bottle/${encodeURIComponent(bottle.qrToken)}`
+    : "";
 
   return (
     <article
-      className={[
-        "bottle-label relative box-border overflow-hidden bg-white text-black",
-        showBorder ? "border border-black" : "",
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      className={`label-card break-inside-avoid bg-white text-black ${
+        showBorder ? "border border-black" : ""
+      } ${className}`}
       style={{
-        width: "50mm",
-        height: "30mm",
-        minWidth: "50mm",
-        minHeight: "30mm",
-        maxWidth: "50mm",
-        maxHeight: "30mm",
-        fontFamily: "Arial, Helvetica, sans-serif",
-        breakInside: "avoid",
-        pageBreakInside: "avoid",
+        width: "100%",
+        minHeight: "120mm",
+        padding: "8mm",
+        boxSizing: "border-box",
       }}
     >
-      <div
-        className="grid h-full w-full grid-cols-[1fr_auto]"
-        style={{
-          padding: "1.4mm",
-          columnGap: "1.2mm",
-        }}
-      >
-        <section className="flex min-w-0 flex-col">
-          <header>
-            <p
-              className="truncate font-black uppercase"
-              style={{
-                fontSize: "4.8pt",
-                lineHeight: 1.05,
-                letterSpacing: "0.04em",
-              }}
-            >
-              Casa Destiladora del Norte
+      <header className="text-center">
+        <p className="text-[10px] font-black uppercase tracking-[0.22em]">
+          Casa Destiladora del Norte
+        </p>
+
+        <h2 className="mt-3 text-2xl font-black leading-tight">
+          {bottle.productIcon ? `${bottle.productIcon} ` : ""}
+          {bottle.productName}
+        </h2>
+
+        <p className="mt-2 text-sm font-bold">
+          {formatBottleSize(bottle.bottleSizeMl)}
+        </p>
+
+        {bottle.alcohol !== null &&
+          bottle.alcohol !== undefined && (
+            <p className="mt-1 text-sm font-black">
+              {formatNumber(bottle.alcohol)}% Alc. Vol.
             </p>
+          )}
+      </header>
 
-            <div
-              className="mt-[0.7mm] h-px w-full bg-black"
-              aria-hidden="true"
-            />
-          </header>
+      <section className="mt-5 border-y border-black py-4">
+        <LabelRow
+          label="Lote"
+          value={bottle.batchCode}
+          mono
+        />
 
-          <div className="mt-[1mm] min-w-0">
-            <p
-              className="line-clamp-2 font-black"
-              style={{
-                fontSize: "7.4pt",
-                lineHeight: 1.05,
-              }}
-            >
-              {bottle.productIcon ? (
-                <span className="mr-[0.7mm]">
-                  {bottle.productIcon}
-                </span>
-              ) : null}
+        <LabelRow
+          label="Botella"
+          value={`${bottle.serialNumber} de ${bottle.totalBottles}`}
+        />
 
-              {bottle.productName}
-            </p>
+        <LabelRow
+          label="Código"
+          value={bottle.bottleCode}
+          mono
+        />
 
-            <p
-              className="mt-[0.8mm] font-bold"
-              style={{
-                fontSize: "5.5pt",
-                lineHeight: 1,
-              }}
-            >
-              {formatBottleSize(bottle.bottleSizeMl)}
+        <LabelRow
+          label="Elaboración"
+          value={
+            bottle.manufacturedAt
+              ? formatDate(bottle.manufacturedAt)
+              : "Sin fecha"
+          }
+        />
 
-              {bottle.alcohol !== null &&
-              bottle.alcohol !== undefined ? (
-                <>
-                  <span className="mx-[0.8mm]">·</span>
-                  {formatNumber(bottle.alcohol, 2)}% Alc. Vol.
-                </>
-              ) : null}
-            </p>
-          </div>
+        <LabelRow
+          label="Caducidad"
+          value={
+            bottle.expirationDate
+              ? formatDate(bottle.expirationDate)
+              : "Sin fecha"
+          }
+        />
+      </section>
 
-          <dl
-            className="mt-[1.3mm] grid gap-[0.7mm]"
-            style={{
-              fontSize: "5.1pt",
-              lineHeight: 1.05,
-            }}
-          >
-            <div className="min-w-0">
-              <dt className="font-bold uppercase">Lote</dt>
-
-              <dd className="truncate font-black">
-                {bottle.batchCode}
-              </dd>
-            </div>
-
-            <div>
-              <dt className="font-bold uppercase">Botella</dt>
-
-              <dd className="font-black">
-                {serialNumber} / {totalBottles}
-              </dd>
-            </div>
-          </dl>
-
-          <footer className="mt-auto min-w-0 pt-[0.8mm]">
-            <div className="flex items-center gap-[0.7mm]">
-              <span
-                className="flex shrink-0 items-center justify-center rounded-full bg-black text-white"
-                style={{
-                  width: "3mm",
-                  height: "3mm",
-                  fontSize: "5pt",
-                  lineHeight: 1,
-                }}
-              >
-                ✓
-              </span>
-
-              <p
-                className="truncate font-black uppercase"
-                style={{
-                  fontSize: "4.5pt",
-                  lineHeight: 1,
-                }}
-              >
-                Producto original
-              </p>
-            </div>
-
-            <p
-              className="mt-[0.7mm] truncate font-mono font-bold"
-              style={{
-                fontSize: "4.2pt",
-                lineHeight: 1,
-              }}
-              title={bottle.bottleCode}
-            >
-              {bottle.bottleCode}
-            </p>
-          </footer>
-        </section>
-
-        <section
-          className="flex shrink-0 flex-col items-center justify-center"
-          style={{
-            width: "20mm",
-          }}
-        >
-          <div
-            className="flex items-center justify-center bg-white"
-            style={{
-              width: "19mm",
-              height: "19mm",
-            }}
-          >
-            <BottleQRCode
-              value={bottle.qrUrl}
-              size={72}
-            />
-          </div>
-
-          <p
-            className="mt-[0.8mm] text-center font-black uppercase"
-            style={{
-              fontSize: "4.3pt",
-              lineHeight: 1.05,
-            }}
-          >
-            Escanee para verificar
+      <section className="mt-5 flex items-center justify-between gap-5">
+        <div className="min-w-0 flex-1">
+          <p className="text-[9px] font-black uppercase tracking-wider">
+            Código de autenticidad
           </p>
 
           <p
-            className="mt-[0.6mm] max-w-full truncate text-center font-mono font-bold"
-            style={{
-              fontSize: "3.8pt",
-              lineHeight: 1,
-            }}
-            title={authenticityCode}
+            className="mt-2 break-all font-mono text-xs font-black"
+            title={
+              bottle.authenticityCode ??
+              bottle.bottleCode
+            }
           >
-            {authenticityCode}
+            {bottle.authenticityCode ??
+              bottle.bottleCode}
           </p>
-        </section>
-      </div>
+
+          <p className="mt-4 text-[9px] font-semibold leading-4">
+            Escanea el código QR para consultar la identidad de esta
+            botella.
+          </p>
+        </div>
+
+        <div className="shrink-0">
+          <BottleQrCode value={qrUrl} size={88} />
+        </div>
+      </section>
+
+      <footer className="mt-6 border-t border-black pt-3 text-center">
+        <p className="text-[8px] font-black uppercase tracking-[0.14em]">
+          Producto identificado individualmente por MAESTRO
+        </p>
+      </footer>
     </article>
   );
 }
 
-function createAuthenticityCode(
-  qrToken: string,
-  serialNumber: number
-) {
-  const tokenPart = qrToken
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .slice(-8)
-    .toUpperCase();
+function LabelRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="mt-2 flex items-start justify-between gap-4 first:mt-0">
+      <span className="shrink-0 text-[10px] font-black uppercase">
+        {label}
+      </span>
 
-  const serialPart = serialNumber
-    .toString()
-    .padStart(6, "0");
-
-  return `CDN-${serialPart}-${tokenPart}`;
-}
-
-function formatSerialNumber(
-  value: number,
-  totalBottles: number
-) {
-  const digits = Math.max(
-    3,
-    totalBottles.toString().length
+      <span
+        className={`min-w-0 break-all text-right text-xs font-black ${
+          mono ? "font-mono" : ""
+        }`}
+      >
+        {value}
+      </span>
+    </div>
   );
-
-  return value.toString().padStart(digits, "0");
 }
 
 function formatBottleSize(sizeMl: number) {
@@ -262,7 +172,7 @@ function formatBottleSize(sizeMl: number) {
     const liters = sizeMl / 1000;
 
     return `${formatNumber(liters, 2)} ${
-      liters === 1 ? "L" : "L"
+      liters === 1 ? "litro" : "litros"
     }`;
   }
 
@@ -274,7 +184,13 @@ function formatNumber(
   maximumFractionDigits = 2
 ) {
   return new Intl.NumberFormat("es-MX", {
-    minimumFractionDigits: 0,
     maximumFractionDigits,
   }).format(value);
+}
+
+function formatDate(date: Date) {
+  return new Intl.DateTimeFormat("es-MX", {
+    dateStyle: "medium",
+    timeZone: "America/Mexico_City",
+  }).format(date);
 }
