@@ -6,6 +6,51 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 
 type Step = "ventas" | "salidas" | "entradas" | "cierre";
+type CashCutStatus = "ABIERTO" | "CERRADO" | "AUDITADO";
+
+interface Branch {
+  id: string;
+  name: string;
+}
+
+interface SalePayment {
+  id: string;
+  method: string;
+  amount: number;
+}
+
+interface Outflow {
+  id: string;
+  concept: string;
+  category: string;
+  amount: number;
+}
+
+interface Inflow {
+  id: string;
+  type: string;
+  amount: number;
+}
+
+interface CashCut {
+  id: string;
+  code: string;
+  status: CashCutStatus;
+  branch: Branch;
+  salesByMethod: SalePayment[];
+  outflows: Outflow[];
+  inflows: Inflow[];
+  cashCounted: number | null;
+  cashExpected: number | null;
+  difference: number | null;
+  envelopeAmount: number | null;
+  envelopeNumber: string | null;
+  nextFund: number | null;
+}
+
+interface CloseResult {
+  assignmentWarning?: string;
+}
 
 const METODOS = [
   { key: "EFECTIVO", label: "Efectivo" },
@@ -18,9 +63,26 @@ const METODOS = [
   { key: "OTRO", label: "Otro" },
 ];
 
+const CATEGORIAS_SALIDA = [
+  "Insumos de barra",
+  "Hielo",
+  "Limpieza",
+  "Mantenimiento",
+  "Transporte",
+  "Cambio",
+  "Otro",
+];
+
+interface StepProps {
+  cashCutId: string;
+  cashCut: CashCut;
+  onSaved: () => void;
+  disabled: boolean;
+}
+
 export default function CashCutDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [cashCut, setCashCut] = useState<any>(null);
+  const [cashCut, setCashCut] = useState<CashCut | null>(null);
   const [step, setStep] = useState<Step>("ventas");
   const [loading, setLoading] = useState(true);
 
@@ -86,11 +148,11 @@ export default function CashCutDetailPage() {
   );
 }
 
-function VentasStep({ cashCutId, cashCut, onSaved, disabled }: any) {
+function VentasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
   const [values, setValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const m of METODOS) {
-      const existing = cashCut.salesByMethod.find((s: any) => s.method === m.key);
+      const existing = cashCut.salesByMethod.find((s) => s.method === m.key);
       initial[m.key] = existing ? String(existing.amount) : "";
     }
     return initial;
@@ -140,9 +202,9 @@ function VentasStep({ cashCutId, cashCut, onSaved, disabled }: any) {
   );
 }
 
-function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: any) {
+function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
   const [concept, setConcept] = useState("");
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState(CATEGORIAS_SALIDA[0]);
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -156,13 +218,12 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: any) {
       body: JSON.stringify({ concept, category, amount: Number(amount) }),
     });
     setConcept("");
-    setCategory("");
     setAmount("");
     setSaving(false);
     onSaved();
   }
 
-  const total = cashCut.outflows.reduce((sum: number, o: any) => sum + o.amount, 0);
+  const total = cashCut.outflows.reduce((sum, o) => sum + o.amount, 0);
 
   return (
     <div className="space-y-4">
@@ -179,12 +240,17 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: any) {
           </Card>
           <Card>
             <CardLabel>Categoría</CardLabel>
-            <input
+            <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              placeholder="Ej. Insumos"
               className="w-full bg-slate-800 text-white rounded-lg px-3 py-2 border border-slate-600"
-            />
+            >
+              {CATEGORIAS_SALIDA.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
           </Card>
           <Card>
             <CardLabel>Monto</CardLabel>
@@ -203,7 +269,7 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: any) {
       )}
 
       <div className="space-y-2">
-        {cashCut.outflows.map((o: any) => (
+        {cashCut.outflows.map((o) => (
           <Card key={o.id}>
             <div className="flex justify-between">
               <div>
@@ -224,7 +290,7 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: any) {
   );
 }
 
-function EntradasStep({ cashCutId, cashCut, onSaved, disabled }: any) {
+function EntradasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
   const [type, setType] = useState("CAMBIO_RECIBIDO");
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
@@ -251,7 +317,7 @@ function EntradasStep({ cashCutId, cashCut, onSaved, disabled }: any) {
     onSaved();
   }
 
-  const total = cashCut.inflows.reduce((sum: number, i: any) => sum + i.amount, 0);
+  const total = cashCut.inflows.reduce((sum, i) => sum + i.amount, 0);
 
   return (
     <div className="space-y-4">
@@ -288,7 +354,7 @@ function EntradasStep({ cashCutId, cashCut, onSaved, disabled }: any) {
       )}
 
       <div className="space-y-2">
-        {cashCut.inflows.map((i: any) => (
+        {cashCut.inflows.map((i) => (
           <Card key={i.id}>
             <div className="flex justify-between">
               <p className="text-white font-semibold">{i.type}</p>
@@ -306,13 +372,13 @@ function EntradasStep({ cashCutId, cashCut, onSaved, disabled }: any) {
   );
 }
 
-function CierreStep({ cashCutId, cashCut, onSaved, disabled }: any) {
-  const [cashCounted, setCashCounted] = useState(cashCut.cashCounted ?? "");
-  const [envelopeAmount, setEnvelopeAmount] = useState(cashCut.envelopeAmount ?? "");
+function CierreStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
+  const [cashCounted, setCashCounted] = useState(cashCut.cashCounted?.toString() ?? "");
+  const [envelopeAmount, setEnvelopeAmount] = useState(cashCut.envelopeAmount?.toString() ?? "");
   const [envelopeNumber, setEnvelopeNumber] = useState(cashCut.envelopeNumber ?? "");
-  const [nextFund, setNextFund] = useState(cashCut.nextFund ?? "");
+  const [nextFund, setNextFund] = useState(cashCut.nextFund?.toString() ?? "");
   const [saving, setSaving] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<CloseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function handleClose() {
@@ -340,7 +406,7 @@ function CierreStep({ cashCutId, cashCut, onSaved, disabled }: any) {
       return;
     }
 
-    const data = await res.json();
+    const data: CloseResult = await res.json();
     setResult(data);
     onSaved();
   }
