@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
@@ -35,11 +35,19 @@ export default async function RootLayout({
   const user = await getCurrentUser();
 
   const cookieStore = await cookies();
+  const headerStore = await headers();
 
-  const hasSessionCookie =
-    cookieStore.has("maestro_user");
+  const hasSessionCookie = cookieStore.has("maestro_user");
 
-  if (hasSessionCookie && !user) {
+  const isPublicRoute =
+    headerStore.get("x-maestro-public-route") === "true";
+
+  /*
+   * Si existe una sesión inválida, se limpia solamente dentro
+   * de las páginas privadas. Las páginas públicas, como /q/[token],
+   * deben abrir aunque el navegador conserve una cookie anterior.
+   */
+  if (hasSessionCookie && !user && !isPublicRoute) {
     redirect("/api/session/clear");
   }
 
@@ -51,10 +59,8 @@ export default async function RootLayout({
       <body className="min-h-screen bg-slate-950 text-white">
         <ServiceWorkerRegister />
 
-        {user ? (
-          <AppShell user={user}>
-            {children}
-          </AppShell>
+        {user && !isPublicRoute ? (
+          <AppShell user={user}>{children}</AppShell>
         ) : (
           children
         )}

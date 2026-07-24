@@ -36,9 +36,17 @@ export function middleware(request: NextRequest) {
    * Los cron jobs no usan la cookie maestro_user.
    * Esta ruta se protege en route.ts mediante CRON_SECRET.
    */
-  if (isPublicApi) {
-    return NextResponse.next();
-  }
+  if (isPublicPage) {
+  const requestHeaders = new Headers(request.headers);
+
+  requestHeaders.set("x-maestro-public-route", "true");
+
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
+}
 
   /*
    * Las páginas públicas pueden abrirse sin iniciar sesión.
