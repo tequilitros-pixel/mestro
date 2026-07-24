@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import {
   LiquorBatchStatus,
   LiquorBottlingStatus,
+  LiquorBottleMovementType,
   LiquorBottleStatus,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -108,13 +109,21 @@ export async function createLiquorBottlingAction(
           status: true,
           actualLiters: true,
           plannedLiters: true,
+          createdAt: true,
 
           product: {
-            select: {
-              id: true,
-              prefix: true,
-            },
-          },
+  select: {
+    id: true,
+    name: true,
+    prefix: true,
+    defaultShelfLifeDays: true,
+    yellowAlertDays: true,
+    redAlertDays: true,
+    showExpirationOnLabel: true,
+    requiresQr: true,
+    requiresSerialNumber: true,
+  },
+},
 
           bottlings: {
             select: {
@@ -166,9 +175,47 @@ export async function createLiquorBottlingAction(
       }
 
       const now = new Date();
-      const bottlingCode = createBottlingCode(batch.code);
-      const productPrefix = sanitizeProductPrefix(batch.product.prefix);
+const manufacturedAt = batch.createdAt;
 
+const shelfLifeDays = batch.product.defaultShelfLifeDays;
+
+if (
+  shelfLifeDays === null ||
+  !Number.isInteger(shelfLifeDays) ||
+  shelfLifeDays <= 0
+) {
+  throw new Error(
+    `El producto ${batch.product.name} no tiene una vida útil válida configurada.`
+  );
+}
+
+if (
+  batch.product.yellowAlertDays <= 0 ||
+  batch.product.yellowAlertDays > shelfLifeDays
+) {
+  throw new Error(
+    "La configuración de la alerta amarilla no es válida."
+  );
+}
+
+if (
+  batch.product.redAlertDays <= 0 ||
+  batch.product.redAlertDays > batch.product.yellowAlertDays
+) {
+  throw new Error(
+    "La configuración de la alerta roja no es válida."
+  );
+}
+
+const expirationDate = addDays(
+  manufacturedAt,
+  shelfLifeDays
+);
+
+const bottlingCode = createBottlingCode(batch.code);
+const productPrefix = sanitizeProductPrefix(
+  batch.product.prefix
+);
       /*
        * Buscamos todos los códigos de botella del mismo producto para
        * continuar el consecutivo, aunque se realicen varios embotellados.
@@ -203,6 +250,7 @@ export async function createLiquorBottlingAction(
           litersUsed,
           lossLiters,
           bottledAt: now,
+          expirationDate,
           startedAt: now,
           finishedAt: now,
           notes,
@@ -215,34 +263,89 @@ export async function createLiquorBottlingAction(
         },
       });
 
-      const bottles = Array.from(
-        {
-          length: producedBottles,
-        },
-        (_, index) => {
-          /*
-           * serialNumber conserva el orden interno dentro del embotellado.
-           * visibleSequence es el consecutivo global del producto.
-           */
-          const serialNumber = index + 1;
-          const visibleSequence = lastVisibleSequence + index + 1;
+     const bottles = Array.from(
+  {
+    length: producedBottles,
+  },
+  (_, index) => {
+    /*
+     * serialNumber conserva el orden dentro del embotellado.
+     * visibleSequence es el consecutivo global del producto.
+     */
+    const serialNumber = index + 1;
+    const visibleSequence =
+      lastVisibleSequence + index + 1;
 
-          return {
-            bottlingId: bottling.id,
-            code: createBottleCode(productPrefix, visibleSequence),
-            serialNumber,
-            qrToken: randomUUID(),
-            status: LiquorBottleStatus.DISPONIBLE,
-            bottledAt: now,
-            expirationDate: null,
-            currentLocation: "Almacén principal",
-          };
-        }
-      );
+    return {
+      bottlingId: bottling.id,
+      code: createBottleCode(
+        productPrefix,
+        visibleSequence
+      ),
+      serialNumber,
 
-      await tx.liquorBottle.createMany({
-        data: bottles,
-      });
+      /*
+       * qrToken siempre se genera porque actualmente es obligatorio
+       * en la base de datos. La configuración requiresQr determinará
+       * posteriormente si se imprime o se muestra.
+       */
+      qrToken: randomUUID(),
+
+      authenticityCode: createAuthenticityCode(),
+
+      status: LiquorBottleStatus.DISPONIBLE,
+
+      manufacturedAt,
+      bottledAt: now,
+      expirationDate,
+
+      /*
+       * Fotografía histórica de las reglas del producto.
+       * Si la configuración cambia después, estas botellas conservarán
+       * las reglas originales.
+       */
+      shelfLifeDays,
+      yellowAlertDays:
+        batch.product.yellowAlertDays,
+      redAlertDays:
+        batch.product.redAlertDays,
+      showExpirationOnLabel:
+        batch.product.showExpirationOnLabel,
+
+      currentLocation: "Almacén principal",
+    };
+  }
+);
+
+await tx.liquorBottle.createMany({
+  data: bottles,
+});
+
+/*
+ * Recuperamos las botellas recién creadas para registrar
+ * su primer movimiento individual de trazabilidad.
+ */
+const createdBottles =
+  await tx.liquorBottle.findMany({
+    where: {
+      bottlingId: bottling.id,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+await tx.liquorBottleMovement.createMany({
+  data: createdBottles.map((bottle) => ({
+    bottleId: bottle.id,
+    type: LiquorBottleMovementType.CREADA,
+    fromLocation: "Producción",
+    toLocation: "Almacén principal",
+    userId,
+    notes: `Botella creada durante el embotellado ${bottling.code}.`,
+    createdAt: now,
+  })),
+});
 
       const remainingLiters = roundLiters(
         Math.max(availableLiters - litersUsed, 0)
@@ -422,6 +525,32 @@ function escapeRegularExpression(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function addDays(date: Date, days: number) {
+  const result = new Date(date);
+
+  result.setUTCDate(result.getUTCDate() + days);
+
+  return result;
+}
+
+function createAuthenticityCode() {
+  const firstPart = randomUUID()
+    .replaceAll("-", "")
+    .slice(0, 4)
+    .toUpperCase();
+
+  const secondPart = randomUUID()
+    .replaceAll("-", "")
+    .slice(0, 4)
+    .toUpperCase();
+
+  const thirdPart = randomUUID()
+    .replaceAll("-", "")
+    .slice(0, 4)
+    .toUpperCase();
+
+  return `${firstPart}-${secondPart}-${thirdPart}`;
+}
 function roundLiters(value: number) {
   return Math.round((value + Number.EPSILON) * 1000) / 1000;
 }

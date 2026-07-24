@@ -164,13 +164,15 @@ const isReleased = releasedStatuses.includes(currentStatus);
 
       {isTerminated ? (
   <LiquorBatchFinishedCard
-    batchCode={batch.code}
-    productName={batch.product.name}
-    productIcon={batch.product.icon}
-    finishedAt={batch.finishedAt ?? batch.updatedAt}
-    totalProducedBottles={totalProducedBottles}
-    totalRejectedBottles={totalRejectedBottles}
-    finalNotes={batch.finalNotes}
+  batchId={batch.id}
+  batchCode={batch.code}
+  productName={batch.product.name}
+  productIcon={batch.product.icon}
+  finishedAt={batch.finishedAt ?? batch.updatedAt}
+  totalProducedBottles={totalProducedBottles}
+  totalRejectedBottles={totalRejectedBottles}
+  finalNotes={batch.finalNotes}
+
   />
 ) : isReleased ? (
   <LiquorBatchReleasedCard
@@ -483,6 +485,7 @@ const isReleased = releasedStatuses.includes(currentStatus);
   );
 }
 function LiquorBatchFinishedCard({
+  batchId,
   batchCode,
   productName,
   productIcon,
@@ -491,6 +494,7 @@ function LiquorBatchFinishedCard({
   totalRejectedBottles,
   finalNotes,
 }: {
+  batchId: string;
   batchCode: string;
   productName: string;
   productIcon: string | null;
@@ -554,21 +558,30 @@ function LiquorBatchFinishedCard({
           </div>
         )}
 
-        <div className="mx-auto mt-8 flex max-w-4xl flex-col gap-3 sm:flex-row">
-          <Link
-            href="/liquors/inventory"
-            className="flex-1 rounded-2xl bg-purple-600 px-5 py-4 text-center font-black text-white transition hover:bg-purple-500"
-          >
-            Ver inventario
-          </Link>
+        <div className="mx-auto mt-8 grid max-w-4xl gap-3 sm:grid-cols-3">
+  {totalProducedBottles > 0 && (
+    <Link
+      href={`/liquors/batches/${batchId}/labels`}
+      className="rounded-2xl bg-green-600 px-5 py-4 text-center font-black text-white transition hover:bg-green-500"
+    >
+      🏷️ Imprimir etiquetas
+    </Link>
+  )}
 
-          <Link
-            href="/liquors/batches"
-            className="flex-1 rounded-2xl border border-slate-700 px-5 py-4 text-center font-black text-slate-200 transition hover:bg-slate-800"
-          >
-            Volver a lotes
-          </Link>
-        </div>
+  <Link
+    href="/liquors/inventory"
+    className="rounded-2xl bg-purple-600 px-5 py-4 text-center font-black text-white transition hover:bg-purple-500"
+  >
+    📦 Ver inventario
+  </Link>
+
+  <Link
+    href="/liquors/batches"
+    className="rounded-2xl border border-slate-700 px-5 py-4 text-center font-black text-slate-200 transition hover:bg-slate-800"
+  >
+    Volver a lotes
+  </Link>
+</div>
       </div>
     </section>
   );
@@ -768,11 +781,11 @@ function LiquorBatchReleasedCard({
           </Link>
 
           <Link
-            href={`/liquors/products/${batchId}`}
-            className="flex-1 rounded-2xl border border-slate-700 px-5 py-3 text-center font-bold text-slate-300 transition hover:border-slate-600 hover:bg-slate-800"
-          >
-            Crear nuevo lote
-          </Link>
+  href="/liquors"
+  className="flex-1 rounded-2xl border border-slate-700 px-5 py-3 text-center font-bold text-slate-300 transition hover:border-slate-600 hover:bg-slate-800"
+>
+  Crear nuevo lote
+</Link>
         </div>
       </div>
     </section>

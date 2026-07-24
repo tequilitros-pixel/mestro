@@ -111,18 +111,31 @@ export default async function LiquorProductPage({
             </div>
           </div>
 
-          {activeRecipe ? (
-            <Link
-              href={`/liquors/products/${product.slug}/new`}
-              className="rounded-2xl bg-purple-500 px-6 py-4 text-center font-bold text-white transition hover:bg-purple-400"
-            >
-              {product.icon ?? "🍹"} Elaborar {product.name}
-            </Link>
-          ) : (
+          <div className="flex flex-col gap-3 sm:flex-row">
+  <Link
+    href={`/liquors/products/${product.slug}/edit`}
+    className="rounded-2xl border border-slate-700 bg-slate-950 px-6 py-4 text-center font-bold text-slate-200 transition hover:border-purple-500/50 hover:text-white"
+  >
+    ⚙️ Configurar producto
+  </Link>
+
+  {activeRecipe ? (
+    <Link
+      href={`/liquors/products/${product.slug}/new`}
+      className="rounded-2xl bg-purple-500 px-6 py-4 text-center font-bold text-white transition hover:bg-purple-400"
+    >
+      {product.icon ?? "🍹"} Elaborar {product.name}
+    </Link>
+  ) : (
+    <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-5 py-4 text-sm text-amber-200">
+      Primero debemos registrar la receta oficial.
+    </div>
+  )}
+</div>
             <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-5 py-4 text-sm text-amber-200">
               Primero debemos registrar la receta oficial.
             </div>
-          )}
+          
         </div>
       </header>
 
@@ -159,6 +172,81 @@ export default async function LiquorProductPage({
           }
         />
       </section>
+      <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
+  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <p className="text-sm font-semibold uppercase tracking-[0.3em] text-purple-400">
+        Trazabilidad y caducidad
+      </p>
+
+      <h2 className="mt-2 text-2xl font-bold text-white">
+        Configuración del producto
+      </h2>
+    </div>
+
+    <Link
+      href={`/liquors/products/${product.slug}/edit`}
+      className="rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-2 text-center text-sm font-bold text-purple-300 transition hover:bg-purple-500/20"
+    >
+      Editar configuración
+    </Link>
+  </div>
+
+  <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <ConfigurationValue
+      title="Vida útil"
+      value={
+        product.defaultShelfLifeDays !== null
+          ? `${formatNumber(product.defaultShelfLifeDays, 0)} días`
+          : "Sin definir"
+      }
+      detail="Aplicada a nuevas producciones"
+    />
+
+    <ConfigurationValue
+      title="Alerta amarilla"
+      value={`${formatNumber(product.yellowAlertDays, 0)} días`}
+      detail="Próxima a caducar"
+    />
+
+    <ConfigurationValue
+      title="Alerta roja"
+      value={`${formatNumber(product.redAlertDays, 0)} días`}
+      detail="Atención prioritaria"
+    />
+
+    <ConfigurationValue
+      title="Fecha en etiqueta"
+      value={product.showExpirationOnLabel ? "Sí" : "No"}
+      detail="Mostrar fecha de caducidad"
+    />
+
+    <ConfigurationValue
+      title="Código QR"
+      value={product.requiresQr ? "Obligatorio" : "Opcional"}
+      detail="Identidad digital por botella"
+    />
+
+    <ConfigurationValue
+      title="Número de serie"
+      value={product.requiresSerialNumber ? "Obligatorio" : "Opcional"}
+      detail="Identidad individual"
+    />
+  </div>
+
+  {product.defaultShelfLifeDays !== null &&
+    product.yellowAlertDays > product.defaultShelfLifeDays && (
+      <div className="mt-5 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+        La alerta amarilla no puede ser mayor que la vida útil.
+      </div>
+    )}
+
+  {product.redAlertDays > product.yellowAlertDays && (
+    <div className="mt-5 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+      La alerta roja no puede ser mayor que la alerta amarilla.
+    </div>
+  )}
+</section>
 
       <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -291,6 +379,7 @@ export default async function LiquorProductPage({
                         {batch.recipe.version}
                       </p>
                     </div>
+                    
 
                     <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                       <BatchValue
@@ -353,7 +442,27 @@ function Badge({ children }: { children: React.ReactNode }) {
     </span>
   );
 }
+function ConfigurationValue({
+  title,
+  value,
+  detail,
+}: {
+  title: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-5">
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        {title}
+      </p>
 
+      <p className="mt-2 text-xl font-black text-white">{value}</p>
+
+      <p className="mt-2 text-xs text-slate-500">{detail}</p>
+    </div>
+  );
+}
 function BatchValue({
   title,
   value,

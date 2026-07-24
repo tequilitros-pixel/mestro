@@ -7,35 +7,37 @@ datasource db {
 }
 
 model User {
-  id                        String              @id @default(cuid())
+  id                        String                 @id @default(cuid())
   name                      String
-  username                  String              @unique
-  email                     String?             @unique
+  username                  String                 @unique
+  email                     String?                @unique
   password                  String
   role                      UserRole
-  active                    Boolean             @default(true)
-  createdAt                 DateTime            @default(now())
-  updatedAt                 DateTime            @updatedAt
+  active                    Boolean                @default(true)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
   lastLogin                 DateTime?
-  cookingsFinished          Cooking[]           @relation("CookingFinishedBy")
-  distillationsFinished     Distillation[]      @relation("DistillationFinishedBy")
-  fermentationsFinished     Fermentation[]      @relation("FermentationFinishedBy")
-  liquorBatchesCreated      LiquorBatch[]       @relation("LiquorBatchCreatedBy")
-  liquorBatchesFinished     LiquorBatch[]       @relation("LiquorBatchFinishedBy")
-  liquorBatchsPaused        LiquorBatch[]       @relation("LiquorBatchPausedBy")
-  liquorEventsCreated       LiquorBatchEvent[]  @relation("LiquorBatchEventCreatedBy")
-  liquorBatchStepsCompleted LiquorBatchStep[]   @relation("LiquorBatchStepCompletedBy")
-  liquorBottlingsCreated    LiquorBottling[]    @relation("LiquorBottlingCreatedBy")
-  liquorBottlingsFinished   LiquorBottling[]    @relation("LiquorBottlingFinishedBy")
-  liquorProductsCreated     LiquorProduct[]     @relation("LiquorProductCreatedBy")
-  liquorRecipesCreated      LiquorRecipe[]      @relation("LiquorRecipeCreatedBy")
+  cookingsFinished          Cooking[]              @relation("CookingFinishedBy")
+  distillationsFinished     Distillation[]         @relation("DistillationFinishedBy")
+  fermentationsFinished     Fermentation[]         @relation("FermentationFinishedBy")
+  liquorBatchesCreated      LiquorBatch[]          @relation("LiquorBatchCreatedBy")
+  liquorBatchesFinished     LiquorBatch[]          @relation("LiquorBatchFinishedBy")
+  liquorBottlesSold         LiquorBottle[]         @relation("LiquorBottleSoldBy")
+  liquorBottleMovements     LiquorBottleMovement[] @relation("LiquorBottleMovementCreatedBy")
+  liquorBatchsPaused        LiquorBatch[]          @relation("LiquorBatchPausedBy")
+  liquorEventsCreated       LiquorBatchEvent[]     @relation("LiquorBatchEventCreatedBy")
+  liquorBatchStepsCompleted LiquorBatchStep[]      @relation("LiquorBatchStepCompletedBy")
+  liquorBottlingsCreated    LiquorBottling[]       @relation("LiquorBottlingCreatedBy")
+  liquorBottlingsFinished   LiquorBottling[]       @relation("LiquorBottlingFinishedBy")
+  liquorProductsCreated     LiquorProduct[]        @relation("LiquorProductCreatedBy")
+  liquorRecipesCreated      LiquorRecipe[]         @relation("LiquorRecipeCreatedBy")
   lots                      Lot[]
   branches                  UserBranch[]
-  cashCutsResponsible       CashCut[]           @relation("CashCutResponsible")
-  cashCutsCreated           CashCut[]           @relation("CashCutCreatedBy")
-  cashCutsUpdated           CashCut[]           @relation("CashCutUpdatedBy")
-  cashOutflowsAuthorized    CashOutflow[]       @relation("CashOutflowAuthorizedBy")
-  cashCutAuditEntries       CashCutAuditEntry[] @relation("CashCutAuditBy")
+  cashCutsResponsible       CashCut[]              @relation("CashCutResponsible")
+  cashCutsCreated           CashCut[]              @relation("CashCutCreatedBy")
+  cashCutsUpdated           CashCut[]              @relation("CashCutUpdatedBy")
+  cashOutflowsAuthorized    CashOutflow[]          @relation("CashOutflowAuthorizedBy")
+  cashCutAuditEntries       CashCutAuditEntry[]    @relation("CashCutAuditBy")
 
   millingsFinished   Milling[]           @relation("MillingFinishedBy")
   millingDischarges  MillingDischarge[]
@@ -357,21 +359,32 @@ model RawMaterial {
 }
 
 model LiquorProduct {
-  id                   String         @id @default(cuid())
-  name                 String         @unique
-  slug                 String         @unique
-  prefix               String         @unique
-  description          String?
-  icon                 String?
-  defaultAlcohol       Float?
-  defaultShelfLifeDays Int?
-  active               Boolean        @default(true)
-  createdById          String?
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
-  batches              LiquorBatch[]
-  createdBy            User?          @relation("LiquorProductCreatedBy", fields: [createdById], references: [id])
-  recipes              LiquorRecipe[]
+  id             String  @id @default(cuid())
+  name           String  @unique
+  slug           String  @unique
+  prefix         String  @unique
+  description    String?
+  icon           String?
+  defaultAlcohol Float?
+
+  // Configuración de caducidad
+  defaultShelfLifeDays  Int?
+  yellowAlertDays       Int     @default(30)
+  redAlertDays          Int     @default(7)
+  showExpirationOnLabel Boolean @default(true)
+
+  // Configuración de trazabilidad
+  requiresQr           Boolean @default(true)
+  requiresSerialNumber Boolean @default(true)
+
+  active      Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  batches   LiquorBatch[]
+  createdBy User?          @relation("LiquorProductCreatedBy", fields: [createdById], references: [id])
+  recipes   LiquorRecipe[]
 
   @@index([createdById])
   @@index([active])
@@ -655,64 +668,102 @@ model LiquorBottling {
 /// *
 ///  * Cada botella individual tendrá identidad propia y un QR único.
 model LiquorBottle {
-  id              String                 @id @default(cuid())
-  bottlingId      String
-  code            String                 @unique
-  serialNumber    Int
-  qrToken         String                 @unique @default(cuid())
-  status          LiquorBottleStatus     @default(DISPONIBLE)
-  bottledAt       DateTime
-  expirationDate  DateTime?
-  currentLocation String?
-  notes           String?
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
+  id           String @id @default(cuid())
+  bottlingId   String
+  code         String @unique
+  serialNumber Int
+  qrToken      String @unique @default(cuid())
+
+  // Se agrega inicialmente como opcional para una migración segura.
+  authenticityCode String? @unique
+
+  status LiquorBottleStatus @default(DISPONIBLE)
+
+  // Fechas propias de la botella
+  manufacturedAt DateTime?
+  bottledAt      DateTime
+  expirationDate DateTime?
+
+  // Copia histórica de las reglas aplicadas al embotellar
+  shelfLifeDays         Int?
+  yellowAlertDays       Int?
+  redAlertDays          Int?
+  showExpirationOnLabel Boolean @default(true)
+
+  // Ubicación actual
   branchId        String?
-  removedAt       DateTime?
-  reservedAt      DateTime?
-  soldAt          DateTime?
-  soldById        String?
-  bottling        LiquorBottling         @relation(fields: [bottlingId], references: [id], onDelete: Cascade)
-  movements       LiquorBottleMovement[]
+  currentLocation String?
+
+  // Venta y retiro
+  reservedAt DateTime?
+  soldAt     DateTime?
+  soldById   String?
+  removedAt  DateTime?
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bottling LiquorBottling @relation(fields: [bottlingId], references: [id], onDelete: Cascade)
+  branch   Branch?        @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  soldBy   User?          @relation("LiquorBottleSoldBy", fields: [soldById], references: [id], onDelete: SetNull)
+
+  movements LiquorBottleMovement[]
 
   @@unique([bottlingId, serialNumber])
   @@index([bottlingId])
   @@index([status])
   @@index([expirationDate])
-  @@index([currentLocation])
+  @@index([branchId])
   @@index([soldAt])
   @@index([soldById])
-  @@index([branchId])
+  @@index([manufacturedAt])
 }
 
 model LiquorBottleMovement {
-  id           String                   @id @default(cuid())
-  bottleId     String
-  type         LiquorBottleMovementType
+  id       String                   @id @default(cuid())
+  bottleId String
+  type     LiquorBottleMovementType
+
+  // Relaciones formales con sucursales
+  fromBranchId String?
+  toBranchId   String?
+
+  // Campos anteriores conservados temporalmente
   fromLocation String?
   toLocation   String?
-  userId       String?
-  notes        String?
-  createdAt    DateTime                 @default(now())
-  bottle       LiquorBottle             @relation(fields: [bottleId], references: [id], onDelete: Cascade)
+
+  userId    String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  bottle     LiquorBottle @relation(fields: [bottleId], references: [id], onDelete: Cascade)
+  fromBranch Branch?      @relation("LiquorMovementFromBranch", fields: [fromBranchId], references: [id], onDelete: SetNull)
+  toBranch   Branch?      @relation("LiquorMovementToBranch", fields: [toBranchId], references: [id], onDelete: SetNull)
+  user       User?        @relation("LiquorBottleMovementCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([bottleId])
   @@index([type])
   @@index([userId])
+  @@index([fromBranchId])
+  @@index([toBranchId])
   @@index([createdAt])
 }
 
 model Branch {
   id        String   @id @default(cuid())
   name      String
-  code      String   @unique // ej. "CENTRO", "NORTE"
+  code      String   @unique
   address   String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users    UserBranch[]
-  cashCuts CashCut[]
+  users               UserBranch[]
+  cashCuts            CashCut[]
+  liquorBottles       LiquorBottle[]
+  liquorMovementsFrom LiquorBottleMovement[] @relation("LiquorMovementFromBranch")
+  liquorMovementsTo   LiquorBottleMovement[] @relation("LiquorMovementToBranch")
 
   @@index([active])
 }

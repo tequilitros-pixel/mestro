@@ -9,12 +9,19 @@ type InventoryGroup = {
   productSlug: string;
   productIcon: string;
   bottleSizeMl: number;
+
   total: number;
   available: number;
   reserved: number;
   sold: number;
   loss: number;
   removed: number;
+
+  healthy: number;
+  yellowAlert: number;
+  redAlert: number;
+  expired: number;
+  withoutExpiration: number;
 };
 
 export default async function LiquorInventoryPage() {
@@ -41,10 +48,13 @@ export default async function LiquorInventoryPage() {
         },
       },
       bottles: {
-        select: {
-          status: true,
-        },
-      },
+  select: {
+    status: true,
+    expirationDate: true,
+    yellowAlertDays: true,
+    redAlertDays: true,
+  },
+},
     },
     orderBy: {
       createdAt: "desc",
@@ -52,28 +62,37 @@ export default async function LiquorInventoryPage() {
   });
 
   const inventoryGroups = buildInventoryGroups(bottlings);
+const totals = inventoryGroups.reduce(
+  (accumulator, group) => {
+    accumulator.total += group.total;
+    accumulator.available += group.available;
+    accumulator.reserved += group.reserved;
+    accumulator.sold += group.sold;
+    accumulator.loss += group.loss;
+    accumulator.removed += group.removed;
 
-  const totals = inventoryGroups.reduce(
-    (accumulator, group) => {
-      accumulator.total += group.total;
-      accumulator.available += group.available;
-      accumulator.reserved += group.reserved;
-      accumulator.sold += group.sold;
-      accumulator.loss += group.loss;
-      accumulator.removed += group.removed;
+    accumulator.healthy += group.healthy;
+    accumulator.yellowAlert += group.yellowAlert;
+    accumulator.redAlert += group.redAlert;
+    accumulator.expired += group.expired;
+    accumulator.withoutExpiration += group.withoutExpiration;
 
-      return accumulator;
-    },
-    {
-      total: 0,
-      available: 0,
-      reserved: 0,
-      sold: 0,
-      loss: 0,
-      removed: 0,
-    }
-  );
-
+    return accumulator;
+  },
+  {
+    total: 0,
+    available: 0,
+    reserved: 0,
+    sold: 0,
+    loss: 0,
+    removed: 0,
+    healthy: 0,
+    yellowAlert: 0,
+    redAlert: 0,
+    expired: 0,
+    withoutExpiration: 0,
+  }
+);
   const totalAvailableLiters = inventoryGroups.reduce(
     (total, group) =>
       total + group.available * (group.bottleSizeMl / 1000),
@@ -160,7 +179,64 @@ export default async function LiquorInventoryPage() {
           detail="Fuera de circulación"
         />
       </section>
+<section className="mt-8 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
+  <div>
+    <p className="text-sm font-black uppercase tracking-[0.3em] text-purple-400">
+      Control de caducidades
+    </p>
 
+    <h2 className="mt-2 text-3xl font-black text-white">
+      Estado del inventario actual
+    </h2>
+
+    <p className="mt-2 text-sm text-slate-400">
+      Análisis de botellas disponibles y reservadas según su fecha de
+      caducidad.
+    </p>
+  </div>
+
+  <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+    <ExpirationKpi
+      icon="🟢"
+      title="Vigentes"
+      value={totals.healthy}
+      detail="Sin riesgo próximo"
+      tone="green"
+    />
+
+    <ExpirationKpi
+      icon="🟡"
+      title="Alerta amarilla"
+      value={totals.yellowAlert}
+      detail="Próximas a caducar"
+      tone="yellow"
+    />
+
+    <ExpirationKpi
+      icon="🟠"
+      title="Alerta roja"
+      value={totals.redAlert}
+      detail="Salida prioritaria"
+      tone="orange"
+    />
+
+    <ExpirationKpi
+      icon="🔴"
+      title="Caducadas"
+      value={totals.expired}
+      detail="Requieren atención"
+      tone="red"
+    />
+
+    <ExpirationKpi
+      icon="⚪"
+      title="Sin caducidad"
+      value={totals.withoutExpiration}
+      detail="Falta información"
+      tone="slate"
+    />
+  </div>
+</section>
       <section className="mt-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -265,7 +341,60 @@ function InventoryCard({ group }: { group: InventoryGroup }) {
             />
           </div>
         </div>
+<div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+  <div className="flex items-center justify-between gap-3">
+    <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+      Caducidad del inventario
+    </p>
 
+    {group.expired > 0 ? (
+      <span className="rounded-full border border-red-500/25 bg-red-500/10 px-3 py-1 text-xs font-black text-red-300">
+        Atención
+      </span>
+    ) : group.redAlert > 0 ? (
+      <span className="rounded-full border border-orange-500/25 bg-orange-500/10 px-3 py-1 text-xs font-black text-orange-300">
+        Prioridad
+      </span>
+    ) : group.yellowAlert > 0 ? (
+      <span className="rounded-full border border-yellow-500/25 bg-yellow-500/10 px-3 py-1 text-xs font-black text-yellow-300">
+        Preventivo
+      </span>
+    ) : (
+      <span className="rounded-full border border-green-500/25 bg-green-500/10 px-3 py-1 text-xs font-black text-green-300">
+        Saludable
+      </span>
+    )}
+  </div>
+
+  <div className="mt-4 grid grid-cols-2 gap-3">
+    <ExpirationValue
+      label="🟢 Vigentes"
+      value={group.healthy}
+    />
+
+    <ExpirationValue
+      label="🟡 Amarilla"
+      value={group.yellowAlert}
+    />
+
+    <ExpirationValue
+      label="🟠 Roja"
+      value={group.redAlert}
+    />
+
+    <ExpirationValue
+      label="🔴 Caducadas"
+      value={group.expired}
+    />
+  </div>
+
+  {group.withoutExpiration > 0 && (
+    <p className="mt-4 text-xs font-semibold text-slate-500">
+      ⚪ {group.withoutExpiration} botellas no tienen fecha de
+      caducidad registrada.
+    </p>
+  )}
+</div>
         <div className="mt-6 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-slate-800 pt-5">
           <StatusValue
             label="Reservadas"
@@ -370,7 +499,67 @@ function StatusValue({
     </div>
   );
 }
+function ExpirationKpi({
+  icon,
+  title,
+  value,
+  detail,
+  tone,
+}: {
+  icon: string;
+  title: string;
+  value: number;
+  detail: string;
+  tone: "green" | "yellow" | "orange" | "red" | "slate";
+}) {
+  const toneClasses = {
+    green: "border-green-500/20 bg-green-500/10 text-green-300",
+    yellow:
+      "border-yellow-500/20 bg-yellow-500/10 text-yellow-300",
+    orange:
+      "border-orange-500/20 bg-orange-500/10 text-orange-300",
+    red: "border-red-500/20 bg-red-500/10 text-red-300",
+    slate: "border-slate-700 bg-slate-950/40 text-slate-300",
+  };
 
+  return (
+    <div
+      className={`rounded-2xl border p-5 ${toneClasses[tone]}`}
+    >
+      <div className="text-2xl">{icon}</div>
+
+      <p className="mt-4 text-sm font-bold opacity-80">
+        {title}
+      </p>
+
+      <p className="mt-2 text-3xl font-black text-white">
+        {formatNumber(value, 0)}
+      </p>
+
+      <p className="mt-2 text-xs opacity-60">{detail}</p>
+    </div>
+  );
+}
+
+function ExpirationValue({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+      <p className="text-xs font-semibold text-slate-500">
+        {label}
+      </p>
+
+      <p className="mt-1 text-xl font-black text-white">
+        {formatNumber(value, 0)}
+      </p>
+    </div>
+  );
+}
 function EmptyInventory() {
   return (
     <div className="mt-6 rounded-3xl border border-dashed border-slate-700 bg-slate-900/50 p-8 text-center sm:p-12">
@@ -409,9 +598,12 @@ function buildInventoryGroups(
         active: boolean;
       };
     };
-    bottles: Array<{
-      status: LiquorBottleStatus;
-    }>;
+   bottles: Array<{
+  status: LiquorBottleStatus;
+  expirationDate: Date | null;
+  yellowAlertDays: number | null;
+  redAlertDays: number | null;
+}>;
   }>
 ) {
   const groups = new Map<string, InventoryGroup>();
@@ -435,6 +627,12 @@ function buildInventoryGroups(
         sold: 0,
         loss: 0,
         removed: 0,
+
+        healthy: 0,
+yellowAlert: 0,
+redAlert: 0,
+expired: 0,
+withoutExpiration: 0,
       };
 
     for (const bottle of bottling.bottles) {
@@ -444,6 +642,42 @@ function buildInventoryGroups(
         case LiquorBottleStatus.DISPONIBLE:
           current.available += 1;
           break;
+
+          const isCurrentInventory =
+  bottle.status === LiquorBottleStatus.DISPONIBLE ||
+  bottle.status === LiquorBottleStatus.RESERVADA;
+
+if (!isCurrentInventory) {
+  continue;
+}
+
+const expirationStatus = getExpirationStatus({
+  expirationDate: bottle.expirationDate,
+  yellowAlertDays: bottle.yellowAlertDays,
+  redAlertDays: bottle.redAlertDays,
+});
+
+switch (expirationStatus) {
+  case "HEALTHY":
+    current.healthy += 1;
+    break;
+
+  case "YELLOW":
+    current.yellowAlert += 1;
+    break;
+
+  case "RED":
+    current.redAlert += 1;
+    break;
+
+  case "EXPIRED":
+    current.expired += 1;
+    break;
+
+  case "WITHOUT_EXPIRATION":
+    current.withoutExpiration += 1;
+    break;
+}
 
         case LiquorBottleStatus.RESERVADA:
           current.reserved += 1;
@@ -479,7 +713,66 @@ function buildInventoryGroups(
     return first.bottleSizeMl - second.bottleSizeMl;
   });
 }
+type ExpirationStatus =
+  | "HEALTHY"
+  | "YELLOW"
+  | "RED"
+  | "EXPIRED"
+  | "WITHOUT_EXPIRATION";
 
+function getExpirationStatus({
+  expirationDate,
+  yellowAlertDays,
+  redAlertDays,
+}: {
+  expirationDate: Date | null;
+yellowAlertDays: number | null;
+redAlertDays: number | null;
+}): ExpirationStatus {
+  if (!expirationDate) {
+    return "WITHOUT_EXPIRATION";
+  }
+const safeYellowAlertDays =
+  yellowAlertDays !== null && yellowAlertDays > 0
+    ? yellowAlertDays
+    : 30;
+
+const safeRedAlertDays =
+  redAlertDays !== null && redAlertDays > 0
+    ? redAlertDays
+    : 7;
+  const today = startOfDay(new Date());
+  const expiration = startOfDay(expirationDate);
+
+  const millisecondsPerDay = 1000 * 60 * 60 * 24;
+
+  const daysRemaining = Math.ceil(
+    (expiration.getTime() - today.getTime()) /
+      millisecondsPerDay
+  );
+
+  if (daysRemaining < 0) {
+    return "EXPIRED";
+  }
+
+  if (daysRemaining <= safeRedAlertDays) {
+  return "RED";
+}
+
+if (daysRemaining <= safeYellowAlertDays) {
+  return "YELLOW";
+}
+
+  return "HEALTHY";
+}
+
+function startOfDay(date: Date) {
+  const result = new Date(date);
+
+  result.setHours(0, 0, 0, 0);
+
+  return result;
+}
 function formatBottleSize(sizeMl: number) {
   if (sizeMl >= 1000) {
     const liters = sizeMl / 1000;
