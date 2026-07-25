@@ -27,168 +27,121 @@ export default function BottleLabel({
   showBorder = true,
 }: BottleLabelProps) {
   const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-const qrUrl = bottle.qrToken
-  ? `${baseUrl}/q/${encodeURIComponent(bottle.qrToken)}`
-  : "";
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+    "http://localhost:3000";
+
+  const qrUrl = bottle.qrToken
+    ? `${baseUrl}/q/${encodeURIComponent(bottle.qrToken)}`
+    : "";
+
   return (
     <article
-      className={`label-card break-inside-avoid bg-white text-black ${
-        showBorder ? "border border-black" : ""
+      className={`label-card break-inside-avoid overflow-hidden bg-white text-black ${
+        showBorder ? "border-[0.35mm] border-black" : ""
       } ${className}`}
       style={{
-        width: "100%",
-        minHeight: "120mm",
-        padding: "8mm",
+        width: "50mm",
+        height: "30mm",
+        padding: "1.5mm",
         boxSizing: "border-box",
+        borderRadius: showBorder ? "2mm" : undefined,
+        fontFamily: "Arial, Helvetica, sans-serif",
       }}
+      aria-label={`Etiqueta de control interno de la botella ${bottle.bottleCode}`}
     >
-      <header className="text-center">
-        <p className="text-[10px] font-black uppercase tracking-[0.22em]">
-          Casa Destiladora del Norte
-        </p>
-
-        <h2 className="mt-3 text-2xl font-black leading-tight">
-          {bottle.productIcon ? `${bottle.productIcon} ` : ""}
-          {bottle.productName}
-        </h2>
-
-        <p className="mt-2 text-sm font-bold">
-          {formatBottleSize(bottle.bottleSizeMl)}
-        </p>
-
-        {bottle.alcohol !== null &&
-          bottle.alcohol !== undefined && (
-            <p className="mt-1 text-sm font-black">
-              {formatNumber(bottle.alcohol)}% Alc. Vol.
-            </p>
-          )}
-      </header>
-
-      <section className="mt-5 border-y border-black py-4">
-        <LabelRow
-          label="Lote"
-          value={bottle.batchCode}
-          mono
-        />
-
-        <LabelRow
-          label="Botella"
-          value={`${bottle.serialNumber} de ${bottle.totalBottles}`}
-        />
-
-        <LabelRow
-          label="Código"
-          value={bottle.bottleCode}
-          mono
-        />
-
-        <LabelRow
-          label="Elaboración"
-          value={
-            bottle.manufacturedAt
-              ? formatDate(bottle.manufacturedAt)
-              : "Sin fecha"
-          }
-        />
-
-        <LabelRow
-          label="Caducidad"
-          value={
-            bottle.expirationDate
-              ? formatDate(bottle.expirationDate)
-              : "Sin fecha"
-          }
-        />
-      </section>
-
-      <section className="mt-5 flex items-center justify-between gap-5">
-        <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-black uppercase tracking-wider">
-            Código de autenticidad
-          </p>
-
-          <p
-            className="mt-2 break-all font-mono text-xs font-black"
-            title={
-              bottle.authenticityCode ??
-              bottle.bottleCode
-            }
+      <div className="flex h-full items-center gap-[1.5mm]">
+        {/* Identidad */}
+        <section className="flex h-full min-w-0 flex-1 flex-col items-center justify-center text-center">
+          <div
+            className="mb-[1mm] flex items-center justify-center"
+            aria-hidden="true"
           >
-            {bottle.authenticityCode ??
-              bottle.bottleCode}
+            <DistilleryMark />
+          </div>
+
+          <p className="whitespace-nowrap text-[6.5pt] font-black uppercase leading-none tracking-[0.08em]">
+            Control interno
           </p>
 
-          <p className="mt-4 text-[9px] font-semibold leading-4">
-            Escanea el código QR para consultar la identidad de esta
-            botella.
+          <div className="my-[1.2mm] h-[0.3mm] w-full bg-black" />
+
+          <h2 className="text-[9pt] font-black uppercase leading-[0.95]">
+            Destiladora
+            <br />
+            del Norte
+          </h2>
+
+          <p className="mt-auto whitespace-nowrap text-[4.5pt] font-bold uppercase leading-none tracking-[0.02em]">
+            Escanee para consultar
           </p>
-        </div>
 
-        <div className="shrink-0">
-          <BottleQrCode value={qrUrl} size={88} />
-        </div>
-      </section>
+          <p className="mt-[0.6mm] text-[5pt] font-black uppercase leading-none tracking-[0.12em]">
+            Maestro
+          </p>
+        </section>
 
-      <footer className="mt-6 border-t border-black pt-3 text-center">
-        <p className="text-[8px] font-black uppercase tracking-[0.14em]">
-          Producto identificado individualmente por MAESTRO
-        </p>
-      </footer>
+        {/* QR */}
+        <section
+          className="flex shrink-0 items-center justify-center"
+          style={{
+            width: "24mm",
+            height: "24mm",
+          }}
+        >
+          {qrUrl ? (
+            <BottleQrCode value={qrUrl} size={220} />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center border border-black text-center text-[6pt] font-black uppercase">
+              QR no disponible
+            </div>
+          )}
+        </section>
+      </div>
     </article>
   );
 }
 
-function LabelRow({
-  label,
-  value,
-  mono = false,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
+function DistilleryMark() {
   return (
-    <div className="mt-2 flex items-start justify-between gap-4 first:mt-0">
-      <span className="shrink-0 text-[10px] font-black uppercase">
-        {label}
-      </span>
+    <svg
+      width="22"
+      height="18"
+      viewBox="0 0 22 18"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M11 17V6"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
 
-      <span
-        className={`min-w-0 break-all text-right text-xs font-black ${
-          mono ? "font-mono" : ""
-        }`}
-      >
-        {value}
-      </span>
-    </div>
+      <path
+        d="M11 12C8.8 10.6 7.2 8.5 6.5 6C8.8 6.5 10.3 8 11 10"
+        fill="currentColor"
+      />
+
+      <path
+        d="M11 12C13.2 10.6 14.8 8.5 15.5 6C13.2 6.5 11.7 8 11 10"
+        fill="currentColor"
+      />
+
+      <path
+        d="M11 9C9.8 6.8 9.4 4.2 11 1C12.6 4.2 12.2 6.8 11 9Z"
+        fill="currentColor"
+      />
+
+      <path
+        d="M8.5 11C6.1 10.4 4.2 8.9 3 6.7C5.5 6.5 7.5 7.6 8.5 9.5"
+        fill="currentColor"
+      />
+
+      <path
+        d="M13.5 11C15.9 10.4 17.8 8.9 19 6.7C16.5 6.5 14.5 7.6 13.5 9.5"
+        fill="currentColor"
+      />
+    </svg>
   );
-}
-
-function formatBottleSize(sizeMl: number) {
-  if (sizeMl >= 1000) {
-    const liters = sizeMl / 1000;
-
-    return `${formatNumber(liters, 2)} ${
-      liters === 1 ? "litro" : "litros"
-    }`;
-  }
-
-  return `${formatNumber(sizeMl, 0)} ml`;
-}
-
-function formatNumber(
-  value: number,
-  maximumFractionDigits = 2
-) {
-  return new Intl.NumberFormat("es-MX", {
-    maximumFractionDigits,
-  }).format(value);
-}
-
-function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeZone: "America/Mexico_City",
-  }).format(date);
 }

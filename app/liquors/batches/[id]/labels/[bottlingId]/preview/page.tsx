@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import BottleQrCode from "@/components/liquors/BottleQrCode";
+import BottleLabel from "@/components/liquors/BottleLabel";
 import PrintLabelsButton from "@/components/liquors/PrintLabelsButton";
 
 type Props = {
@@ -106,10 +106,6 @@ export default async function LiquorLabelsPreviewPage({
     bottling.batch.recipe.targetAlcohol ??
     null;
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000";
-
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 print:max-w-none print:p-0">
       <Link
@@ -181,8 +177,8 @@ export default async function LiquorLabelsPreviewPage({
           </p>
         </div>
 
-        <div className="label-sheet mt-6 grid gap-4 sm:grid-cols-2 print:mt-0 print:grid-cols-2 print:gap-0">
-          {selectedBottles.map((bottle) => {
+        <div className="label-sheet mt-6 flex flex-wrap justify-center gap-4 print:mt-0 print:block">
+          {selectedBottles.map((bottle, index) => {
             const manufacturedAt =
               bottle.manufacturedAt ??
               bottle.bottledAt ??
@@ -192,106 +188,32 @@ export default async function LiquorLabelsPreviewPage({
               bottle.expirationDate ??
               bottling.expirationDate;
 
-       const qrUrl = `${baseUrl}/q/${encodeURIComponent(
-  bottle.qrToken
-)}`;
-
             return (
-              <article
+              <div
                 key={bottle.id}
-                className="label-card break-inside-avoid border border-slate-300 bg-white p-6 text-black print:border-black"
-                style={{
-                  boxSizing: "border-box",
-                  minHeight: "120mm",
-                }}
+                className={
+                  index < selectedBottles.length - 1
+                    ? "print:[break-after:page]"
+                    : ""
+                }
               >
-                <header className="text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em]">
-                    Casa Destiladora del Norte
-                  </p>
-
-                  <h3 className="mt-3 text-2xl font-black leading-tight">
-                    {bottling.batch.product.name}
-                  </h3>
-
-                  <p className="mt-2 text-sm font-bold">
-                    {formatBottleSize(bottling.bottleSizeMl)}
-                  </p>
-
-                  {alcohol !== null && (
-                    <p className="mt-1 text-sm font-black">
-                      {formatNumber(alcohol)}% Alc. Vol.
-                    </p>
-                  )}
-                </header>
-
-                <section className="mt-5 border-y border-black py-4">
-                  <LabelRow
-                    label="Lote"
-                    value={bottling.batch.code}
-                    mono
-                  />
-
-                  <LabelRow
-                    label="Botella"
-                    value={`${bottle.serialNumber} de ${totalBottles}`}
-                  />
-
-                  <LabelRow
-                    label="Código"
-                    value={bottle.code}
-                    mono
-                  />
-
-                  <LabelRow
-                    label="Elaboración"
-                    value={
-                      manufacturedAt
-                        ? formatDate(manufacturedAt)
-                        : "Sin fecha"
-                    }
-                  />
-
-                  <LabelRow
-                    label="Caducidad"
-                    value={
-                      expirationDate
-                        ? formatDate(expirationDate)
-                        : "Sin fecha"
-                    }
-                  />
-                </section>
-
-                <section className="mt-5 flex items-center justify-between gap-5">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[9px] font-black uppercase tracking-wider">
-                      Código de autenticidad
-                    </p>
-
-                    <p className="mt-2 break-all font-mono text-xs font-black">
-                      {bottle.authenticityCode ?? bottle.code}
-                    </p>
-
-                    <p className="mt-4 text-[9px] font-semibold leading-4">
-                      Escanea el código QR para consultar la identidad
-                      de esta botella.
-                    </p>
-                  </div>
-
-                  <div className="shrink-0 bg-white">
-                    <BottleQrCode
-                      value={qrUrl}
-                      size={92}
-                    />
-                  </div>
-                </section>
-
-                <footer className="mt-6 border-t border-black pt-3 text-center">
-                  <p className="text-[8px] font-black uppercase tracking-[0.14em]">
-                    Producto identificado individualmente por MAESTRO
-                  </p>
-                </footer>
-              </article>
+                <BottleLabel
+                  bottle={{
+                    productName: bottling.batch.product.name,
+                    productIcon: bottling.batch.product.icon,
+                    bottleSizeMl: bottling.bottleSizeMl,
+                    bottleCode: bottle.code,
+                    batchCode: bottling.batch.code,
+                    serialNumber: bottle.serialNumber,
+                    totalBottles,
+                    alcohol,
+                    qrToken: bottle.qrToken,
+                    authenticityCode: bottle.authenticityCode,
+                    manufacturedAt,
+                    expirationDate,
+                  }}
+                />
+              </div>
             );
           })}
         </div>
@@ -331,32 +253,6 @@ function SummaryCard({
   );
 }
 
-function LabelRow({
-  label,
-  value,
-  mono = false,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="mt-2 flex items-start justify-between gap-4 first:mt-0">
-      <span className="shrink-0 text-[10px] font-black uppercase">
-        {label}
-      </span>
-
-      <span
-        className={`min-w-0 break-all text-right text-xs font-black ${
-          mono ? "font-mono" : ""
-        }`}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
 function formatBottleSize(sizeMl: number) {
   if (sizeMl >= 1000) {
     const liters = sizeMl / 1000;
@@ -376,11 +272,4 @@ function formatNumber(
   return new Intl.NumberFormat("es-MX", {
     maximumFractionDigits,
   }).format(value);
-}
-
-function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeZone: "America/Mexico_City",
-  }).format(date);
 }

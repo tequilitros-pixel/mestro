@@ -24,8 +24,9 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
 /* =========================================================
-   IMPRESIÓN DE ETIQUETAS DE BOTELLAS — 50 mm × 30 mm
+   IMPRESIÓN DE ETIQUETAS MAESTRO — 50 mm × 30 mm
    ========================================================= */
 
 @media print {
@@ -44,6 +45,10 @@ body {
     background: white !important;
   }
 
+  body {
+    color: black !important;
+  }
+
   body * {
     visibility: hidden !important;
   }
@@ -56,6 +61,7 @@ body {
   .print-label-root {
     position: fixed !important;
     inset: 0 !important;
+    display: block !important;
     width: 50mm !important;
     height: 30mm !important;
     margin: 0 !important;
@@ -63,10 +69,9 @@ body {
     overflow: hidden !important;
     background: white !important;
     box-shadow: none !important;
-    border-radius: 0 !important;
   }
 
-  .bottle-label {
+  .label-card {
     display: block !important;
     width: 50mm !important;
     height: 30mm !important;
@@ -75,56 +80,16 @@ body {
     max-width: 50mm !important;
     max-height: 30mm !important;
     margin: 0 !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    background: white !important;
+    color: black !important;
     box-shadow: none !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
 
-  .print-hidden {
-    display: none !important;
-  }
-}
-@media print {
-  @page {
-    size: letter portrait;
-    margin: 8mm;
-  }
-
-  html,
-  body {
-    margin: 0 !important;
-    padding: 0 !important;
-    background: white !important;
-  }
-
-  body * {
-    visibility: hidden;
-  }
-
-  .label-sheet,
-  .label-sheet * {
-    visibility: visible;
-  }
-
-  .label-sheet {
-    position: absolute;
-    top: 0;
-    left: 0;
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    width: 100% !important;
-    margin: 0 !important;
-    gap: 0 !important;
-  }
-
-  .label-card {
-    box-sizing: border-box;
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
-    background: white !important;
-    color: black !important;
-  }
-
+  .print-hidden,
   .no-print {
     display: none !important;
   }

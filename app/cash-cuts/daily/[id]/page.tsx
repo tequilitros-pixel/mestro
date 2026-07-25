@@ -1,9 +1,8 @@
 "use client";
-
-import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
+ import { useEffect, useState, useCallback, startTransition } from "react";
 
 type Step = "ventas" | "salidas" | "entradas" | "cierre";
 type CashCutStatus = "ABIERTO" | "CERRADO" | "AUDITADO";
@@ -86,11 +85,18 @@ export default function CashCutDetailPage() {
   const [step, setStep] = useState<Step>("ventas");
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    const res = await fetch(`/api/cash-cuts/${id}`);
-    if (res.ok) setCashCut(await res.json());
+
+
+const load = useCallback(async () => {
+  const res = await fetch(`/api/cash-cuts/${id}`);
+  const data = res.ok ? await res.json() : null;
+
+  startTransition(() => {
+    if (data) setCashCut(data);
     setLoading(false);
-  }, [id]);
+  });
+}, [id]);
+
 
   useEffect(() => {
     load();
