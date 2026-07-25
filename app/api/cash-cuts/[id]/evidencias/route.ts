@@ -14,19 +14,23 @@ const VALID_TYPES: CashEvidenceType[] = [
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
   const evidences = await prisma.cashCutEvidence.findMany({
-    where: { cashCutId: params.id },
+    where: { cashCutId: id },
     orderBy: { createdAt: "desc" },
   });
+
   return NextResponse.json(evidences);
 }
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const formData = await req.formData();
   const file = formData.get("file");
   const type = formData.get("type");
@@ -41,14 +45,14 @@ export async function POST(
   }
 
   const blob = await put(
-    `cash-cuts/${params.id}/${Date.now()}-${file.name}`,
+    `cash-cuts/${id}/${Date.now()}-${file.name}`,
     file,
     { access: "public" }
   );
 
   const evidence = await prisma.cashCutEvidence.create({
     data: {
-      cashCutId: params.id,
+      cashCutId: id,
       type: type as CashEvidenceType,
       url: blob.url,
       notes: typeof notes === "string" && notes ? notes : undefined,
