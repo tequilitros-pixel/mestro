@@ -29,19 +29,27 @@ body {
    IMPRESIÓN DE ETIQUETAS MAESTRO — 50 mm × 30 mm
    ========================================================= */
 
-@media print {
-  @page {
-    size: 50mm 30mm;
-    margin: 0;
-  }
+@page {
+  size: 50mm 30mm;
+  margin: 0;
+}
 
+.label-print-page {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  background: white;
+}
+
+@media print {
   html,
   body {
     width: 50mm !important;
-    height: 30mm !important;
     margin: 0 !important;
     padding: 0 !important;
-    overflow: hidden !important;
     background: white !important;
   }
 
@@ -49,48 +57,31 @@ body {
     color: black !important;
   }
 
-  body * {
-    visibility: hidden !important;
-  }
-
-  .print-label-root,
-  .print-label-root * {
-    visibility: visible !important;
-  }
-
-  .print-label-root {
-    position: fixed !important;
-    inset: 0 !important;
+  .label-print-page {
     display: block !important;
+    width: 50mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .label-card {
     width: 50mm !important;
     height: 30mm !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: hidden !important;
-    background: white !important;
-    box-shadow: none !important;
-  }
-
-  .label-card {
-    display: block !important;
-    width: 50mm !important;
-    height: 30mm !important;
-    min-width: 50mm !important;
-    min-height: 30mm !important;
-    max-width: 50mm !important;
-    max-height: 30mm !important;
-    margin: 0 !important;
     box-sizing: border-box !important;
-    overflow: hidden !important;
     background: white !important;
     color: black !important;
     box-shadow: none !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
+    break-after: page !important;
+    page-break-after: always !important;
   }
 
-  .print-hidden,
-  .no-print {
-    display: none !important;
+  .label-card:last-child {
+    break-after: auto !important;
+    page-break-after: auto !important;
   }
 }

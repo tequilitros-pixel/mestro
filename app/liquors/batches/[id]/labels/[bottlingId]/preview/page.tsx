@@ -107,7 +107,7 @@ export default async function LiquorLabelsPreviewPage({
     null;
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 print:max-w-none print:p-0">
+    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 print:m-0 print:max-w-none print:p-0">
       <Link
         href={`/liquors/batches/${id}/labels/${bottlingId}`}
         className="no-print text-sm font-semibold text-purple-300 transition hover:text-purple-200"
@@ -177,8 +177,8 @@ export default async function LiquorLabelsPreviewPage({
           </p>
         </div>
 
-        <div className="label-sheet mt-6 flex flex-wrap justify-center gap-4 print:mt-0 print:block">
-          {selectedBottles.map((bottle, index) => {
+        <div className="print-label-root mt-6 flex flex-wrap justify-center gap-4 print:mt-0 print:block">
+          {selectedBottles.map((bottle) => {
             const manufacturedAt =
               bottle.manufacturedAt ??
               bottle.bottledAt ??
@@ -189,31 +189,23 @@ export default async function LiquorLabelsPreviewPage({
               bottling.expirationDate;
 
             return (
-              <div
+              <BottleLabel
                 key={bottle.id}
-                className={
-                  index < selectedBottles.length - 1
-                    ? "print:[break-after:page]"
-                    : ""
-                }
-              >
-                <BottleLabel
-                  bottle={{
-                    productName: bottling.batch.product.name,
-                    productIcon: bottling.batch.product.icon,
-                    bottleSizeMl: bottling.bottleSizeMl,
-                    bottleCode: bottle.code,
-                    batchCode: bottling.batch.code,
-                    serialNumber: bottle.serialNumber,
-                    totalBottles,
-                    alcohol,
-                    qrToken: bottle.qrToken,
-                    authenticityCode: bottle.authenticityCode,
-                    manufacturedAt,
-                    expirationDate,
-                  }}
-                />
-              </div>
+                bottle={{
+                  productName: bottling.batch.product.name,
+                  productIcon: bottling.batch.product.icon,
+                  bottleSizeMl: bottling.bottleSizeMl,
+                  bottleCode: bottle.code,
+                  batchCode: bottling.batch.code,
+                  serialNumber: bottle.serialNumber,
+                  totalBottles,
+                  alcohol,
+                  qrToken: bottle.qrToken,
+                  authenticityCode: bottle.authenticityCode,
+                  manufacturedAt,
+                  expirationDate,
+                }}
+              />
             );
           })}
         </div>
