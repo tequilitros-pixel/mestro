@@ -60,10 +60,11 @@ export async function finishLiquorBatchWithRemainderAction(
         throw new Error("El lote seleccionado no existe.");
       }
 
-      const allowedStatuses: LiquorBatchStatus[] = [
-        LiquorBatchStatus.LISTO_PARA_EMBOTELLAR,
-        LiquorBatchStatus.EMBOTELLANDO,
-      ];
+    const allowedStatuses: LiquorBatchStatus[] = [
+  LiquorBatchStatus.LISTO_PARA_EMBOTELLAR,
+  LiquorBatchStatus.EMBOTELLANDO,
+  LiquorBatchStatus.TERMINADO,
+];
 
       if (!allowedStatuses.includes(batch.status)) {
         throw new Error(

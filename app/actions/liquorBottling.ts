@@ -352,16 +352,13 @@ await tx.liquorBottleMovement.createMany({
       );
 
       await tx.liquorBatch.update({
-        where: {
-          id: batch.id,
-        },
-        data: {
-          status:
-            remainingLiters <= 0.0001
-              ? LiquorBatchStatus.TERMINADO
-              : LiquorBatchStatus.EMBOTELLANDO,
-        },
-      });
+  where: {
+    id: batch.id,
+  },
+  data: {
+    status: LiquorBatchStatus.EMBOTELLANDO,
+  },
+});
 
       return {
         bottlingId: bottling.id,
