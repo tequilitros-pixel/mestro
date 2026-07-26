@@ -135,37 +135,46 @@ export const SUBMENUS: Record<
     },
   ],
 
-  "cash-cuts": [
-    {
-      href: "/cash-cuts",
-      label: "🏠 Inicio",
-    },
-    {
-      href: "/cash-cuts/branches",
-      label: "🏪 Sucursales",
-    },
-    
-    {
-      href: "/cash-cuts/daily",
-      label: "🧾 Cortes",
-    },
-    {
-      href: "/cash-cuts/expenses",
-      label: "📤 Salidas",
-    },
-    {
-      href: "/cash-cuts/envelopes",
-      label: "✉️ Sobres",
-    },
-    {
-      href: "/cash-cuts/safe",
-      label: "🔐 Caja fuerte",
-    },
-    {
-      href: "/cash-cuts/history",
-      label: "📊 Historial",
-    },
-  ],
+"cash-cuts": [
+  {
+    href: "/cash-cuts",
+    label: "🏠 Inicio",
+  },
+  {
+    href: "/cash-cuts/dashboard",
+    label: "📈 Dashboard",
+  },
+  {
+    href: "/cash-cuts/branches",
+    label: "🏪 Sucursales",
+  },
+  {
+    href: "/cash-cuts/daily",
+    label: "🧾 Cortes",
+  },
+  {
+    href: "/cash-cuts/expenses",
+    label: "📤 Salidas",
+  },
+  {
+    href: "/cash-cuts/envelopes",
+    label: "✉️ Sobres",
+  },
+  {
+    href: "/cash-cuts/safe",
+    label: "🔐 Caja fuerte",
+  },
+  {
+    href: "/cash-cuts/audit",
+    label: "🕵️ Auditoría",
+  },
+  {
+    href: "/cash-cuts/history",
+    label: "📊 Historial",
+  },
+],
+
+
 
   administration: [
     {

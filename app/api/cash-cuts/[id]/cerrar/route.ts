@@ -47,8 +47,6 @@ export async function POST(
     );
   }
 
-  // Totales reales, recalculados aquí para no confiar en los campos
-  // desnormalizados por si algo quedó desincronizado.
   const [outflows, inflows] = await Promise.all([
     prisma.cashOutflow.findMany({ where: { cashCutId } }),
     prisma.cashInflow.findMany({ where: { cashCutId } }),
@@ -58,8 +56,6 @@ export async function POST(
   const totalInflows = inflows.reduce((sum, i) => sum + i.amount, 0);
   const totalSales = cashCut.salesByMethod.reduce((sum, s) => sum + s.amount, 0);
 
-  // Solo el efectivo (EFECTIVO) es lo que debe reflejarse en el conteo físico.
-  // Tarjeta, transferencia, DiDi, etc. no producen billetes en la caja.
   const cashSales =
     cashCut.salesByMethod.find((s) => s.method === "EFECTIVO")?.amount ?? 0;
 
@@ -73,8 +69,6 @@ export async function POST(
       ? totalSales - totalCostOfGoods - totalOutflows
       : null;
 
-  // Aviso suave (no bloquea el cierre): sobre + fondo siguiente debería
-  // coincidir aproximadamente con lo contado.
   const assignedCash = (envelopeAmount ?? 0) + nextFund;
   const assignmentWarning =
     Math.abs(assignedCash - cashCounted) > 1
@@ -106,6 +100,19 @@ export async function POST(
           newValue: `diferencia: ${difference}`,
         },
       },
+      ...(envelopeAmount && envelopeAmount > 0
+        ? {
+            safeMovements: {
+              create: {
+                branchId: cashCut.branchId,
+                type: "DEPOSITO_SOBRE",
+                amount: envelopeAmount,
+                userId: user.id,
+                notes: envelopeNumber ? `Sobre #${envelopeNumber}` : undefined,
+              },
+            },
+          }
+        : {}),
     },
   });
 

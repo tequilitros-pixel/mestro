@@ -38,6 +38,7 @@ model User {
   cashCutsUpdated           CashCut[]              @relation("CashCutUpdatedBy")
   cashOutflowsAuthorized    CashOutflow[]          @relation("CashOutflowAuthorizedBy")
   cashCutAuditEntries       CashCutAuditEntry[]    @relation("CashCutAuditBy")
+  cashSafeMovementsBy CashSafeMovement[] @relation("CashSafeMovementBy")
 
   millingsFinished   Milling[]           @relation("MillingFinishedBy")
   millingDischarges  MillingDischarge[]
@@ -764,6 +765,7 @@ model Branch {
   liquorBottles       LiquorBottle[]
   liquorMovementsFrom LiquorBottleMovement[] @relation("LiquorMovementFromBranch")
   liquorMovementsTo   LiquorBottleMovement[] @relation("LiquorMovementToBranch")
+  cashSafeMovements CashSafeMovement[]
 
   @@index([active])
 }
@@ -829,6 +831,7 @@ model CashCut {
   inflows       CashInflow[]
   evidences     CashCutEvidence[]
   auditEntries  CashCutAuditEntry[]
+  safeMovements CashSafeMovement[]
 
   @@index([branchId])
   @@index([responsibleId])
@@ -1149,4 +1152,30 @@ model PasswordResetCode {
 
   @@index([userId])
   @@index([code])
+}
+enum CashSafeMovementType {
+  DEPOSITO_SOBRE
+  RETIRO
+}
+
+model CashSafeMovement {
+  id        String   @id @default(cuid())
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id])
+
+  type      CashSafeMovementType
+  amount    Float
+
+  cashCutId String?
+  cashCut   CashCut? @relation(fields: [cashCutId], references: [id])
+
+  notes     String?
+
+  userId    String
+  user      User     @relation("CashSafeMovementBy", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([branchId])
+  @@index([cashCutId])
 }
