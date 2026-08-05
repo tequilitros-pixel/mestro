@@ -51,7 +51,11 @@ export async function POST(request: Request) {
   }
 
   const branch = await prisma.branch.create({
-    data: { name, code: code.toUpperCase(), address },
+    data: {
+      name,
+      code: code.toUpperCase(),
+      address,
+    },
   });
 
   return NextResponse.json(branch, { status: 201 });

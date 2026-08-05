@@ -15,20 +15,20 @@ export default function FinishDistillationModal({
     <>
       <button
         onClick={() => setOpen(true)}
-        className="w-full rounded-xl bg-green-500 px-6 py-3 font-bold text-black hover:bg-green-400"
+        className="w-full rounded-xl bg-tertiary-fixed-dim px-6 py-3 font-bold text-on-primary hover:opacity-90"
       >
         Finalizar destilación
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-slate-900 p-8">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-surface-container p-8">
 
-            <h2 className="text-3xl font-bold text-white">
+            <h2 className="text-3xl font-bold text-on-surface">
               Acta de cierre de destilación
             </h2>
 
-            <p className="mt-2 text-slate-400">
+            <p className="mt-2 text-on-surface-variant">
               Una vez cerrada la destilación no podrán agregarse más registros.
             </p>
 
@@ -40,7 +40,7 @@ export default function FinishDistillationModal({
                 step="0.01"
                 placeholder="Litros finales"
                 required
-                className="w-full rounded-xl bg-slate-800 p-3"
+                className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
               />
 
               <input
@@ -49,14 +49,14 @@ export default function FinishDistillationModal({
                 step="0.01"
                 placeholder="Alcohol final corregido (%)"
                 required
-                className="w-full rounded-xl bg-slate-800 p-3"
+                className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
               />
 
               <textarea
                 name="finalNotes"
                 rows={4}
                 placeholder="Observaciones finales"
-                className="w-full rounded-xl bg-slate-800 p-3"
+                className="w-full resize-none rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
               />
 
               <div className="flex gap-4">
@@ -64,14 +64,14 @@ export default function FinishDistillationModal({
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="flex-1 rounded-xl bg-slate-700 py-3 font-bold"
+                  className="flex-1 rounded-xl bg-surface-container-highest py-3 font-bold"
                 >
                   Cancelar
                 </button>
 
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-green-500 py-3 font-bold text-black"
+                  className="flex-1 rounded-xl bg-tertiary-fixed-dim py-3 font-bold text-on-primary"
                 >
                   Cerrar proceso
                 </button>

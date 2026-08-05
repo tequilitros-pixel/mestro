@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import BottleLabel from "@/components/liquors/BottleLabel";
 import PrintLabelsButton from "@/components/liquors/PrintLabelsButton";
+import { TagIcon } from "@/components/ui/icons";
 
 type Props = {
   params: Promise<{
@@ -110,26 +111,27 @@ export default async function LiquorLabelsPreviewPage({
     <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 print:m-0 print:max-w-none print:p-0">
       <Link
         href={`/liquors/batches/${id}/labels/${bottlingId}`}
-        className="no-print text-sm font-semibold text-purple-300 transition hover:text-purple-200"
+        className="no-print text-sm font-semibold text-on-surface-variant transition hover:text-on-surface"
       >
         ← Modificar selección
       </Link>
 
-      <header className="no-print mt-6 rounded-3xl border border-purple-500/20 bg-slate-900 p-6 sm:p-8">
-        <p className="text-sm font-black uppercase tracking-[0.3em] text-purple-300">
+      <header className="no-print mt-6 rounded-3xl border border-outline-variant bg-surface-container p-6 sm:p-8">
+        <p className="text-sm font-black uppercase tracking-[0.3em] text-on-surface-variant">
           Vista previa
         </p>
 
-        <h1 className="mt-3 text-4xl font-black text-white">
-          🏷️ Etiquetas seleccionadas
+        <h1 className="mt-3 flex items-center gap-3 text-4xl font-black text-on-surface">
+          <TagIcon className="h-8 w-8 shrink-0" />
+          Etiquetas seleccionadas
         </h1>
 
-        <p className="mt-4 text-xl font-bold text-purple-200">
+        <p className="mt-4 text-xl font-bold text-on-surface-variant">
           {bottling.batch.product.icon ?? "🍹"}{" "}
           {bottling.batch.product.name}
         </p>
 
-        <p className="mt-2 font-mono text-sm font-bold text-slate-400">
+        <p className="mt-2 font-mono text-sm font-bold text-on-surface-variant">
           Lote {bottling.batch.code}
         </p>
 
@@ -160,19 +162,19 @@ export default async function LiquorLabelsPreviewPage({
         </div>
       </header>
 
-      <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8 print:m-0 print:border-0 print:bg-white print:p-0">
+      <section className="mt-6 rounded-3xl border border-outline-variant bg-surface-container p-6 sm:p-8 print:m-0 print:border-0 print:bg-white print:p-0">
         <div className="no-print flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.25em] text-purple-400">
+            <p className="text-sm font-black uppercase tracking-[0.25em] text-on-surface-variant">
               Botellas seleccionadas
             </p>
 
-            <h2 className="mt-2 text-2xl font-black text-white">
+            <h2 className="mt-2 text-2xl font-black text-on-surface">
               Revisa antes de imprimir
             </h2>
           </div>
 
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-on-surface-variant">
             {selectedBottles.length} etiquetas
           </p>
         </div>
@@ -213,7 +215,7 @@ export default async function LiquorLabelsPreviewPage({
         <div className="no-print mt-8 flex flex-col gap-3 sm:flex-row">
           <Link
             href={`/liquors/batches/${id}/labels/${bottlingId}`}
-            className="flex-1 rounded-2xl border border-slate-700 px-6 py-4 text-center font-black text-slate-200 transition hover:bg-slate-800"
+            className="flex-1 rounded-2xl border border-outline-variant px-6 py-4 text-center font-black text-on-surface transition hover:bg-surface-container-high"
           >
             Regresar
           </Link>
@@ -233,12 +235,12 @@ function SummaryCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 p-5">
-      <p className="text-xs font-black uppercase tracking-wider text-purple-300/70">
+    <div className="rounded-2xl border border-primary/25 bg-primary/[0.06] p-5">
+      <p className="text-xs font-black uppercase tracking-wider text-on-surface-variant">
         {label}
       </p>
 
-      <p className="mt-2 text-2xl font-black text-white">
+      <p className="mt-2 text-2xl font-black text-on-surface">
         {value}
       </p>
     </div>

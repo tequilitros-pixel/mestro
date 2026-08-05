@@ -3,6 +3,20 @@ import LotMenu from "@/components/LotMenu";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLotEngine } from "@/lib/services/lotEngine";
+import {
+  PrinterIcon,
+  BrainIcon,
+  CheckIcon,
+  ChevronRightIcon,
+  FlameIcon,
+  GearIcon,
+  FlaskIcon,
+  StillIcon,
+  DollarIcon,
+  ChartBarIcon,
+} from "@/components/ui/icons";
+import type { ComponentType } from "react";
+import type { IconProps } from "@/components/ui/icons";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -23,7 +37,7 @@ export default async function LotDetailPage({ params }: Props) {
   });
 
   if (!lot) notFound();
-const engine = getLotEngine(lot);
+  const engine = getLotEngine(lot);
   const lastCooking = lot.cookings.at(-1);
   const lastMilling = lot.millings.at(-1);
   const lastFermentation = lot.fermentations.at(-1);
@@ -31,137 +45,151 @@ const engine = getLotEngine(lot);
 
   const totalCost = lot.expenses.reduce((sum, e) => sum + e.amount, 0);
 
-  const totalLiters = lot.distillations.reduce((sum, d) => {
-    return sum + d.events.reduce((s, e) => s + (e.liters ?? 0), 0);
-  }, 0);
+  // Igual que en Costos: usamos el total autoritativo fijado en
+  // "Finalizar lote", no la suma de lecturas intermedias de litros.
+  const totalLiters = lot.totalLitersObtained ?? 0;
+  const isFinished = lot.totalLitersObtained !== null;
 
   const costPerLiter = totalLiters > 0 ? totalCost / totalLiters : 0;
 
   const lastFermentationReading = lastFermentation?.readings.at(-1);
 
   return (
-    <main className="min-h-screen bg-slate-950 p-10 text-white">
+    <main className="min-h-screen bg-background p-10 text-on-surface">
       <div className="mx-auto max-w-7xl">
-       
-        <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
+
+        <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
           MAESTRO
         </p>
 
-        <h1 className="mt-3 text-5xl font-bold">Lote {lot.code}</h1>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
+          <h1 className="text-5xl font-bold text-primary">Lote {lot.code}</h1>
 
-        <LotMenu id={lot.id} />
-        <section className="mt-8 rounded-3xl bg-slate-900 p-8">
-  <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-    <div>
-      <p className="text-sm uppercase tracking-[0.35em] text-amber-400">
-        MOTOR DEL LOTE
-      </p>
+          {isFinished && (
+            <Link
+              href={`/lots/${lot.id}/qr`}
+              className="flex items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-high px-5 py-3 font-bold text-primary transition duration-150 ease-out hover:scale-[1.04] hover:bg-surface-container-highest active:scale-[0.97]"
+            >
+              <PrinterIcon className="h-5 w-5" />
+              Imprimir QR del lote
+            </Link>
+          )}
+        </div>
 
-      <h2 className="mt-3 text-4xl font-bold">
-        {engine.status}
-      </h2>
+        <LotMenu id={lot.id} isFinished={isFinished} />
+        <section className="mt-8 rounded-xl bg-surface-container p-8">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
+                MOTOR DEL LOTE
+              </p>
 
-      <p className="mt-3 max-w-2xl text-slate-300">
-        {engine.message}
-      </p>
-    </div>
+              <h2 className="mt-3 text-4xl font-bold text-primary">
+                {engine.status}
+              </h2>
 
-    <Link
-      href={engine.nextHref}
-      className="rounded-2xl bg-amber-400 px-6 py-4 text-center font-bold text-slate-950"
-    >
-      {engine.nextAction}
-    </Link>
-  </div>
+              <p className="mt-3 max-w-2xl text-on-surface-variant">
+                {engine.message}
+              </p>
+            </div>
 
-  <div className="mt-8">
-    <div className="mb-2 flex justify-between text-sm text-slate-400">
-      <span>Progreso del lote</span>
-      <span>{engine.progress}%</span>
-    </div>
+            <Link
+              href={engine.nextHref}
+              className="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 text-center font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
+            >
+              {engine.nextAction}
+            </Link>
+          </div>
 
-    <div className="h-4 rounded-full bg-slate-800">
-      <div
-        className="h-4 rounded-full bg-amber-400"
-        style={{ width: `${engine.progress}%` }}
-      />
-    </div>
-  </div>
-</section>
-<section className="mt-6 rounded-3xl border border-amber-500/30 bg-slate-900 p-8">
-  <div className="flex items-center justify-between">
-    <div>
-      <p className="text-sm uppercase tracking-[0.35em] text-amber-400">
-        PRÓXIMA ACCIÓN
-      </p>
+          <div className="mt-8">
+            <div className="mb-2 flex justify-between text-sm text-on-surface-variant">
+              <span>Progreso del lote</span>
+              <span>{engine.progress}%</span>
+            </div>
 
-      <h2 className="mt-2 text-3xl font-bold">
-        {engine.nextAction}
-      </h2>
+            <div className="h-4 rounded-full bg-surface-container-high">
+              <div
+                className="h-4 rounded-full bg-primary"
+                style={{ width: `${engine.progress}%` }}
+              />
+            </div>
+          </div>
+        </section>
+        <section className="mt-6 rounded-xl border border-outline-variant bg-surface-container p-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
+                PRÓXIMA ACCIÓN
+              </p>
 
-      <p className="mt-2 text-slate-400">
-        Esta es la siguiente actividad recomendada por MAESTRO.
-      </p>
-    </div>
+              <h2 className="mt-2 text-3xl font-bold text-primary">
+                {engine.nextAction}
+              </h2>
 
-    <Link
-      href={engine.nextHref}
-      className="rounded-2xl bg-amber-400 px-8 py-4 font-bold text-slate-950 transition hover:scale-105"
-    >
-      IR →
-    </Link>
-  </div>
+              <p className="mt-2 text-on-surface-variant">
+                Esta es la siguiente actividad recomendada por MAESTRO.
+              </p>
+            </div>
 
-  <div className="mt-8 flex items-center gap-3">
-    <span className="text-sm text-slate-400">
-      Prioridad:
-    </span>
+            <Link
+              href={engine.nextHref}
+              className="flex items-center gap-2 rounded-xl bg-primary px-8 py-4 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97]"
+            >
+              IR
+              <ChevronRightIcon className="h-4 w-4" />
+            </Link>
+          </div>
 
-    <span
-      className={`rounded-full px-3 py-1 text-sm font-bold ${
-        engine.priority === "ALTA"
-          ? "bg-red-500 text-white"
-          : engine.priority === "NORMAL"
-          ? "bg-yellow-400 text-slate-900"
-          : "bg-slate-700 text-white"
-      }`}
-    >
-      {engine.priority}
-    </span>
-  </div>
-</section>
-<section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-8">
-  <div className="flex items-center gap-3">
-    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400 text-2xl">
-      🧠
-    </div>
+          <div className="mt-8 flex items-center gap-3">
+            <span className="text-sm text-on-surface-variant">
+              Prioridad:
+            </span>
 
-    <div>
-      <p className="text-sm uppercase tracking-[0.35em] text-amber-400">
-        MAESTRO DICE
-      </p>
+            <span
+              className={`rounded-full px-3 py-1 text-sm font-bold ${
+                engine.priority === "ALTA"
+                  ? "bg-error text-on-error"
+                  : engine.priority === "NORMAL"
+                  ? "bg-secondary text-on-secondary"
+                  : "bg-surface-container-high text-on-surface"
+              }`}
+            >
+              {engine.priority}
+            </span>
+          </div>
+        </section>
+        <section className="mt-6 rounded-xl border border-outline-variant bg-surface-container p-8">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
+              <BrainIcon className="h-6 w-6 text-on-primary" />
+            </div>
 
-      <h2 className="text-2xl font-bold">
-        Recomendaciones para este lote
-      </h2>
-    </div>
-  </div>
+            <div>
+              <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
+                MAESTRO DICE
+              </p>
 
-  <div className="mt-6 space-y-4">
-    {engine.advice.map((item: string, index: number) => (
-      <div
-        key={index}
-        className="flex items-start gap-3 rounded-xl bg-slate-800 p-4"
-      >
-        <span className="mt-1 text-green-400">✔</span>
+              <h2 className="text-2xl font-bold text-primary">
+                Recomendaciones para este lote
+              </h2>
+            </div>
+          </div>
 
-        <p className="text-slate-200">
-          {item}
-        </p>
-      </div>
-    ))}
-  </div>
-</section>
+          <div className="mt-6 space-y-4">
+            {engine.advice.map((item: string, index: number) => (
+              <div
+                key={index}
+                className="flex items-start gap-3 rounded-xl bg-surface-container-high p-4"
+              >
+                <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-tertiary-fixed-dim" />
+
+                <p className="text-on-surface">
+                  {item}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
         <section className="mt-8 grid gap-4 md:grid-cols-4">
           <Kpi title="Etapa actual" value={lot.stage} />
           <Kpi title="Agave" value={`${lot.agaveKg.toLocaleString()} kg`} />
@@ -171,7 +199,8 @@ const engine = getLotEngine(lot);
 
         <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           <StageCard
-            title="🔥 Cocción"
+            icon={FlameIcon}
+            title="Cocción"
             status={lastCooking?.status ?? "Pendiente"}
             main={lastCooking ? `${lastCooking.agaveKg.toLocaleString()} kg` : "Sin registro"}
             detail={`${lastCooking?.events.length ?? 0} eventos`}
@@ -179,7 +208,8 @@ const engine = getLotEngine(lot);
           />
 
           <StageCard
-            title="⚙️ Molienda"
+            icon={GearIcon}
+            title="Molienda"
             status={lastMilling?.status ?? "Pendiente"}
             main={lastMilling?.mashLiters ? `${lastMilling.mashLiters} L mosto` : "Sin mosto"}
             detail={
@@ -191,7 +221,8 @@ const engine = getLotEngine(lot);
           />
 
           <StageCard
-            title="🧪 Fermentación"
+            icon={FlaskIcon}
+            title="Fermentación"
             status={lastFermentation?.status ?? "Pendiente"}
             main={
               lastFermentationReading?.brix
@@ -209,15 +240,17 @@ const engine = getLotEngine(lot);
           />
 
           <StageCard
-            title="🥃 Destilación"
+            icon={StillIcon}
+            title="Destilación"
             status={lastDistillation?.status ?? "Pendiente"}
-            main={totalLiters > 0 ? `${totalLiters.toFixed(2)} L` : "Sin litros"}
+            main={isFinished ? `${totalLiters.toFixed(2)} L` : "Sin litros"}
             detail={`${lot.distillations.length} corridas`}
             href={lastDistillation ? `/distillation/${lastDistillation.id}` : "/distillation"}
           />
 
           <StageCard
-            title="💰 Costos"
+            icon={DollarIcon}
+            title="Costos"
             status={totalCost > 0 ? "Registrado" : "Pendiente"}
             main={`$${totalCost.toLocaleString()}`}
             detail={costPerLiter > 0 ? `$${costPerLiter.toFixed(2)} por litro` : "Sin costo/L"}
@@ -225,9 +258,10 @@ const engine = getLotEngine(lot);
           />
 
           <StageCard
-            title="📊 Resultado"
+            icon={ChartBarIcon}
+            title="Resultado"
             status="En análisis"
-            main={totalLiters > 0 ? `${totalLiters.toFixed(2)} L producidos` : "Sin producción"}
+            main={isFinished ? `${totalLiters.toFixed(2)} L producidos` : "Sin producción"}
             detail="Expediente vivo del lote"
             href={`/lots/${lot.id}`}
           />
@@ -239,20 +273,22 @@ const engine = getLotEngine(lot);
 
 function Kpi({ title, value }: { title: string; value: string | number }) {
   return (
-    <div className="rounded-2xl bg-slate-900 p-5">
-      <p className="text-sm text-slate-400">{title}</p>
-      <p className="mt-2 text-2xl font-bold">{value}</p>
+    <div className="rounded-xl bg-surface-container p-5">
+      <p className="text-sm text-on-surface-variant">{title}</p>
+      <p className="mt-2 text-2xl font-bold text-primary">{value}</p>
     </div>
   );
 }
 
 function StageCard({
+  icon: Icon,
   title,
   status,
   main,
   detail,
   href,
 }: {
+  icon: ComponentType<IconProps>;
   title: string;
   status: string;
   main: string;
@@ -262,19 +298,25 @@ function StageCard({
   return (
     <Link
       href={href}
-      className="rounded-3xl bg-slate-900 p-6 transition hover:bg-slate-800"
+      className="rounded-xl bg-surface-container p-6 transition hover:bg-surface-container-high"
     >
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">{title}</h2>
-        <span className="rounded-full bg-amber-400/10 px-3 py-1 text-sm text-amber-400">
+        <h2 className="flex items-center gap-2 text-2xl font-bold text-primary">
+          <Icon className="h-5 w-5 text-on-surface-variant" />
+          {title}
+        </h2>
+        <span className="rounded-full border border-outline-variant bg-surface-container-high px-3 py-1 text-sm text-on-surface-variant">
           {status}
         </span>
       </div>
 
-      <p className="mt-6 text-4xl font-bold">{main}</p>
-      <p className="mt-3 text-slate-400">{detail}</p>
+      <p className="mt-6 text-4xl font-bold text-primary">{main}</p>
+      <p className="mt-3 text-on-surface-variant">{detail}</p>
 
-      <p className="mt-6 text-amber-400">Abrir etapa →</p>
+      <p className="mt-6 flex items-center gap-1 text-on-surface-variant">
+        Abrir etapa
+        <ChevronRightIcon className="h-4 w-4" />
+      </p>
     </Link>
   );
 }

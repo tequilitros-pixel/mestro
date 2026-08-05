@@ -99,12 +99,12 @@ export function getYield(
   );
 }
 export function getDistillationStatus(events: DistillationEvent[]) {
-  if (events.some((e) => e.type === "FIN_DESTILACION")) return "🏁 Finalizada";
-  if (events.some((e) => e.type === "INICIO_COLAS")) return "🟤 En colas";
-  if (events.some((e) => e.type === "FIN_CORAZON")) return "🟤 Terminando corazón";
-  if (events.some((e) => e.type === "INICIO_CORAZON")) return "❤️ En corazón";
-  if (events.some((e) => e.type === "CORTE_CABEZAS")) return "🥃 Sacando destrozado";
-  if (events.some((e) => e.type === "INICIO_CALENTAMIENTO")) return "🔥 Calentando";
+  if (events.some((e) => e.type === "FIN_DESTILACION")) return "Finalizada";
+  if (events.some((e) => e.type === "INICIO_COLAS")) return "En colas";
+  if (events.some((e) => e.type === "FIN_CORAZON")) return "Terminando corazón";
+  if (events.some((e) => e.type === "INICIO_CORAZON")) return "En corazón";
+  if (events.some((e) => e.type === "CORTE_CABEZAS")) return "Sacando destrozado";
+  if (events.some((e) => e.type === "INICIO_CALENTAMIENTO")) return "Calentando";
 
-  return "⏳ Sin iniciar";
+  return "Sin iniciar";
 }

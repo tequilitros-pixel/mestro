@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export default async function LiquorExpirationPage() {
   const now = new Date();
@@ -58,15 +59,15 @@ export default async function LiquorExpirationPage() {
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
       <div>
-        <p className="text-sm font-black uppercase tracking-[0.2em] text-purple-300">
+        <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-on-surface-variant">
           Control de inventario
         </p>
 
-        <h1 className="mt-2 text-3xl font-black text-white">
+        <h1 className="mt-2 text-3xl font-black text-on-surface">
           Caducidad
         </h1>
 
-        <p className="mt-2 text-slate-400">
+        <p className="mt-2 text-on-surface-variant">
           Consulta las botellas vencidas o próximas a vencer.
         </p>
       </div>
@@ -75,19 +76,19 @@ export default async function LiquorExpirationPage() {
         <SummaryCard
           label="Caducadas"
           value={expired.length}
-          style="border-red-500/25 bg-red-500/10 text-red-300"
+          style="border-error/25 bg-error/10 text-error"
         />
 
         <SummaryCard
           label="Próximos 30 días"
           value={next30Days.length}
-          style="border-orange-500/25 bg-orange-500/10 text-orange-300"
+          style="border-error/25 bg-error/10 text-error"
         />
 
         <SummaryCard
           label="De 31 a 60 días"
           value={next60Days.length}
-          style="border-yellow-500/25 bg-yellow-500/10 text-yellow-300"
+          style="border-secondary/25 bg-secondary/10 text-secondary"
         />
       </section>
 
@@ -127,7 +128,7 @@ function SummaryCard({
         {label}
       </p>
 
-      <p className="mt-3 text-4xl font-black text-white">
+      <p className="mt-3 text-4xl font-black text-on-surface">
         {value}
       </p>
 
@@ -138,25 +139,19 @@ function SummaryCard({
   );
 }
 
-type BottleWithRelations = Awaited<
-  ReturnType<typeof getBottleType>
->[number];
-
-async function getBottleType() {
-  return prisma.liquorBottle.findMany({
-    include: {
-      bottling: {
-        include: {
-          batch: {
-            include: {
-              product: true,
-            },
-          },
-        },
-      },
-    },
-  });
-}
+type BottleWithRelations = Prisma.LiquorBottleGetPayload<{
+  include: {
+    bottling: {
+      include: {
+        batch: {
+          include: {
+            product: true;
+          };
+        };
+      };
+    };
+  };
+}>;
 
 function ExpirationSection({
   title,
@@ -169,17 +164,17 @@ function ExpirationSection({
 }) {
   return (
     <section className="mt-8">
-      <h2 className="text-xl font-black text-white">
+      <h2 className="text-xl font-black text-on-surface">
         {title}
       </h2>
 
       {bottles.length === 0 ? (
-        <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 text-slate-500">
+        <div className="mt-4 rounded-2xl border border-outline-variant bg-surface-container/50 p-6 text-outline">
           {emptyText}
         </div>
       ) : (
-        <div className="mt-4 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/60">
-          <div className="divide-y divide-slate-800">
+        <div className="mt-4 overflow-hidden rounded-3xl border border-outline-variant bg-surface-container/60">
+          <div className="divide-y divide-outline-variant">
             {bottles.map((bottle) => {
               const batch = bottle.bottling.batch;
 
@@ -189,28 +184,28 @@ function ExpirationSection({
                   className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
-                    <p className="font-black text-white">
+                    <p className="font-black text-on-surface">
                       {batch.product.icon ?? "🍾"}{" "}
                       {batch.product.name}
                     </p>
 
-                    <p className="mt-1 font-mono text-sm text-purple-300">
+                    <p className="mt-1 font-mono text-sm text-on-surface-variant">
                       {bottle.code}
                     </p>
 
-                    <p className="mt-2 text-sm text-slate-500">
+                    <p className="mt-2 text-sm text-outline">
                       Lote: {batch.code}
                     </p>
                   </div>
 
                   <div className="sm:text-right">
-                    <p className="font-black text-white">
+                    <p className="font-black text-on-surface">
                       {formatDate(bottle.expirationDate)}
                     </p>
 
                     <Link
                       href={`/liquors/bottles/${bottle.id}`}
-                      className="mt-2 inline-flex text-sm font-black text-purple-300"
+                      className="mt-2 inline-flex text-sm font-black text-on-surface-variant"
                     >
                       Ver botella →
                     </Link>

@@ -1,17 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const allowedBranchIds = await getAccessibleBranchIds();
+
   const { searchParams } = new URL(req.url);
-  const branchId = searchParams.get("branchId");
+  const requestedBranchId = searchParams.get("branchId");
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
 
+  let branchFilter: string | { in: string[] } | undefined;
+
+  if (requestedBranchId) {
+    if (allowedBranchIds && !allowedBranchIds.includes(requestedBranchId)) {
+      return NextResponse.json([]);
+    }
+    branchFilter = requestedBranchId;
+  } else if (allowedBranchIds) {
+    if (allowedBranchIds.length === 0) {
+      return NextResponse.json([]);
+    }
+    branchFilter = { in: allowedBranchIds };
+  }
+
   const cuts = await prisma.cashCut.findMany({
     where: {
-     status: "CERRADO", // solo cortes cerrados
-
-      ...(branchId ? { branchId } : {}),
+      status: "CERRADO",
+      ...(branchFilter ? { branchId: branchFilter } : {}),
       ...(dateFrom || dateTo
         ? {
             date: {
@@ -20,7 +42,7 @@ export async function GET(req: NextRequest) {
             },
           }
         : {}),
-      envelopeAmount: { gt: 0 }, // ajusta al nombre real del campo
+      envelopeAmount: { gt: 0 },
     },
     include: { branch: true, responsible: true },
     orderBy: { date: "desc" },
@@ -35,6 +57,6 @@ export async function GET(req: NextRequest) {
       envelopeNumber: c.envelopeNumber,
       envelopeNotes: c.envelopeNotes,
       responsible: c.responsible?.name,
-    }))
+    })),
   );
 }

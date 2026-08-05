@@ -8,10 +8,15 @@
     "start": "next start",
     "lint": "eslint",
     "sync:liquor-recipes": "tsx scripts/sync-liquor-recipes.ts",
-    "sync:liquor-steps": "tsx scripts/sync-liquor-steps.ts"
+    "sync:liquor-steps": "tsx scripts/sync-liquor-steps.ts",
+    "seed:pos-tequilitros": "tsx scripts/seed-pos-tequilitros.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
     "@prisma/adapter-better-sqlite3": "^7.8.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
@@ -32,6 +37,7 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",

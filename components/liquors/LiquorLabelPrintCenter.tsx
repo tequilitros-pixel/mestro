@@ -1,7 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, ComponentType } from "react";
+import {
+  TagIcon,
+  HashIcon,
+  ArrowsRangeIcon,
+  CheckIcon,
+  type IconProps,
+} from "@/components/ui/icons";
 
 type PrintMode = "ALL" | "QUANTITY" | "RANGE";
 
@@ -111,7 +118,7 @@ export default function LiquorLabelPrintCenter({
       <div className="grid gap-4 lg:grid-cols-3">
         <ModeCard
           active={mode === "ALL"}
-          icon="🏷️"
+          icon={TagIcon}
           title="Todas"
           description={`Preparar las ${totalBottles} etiquetas del embotellado.`}
           onClick={() => {
@@ -122,7 +129,7 @@ export default function LiquorLabelPrintCenter({
 
         <ModeCard
           active={mode === "QUANTITY"}
-          icon="🔢"
+          icon={HashIcon}
           title="Una cantidad"
           description="Escribe cuántas etiquetas deseas preparar."
           onClick={() => {
@@ -133,7 +140,7 @@ export default function LiquorLabelPrintCenter({
 
         <ModeCard
           active={mode === "RANGE"}
-          icon="↔️"
+          icon={ArrowsRangeIcon}
           title="Un rango"
           description="Selecciona desde qué botella hasta cuál."
           onClick={() => {
@@ -143,18 +150,18 @@ export default function LiquorLabelPrintCenter({
         />
       </div>
 
-      <div className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
+      <div className="mt-6 rounded-3xl border border-outline-variant bg-surface-container p-6 sm:p-8">
         {mode === "ALL" && (
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.25em] text-purple-300">
+            <p className="font-mono text-sm font-black uppercase tracking-[0.25em] text-outline">
               Imprimir todas
             </p>
 
-            <h2 className="mt-3 text-3xl font-black text-white">
+            <h2 className="mt-3 text-3xl font-black text-on-surface">
               {totalBottles} etiquetas
             </h2>
 
-            <p className="mt-3 text-slate-400">
+            <p className="mt-3 text-on-surface-variant">
               Se preparará una etiqueta para cada botella registrada
               en este embotellado.
             </p>
@@ -163,12 +170,12 @@ export default function LiquorLabelPrintCenter({
 
         {mode === "QUANTITY" && (
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.25em] text-purple-300">
+            <p className="font-mono text-sm font-black uppercase tracking-[0.25em] text-outline">
               Cantidad de etiquetas
             </p>
 
             <label className="mt-6 block">
-              <span className="text-sm font-bold text-slate-300">
+              <span className="text-sm font-semibold text-on-surface-variant">
                 ¿Cuántas deseas preparar?
               </span>
 
@@ -181,11 +188,11 @@ export default function LiquorLabelPrintCenter({
                   setQuantity(Number(event.target.value));
                   setError("");
                 }}
-                className="mt-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-5 py-4 text-2xl font-black text-white outline-none transition focus:border-purple-500"
+                className="mt-3 w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
               />
             </label>
 
-            <p className="mt-3 text-sm text-slate-500">
+            <p className="mt-3 text-sm text-outline">
               Máximo disponible: {totalBottles}
             </p>
           </div>
@@ -193,13 +200,13 @@ export default function LiquorLabelPrintCenter({
 
         {mode === "RANGE" && (
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.25em] text-purple-300">
+            <p className="font-mono text-sm font-black uppercase tracking-[0.25em] text-outline">
               Rango de botellas
             </p>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <label>
-                <span className="text-sm font-bold text-slate-300">
+                <span className="text-sm font-semibold text-on-surface-variant">
                   Desde
                 </span>
 
@@ -212,12 +219,12 @@ export default function LiquorLabelPrintCenter({
                     setFromBottle(Number(event.target.value));
                     setError("");
                   }}
-                  className="mt-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-5 py-4 text-2xl font-black text-white outline-none transition focus:border-purple-500"
+                  className="mt-3 w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
                 />
               </label>
 
               <label>
-                <span className="text-sm font-bold text-slate-300">
+                <span className="text-sm font-semibold text-on-surface-variant">
                   Hasta
                 </span>
 
@@ -230,35 +237,35 @@ export default function LiquorLabelPrintCenter({
                     setToBottle(Number(event.target.value));
                     setError("");
                   }}
-                  className="mt-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-5 py-4 text-2xl font-black text-white outline-none transition focus:border-purple-500"
+                  className="mt-3 w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
                 />
               </label>
             </div>
 
-            <p className="mt-3 text-sm text-slate-500">
+            <p className="mt-3 text-sm text-outline">
               Rango permitido: 1 a {totalBottles}
             </p>
           </div>
         )}
 
-        <div className="mt-8 rounded-2xl border border-purple-500/20 bg-purple-500/10 p-5">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-purple-300/70">
+        <div className="mt-8 rounded-2xl border border-primary/20 bg-primary/[0.06] p-5">
+          <p className="font-mono text-xs font-black uppercase tracking-[0.2em] text-on-surface-variant">
             Selección actual
           </p>
 
-          <p className="mt-2 text-3xl font-black text-white">
+          <p className="mt-2 text-3xl font-black text-primary">
             {selectedQuantity} etiquetas
           </p>
 
           {mode === "RANGE" && (
-            <p className="mt-2 text-sm font-semibold text-purple-200">
+            <p className="mt-2 text-sm font-semibold text-on-surface-variant">
               Botellas {fromBottle} a {toBottle}
             </p>
           )}
         </div>
 
         {error && (
-          <div className="mt-5 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm font-bold text-red-300">
+          <div className="mt-5 rounded-2xl border border-error/30 bg-error/10 p-4 text-sm font-bold text-error">
             {error}
           </div>
         )}
@@ -267,7 +274,7 @@ export default function LiquorLabelPrintCenter({
           type="button"
           onClick={continueToPreview}
           disabled={totalBottles === 0}
-          className="mt-6 w-full rounded-2xl bg-green-600 px-6 py-4 text-lg font-black text-white transition hover:bg-green-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+          className="mt-6 w-full rounded-2xl bg-tertiary-fixed-dim px-6 py-4 text-lg font-black text-on-surface transition duration-150 ease-out hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant disabled:hover:scale-100"
         >
           Continuar a vista previa →
         </button>
@@ -278,13 +285,13 @@ export default function LiquorLabelPrintCenter({
 
 function ModeCard({
   active,
-  icon,
+  icon: Icon,
   title,
   description,
   onClick,
 }: {
   active: boolean;
-  icon: string;
+  icon: ComponentType<IconProps>;
   title: string;
   description: string;
   onClick: () => void;
@@ -293,28 +300,28 @@ function ModeCard({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-3xl border p-6 text-left transition ${
+      className={`rounded-3xl border p-6 text-left transition duration-150 ease-out hover:scale-[1.01] active:scale-[0.99] ${
         active
-          ? "border-purple-400 bg-purple-500/15 shadow-lg shadow-purple-950/20"
-          : "border-slate-800 bg-slate-900 hover:border-slate-700"
+          ? "border-primary bg-primary/[0.06] shadow-lg shadow-primary/10"
+          : "border-outline-variant bg-surface-container hover:border-outline"
       }`}
     >
-      <span className="text-4xl">{icon}</span>
+      <Icon className="h-9 w-9 text-on-surface-variant" />
 
-      <p className="mt-5 text-xl font-black text-white">{title}</p>
+      <p className="mt-5 text-xl font-black text-on-surface">{title}</p>
 
-      <p className="mt-2 text-sm leading-6 text-slate-400">
+      <p className="mt-2 text-sm leading-6 text-on-surface-variant">
         {description}
       </p>
 
       <div
         className={`mt-5 flex h-6 w-6 items-center justify-center rounded-full border ${
           active
-            ? "border-purple-300 bg-purple-500 text-white"
-            : "border-slate-600"
+            ? "border-primary bg-primary text-on-primary"
+            : "border-outline-variant"
         }`}
       >
-        {active && <span className="text-xs font-black">✓</span>}
+        {active && <CheckIcon className="h-3.5 w-3.5" />}
       </div>
     </button>
   );

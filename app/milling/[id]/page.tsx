@@ -3,10 +3,13 @@ import { getCurrentUser } from "@/lib/auth";
 import MillingCharts from "@/components/MillingCharts";
 import FinishMillingModal from "@/components/FinishMillingModal";
 import {
+  EquipmentStatus,
+  LotStage,
   MillingEventType,
   MillingStatus,
 } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
+import { advanceLotStage } from "@/lib/lotStage";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -68,6 +71,9 @@ export default async function MillingDetailPage({
   });
 
   if (!milling) notFound();
+
+  const millingEquipmentId = milling.equipmentId;
+  const millingLotId = milling.lotId;
 
   const tanks = await prisma.equipment.findMany({
     where: {
@@ -416,6 +422,20 @@ export default async function MillingDetailPage({
           },
         });
 
+        await transaction.equipment.update({
+          where: { id: millingEquipmentId },
+          data: {
+            status: EquipmentStatus.DISPONIBLE,
+            currentLoad: 0,
+          },
+        });
+
+        await advanceLotStage(
+          transaction,
+          millingLotId,
+          LotStage.FERMENTACION
+        );
+
         return updated;
       }
     );
@@ -428,12 +448,12 @@ export default async function MillingDetailPage({
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 p-4 text-white sm:p-6 lg:p-10">
+    <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
       <div className="mx-auto max-w-6xl">
     
 
         <header className="mt-8">
-          <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
+          <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
             MAESTRO
           </p>
 
@@ -443,7 +463,7 @@ export default async function MillingDetailPage({
                 Molienda {milling.lot.code}
               </h1>
 
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-on-surface-variant">
                 {milling.equipment.name} · Inicio{" "}
                 {formatDateTime(milling.startedAt)}
               </p>
@@ -491,9 +511,9 @@ export default async function MillingDetailPage({
           />
         </section>
 
-        <section className="mt-6 overflow-hidden rounded-2xl border border-blue-500/20 bg-blue-950/60">
+        <section className="mt-6 overflow-hidden rounded-2xl border border-on-surface-variant/20 bg-on-surface-variant/10">
           <div className="p-6 sm:p-8">
-            <p className="text-sm uppercase tracking-[0.35em] text-amber-400">
+            <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
               Mosto acumulado
             </p>
 
@@ -535,7 +555,7 @@ export default async function MillingDetailPage({
             </div>
           </div>
 
-          <div className="grid border-t border-blue-500/10 sm:grid-cols-3">
+          <div className="grid border-t border-on-surface-variant/10 sm:grid-cols-3">
             <ProcessIndicator
               title="Recuperación"
               value={`${formatNumber(
@@ -561,27 +581,27 @@ export default async function MillingDetailPage({
         <section
           className={`mt-6 rounded-2xl border p-6 ${
             millingHealth === "ATENCION"
-              ? "border-red-500/30 bg-red-500/10"
+              ? "border-error/30 bg-error/10"
               : millingHealth === "TERMINADA"
-                ? "border-blue-500/30 bg-blue-500/10"
+                ? "border-on-surface-variant/30 bg-on-surface-variant/10"
                 : millingHealth === "LISTA"
-                  ? "border-green-500/30 bg-green-500/10"
-                  : "border-amber-400/30 bg-amber-400/10"
+                  ? "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10"
+                  : "border-secondary/30 bg-secondary/10"
           }`}
         >
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-400">
+          <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
             Análisis de MAESTRO
           </p>
 
           <h2
             className={`mt-3 text-2xl font-bold sm:text-3xl ${
               millingHealth === "ATENCION"
-                ? "text-red-400"
+                ? "text-error"
                 : millingHealth === "TERMINADA"
-                  ? "text-blue-400"
+                  ? "text-on-surface-variant"
                   : millingHealth === "LISTA"
-                    ? "text-green-400"
-                    : "text-amber-300"
+                    ? "text-tertiary-fixed-dim"
+                    : "text-secondary"
             }`}
           >
             {getMillingHealthTitle(millingHealth)}
@@ -600,13 +620,11 @@ export default async function MillingDetailPage({
             }).map((message) => (
               <div
                 key={message}
-                className="flex items-start gap-3 rounded-xl bg-slate-950/40 p-3"
+                className="flex items-start gap-3 rounded-xl bg-surface-dim/40 p-3"
               >
-                <span className="mt-0.5 text-amber-400">
-                  ●
-                </span>
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-on-surface-variant" />
 
-                <p className="text-slate-200">
+                <p className="text-on-surface">
                   {message}
                 </p>
               </div>
@@ -655,13 +673,13 @@ export default async function MillingDetailPage({
         )}
 
         {!hasFinished && (
-          <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-8">
+          <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
             <div className="mb-6">
               <h2 className="text-2xl font-bold">
                 Descargas a fermentación
               </h2>
 
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-on-surface-variant">
                 Registra cada descarga de mosto con su
                 tina destino y mediciones.
               </p>
@@ -672,13 +690,13 @@ export default async function MillingDetailPage({
               className="grid gap-4 md:grid-cols-2"
             >
               <label>
-                <span className="mb-2 block text-sm font-medium text-slate-300">
+                <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
                   Tina destino
                 </span>
 
                 <select
                   name="tankId"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-white outline-none focus:border-amber-400"
+                  className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
                 >
                   <option value="">
                     Sin tina asignada
@@ -735,27 +753,27 @@ export default async function MillingDetailPage({
               />
 
               <label>
-                <span className="mb-2 block text-sm font-medium text-slate-300">
+                <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
                   Observaciones
                 </span>
 
                 <input
                   name="notes"
                   placeholder="Observación opcional"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-white outline-none placeholder:text-slate-500 focus:border-amber-400"
+                  className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
                 />
               </label>
 
               <button
                 type="submit"
-                className="rounded-xl bg-amber-400 py-3 font-bold text-black transition hover:bg-amber-300 md:col-span-2"
+                className="rounded-xl bg-primary py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97] md:col-span-2"
               >
                 Guardar descarga
               </button>
             </form>
 
-            <div className="mt-6 border-t border-slate-800 pt-6">
-              <p className="mb-3 text-sm text-slate-400">
+            <div className="mt-6 border-t border-outline-variant pt-6">
+              <p className="mb-3 text-sm text-on-surface-variant">
                 Finaliza únicamente después de confirmar
                 todas las descargas y resultados oficiales.
               </p>
@@ -788,26 +806,26 @@ export default async function MillingDetailPage({
 
         <MillingCharts events={milling.events} />
 
-        <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-8">
+        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
               Descargas registradas
             </h2>
 
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-on-surface-variant">
               Historial de mosto enviado a las tinas de
               fermentación.
             </p>
           </div>
 
           {milling.discharges.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center">
-              <p className="text-slate-400">
+            <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center">
+              <p className="text-on-surface-variant">
                 Aún no hay descargas registradas.
               </p>
             </div>
           ) : (
-            <div className="relative space-y-5 before:absolute before:bottom-3 before:left-[11px] before:top-3 before:w-px before:bg-slate-700">
+            <div className="relative space-y-5 before:absolute before:bottom-3 before:left-[11px] before:top-3 before:w-px before:bg-surface-container-highest">
               {milling.discharges.map(
                 (discharge, index) => (
                   <article
@@ -815,29 +833,29 @@ export default async function MillingDetailPage({
                     className="relative pl-9"
                   >
                     <div
-                      className={`absolute left-0 top-6 h-6 w-6 rounded-full border-4 border-slate-900 ${
+                      className={`absolute left-0 top-6 h-6 w-6 rounded-full border-4 border-outline-variant ${
                         index === 0
-                          ? "bg-amber-400"
-                          : "bg-slate-600"
+                          ? "bg-primary"
+                          : "bg-surface-container-highest"
                       }`}
                     />
 
-                    <div className="rounded-2xl border border-slate-700 bg-slate-800 p-5">
+                    <div className="rounded-2xl border border-outline-variant bg-surface-container-high p-5">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <p className="font-bold text-amber-400">
+                          <p className="font-bold text-primary">
                             {discharge.tank?.name ??
                               "Sin tina asignada"}
                           </p>
 
-                          <p className="mt-1 text-xs text-slate-500">
+                          <p className="mt-1 text-xs text-outline">
                             Registrado por{" "}
                             {discharge.createdBy?.name ??
                               "Usuario no identificado"}
                           </p>
                         </div>
 
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-on-surface-variant">
                           {formatDateTime(
                             discharge.createdAt
                           )}
@@ -875,12 +893,12 @@ export default async function MillingDetailPage({
                       </div>
 
                       {discharge.notes && (
-                        <div className="mt-4 rounded-xl bg-slate-900 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <div className="mt-4 rounded-xl bg-surface-container p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-outline">
                             Observaciones
                           </p>
 
-                          <p className="mt-2 whitespace-pre-wrap text-slate-300">
+                          <p className="mt-2 whitespace-pre-wrap text-on-surface-variant">
                             {discharge.notes}
                           </p>
                         </div>
@@ -893,26 +911,26 @@ export default async function MillingDetailPage({
           )}
         </section>
 
-        <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-8">
+        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
               Bitácora de molienda
             </h2>
 
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-on-surface-variant">
               Eventos generales registrados durante el
               proceso.
             </p>
           </div>
 
           {milling.events.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center">
-              <p className="text-slate-400">
+            <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center">
+              <p className="text-on-surface-variant">
                 Aún no hay eventos registrados.
               </p>
             </div>
           ) : (
-            <div className="relative space-y-5 before:absolute before:bottom-3 before:left-[11px] before:top-3 before:w-px before:bg-slate-700">
+            <div className="relative space-y-5 before:absolute before:bottom-3 before:left-[11px] before:top-3 before:w-px before:bg-surface-container-highest">
               {[...milling.events]
                 .reverse()
                 .map((event, index) => (
@@ -921,22 +939,22 @@ export default async function MillingDetailPage({
                     className="relative pl-9"
                   >
                     <div
-                      className={`absolute left-0 top-6 h-6 w-6 rounded-full border-4 border-slate-900 ${
+                      className={`absolute left-0 top-6 h-6 w-6 rounded-full border-4 border-outline-variant ${
                         index === 0
-                          ? "bg-amber-400"
-                          : "bg-slate-600"
+                          ? "bg-primary"
+                          : "bg-surface-container-highest"
                       }`}
                     />
 
-                    <div className="rounded-2xl border border-slate-700 bg-slate-800 p-5">
+                    <div className="rounded-2xl border border-outline-variant bg-surface-container-high p-5">
                       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="font-semibold text-amber-400">
+                        <p className="font-semibold text-primary">
                           {getMillingEventLabel(
                             event.type
                           )}
                         </p>
 
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-on-surface-variant">
                           {formatDateTime(
                             event.createdAt
                           )}
@@ -1008,12 +1026,12 @@ export default async function MillingDetailPage({
                       )}
 
                       {event.notes && (
-                        <div className="mt-4 rounded-xl bg-slate-900 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <div className="mt-4 rounded-xl bg-surface-container p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-outline">
                             Observaciones
                           </p>
 
-                          <p className="mt-2 whitespace-pre-wrap text-slate-300">
+                          <p className="mt-2 whitespace-pre-wrap text-on-surface-variant">
                             {event.notes}
                           </p>
                         </div>
@@ -1077,25 +1095,25 @@ function MillingClosureAct({
       : null;
 
   return (
-    <section className="mt-8 overflow-hidden rounded-3xl border border-green-500/30 bg-slate-900">
-      <header className="border-b border-green-500/20 bg-green-500/10 p-6 sm:p-8">
-        <p className="text-xs font-bold uppercase tracking-[0.3em] text-green-400">
+    <section className="mt-8 overflow-hidden rounded-3xl border border-tertiary-fixed-dim/30 bg-surface-container">
+      <header className="border-b border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 p-6 sm:p-8">
+        <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-tertiary-fixed-dim">
           Acta de cierre
         </p>
 
         <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-white sm:text-3xl">
+            <h2 className="text-2xl font-bold text-on-surface sm:text-3xl">
               Molienda terminada
             </h2>
 
-            <p className="mt-2 text-sm text-slate-300">
+            <p className="mt-2 text-sm text-on-surface-variant">
               El proceso quedó cerrado y bloqueado para
               nuevas descargas.
             </p>
           </div>
 
-          <div className="w-fit rounded-full border border-green-500/40 bg-green-500/10 px-4 py-2 font-mono text-sm font-bold text-green-300">
+          <div className="w-fit rounded-full border border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 px-4 py-2 font-mono text-sm font-bold text-tertiary-fixed-dim">
             {closureCode ?? "Acta sin folio"}
           </div>
         </div>
@@ -1226,12 +1244,12 @@ function MillingClosureAct({
           />
         </div>
 
-        <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950 p-5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <div className="mt-4 rounded-2xl border border-outline-variant bg-background p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-outline">
             Tinas utilizadas
           </p>
 
-          <p className="mt-2 text-slate-300">
+          <p className="mt-2 text-on-surface-variant">
             {tanksUsed.length > 0
               ? tanksUsed.join(", ")
               : "Sin tinas asignadas"}
@@ -1239,23 +1257,23 @@ function MillingClosureAct({
         </div>
 
         {finalNotes && (
-          <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950 p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <div className="mt-4 rounded-2xl border border-outline-variant bg-background p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-outline">
               Observaciones finales
             </p>
 
-            <p className="mt-2 whitespace-pre-wrap text-slate-300">
+            <p className="mt-2 whitespace-pre-wrap text-on-surface-variant">
               {finalNotes}
             </p>
           </div>
         )}
 
-        <div className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-5">
-          <p className="font-bold text-amber-300">
+        <div className="mt-6 rounded-2xl border border-outline-variant bg-surface-container-high/60 p-5">
+          <p className="font-bold text-primary">
             Siguiente etapa: Fermentación
           </p>
 
-          <p className="mt-1 text-sm text-amber-100/70">
+          <p className="mt-1 text-sm text-on-surface-variant">
             El mosto quedó documentado y disponible
             para iniciar las fermentaciones
             correspondientes.
@@ -1278,23 +1296,23 @@ function Kpi({
   highlight?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <p className="text-sm text-slate-400">
+    <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+      <p className="text-sm text-on-surface-variant">
         {title}
       </p>
 
       <p
         className={`mt-2 text-2xl font-bold ${
           highlight
-            ? "text-green-400"
-            : "text-white"
+            ? "text-tertiary-fixed-dim"
+            : "text-on-surface"
         }`}
       >
         {value}
       </p>
 
       {detail && (
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-outline">
           {detail}
         </p>
       )}
@@ -1313,15 +1331,15 @@ function SummaryMetric({
 }) {
   return (
     <div>
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-on-surface-variant">
         {title}
       </p>
 
       <p
         className={`mt-2 text-3xl font-bold ${
           highlight
-            ? "text-white"
-            : "text-slate-100"
+            ? "text-on-surface"
+            : "text-on-surface"
         }`}
       >
         {value}
@@ -1338,8 +1356,8 @@ function Mini({
   value: string | number;
 }) {
   return (
-    <div className="rounded-xl bg-slate-900 p-3">
-      <p className="text-xs text-slate-400">
+    <div className="rounded-xl bg-surface-container p-3">
+      <p className="text-xs text-on-surface-variant">
         {title}
       </p>
 
@@ -1358,16 +1376,16 @@ function ActValue({
   highlight?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
-      <p className="text-xs uppercase tracking-wider text-slate-500">
+    <div className="rounded-2xl border border-outline-variant bg-background p-4">
+      <p className="text-xs uppercase tracking-wider text-outline">
         {title}
       </p>
 
       <p
         className={`mt-2 font-bold ${
           highlight
-            ? "text-green-400"
-            : "text-white"
+            ? "text-tertiary-fixed-dim"
+            : "text-on-surface"
         }`}
       >
         {value}
@@ -1386,16 +1404,16 @@ function ProcessIndicator({
   warning: boolean;
 }) {
   return (
-    <div className="border-slate-800 p-5 sm:border-r sm:last:border-r-0">
-      <p className="text-xs uppercase tracking-wider text-slate-500">
+    <div className="border-outline-variant p-5 sm:border-r sm:last:border-r-0">
+      <p className="text-xs uppercase tracking-wider text-outline">
         {title}
       </p>
 
       <p
         className={`mt-1 font-bold ${
           warning
-            ? "text-amber-400"
-            : "text-green-400"
+            ? "text-secondary"
+            : "text-tertiary-fixed-dim"
         }`}
       >
         {warning ? "● " : "✓ "}
@@ -1426,7 +1444,7 @@ function NumberField({
 }) {
   return (
     <label>
-      <span className="mb-2 block text-sm font-medium text-slate-300">
+      <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
         {label}
       </span>
 
@@ -1440,13 +1458,13 @@ function NumberField({
           max={max}
           required={required}
           placeholder={placeholder}
-          className={`w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-white outline-none placeholder:text-slate-500 focus:border-amber-400 ${
+          className={`w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary ${
             suffix ? "pr-14" : ""
           }`}
         />
 
         {suffix && (
-          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-slate-500">
+          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-outline">
             {suffix}
           </span>
         )}
@@ -1466,30 +1484,47 @@ function MillingStatusBadge({
 }) {
   const styles = {
     ATENCION:
-      "border-red-500/40 bg-red-500/10 text-red-400",
+      "border-error/40 bg-error/10 text-error",
     ACTIVA:
-      "border-amber-400/40 bg-amber-400/10 text-amber-300",
+      "border-secondary/40 bg-secondary/10 text-secondary",
     LISTA:
-      "border-green-500/40 bg-green-500/10 text-green-400",
+      "border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim",
     TERMINADA:
-      "border-blue-500/40 bg-blue-500/10 text-blue-400",
+      "border-on-surface-variant/40 bg-on-surface-variant/10 text-on-surface-variant",
+  };
+
+  const dotStyles: Record<
+    | "ATENCION"
+    | "ACTIVA"
+    | "LISTA"
+    | "TERMINADA",
+    string
+  > = {
+    ATENCION: "bg-error",
+    ACTIVA: "bg-secondary",
+    LISTA: "bg-tertiary-fixed-dim",
+    TERMINADA: "bg-on-surface-variant",
   };
 
   return (
     <div
-      className={`w-fit rounded-full border px-4 py-2 text-sm font-bold ${styles[status]}`}
+      className={`flex w-fit items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold ${styles[status]}`}
     >
+      <span
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotStyles[status]}`}
+      />
+
       {status === "ATENCION" &&
-        "🔴 Requiere atención"}
+        "Requiere atención"}
 
       {status === "ACTIVA" &&
-        "🟡 Molienda activa"}
+        "Molienda activa"}
 
       {status === "LISTA" &&
-        "🟢 Lista para cerrar"}
+        "Lista para cerrar"}
 
       {status === "TERMINADA" &&
-        "🔵 Molienda terminada"}
+        "Molienda terminada"}
     </div>
   );
 }
@@ -1733,17 +1768,17 @@ function getMillingEventLabel(
     MillingEventType,
     string
   > = {
-    INICIO_MOLIENDA: "▶️ Inicio de molienda",
-    REGISTRO_BRIX: "🍬 Registro de °Brix",
-    REGISTRO_PH: "🧪 Registro de pH",
+    INICIO_MOLIENDA: "Inicio de molienda",
+    REGISTRO_BRIX: "Registro de °Brix",
+    REGISTRO_PH: "Registro de pH",
     REGISTRO_TEMPERATURA:
-      "🌡️ Registro de temperatura",
-    AGREGAR_AGUA: "💧 Agua agregada",
-    CAMBIO_PRENSA: "⚙️ Cambio de prensa",
-    LAVADO_BAGAZO: "🚿 Lavado de bagazo",
-    REGISTRO_BAGAZO: "🌿 Registro de bagazo",
-    FIN_MOLIENDA: "🏁 Cierre de molienda",
-    OBSERVACION: "📝 Observación",
+      "Registro de temperatura",
+    AGREGAR_AGUA: "Agua agregada",
+    CAMBIO_PRENSA: "Cambio de prensa",
+    LAVADO_BAGAZO: "Lavado de bagazo",
+    REGISTRO_BAGAZO: "Registro de bagazo",
+    FIN_MOLIENDA: "Cierre de molienda",
+    OBSERVACION: "Observación",
   };
 
   return labels[type];

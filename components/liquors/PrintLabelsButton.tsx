@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
+import { PrinterIcon } from "@/components/ui/icons";
 
 export default function PrintLabelsButton() {
   const pathname = usePathname();
@@ -21,9 +22,10 @@ export default function PrintLabelsButton() {
     <button
       type="button"
       onClick={openPrintPage}
-      className="flex-1 rounded-2xl bg-green-600 px-6 py-4 font-black text-white transition hover:bg-green-500"
+      className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-tertiary-fixed-dim px-6 py-4 font-black text-on-surface transition duration-150 ease-out hover:scale-[1.02] hover:opacity-90 active:scale-[0.98]"
     >
-      🖨️ Imprimir etiquetas
+      <PrinterIcon className="h-5 w-5" />
+      Imprimir etiquetas
     </button>
   );
 }

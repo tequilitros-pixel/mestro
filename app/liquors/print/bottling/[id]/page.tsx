@@ -42,11 +42,6 @@ export default async function BottlingLabelsPage({
   const batch = bottling.batch;
   const product = batch.product;
 
-  const appUrl = (
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "https://maestro-destiladora.space"
-  ).replace(/\/$/, "");
-
   const totalBottles = Math.max(
     bottling.producedBottles,
     bottling.bottles.length,
@@ -60,44 +55,44 @@ export default async function BottlingLabelsPage({
     null;
 
   return (
-    <main className="min-h-screen bg-neutral-100 px-4 py-8 print:bg-white print:p-0">
+    <main className="min-h-screen bg-background px-4 py-8 print:bg-white print:p-0">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-8 rounded-2xl bg-white p-6 shadow-sm print:hidden">
+        <header className="mb-8 rounded-2xl border border-outline-variant bg-surface-container p-6 print:hidden">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-sm font-bold uppercase tracking-wide text-neutral-500">
+              <p className="text-sm font-bold uppercase tracking-wide text-on-surface-variant">
                 Impresión masiva
               </p>
 
-              <h1 className="mt-1 text-3xl font-black text-neutral-950">
+              <h1 className="mt-1 text-3xl font-black text-on-surface">
                 {product.name}
               </h1>
 
-              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-neutral-600">
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-on-surface-variant">
                 <span>
                   Lote:{" "}
-                  <strong className="text-neutral-900">
+                  <strong className="text-on-surface">
                     {batch.code}
                   </strong>
                 </span>
 
                 <span>
                   Embotellado:{" "}
-                  <strong className="text-neutral-900">
+                  <strong className="text-on-surface">
                     {bottling.code}
                   </strong>
                 </span>
 
                 <span>
                   Botellas registradas:{" "}
-                  <strong className="text-neutral-900">
+                  <strong className="text-on-surface">
                     {bottling.bottles.length}
                   </strong>
                 </span>
 
                 <span>
                   Presentación:{" "}
-                  <strong className="text-neutral-900">
+                  <strong className="text-on-surface">
                     {bottling.bottleSizeMl} ml
                   </strong>
                 </span>
@@ -109,7 +104,7 @@ export default async function BottlingLabelsPage({
 
               <Link
                 href="/liquors/bottling"
-                className="rounded-lg border border-neutral-300 bg-white px-5 py-3 font-bold text-neutral-800 transition hover:bg-neutral-50"
+                className="rounded-lg border border-outline-variant bg-surface-container-high px-5 py-3 font-bold text-on-surface transition hover:bg-surface-container-highest"
               >
                 ← Regresar
               </Link>
@@ -118,12 +113,12 @@ export default async function BottlingLabelsPage({
         </header>
 
         {bottling.bottles.length === 0 ? (
-          <section className="rounded-2xl border border-dashed border-neutral-300 bg-white p-12 text-center print:hidden">
-            <h2 className="text-xl font-black text-neutral-900">
+          <section className="rounded-2xl border border-dashed border-outline-variant bg-surface-container/50 p-12 text-center print:hidden">
+            <h2 className="text-xl font-black text-on-surface">
               No hay botellas registradas
             </h2>
 
-            <p className="mt-2 text-neutral-600">
+            <p className="mt-2 text-on-surface-variant">
               Este embotellado todavía no tiene botellas individuales.
             </p>
           </section>

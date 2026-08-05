@@ -38,12 +38,23 @@ model User {
   cashCutsUpdated           CashCut[]              @relation("CashCutUpdatedBy")
   cashOutflowsAuthorized    CashOutflow[]          @relation("CashOutflowAuthorizedBy")
   cashCutAuditEntries       CashCutAuditEntry[]    @relation("CashCutAuditBy")
-  cashSafeMovementsBy CashSafeMovement[] @relation("CashSafeMovementBy")
+  cashSafeMovementsBy       CashSafeMovement[]     @relation("CashSafeMovementBy")
+  hourlyRate                Decimal?               @db.Decimal(10, 2)
+  timeClockEntries          TimeClockEntry[]       @relation("TimeClockEntries")
+  timeClockEntriesClosed    TimeClockEntry[]       @relation("TimeClockClosedBy")
+  scheduledShifts           ScheduledShift[]       @relation("ScheduledShifts")
+  geofenceAlerts            GeofenceAlert[]
 
   millingsFinished   Milling[]           @relation("MillingFinishedBy")
   millingDischarges  MillingDischarge[]
   pushSubscriptions  PushSubscription[]
   passwordResetCodes PasswordResetCode[]
+  modulePermissions  ModulePermission[]
+
+  posCategoriesCreated PosCategory[] @relation("PosCategoryCreatedBy")
+  posProductsCreated   PosProduct[]  @relation("PosProductCreatedBy")
+  posSalesSold         PosSale[]     @relation("PosSaleSoldBy")
+  posSalesCancelled    PosSale[]     @relation("PosSaleCancelledBy")
 }
 
 model Equipment {
@@ -65,23 +76,25 @@ model Equipment {
 }
 
 model Lot {
-  id            String         @id @default(cuid())
-  code          String         @unique
-  stage         LotStage
-  agaveKg       Float
-  art           Float?
-  startedAt     DateTime
-  finishedAt    DateTime?
-  observations  String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  ownerId       String
-  cookings      Cooking[]
-  distillations Distillation[]
-  fermentations Fermentation[]
-  owner         User           @relation(fields: [ownerId], references: [id])
-  expenses      LotExpense[]
-  millings      Milling[]
+  id                  String         @id @default(cuid())
+  code                String         @unique
+  stage               LotStage
+  agaveKg             Float
+  art                 Float?
+  startedAt           DateTime
+  finishedAt          DateTime?
+  totalLitersObtained Float?
+  qrToken             String?        @unique
+  observations        String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  ownerId             String
+  cookings            Cooking[]
+  distillations       Distillation[]
+  fermentations       Fermentation[]
+  owner               User           @relation(fields: [ownerId], references: [id])
+  expenses            LotExpense[]
+  millings            Milling[]
 }
 
 model Cooking {
@@ -752,22 +765,77 @@ model LiquorBottleMovement {
 }
 
 model Branch {
-  id        String   @id @default(cuid())
-  name      String
-  code      String   @unique
-  address   String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String           @id @default(cuid())
+  name             String
+  code             String           @unique
+  address          String?
+  active           Boolean          @default(true)
+  /*
+   * Geocerca del checador: si la sucursal tiene una geozona asignada,
+   * el checador exige que el empleado esté dentro de ese radio (en
+   * metros) para checar entrada o salida. Si no tiene geozona
+   * asignada, no se aplica ninguna restricción de ubicación.
+   */
+  geofenceId       String?
+  geofence         Geofence?        @relation(fields: [geofenceId], references: [id])
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  counts           InventoryCount[]
+  entries          InventoryEntry[]
+  timeClockEntries TimeClockEntry[]
 
   users               UserBranch[]
   cashCuts            CashCut[]
   liquorBottles       LiquorBottle[]
   liquorMovementsFrom LiquorBottleMovement[] @relation("LiquorMovementFromBranch")
   liquorMovementsTo   LiquorBottleMovement[] @relation("LiquorMovementToBranch")
-  cashSafeMovements CashSafeMovement[]
+  cashSafeMovements   CashSafeMovement[]
+  scheduledShifts     ScheduledShift[]
+  scheduleTemplates   BranchScheduleTemplate[]
+  geofenceAlerts      GeofenceAlert[]
+  posSales            PosSale[]
 
   @@index([active])
+  @@index([geofenceId])
+}
+
+/*
+ * Geozona: círculo (centro + radio en metros) que puede asignarse a
+ * una o varias sucursales para restringir dónde se puede checar
+ * entrada/salida. Se administra desde Horario > Geozona.
+ */
+model Geofence {
+  id        String   @id @default(cuid())
+  name      String
+  latitude  Float
+  longitude Float
+  radius    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches  Branch[]
+}
+
+/*
+ * Alerta generada cuando un empleado con turno abierto se aleja
+ * del radio permitido de su sucursal. Sirve como bitácora para
+ * que un administrador la revise (checador > turnos abiertos).
+ */
+model GeofenceAlert {
+  id           String   @id @default(cuid())
+  userId       String
+  branchId     String
+  timeClockId  String?
+  distance     Int
+  createdAt    DateTime @default(now())
+
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch     Branch          @relation(fields: [branchId], references: [id])
+  timeClock  TimeClockEntry? @relation(fields: [timeClockId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([branchId])
+  @@index([createdAt])
 }
 
 model UserBranch {
@@ -793,6 +861,12 @@ model CashCut {
 
   responsibleId String
   responsible   User   @relation("CashCutResponsible", fields: [responsibleId], references: [id])
+
+  // Evento de salón vinculado a este turno: si se elige uno al abrir
+  // el corte, el inventario cargado a ese evento (ServiceEventItem)
+  // se descuenta automáticamente del inventario de la sucursal.
+  eventId String?
+  event   ServiceEvent? @relation(fields: [eventId], references: [id])
 
   date     DateTime
   openedAt DateTime      @default(now())
@@ -832,18 +906,49 @@ model CashCut {
   evidences     CashCutEvidence[]
   auditEntries  CashCutAuditEntry[]
   safeMovements CashSafeMovement[]
+  denominations CashCutDenomination[]
+  posSales      PosSale[]
 
   @@index([branchId])
   @@index([responsibleId])
   @@index([createdById])
   @@index([status])
   @@index([date])
+  @@index([eventId])
 }
 
 enum CashCutStatus {
   ABIERTO
   CERRADO
   AUDITADO
+}
+
+/*
+ * Desglose de billetes/monedas contados en cada momento del corte
+ * (apertura, cierre, fondo para el siguiente turno). Se guarda para
+ * auditoría — el monto total sigue viviendo en CashCut.startingFund
+ * / cashCounted / nextFund, este detalle es de respaldo.
+ */
+enum CashCountContext {
+  APERTURA
+  CIERRE
+  SIGUIENTE_TURNO
+}
+
+model CashCutDenomination {
+  id        String  @id @default(cuid())
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
+
+  context  CashCountContext
+  value    Float
+  quantity Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cashCutId, context, value])
+  @@index([cashCutId])
 }
 
 model CashSalePayment {
@@ -1153,29 +1258,564 @@ model PasswordResetCode {
   @@index([userId])
   @@index([code])
 }
+
 enum CashSafeMovementType {
   DEPOSITO_SOBRE
   RETIRO
 }
 
 model CashSafeMovement {
-  id        String   @id @default(cuid())
-  branchId  String
-  branch    Branch   @relation(fields: [branchId], references: [id])
+  id       String @id @default(cuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
 
-  type      CashSafeMovementType
-  amount    Float
+  type   CashSafeMovementType
+  amount Float
 
   cashCutId String?
   cashCut   CashCut? @relation(fields: [cashCutId], references: [id])
 
-  notes     String?
+  notes String?
 
-  userId    String
-  user      User     @relation("CashSafeMovementBy", fields: [userId], references: [id])
+  userId String
+  user   User   @relation("CashSafeMovementBy", fields: [userId], references: [id])
 
   createdAt DateTime @default(now())
 
   @@index([branchId])
   @@index([cashCutId])
+}
+
+model InventoryProduct {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+
+  category String
+  unit     String
+
+  unitCost     Decimal? @db.Decimal(12, 4)
+  minimumStock Decimal  @default(0) @db.Decimal(12, 3)
+
+  itemType InventoryItemType
+
+  trackStock      Boolean              @default(true)
+  trackBatch      Boolean              @default(false)
+  trackExpiration Boolean              @default(false)
+  canBeSold       Boolean              @default(false)
+  mustReturn      Boolean              @default(false)
+  countItems      InventoryCountItem[]
+  entries         InventoryEntry[]
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  packageItems      EventPackageItem[]
+  eventItems        ServiceEventItem[]
+  equipmentKitItems EquipmentKitItem[]
+  posIngredientOf   PosVariantIngredient[]
+
+  @@index([name])
+  @@index([category])
+  @@index([itemType])
+  @@index([isActive])
+}
+
+enum InventoryItemType {
+  CONSUMABLE
+  RETURNABLE
+  EQUIPMENT
+}
+
+model EventPackage {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  pricePerPerson Decimal? @db.Decimal(10, 2)
+  includedHours  Int?
+  minimumGuests  Int?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  items  EventPackageItem[]
+  events ServiceEvent[]
+}
+
+model EventPackageItem {
+  id              String                     @id @default(cuid())
+  packageId       String
+  productId       String
+  quantity        Decimal                    @db.Decimal(12, 3)
+  calculationType PackageItemCalculationType
+  guestsPerBlock  Int?
+  isRequired      Boolean                    @default(true)
+  sortOrder       Int                        @default(0)
+  notes           String?
+
+  package EventPackage     @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  product InventoryProduct @relation(fields: [productId], references: [id])
+
+  @@unique([packageId, productId])
+}
+
+enum PackageItemCalculationType {
+  FIXED
+  PER_GUEST
+  PER_GUEST_BLOCK
+  MANUAL
+}
+
+model ServiceEvent {
+  id             String             @id @default(cuid())
+  code           String             @unique
+  packageId      String?
+  equipmentKitId String?
+  clientName     String
+  clientPhone    String?
+  location       String
+  eventDate      DateTime
+  guestCount     Int
+  saleAmount     Decimal?           @db.Decimal(12, 2)
+  status         ServiceEventStatus @default(DRAFT)
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  // Se marca cuando el inventario cargado a este evento ya se
+  // descontó del inventario de una sucursal (al abrir un corte de
+  // caja eligiendo este evento). Evita descontarlo dos veces.
+  stockDeductedAt DateTime?
+
+  package      EventPackage?      @relation(fields: [packageId], references: [id])
+  equipmentKit EquipmentKit?      @relation(fields: [equipmentKitId], references: [id])
+  items        ServiceEventItem[]
+  recounts     EventRecount[]
+  cashCuts     CashCut[]
+}
+
+model ServiceEventItem {
+  id        String @id @default(cuid())
+  eventId   String
+  productId String
+
+  productName String
+  unit        String
+  itemType    InventoryItemType
+  unitCost    Decimal?          @db.Decimal(12, 4)
+
+  plannedQuantity  Decimal  @db.Decimal(12, 3)
+  sentQuantity     Decimal? @db.Decimal(12, 3)
+  returnedQuantity Decimal? @db.Decimal(12, 3)
+  damagedQuantity  Decimal  @default(0) @db.Decimal(12, 3)
+  lostQuantity     Decimal  @default(0) @db.Decimal(12, 3)
+
+  checkedOut Boolean @default(false)
+  checkedIn  Boolean @default(false)
+  isCustom   Boolean @default(false)
+  notes      String?
+  sortOrder  Int     @default(0)
+
+  event   ServiceEvent     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  product InventoryProduct @relation(fields: [productId], references: [id])
+
+  recountEntries EventRecountItem[]
+}
+
+/*
+ * Reconteo rápido durante un evento de varios días. Cada día del
+ * evento se cuenta el stock que queda contra lo que salió
+ * originalmente (ServiceEventItem.sentQuantity) para saber qué hay
+ * que resurtir. Se guarda un EventRecount por día para tener
+ * historial completo del evento.
+ */
+model EventRecount {
+  id          String             @id @default(cuid())
+  eventId     String
+  dayNumber   Int
+  countDate   DateTime           @default(now())
+  status      EventRecountStatus @default(PENDIENTE)
+  fulfilledAt DateTime?
+  notes       String?
+  createdAt   DateTime           @default(now())
+
+  event ServiceEvent       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  items EventRecountItem[]
+
+  @@unique([eventId, dayNumber])
+  @@index([eventId])
+}
+
+enum EventRecountStatus {
+  PENDIENTE
+  SURTIDO
+}
+
+model EventRecountItem {
+  id              String  @id @default(cuid())
+  recountId       String
+  eventItemId     String
+  countedQuantity Decimal @db.Decimal(12, 3)
+  missingQuantity Decimal @db.Decimal(12, 3)
+
+  recount   EventRecount     @relation(fields: [recountId], references: [id], onDelete: Cascade)
+  eventItem ServiceEventItem @relation(fields: [eventItemId], references: [id], onDelete: Cascade)
+
+  @@unique([recountId, eventItemId])
+  @@index([recountId])
+  @@index([eventItemId])
+}
+
+enum ServiceEventStatus {
+  DRAFT
+  PREPARING
+  READY
+  IN_PROGRESS
+  RETURN_PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model EquipmentKit {
+  id          String   @id @default(cuid())
+  name        String   @unique // "Toldo", "Remolque", y a futuro lo que sea
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items  EquipmentKitItem[]
+  events ServiceEvent[]
+}
+
+model EquipmentKitItem {
+  id         String  @id @default(cuid())
+  kitId      String
+  productId  String
+  quantity   Decimal @db.Decimal(12, 3)
+  isRequired Boolean @default(true)
+  notes      String?
+  sortOrder  Int     @default(0)
+
+  kit     EquipmentKit     @relation(fields: [kitId], references: [id], onDelete: Cascade)
+  product InventoryProduct @relation(fields: [productId], references: [id])
+
+  @@unique([kitId, productId])
+}
+
+enum InventoryEntryType {
+  COMPRA
+  TRASPASO
+  AJUSTE
+  // Descuento/reversión automática por una venta del Punto de Venta.
+  // Se suman igual que cualquier otra entrada en computeStockMatrix,
+  // así que el stock por sucursal queda correcto sin tocar ese cálculo.
+  VENTA_POS
+  DEVOLUCION_POS
+  // Salida automática al abrir un corte de caja vinculado a un
+  // evento: descuenta lo cargado (ServiceEventItem) del inventario
+  // de la sucursal donde se abre el corte.
+  SALIDA_EVENTO
+}
+
+model InventoryEntry {
+  id        String             @id @default(cuid())
+  branchId  String
+  productId String
+  type      InventoryEntryType
+  quantity  Decimal            @db.Decimal(12, 3)
+  unitCost  Decimal?           @db.Decimal(12, 4)
+  entryDate DateTime           @default(now())
+  notes     String?
+  createdAt DateTime           @default(now())
+
+  branch  Branch           @relation(fields: [branchId], references: [id])
+  product InventoryProduct @relation(fields: [productId], references: [id])
+
+  @@index([branchId])
+  @@index([productId])
+  @@index([entryDate])
+}
+
+enum InventoryCountStatus {
+  BORRADOR
+  CERRADO
+}
+
+model InventoryCount {
+  id        String               @id @default(cuid())
+  code      String               @unique
+  branchId  String
+  countDate DateTime
+  status    InventoryCountStatus @default(BORRADOR)
+  notes     String?
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  branch Branch               @relation(fields: [branchId], references: [id])
+  items  InventoryCountItem[]
+
+  @@index([branchId])
+  @@index([countDate])
+}
+
+model InventoryCountItem {
+  id               String   @id @default(cuid())
+  countId          String
+  productId        String
+  quantityCounted  Decimal  @db.Decimal(12, 3)
+  previousQuantity Decimal? @db.Decimal(12, 3)
+  entriesQuantity  Decimal  @default(0) @db.Decimal(12, 3)
+  quantityConsumed Decimal? @db.Decimal(12, 3)
+  unitCostAtTime   Decimal? @db.Decimal(12, 4)
+  costTotal        Decimal? @db.Decimal(12, 2)
+  notes            String?
+
+  count   InventoryCount   @relation(fields: [countId], references: [id], onDelete: Cascade)
+  product InventoryProduct @relation(fields: [productId], references: [id])
+
+  @@unique([countId, productId])
+}
+
+model ModulePermission {
+  id        String   @id @default(cuid())
+  userId    String
+  moduleKey String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleKey])
+  @@index([userId])
+}
+
+model TimeClockEntry {
+  id                  String    @id @default(cuid())
+  userId              String
+  branchId            String
+  clockIn             DateTime
+  clockOut            DateTime?
+  confirmedByEmployee Boolean   @default(false)
+  closedManuallyById  String?
+  notes               String?
+  createdAt           DateTime  @default(now())
+
+  user             User            @relation("TimeClockEntries", fields: [userId], references: [id])
+  branch           Branch          @relation(fields: [branchId], references: [id])
+  closedManuallyBy User?           @relation("TimeClockClosedBy", fields: [closedManuallyById], references: [id])
+  geofenceAlerts   GeofenceAlert[]
+
+  @@index([userId])
+  @@index([branchId])
+  @@index([clockIn])
+}
+
+model ScheduledShift {
+  id        String   @id @default(cuid())
+  userId    String
+  branchId  String
+  date      DateTime
+  startTime String
+  endTime   String
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation("ScheduledShifts", fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@index([userId])
+  @@index([branchId])
+  @@index([date])
+}
+
+/*
+ * Plantilla de horario por sucursal.
+ *
+ * Define el horario estándar (entrada/salida) de una sucursal
+ * para cada día de la semana (0 = lunes ... 6 = domingo, igual
+ * que en ScheduleBuilder). Se usa para autocompletar horas al
+ * agregar un turno y así no capturarlas a mano cada vez.
+ */
+model BranchScheduleTemplate {
+  id        String   @id @default(cuid())
+  branchId  String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, dayOfWeek])
+  @@index([branchId])
+}
+
+/*
+ * ==========================================================
+ * Punto de Venta (POS)
+ * ----------------------------------------------------------
+ * Categorías > Productos > Variantes (ej. Mediano/Grande, o
+ * "Único" si el producto no tiene variantes reales). Cada
+ * variante puede tener su propia receta de ingredientes
+ * (PosVariantIngredient), que apunta a InventoryProduct — el
+ * mismo catálogo que ya usa Administración > Inventario — así
+ * que vender descuenta del mismo stock por sucursal.
+ *
+ * El descuento/reversión de inventario se hace creando
+ * InventoryEntry con type VENTA_POS / DEVOLUCION_POS: se suman
+ * igual que cualquier otra entrada en computeStockMatrix, sin
+ * necesidad de tocar ese cálculo.
+ * ==========================================================
+ */
+model PosCategory {
+  id        String   @id @default(cuid())
+  name      String
+  position  Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById String?
+  createdBy   User?   @relation("PosCategoryCreatedBy", fields: [createdById], references: [id])
+
+  products PosProduct[]
+
+  @@index([position])
+}
+
+model PosProduct {
+  id         String  @id @default(cuid())
+  categoryId String
+  category   PosCategory @relation(fields: [categoryId], references: [id])
+
+  name     String
+  icon     String?
+  active   Boolean @default(true)
+  position Int     @default(0)
+
+  createdById String?
+  createdBy   User?   @relation("PosProductCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants PosProductVariant[]
+
+  @@index([categoryId])
+}
+
+model PosProductVariant {
+  id        String     @id @default(cuid())
+  productId String
+  product   PosProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // "Único" cuando el producto no maneja variantes reales.
+  name     String
+  price    Float
+  position Int    @default(0)
+  active   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ingredients PosVariantIngredient[]
+  saleItems   PosSaleItem[]
+
+  @@index([productId])
+}
+
+model PosVariantIngredient {
+  id        String            @id @default(cuid())
+  variantId String
+  variant   PosProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  inventoryProductId String
+  inventoryProduct   InventoryProduct @relation(fields: [inventoryProductId], references: [id])
+
+  quantity Decimal @db.Decimal(12, 3)
+
+  @@unique([variantId, inventoryProductId])
+  @@index([variantId])
+  @@index([inventoryProductId])
+}
+
+enum PosSaleStatus {
+  COMPLETADA
+  CANCELADA
+}
+
+model PosSale {
+  id       String @id @default(cuid())
+  code     String @unique
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id])
+
+  soldById String
+  soldBy   User   @relation("PosSaleSoldBy", fields: [soldById], references: [id])
+
+  subtotal       Float
+  discountAmount Float   @default(0)
+  discountReason String?
+  total          Float
+
+  status PosSaleStatus @default(COMPLETADA)
+
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelledBy   User?     @relation("PosSaleCancelledBy", fields: [cancelledById], references: [id])
+  cancelReason  String?
+
+  createdAt DateTime @default(now())
+
+  items    PosSaleItem[]
+  payments PosSalePayment[]
+
+  @@index([branchId])
+  @@index([cashCutId])
+  @@index([soldById])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PosSaleItem {
+  id     String  @id @default(cuid())
+  saleId String
+  sale   PosSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  variantId String?
+  variant   PosProductVariant? @relation(fields: [variantId], references: [id])
+
+  // Copia del nombre/precio al momento de la venta, para que el
+  // recibo y el historial no cambien si el catálogo cambia después.
+  name      String
+  unitPrice Float
+  quantity  Int
+  lineTotal Float
+
+  // Cobro personalizado con el teclado (sin producto de catálogo).
+  isCustom    Boolean @default(false)
+  description String?
+
+  @@index([saleId])
+  @@index([variantId])
+}
+
+model PosSalePayment {
+  id     String  @id @default(cuid())
+  saleId String
+  sale   PosSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  method PaymentMethod
+  amount Float
+
+  @@index([saleId])
 }

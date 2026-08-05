@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card, CardLabel } from "@/components/ui/Card";
+import DenominationCounter, {
+  type DenominationCount,
+} from "@/components/cash-cuts/DenominationCounter";
 
 interface Branch {
   id: string;
@@ -11,12 +14,34 @@ interface Branch {
   code: string;
 }
 
+interface EligibleEvent {
+  id: string;
+  code: string;
+  clientName: string;
+  location: string;
+  eventDate: string;
+  guestCount: number;
+  status: string;
+  _count: { items: number };
+}
+
+const formatEventDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("es-MX", {
+    day: "numeric",
+    month: "short",
+  });
+
 export default function NuevoCortePage() {
   const router = useRouter();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchId] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [startingFund, setStartingFund] = useState("");
+  const [startingFundBreakdown, setStartingFundBreakdown] = useState<
+    DenominationCount[]
+  >([]);
+  const [events, setEvents] = useState<EligibleEvent[]>([]);
+  const [eventId, setEventId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,6 +52,11 @@ export default function NuevoCortePage() {
         setBranches(data);
         if (data.length === 1) setBranchId(data[0].id);
       });
+
+    fetch("/api/cash-cuts/events")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setEvents(Array.isArray(data) ? data : []))
+      .catch(() => setEvents([]));
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -46,6 +76,8 @@ export default function NuevoCortePage() {
         branchId,
         date,
         startingFund: Number(startingFund),
+        startingFundDenominations: startingFundBreakdown,
+        eventId: eventId || undefined,
       }),
     });
 
@@ -63,8 +95,10 @@ export default function NuevoCortePage() {
 
   return (
     <div className="max-w-md mx-auto p-6">
-      <h1 className="text-2xl font-bold text-white mb-1">Nuevo corte de caja</h1>
-      <p className="text-slate-400 text-sm mb-6">Paso 1 de 5 — Abrir corte</p>
+      <h1 className="text-2xl font-bold text-on-surface mb-1">Nuevo corte de caja</h1>
+      <p className="text-on-surface-variant text-sm mb-6">
+        Abre el turno contando el fondo de caja billete por billete.
+      </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <Card>
@@ -72,7 +106,7 @@ export default function NuevoCortePage() {
           <select
             value={branchId}
             onChange={(e) => setBranchId(e.target.value)}
-            className="w-full bg-slate-800 text-white rounded-lg px-3 py-2 border border-slate-600"
+            className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
           >
             <option value="">Selecciona...</option>
             {branches.map((b) => (
@@ -89,23 +123,44 @@ export default function NuevoCortePage() {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full bg-slate-800 text-white rounded-lg px-3 py-2 border border-slate-600"
+            className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
           />
         </Card>
+
+        {events.length > 0 && (
+          <Card>
+            <CardLabel>Evento (opcional)</CardLabel>
+            <p className="mb-2 text-xs text-on-surface-variant">
+              Si este turno es para un evento, elígelo aquí: su inventario
+              cargado se descontará automáticamente de esta sucursal.
+            </p>
+            <select
+              value={eventId}
+              onChange={(e) => setEventId(e.target.value)}
+              className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+            >
+              <option value="">Ninguno</option>
+              {events.map((ev) => (
+                <option key={ev.id} value={ev.id}>
+                  {formatEventDate(ev.eventDate)} · {ev.clientName} (
+                  {ev._count.items} productos)
+                </option>
+              ))}
+            </select>
+          </Card>
+        )}
 
         <Card>
           <CardLabel>Fondo de caja (con el que abres el turno)</CardLabel>
-          <input
-            type="number"
-            inputMode="decimal"
-            placeholder="Ej. 1000"
-            value={startingFund}
-            onChange={(e) => setStartingFund(e.target.value)}
-            className="w-full bg-slate-800 text-white rounded-lg px-3 py-2 border border-slate-600"
+          <DenominationCounter
+            onTotalChange={(total, breakdown) => {
+              setStartingFund(total > 0 ? String(total) : "");
+              setStartingFundBreakdown(breakdown);
+            }}
           />
         </Card>
 
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+        {error && <p className="text-error text-sm">{error}</p>}
 
         <Button type="submit" size="lg" className="w-full" disabled={loading}>
           {loading ? "Abriendo..." : "Abrir corte"}

@@ -2,8 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import FermentationCharts from "@/components/FermentationCharts";
 import FinishFermentationModal from "@/components/FinishFermentationModal";
-import { FermentationStatus } from "@prisma/client";
+import { FermentationStatus, LotStage } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
+import { advanceLotStage } from "@/lib/lotStage";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -28,6 +29,8 @@ export default async function FermentationDetailPage({ params }: Props) {
   });
 
   if (!fermentation) notFound();
+
+  const fermentationLotId = fermentation.lotId;
 
   async function addReading(formData: FormData) {
     "use server";
@@ -200,6 +203,12 @@ export default async function FermentationDetailPage({ params }: Props) {
       redirect(`/fermentation/${id}`);
     }
 
+    await advanceLotStage(
+      prisma,
+      fermentationLotId,
+      LotStage.DESTILACION
+    );
+
     redirect(`/fermentation/${id}`);
   }
 
@@ -336,12 +345,12 @@ export default async function FermentationDetailPage({ params }: Props) {
   const latestReading = fermentation.readings[0];
 
   return (
-    <main className="min-h-screen bg-slate-950 p-4 text-white sm:p-6 lg:p-10">
+    <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
       <div className="mx-auto max-w-6xl">
        
 
         <header className="mt-8">
-          <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
+          <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
             MAESTRO
           </p>
 
@@ -351,7 +360,7 @@ export default async function FermentationDetailPage({ params }: Props) {
                 Fermentación {fermentation.lot.code}
               </h1>
 
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-on-surface-variant">
                 {latestReading
                   ? `Última lectura: ${formatDateTime(
                       latestReading.createdAt
@@ -474,11 +483,11 @@ export default async function FermentationDetailPage({ params }: Props) {
           />
         </section>
 
-        <section className="mt-6 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
+        <section className="mt-6 overflow-hidden rounded-2xl border border-outline-variant bg-surface-container">
           <div className="p-6">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-on-surface-variant">
                   Avance de fermentación
                 </p>
 
@@ -487,7 +496,7 @@ export default async function FermentationDetailPage({ params }: Props) {
                     {progress.toFixed(0)}%
                   </p>
 
-                  <p className="pb-1 text-sm text-slate-400">
+                  <p className="pb-1 text-sm text-on-surface-variant">
                     hacia la meta de {TARGET_BRIX} °Brix
                   </p>
                 </div>
@@ -511,15 +520,15 @@ export default async function FermentationDetailPage({ params }: Props) {
               </div>
             </div>
 
-            <div className="mt-6 h-4 overflow-hidden rounded-full bg-slate-800">
+            <div className="mt-6 h-4 overflow-hidden rounded-full bg-surface-container-high">
               <div
-                className="h-full rounded-full bg-amber-400 transition-all duration-500"
+                className="h-full rounded-full bg-primary transition-all duration-500"
                 style={{ width: `${progress}%` }}
               />
             </div>
           </div>
 
-          <div className="grid border-t border-slate-800 sm:grid-cols-3">
+          <div className="grid border-t border-outline-variant sm:grid-cols-3">
             <ProcessIndicator
               title="Temperatura"
               value={temperatureStatus}
@@ -543,27 +552,27 @@ export default async function FermentationDetailPage({ params }: Props) {
         <section
           className={`mt-6 rounded-2xl border p-6 ${
             health === "ATENCION"
-              ? "border-red-500/30 bg-red-500/10"
+              ? "border-error/30 bg-error/10"
               : health === "LISTA"
-                ? "border-green-500/30 bg-green-500/10"
+                ? "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10"
                 : health === "TERMINADA"
-                  ? "border-blue-500/30 bg-blue-500/10"
-                  : "border-amber-400/30 bg-amber-400/10"
+                  ? "border-on-surface-variant/30 bg-on-surface-variant/10"
+                  : "border-secondary/30 bg-secondary/10"
           }`}
         >
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-400">
+          <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
             Análisis de MAESTRO
           </p>
 
           <h2
             className={`mt-3 text-2xl font-bold sm:text-3xl ${
               health === "ATENCION"
-                ? "text-red-400"
+                ? "text-error"
                 : health === "LISTA"
-                  ? "text-green-400"
+                  ? "text-tertiary-fixed-dim"
                   : health === "TERMINADA"
-                    ? "text-blue-400"
-                    : "text-amber-300"
+                    ? "text-on-surface-variant"
+                    : "text-secondary"
             }`}
           >
             {getHealthTitle(health)}
@@ -573,13 +582,11 @@ export default async function FermentationDetailPage({ params }: Props) {
             {maestroMessages.map((message) => (
               <div
                 key={message}
-                className="flex items-start gap-3 rounded-xl bg-slate-950/40 p-3"
+                className="flex items-start gap-3 rounded-xl bg-surface-dim/40 p-3"
               >
-                <span className="mt-0.5 text-amber-400">
-                  ●
-                </span>
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-on-surface-variant" />
 
-                <p className="text-slate-200">{message}</p>
+                <p className="text-on-surface">{message}</p>
               </div>
             ))}
           </div>
@@ -604,13 +611,13 @@ export default async function FermentationDetailPage({ params }: Props) {
         )}
 
         {!isFinished && (
-          <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-8">
+          <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
             <div className="mb-6">
               <h2 className="text-2xl font-bold">
                 Registrar nueva lectura
               </h2>
 
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-on-surface-variant">
                 Solo llena los campos que mediste o las
                 acciones que realizaste.
               </p>
@@ -690,7 +697,7 @@ export default async function FermentationDetailPage({ params }: Props) {
               />
 
               <label className="md:col-span-2">
-                <span className="mb-2 block text-sm font-medium text-slate-300">
+                <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
                   Observaciones
                 </span>
 
@@ -698,20 +705,20 @@ export default async function FermentationDetailPage({ params }: Props) {
                   name="notes"
                   rows={3}
                   placeholder="Describe espuma, aroma, movimiento, correcciones o cualquier situación importante."
-                  className="w-full resize-none rounded-xl border border-slate-700 bg-slate-800 p-3 text-white outline-none transition placeholder:text-slate-500 focus:border-amber-400"
+                  className="w-full resize-none rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
                 />
               </label>
 
               <button
                 type="submit"
-                className="rounded-xl bg-amber-400 px-6 py-3 font-bold text-black transition hover:bg-amber-300 md:col-span-2"
+                className="rounded-xl bg-primary px-6 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97] md:col-span-2"
               >
                 Guardar lectura
               </button>
             </form>
 
-            <div className="mt-6 border-t border-slate-800 pt-6">
-              <p className="mb-3 text-sm text-slate-400">
+            <div className="mt-6 border-t border-outline-variant pt-6">
+              <p className="mb-3 text-sm text-on-surface-variant">
                 Finaliza únicamente cuando hayas confirmado
                 los valores finales del proceso.
               </p>
@@ -735,42 +742,42 @@ export default async function FermentationDetailPage({ params }: Props) {
           readings={fermentation.readings}
         />
 
-        <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-8">
+        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
               Bitácora de fermentación
             </h2>
 
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-on-surface-variant">
               Historial completo, de la lectura más reciente a
               la más antigua.
             </p>
           </div>
 
           {fermentation.readings.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center">
-              <p className="text-slate-400">
+            <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center">
+              <p className="text-on-surface-variant">
                 Aún no hay lecturas registradas.
               </p>
             </div>
           ) : (
-            <div className="relative space-y-5 before:absolute before:bottom-3 before:left-[11px] before:top-3 before:w-px before:bg-slate-700">
+            <div className="relative space-y-5 before:absolute before:bottom-3 before:left-[11px] before:top-3 before:w-px before:bg-surface-container-highest">
               {fermentation.readings.map((reading, index) => (
                 <article
                   key={reading.id}
                   className="relative pl-9"
                 >
                   <div
-                    className={`absolute left-0 top-6 h-6 w-6 rounded-full border-4 border-slate-900 ${
+                    className={`absolute left-0 top-6 h-6 w-6 rounded-full border-4 border-outline-variant ${
                       index === 0
-                        ? "bg-amber-400"
-                        : "bg-slate-600"
+                        ? "bg-primary"
+                        : "bg-surface-container-highest"
                     }`}
                   />
 
-                  <div className="rounded-2xl border border-slate-700 bg-slate-800 p-5">
+                  <div className="rounded-2xl border border-outline-variant bg-surface-container-high p-5">
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="font-semibold text-white">
+                      <p className="font-semibold text-on-surface">
                         {index === 0
                           ? "Lectura más reciente"
                           : `Lectura #${
@@ -779,7 +786,7 @@ export default async function FermentationDetailPage({ params }: Props) {
                             }`}
                       </p>
 
-                      <p className="text-sm text-slate-400">
+                      <p className="text-sm text-on-surface-variant">
                         {formatDateTime(reading.createdAt)}
                       </p>
                     </div>
@@ -835,8 +842,8 @@ export default async function FermentationDetailPage({ params }: Props) {
                       ) > 0 ||
                       Number(reading.heatingMinutes ?? 0) >
                         0) && (
-                      <div className="mt-4 border-t border-slate-700 pt-4">
-                        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      <div className="mt-4 border-t border-outline-variant pt-4">
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
                           Acciones realizadas
                         </p>
 
@@ -879,12 +886,12 @@ export default async function FermentationDetailPage({ params }: Props) {
                     )}
 
                     {reading.notes && (
-                      <div className="mt-4 rounded-xl bg-slate-900 p-4">
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <div className="mt-4 rounded-xl bg-surface-container p-4">
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-outline">
                           Observaciones
                         </p>
 
-                        <p className="text-slate-300">
+                        <p className="text-on-surface-variant">
                           {reading.notes}
                         </p>
                       </div>
@@ -935,25 +942,25 @@ function ClosureAct({
       : "-";
 
   return (
-    <section className="mt-8 overflow-hidden rounded-3xl border border-green-500/30 bg-slate-900">
-      <header className="border-b border-green-500/20 bg-green-500/10 p-6 sm:p-8">
-        <p className="text-xs font-bold uppercase tracking-[0.3em] text-green-400">
+    <section className="mt-8 overflow-hidden rounded-3xl border border-tertiary-fixed-dim/30 bg-surface-container">
+      <header className="border-b border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 p-6 sm:p-8">
+        <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-tertiary-fixed-dim">
           Acta de cierre
         </p>
 
         <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-white sm:text-3xl">
+            <h2 className="text-2xl font-bold text-on-surface sm:text-3xl">
               Fermentación terminada
             </h2>
 
-            <p className="mt-2 text-sm text-slate-300">
+            <p className="mt-2 text-sm text-on-surface-variant">
               El proceso quedó cerrado y bloqueado para
               nuevas lecturas.
             </p>
           </div>
 
-          <div className="w-fit rounded-full border border-green-500/40 bg-green-500/10 px-4 py-2 font-mono text-sm font-bold text-green-300">
+          <div className="w-fit rounded-full border border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 px-4 py-2 font-mono text-sm font-bold text-tertiary-fixed-dim">
             {closureCode ?? "Acta sin folio"}
           </div>
         </div>
@@ -1020,23 +1027,23 @@ function ClosureAct({
         </div>
 
         {finalNotes && (
-          <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950 p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <div className="mt-4 rounded-2xl border border-outline-variant bg-background p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-outline">
               Observaciones finales
             </p>
 
-            <p className="mt-2 whitespace-pre-wrap text-slate-300">
+            <p className="mt-2 whitespace-pre-wrap text-on-surface-variant">
               {finalNotes}
             </p>
           </div>
         )}
 
-        <div className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-5">
-          <p className="font-bold text-amber-300">
+        <div className="mt-6 rounded-2xl border border-outline-variant bg-surface-container-high/60 p-5">
+          <p className="font-bold text-primary">
             Siguiente etapa: Destilación
           </p>
 
-          <p className="mt-1 text-sm text-amber-100/70">
+          <p className="mt-1 text-sm text-on-surface-variant">
             La fermentación ya está disponible para continuar
             con el proceso de destilación.
           </p>
@@ -1056,14 +1063,14 @@ function ActValue({
   highlight?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
-      <p className="text-xs uppercase tracking-wider text-slate-500">
+    <div className="rounded-2xl border border-outline-variant bg-background p-4">
+      <p className="text-xs uppercase tracking-wider text-outline">
         {title}
       </p>
 
       <p
         className={`mt-2 font-bold ${
-          highlight ? "text-green-400" : "text-white"
+          highlight ? "text-tertiary-fixed-dim" : "text-on-surface"
         }`}
       >
         {value}
@@ -1084,19 +1091,19 @@ function Kpi({
   highlight?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <p className="text-sm text-slate-400">{title}</p>
+    <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+      <p className="text-sm text-on-surface-variant">{title}</p>
 
       <p
         className={`mt-2 text-2xl font-bold ${
-          highlight ? "text-green-400" : "text-white"
+          highlight ? "text-tertiary-fixed-dim" : "text-on-surface"
         }`}
       >
         {value}
       </p>
 
       {detail && (
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-outline">
           {detail}
         </p>
       )}
@@ -1129,8 +1136,8 @@ function MeasurementKpi({
     (lowerIsBetter ? delta < 0 : Math.abs(delta) <= 0.3);
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <p className="text-sm text-slate-400">{title}</p>
+    <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+      <p className="text-sm text-on-surface-variant">{title}</p>
 
       <p className="mt-2 text-2xl font-bold">{value}</p>
 
@@ -1138,10 +1145,10 @@ function MeasurementKpi({
         <p
           className={`mt-2 text-xs font-medium ${
             isPositiveMovement
-              ? "text-green-400"
+              ? "text-tertiary-fixed-dim"
               : delta === 0
-                ? "text-slate-400"
-                : "text-amber-400"
+                ? "text-on-surface-variant"
+                : "text-secondary"
           }`}
         >
           {delta > 0 ? "▲" : delta < 0 ? "▼" : "●"}{" "}
@@ -1152,7 +1159,7 @@ function MeasurementKpi({
               )}${suffix} respecto a la anterior`}
         </p>
       ) : (
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-outline">
           Sin lectura anterior comparable
         </p>
       )}
@@ -1169,8 +1176,8 @@ function ProgressValue({
 }) {
   return (
     <div>
-      <p className="text-xs text-slate-500">{title}</p>
-      <p className="mt-1 font-bold text-white">{value}</p>
+      <p className="text-xs text-outline">{title}</p>
+      <p className="mt-1 font-bold text-on-surface">{value}</p>
     </div>
   );
 }
@@ -1185,14 +1192,14 @@ function ProcessIndicator({
   warning: boolean;
 }) {
   return (
-    <div className="border-slate-800 p-5 sm:border-r sm:last:border-r-0">
-      <p className="text-xs uppercase tracking-wider text-slate-500">
+    <div className="border-outline-variant p-5 sm:border-r sm:last:border-r-0">
+      <p className="text-xs uppercase tracking-wider text-outline">
         {title}
       </p>
 
       <p
         className={`mt-1 font-bold ${
-          warning ? "text-red-400" : "text-green-400"
+          warning ? "text-error" : "text-tertiary-fixed-dim"
         }`}
       >
         {warning ? "● " : "✓ "}
@@ -1210,8 +1217,8 @@ function Mini({
   value: string | number;
 }) {
   return (
-    <div className="rounded-xl bg-slate-900 p-3">
-      <p className="text-xs text-slate-400">{title}</p>
+    <div className="rounded-xl bg-surface-container p-3">
+      <p className="text-xs text-on-surface-variant">{title}</p>
       <p className="mt-1 font-bold">{value}</p>
     </div>
   );
@@ -1236,7 +1243,7 @@ function Field({
 }) {
   return (
     <label>
-      <span className="mb-2 block text-sm font-medium text-slate-300">
+      <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
         {label}
       </span>
 
@@ -1249,13 +1256,13 @@ function Field({
           min={min}
           max={max}
           placeholder={placeholder}
-          className={`w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-white outline-none transition placeholder:text-slate-500 focus:border-amber-400 ${
+          className={`w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary ${
             suffix ? "pr-14" : ""
           }`}
         />
 
         {suffix && (
-          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-slate-500">
+          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-outline">
             {suffix}
           </span>
         )}
@@ -1275,25 +1282,42 @@ function StatusBadge({
 }) {
   const styles = {
     ATENCION:
-      "border-red-500/40 bg-red-500/10 text-red-400",
+      "border-error/40 bg-error/10 text-error",
     LISTA:
-      "border-green-500/40 bg-green-500/10 text-green-400",
+      "border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim",
     SALUDABLE:
-      "border-amber-400/40 bg-amber-400/10 text-amber-300",
+      "border-secondary/40 bg-secondary/10 text-secondary",
     TERMINADA:
-      "border-blue-500/40 bg-blue-500/10 text-blue-400",
+      "border-on-surface-variant/40 bg-on-surface-variant/10 text-on-surface-variant",
+  };
+
+  const dotStyles: Record<
+    | "ATENCION"
+    | "LISTA"
+    | "SALUDABLE"
+    | "TERMINADA",
+    string
+  > = {
+    ATENCION: "bg-error",
+    LISTA: "bg-tertiary-fixed-dim",
+    SALUDABLE: "bg-secondary",
+    TERMINADA: "bg-on-surface-variant",
   };
 
   return (
     <div
-      className={`w-fit rounded-full border px-4 py-2 text-sm font-bold ${styles[status]}`}
+      className={`flex w-fit items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold ${styles[status]}`}
     >
-      {status === "ATENCION" && "🔴 Requiere atención"}
-      {status === "LISTA" && "🟢 Lista para destilar"}
+      <span
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotStyles[status]}`}
+      />
+
+      {status === "ATENCION" && "Requiere atención"}
+      {status === "LISTA" && "Lista para destilar"}
       {status === "SALUDABLE" &&
-        "🟡 Fermentación saludable"}
+        "Fermentación saludable"}
       {status === "TERMINADA" &&
-        "🔵 Fermentación terminada"}
+        "Fermentación terminada"}
     </div>
   );
 }

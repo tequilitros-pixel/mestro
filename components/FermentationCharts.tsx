@@ -36,9 +36,9 @@ export default function FermentationCharts({
 
   if (data.length === 0) {
     return (
-      <section className="mt-8 rounded-2xl bg-slate-900 p-8">
+      <section className="mt-8 rounded-2xl bg-surface-container p-8">
         <h2 className="mb-2 text-2xl font-bold">Gráficas</h2>
-        <p className="text-slate-400">
+        <p className="text-on-surface-variant">
           Aún no hay lecturas para graficar.
         </p>
       </section>
@@ -46,7 +46,7 @@ export default function FermentationCharts({
   }
 
   return (
-    <section className="mt-8 rounded-2xl bg-slate-900 p-8">
+    <section className="mt-8 rounded-2xl bg-surface-container p-8">
       <h2 className="mb-6 text-2xl font-bold">Gráficas de fermentación</h2>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -75,7 +75,7 @@ data: {
   dataKey: string;
 }) {
   return (
-    <div className="rounded-2xl bg-slate-800 p-5">
+    <div className="rounded-2xl bg-surface-container-high p-5">
       <h3 className="mb-4 font-bold">{title}</h3>
 
       <div className="h-64">

@@ -147,23 +147,23 @@ export default async function LiquorRecipeDetailPage({
     <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <Link
         href="/liquors/recipes"
-        className="text-sm font-bold text-purple-300 transition hover:text-purple-200"
+        className="text-sm font-bold text-on-surface-variant transition hover:text-on-surface"
       >
         ← Volver a recetas
       </Link>
 
-      <header className="mt-6 rounded-3xl border border-slate-800 bg-slate-900/70 p-6 sm:p-8">
+      <header className="mt-6 rounded-3xl border border-outline-variant bg-surface-container/70 p-6 sm:p-8">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.2em] text-purple-300">
+            <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-on-surface-variant">
               {recipe.product.icon ?? "🍹"} {recipe.product.name}
             </p>
 
-            <h1 className="mt-3 text-3xl font-black text-white sm:text-4xl">
+            <h1 className="mt-3 text-3xl font-black text-on-surface sm:text-4xl">
               {recipe.name}
             </h1>
 
-            <p className="mt-3 text-slate-400">
+            <p className="mt-3 text-on-surface-variant">
               Versión {recipe.version}
             </p>
           </div>
@@ -171,8 +171,8 @@ export default async function LiquorRecipeDetailPage({
           <span
             className={
               recipe.active
-                ? "w-fit rounded-full border border-green-500/30 bg-green-500/10 px-4 py-2 text-sm font-black text-green-300"
-                : "w-fit rounded-full border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-black text-slate-400"
+                ? "w-fit rounded-full border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 px-4 py-2 text-sm font-black text-tertiary-fixed-dim"
+                : "w-fit rounded-full border border-outline-variant bg-surface-container-high px-4 py-2 text-sm font-black text-on-surface-variant"
             }
           >
             {recipe.active ? "Receta activa" : "Receta inactiva"}
@@ -255,12 +255,12 @@ function Metric({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
-      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+    <div className="rounded-2xl border border-outline-variant bg-background/50 p-4">
+      <p className="text-xs font-bold uppercase tracking-wider text-outline">
         {label}
       </p>
 
-      <p className="mt-2 text-xl font-black text-white">
+      <p className="mt-2 text-xl font-black text-on-surface">
         {value}
       </p>
     </div>
@@ -275,12 +275,12 @@ function InformationCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-      <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+    <div className="rounded-2xl border border-outline-variant bg-surface-dim/40 p-5">
+      <p className="text-xs font-black uppercase tracking-wider text-outline">
         {title}
       </p>
 
-      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-300">
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-on-surface-variant">
         {value}
       </p>
     </div>

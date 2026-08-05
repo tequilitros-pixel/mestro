@@ -7,10 +7,10 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 export function Card({ highlight = false, className = "", children, ...props }: CardProps) {
   return (
     <div
-      className={`rounded-2xl border p-5 ${
+      className={`surface-sheen rounded-xl border p-5 transition-colors duration-150 ${
         highlight
-          ? "bg-blue-900/60 border-blue-700"
-          : "bg-slate-900/60 border-slate-700"
+          ? "bg-primary/[0.06] border-primary/25"
+          : "bg-surface-container/60 border-outline-variant"
       } ${className}`}
       {...props}
     >
@@ -20,9 +20,9 @@ export function Card({ highlight = false, className = "", children, ...props }: 
 }
 
 export function CardLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs uppercase tracking-wide text-slate-400 mb-1">{children}</p>;
+  return <p className="font-mono text-xs uppercase tracking-wide text-on-surface-variant mb-1">{children}</p>;
 }
 
 export function CardValue({ children }: { children: React.ReactNode }) {
-  return <p className="text-2xl font-bold text-white">{children}</p>;
+  return <p className="text-2xl font-bold text-on-surface">{children}</p>;
 }

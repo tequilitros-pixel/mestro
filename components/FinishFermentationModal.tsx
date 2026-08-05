@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { XIcon, CheckIcon, AlertIcon } from "@/components/ui/icons";
 
 type Props = {
   lotCode: string;
@@ -42,26 +43,26 @@ export default function FinishFermentationModal({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="w-full rounded-xl bg-green-500 px-6 py-3 font-bold text-black transition hover:bg-green-400"
+        className="w-full rounded-xl bg-tertiary-fixed-dim px-6 py-3 font-bold text-on-primary transition hover:opacity-90"
       >
         Finalizar fermentación
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-slate-700 bg-slate-950 shadow-2xl">
-            <header className="border-b border-slate-800 p-6 sm:p-8">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/80 p-4 backdrop-blur-sm">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-outline-variant bg-background shadow-2xl">
+            <header className="border-b border-outline-variant p-6 sm:p-8">
               <div className="flex items-start justify-between gap-5">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.3em] text-amber-400">
+                  <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-outline">
                     MAESTRO
                   </p>
 
-                  <h2 className="mt-3 text-2xl font-bold text-white sm:text-3xl">
+                  <h2 className="mt-3 text-2xl font-bold text-on-surface sm:text-3xl">
                     Acta de Cierre de Fermentación
                   </h2>
 
-                  <p className="mt-2 text-sm text-slate-400">
+                  <p className="mt-2 text-sm text-on-surface-variant">
                     Confirma los resultados oficiales antes de cerrar el
                     proceso.
                   </p>
@@ -70,10 +71,10 @@ export default function FinishFermentationModal({
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="rounded-xl bg-slate-800 px-4 py-2 text-slate-300 transition hover:bg-slate-700"
+                  className="rounded-xl bg-surface-container-high px-4 py-2 text-on-surface-variant transition duration-150 ease-out hover:scale-[1.04] hover:bg-surface-container-highest active:scale-[0.97]"
                   aria-label="Cerrar"
                 >
-                  ✕
+                  <XIcon className="h-4 w-4" />
                 </button>
               </div>
             </header>
@@ -88,8 +89,8 @@ export default function FinishFermentationModal({
                 />
               </section>
 
-              <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                <h3 className="font-bold text-white">
+              <section className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+                <h3 className="font-bold text-on-surface">
                   Resumen actual del proceso
                 </h3>
 
@@ -115,8 +116,8 @@ export default function FinishFermentationModal({
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                <p className="text-xs font-bold uppercase tracking-[0.25em] text-amber-400">
+              <section className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+                <p className="font-mono text-xs font-bold uppercase tracking-[0.25em] text-outline">
                   Revisión de MAESTRO
                 </p>
 
@@ -160,12 +161,12 @@ export default function FinishFermentationModal({
               </section>
 
               <form action={action} className="space-y-5">
-                <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                  <h3 className="text-lg font-bold text-white">
+                <section className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+                  <h3 className="text-lg font-bold text-on-surface">
                     Resultados oficiales del cierre
                   </h3>
 
-                  <p className="mt-1 text-sm text-slate-400">
+                  <p className="mt-1 text-sm text-on-surface-variant">
                     Estos valores quedarán guardados en el expediente del lote.
                   </p>
 
@@ -201,7 +202,7 @@ export default function FinishFermentationModal({
                   </div>
 
                   <label className="mt-5 block">
-                    <span className="mb-2 block text-sm font-medium text-slate-300">
+                    <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
                       Observaciones finales
                     </span>
 
@@ -209,17 +210,17 @@ export default function FinishFermentationModal({
                       name="finalNotes"
                       rows={4}
                       placeholder="Describe el estado final, aroma, apariencia, comportamiento o cualquier detalle importante."
-                      className="w-full resize-none rounded-xl border border-slate-700 bg-slate-800 p-3 text-white outline-none transition placeholder:text-slate-500 focus:border-amber-400"
+                      className="w-full resize-none rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
                     />
                   </label>
                 </section>
 
-                <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
-                  <p className="font-bold text-red-300">
+                <div className="rounded-2xl border border-error/20 bg-error/10 p-4">
+                  <p className="font-bold text-error">
                     Este cierre es definitivo
                   </p>
 
-                  <p className="mt-1 text-sm text-red-200/70">
+                  <p className="mt-1 text-sm text-error/70">
                     Después de confirmar ya no podrán registrarse nuevas
                     lecturas en esta fermentación.
                   </p>
@@ -229,14 +230,14 @@ export default function FinishFermentationModal({
                   <button
                     type="button"
                     onClick={() => setIsOpen(false)}
-                    className="rounded-xl border border-slate-700 px-6 py-3 font-bold text-slate-300 transition hover:bg-slate-800"
+                    className="rounded-xl border border-outline-variant px-6 py-3 font-bold text-on-surface-variant transition hover:bg-surface-container-high"
                   >
                     Cancelar
                   </button>
 
                   <button
                     type="submit"
-                    className="rounded-xl bg-green-500 px-6 py-3 font-bold text-black transition hover:bg-green-400"
+                    className="rounded-xl bg-tertiary-fixed-dim px-6 py-3 font-bold text-on-primary transition hover:opacity-90"
                   >
                     Confirmar y cerrar fermentación
                   </button>
@@ -258,12 +259,12 @@ function SummaryCard({
   value: string | number;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-      <p className="text-xs uppercase tracking-wider text-slate-500">
+    <div className="rounded-2xl border border-outline-variant bg-surface-container p-4">
+      <p className="text-xs uppercase tracking-wider text-outline">
         {title}
       </p>
 
-      <p className="mt-2 text-lg font-bold text-white">{value}</p>
+      <p className="mt-2 text-lg font-bold text-on-surface">{value}</p>
     </div>
   );
 }
@@ -276,9 +277,9 @@ function Mini({
   value: string | number;
 }) {
   return (
-    <div className="rounded-xl bg-slate-950 p-3">
-      <p className="text-xs text-slate-500">{title}</p>
-      <p className="mt-1 font-bold text-white">{value}</p>
+    <div className="rounded-xl bg-background p-3">
+      <p className="text-xs text-outline">{title}</p>
+      <p className="mt-1 font-bold text-on-surface">{value}</p>
     </div>
   );
 }
@@ -295,20 +296,24 @@ function ValidationItem({
   return (
     <div
       className={`flex items-start gap-3 rounded-xl p-3 ${
-        valid ? "bg-green-500/10" : "bg-amber-400/10"
+        valid ? "bg-tertiary-fixed-dim/10" : "bg-secondary/10"
       }`}
     >
       <span
-        className={`mt-0.5 font-bold ${
-          valid ? "text-green-400" : "text-amber-400"
+        className={`mt-0.5 shrink-0 ${
+          valid ? "text-tertiary-fixed-dim" : "text-secondary"
         }`}
       >
-        {valid ? "✓" : "⚠"}
+        {valid ? (
+          <CheckIcon className="h-4 w-4" />
+        ) : (
+          <AlertIcon className="h-4 w-4" />
+        )}
       </span>
 
       <p
         className={`text-sm ${
-          valid ? "text-green-200" : "text-amber-100"
+          valid ? "text-tertiary-fixed-dim" : "text-secondary"
         }`}
       >
         {valid ? success : warning}
@@ -338,7 +343,7 @@ function Field({
 }) {
   return (
     <label>
-      <span className="mb-2 block text-sm font-medium text-slate-300">
+      <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
         {label}
       </span>
 
@@ -352,13 +357,13 @@ function Field({
           min={min}
           max={max}
           required={required}
-          className={`w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-white outline-none transition focus:border-amber-400 ${
+          className={`w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary ${
             suffix ? "pr-12" : ""
           }`}
         />
 
         {suffix && (
-          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-slate-500">
+          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-outline">
             {suffix}
           </span>
         )}

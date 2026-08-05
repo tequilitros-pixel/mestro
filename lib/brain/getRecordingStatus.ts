@@ -15,7 +15,8 @@ function minutesSince(date: Date) {
 }
 
 export async function getRecordingStatus() {
-  const { cookings, fermentations } = await getActiveProcesses();
+  const { cookings, millings, fermentations, distillations } =
+    await getActiveProcesses();
 
   const cooking: RecordingStatus[] = cookings.map((c) => {
     const last = c.events[0]?.createdAt ?? c.startedAt;
@@ -23,6 +24,18 @@ export async function getRecordingStatus() {
     return {
       id: c.id,
       label: c.equipment.name,
+      lastRecordedAt: last,
+      minutesSinceLastRecord: minutes,
+      isOverdue: minutes > HOURLY_LIMIT_MINUTES,
+    };
+  });
+
+  const milling: RecordingStatus[] = millings.map((m) => {
+    const last = m.events[0]?.createdAt ?? m.startedAt;
+    const minutes = minutesSince(last);
+    return {
+      id: m.id,
+      label: m.equipment.name,
       lastRecordedAt: last,
       minutesSinceLastRecord: minutes,
       isOverdue: minutes > HOURLY_LIMIT_MINUTES,
@@ -41,5 +54,17 @@ export async function getRecordingStatus() {
     };
   });
 
-  return { cooking, fermentation };
+  const distillation: RecordingStatus[] = distillations.map((d) => {
+    const last = d.events[0]?.createdAt ?? d.startedAt;
+    const minutes = minutesSince(last);
+    return {
+      id: d.id,
+      label: d.equipment.name,
+      lastRecordedAt: last,
+      minutesSinceLastRecord: minutes,
+      isOverdue: minutes > HOURLY_LIMIT_MINUTES,
+    };
+  });
+
+  return { cooking, milling, fermentation, distillation };
 }

@@ -1,5 +1,6 @@
-import Image from "next/image";
 import { loginAction } from "@/app/actions/login";
+import AgaveBackdrop from "@/components/ui/AgaveBackdrop";
+import { CoffeeIcon, HeartIcon } from "@/components/ui/icons";
 
 const TIME_ZONE = "America/Mexico_City";
 
@@ -49,50 +50,40 @@ export default async function LoginPage({
 
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8 text-white sm:px-6">
-      {/* Fondo: campo de agave / destiladora */}
-      <div className="absolute inset-0 -z-10">
-        <Image
-          src="/images/agave-field.jpg"
-          alt="Campo de agave, Destiladora del Norte"
-          fill
-          priority
-          className="object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/70 to-slate-950/90" />
-        <div className="absolute inset-0 bg-gradient-to-t from-amber-950/30 via-transparent to-transparent" />
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8 text-on-surface sm:px-6">
+      {/* Fondo: campo de agave al atardecer */}
+      <div className="absolute inset-0 -z-10 bg-surface">
+        <AgaveBackdrop className="h-full w-full" />
+        <div className="absolute inset-0 bg-gradient-to-b from-surface-dim/80 via-surface-dim/70 to-surface-dim/90" />
+        <div className="absolute inset-0 bg-gradient-to-t from-secondary-container/30 via-transparent to-transparent" />
       </div>
 
-      <section className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-slate-950/50 shadow-2xl backdrop-blur-xl">
-        <div className="border-b border-white/10 p-6 text-center sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.45em] text-amber-400">
-            MAESTRO
+      <section className="w-full max-w-md overflow-hidden rounded-xl border border-outline-variant bg-surface-dim/50 shadow-2xl backdrop-blur-xl">
+        <div className="border-b border-outline-variant p-6 text-center sm:p-8">
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.45em] text-on-surface-variant">
+            Sistema Operativo
           </p>
 
-          <h1 className="mt-4 text-3xl font-black text-white">
-            Sistema Inteligente
+          <h1 className="mt-4 text-3xl font-black text-primary">
+            Destiladora del Norte
           </h1>
 
-          <p className="mt-2 text-sm font-medium text-blue-300">
-            Destiladora del Norte
-          </p>
-
           <div className="mt-8">
-            <h2 className="text-2xl font-bold sm:text-3xl">
+            <h2 className="text-2xl font-bold text-primary sm:text-3xl">
               {greeting}
             </h2>
 
-            <p className="mt-3 capitalize text-slate-300">
+            <p className="mt-3 capitalize text-on-surface-variant">
               {currentDate}
             </p>
 
-            <p className="mt-1 text-sm text-amber-400">
+            <p className="mt-1 font-mono text-sm text-on-surface-variant">
               {currentTime}
             </p>
           </div>
 
-          <div className="mt-7 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
-            <p className="text-sm leading-6 text-slate-200">
+          <div className="mt-7 rounded-xl border border-outline-variant bg-surface-container-high/60 p-4">
+            <p className="text-sm leading-6 text-on-surface">
               Gracias por seguir construyendo la historia de
               Destiladora del Norte.
             </p>
@@ -101,13 +92,13 @@ export default async function LoginPage({
 
         <div className="p-6 sm:p-8">
           {hasError && (
-            <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+            <div className="mb-5 rounded-xl border border-error/30 bg-error/10 p-3 text-sm text-error">
               Correo o contraseña incorrectos.
             </div>
           )}
 
           {justReset && (
-            <div className="mb-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">
+            <div className="mb-5 rounded-xl border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 p-3 text-sm text-tertiary-fixed-dim">
               Contraseña actualizada. Ya puedes iniciar sesión.
             </div>
           )}
@@ -116,7 +107,7 @@ export default async function LoginPage({
             <div>
               <label
                 htmlFor="email"
-                className="mb-2 block text-sm font-medium text-slate-300"
+                className="mb-2 block text-sm font-semibold text-on-surface-variant"
               >
                 Correo electrónico
               </label>
@@ -128,7 +119,7 @@ export default async function LoginPage({
                 autoComplete="email"
                 required
                 placeholder="tu@correo.com"
-                className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-amber-400"
+                className="w-full rounded-xl border border-outline-variant bg-surface-dim/60 px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
               />
             </div>
 
@@ -136,14 +127,14 @@ export default async function LoginPage({
               <div className="mb-2 flex items-center justify-between">
                 <label
                   htmlFor="password"
-                  className="text-sm font-medium text-slate-300"
+                  className="text-sm font-semibold text-on-surface-variant"
                 >
                   Contraseña
                 </label>
 
                 <a
                   href="/forgot-password"
-                  className="text-xs font-medium text-amber-400 transition hover:text-amber-300"
+                  className="text-xs font-medium text-on-surface-variant transition hover:text-primary"
                 >
                   ¿Olvidaste tu contraseña?
                 </a>
@@ -156,22 +147,25 @@ export default async function LoginPage({
                 autoComplete="current-password"
                 required
                 placeholder="••••••••"
-                className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-amber-400"
+                className="w-full rounded-xl border border-outline-variant bg-surface-dim/60 px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full rounded-xl bg-amber-400 py-3 font-bold text-slate-950 transition hover:bg-amber-300"
+              className="w-full rounded-xl bg-primary py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
             >
               Ingresar
             </button>
           </form>
 
-          <div className="mt-8 border-t border-white/10 pt-6 text-center">
-            <p className="text-xs leading-5 text-slate-500">
-              Hecho con ☕, código y mucho ❤️ para
-              Destiladora del Norte.
+          <div className="mt-8 border-t border-outline-variant pt-6 text-center">
+            <p className="flex flex-wrap items-center justify-center gap-x-1 text-xs leading-5 text-outline">
+              <span>Hecho con</span>
+              <CoffeeIcon className="h-3.5 w-3.5" />
+              <span>, código y mucho</span>
+              <HeartIcon className="h-3.5 w-3.5" />
+              <span>para Destiladora del Norte.</span>
             </p>
           </div>
         </div>

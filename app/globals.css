@@ -1,28 +1,161 @@
 @import "tailwindcss";
 
+/* =========================================================
+   SISTEMA DE DISEÑO — definido en Stitch (Material 3)
+   MAESTRO es una app siempre oscura, sin modo claro.
+   ========================================================= */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a0a0a;
+  --foreground: #f2f2f3;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Superficies — negro profundo y neutro ("negro brillante"),
+     en vez del gris cálido anterior. La escala sube en pasos
+     pequeños para que la elevación se note por el brillo del
+     borde, no por saltos grandes de gris. */
+  --color-surface: #0a0a0a;
+  --color-surface-dim: #0a0a0a;
+  --color-surface-bright: #3a3a3c;
+  --color-surface-container-lowest: #050505;
+  --color-surface-container-low: #131314;
+  --color-surface-container: #19191a;
+  --color-surface-container-high: #232324;
+  --color-surface-container-highest: #2c2c2e;
+  --color-surface-variant: #2c2c2e;
+  --color-on-surface: #f2f2f3;
+  --color-on-surface-variant: #a3a3a6;
+  --color-on-background: #f2f2f3;
+  --color-inverse-surface: #f2f2f3;
+  --color-inverse-on-surface: #1c1c1e;
+  --color-surface-tint: #d4d4d6;
+  --color-outline: #86868a;
+  --color-outline-variant: #3a3a3d;
+
+  /* Primario */
+  --color-primary: #ffffff;
+  --color-on-primary: #2f3131;
+  --color-primary-container: #e2e2e2;
+  --color-on-primary-container: #636565;
+  --color-primary-fixed: #e2e2e2;
+  --color-primary-fixed-dim: #c6c6c7;
+  --color-on-primary-fixed: #1a1c1c;
+  --color-on-primary-fixed-variant: #454747;
+  --color-inverse-primary: #5d5f5f;
+
+  /* Secundario (acento cobre/ámbar de marca) */
+  --color-secondary: #ffb68e;
+  --color-on-secondary: #532200;
+  --color-secondary-container: #ab4c00;
+  --color-on-secondary-container: #ffe2d5;
+  --color-secondary-fixed: #ffdbca;
+  --color-secondary-fixed-dim: #ffb68e;
+  --color-on-secondary-fixed: #331200;
+  --color-on-secondary-fixed-variant: #763300;
+
+  /* Terciario (verde de éxito/confirmación) */
+  --color-tertiary: #ffffff;
+  --color-on-tertiary: #003919;
+  --color-tertiary-container: #6dfe9c;
+  --color-on-tertiary-container: #007439;
+  --color-tertiary-fixed: #6dfe9c;
+  --color-tertiary-fixed-dim: #4de082;
+  --color-on-tertiary-fixed: #00210c;
+  --color-on-tertiary-fixed-variant: #005227;
+
+  /* Error */
+  --color-error: #ffb4ab;
+  --color-on-error: #690005;
+  --color-error-container: #93000a;
+  --color-on-error-container: #ffdad6;
+
+  /* Tipografía con escala propia */
+  --text-body-md: 16px;
+  --text-body-md--line-height: 24px;
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 28px;
+  --text-data-mono: 14px;
+  --text-data-mono--line-height: 20px;
+  --text-data-mono--font-weight: 500;
+  --text-label-caps: 12px;
+  --text-label-caps--line-height: 16px;
+  --text-label-caps--letter-spacing: 0.1em;
+  --text-label-caps--font-weight: 600;
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 32px;
+  --text-headline-md--font-weight: 600;
+  --text-headline-lg: 32px;
+  --text-headline-lg--line-height: 40px;
+  --text-headline-lg--font-weight: 700;
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 52px;
+  --text-display-lg--font-weight: 800;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+/*
+ * Movimiento respetuoso: si el usuario desactivó las animaciones
+ * en su sistema, todas las transiciones/animaciones de la app se
+ * vuelven instantáneas (sin romper el estado final).
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * Brillo sutil en el borde superior de superficies elevadas
+ * (tarjetas, paneles). Es el acabado "negro brillante": una línea
+ * de luz muy tenue, no color, la que le da profundidad a la
+ * superficie oscura.
+ */
+.surface-sheen {
+  position: relative;
+}
+
+.surface-sheen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.05), transparent 45%);
+  pointer-events: none;
+}
+
+/*
+ * Iconos Material Symbols (usados por las pantallas nuevas
+ * diseñadas en Stitch). Uso: <span class="material-symbols-outlined">home</span>
+ */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
 }
 
 /* =========================================================
@@ -45,15 +178,25 @@ body {
 }
 
 @media print {
-  html,
-  body {
+  .no-print {
+    display: none !important;
+  }
+
+  /*
+   * El ancho de 50mm es específico de las etiquetas de botella y no
+   * debe aplicarse a otras páginas imprimibles (ej. listas de
+   * resurtido), así que solo se activa cuando la página contiene
+   * .label-print-page.
+   */
+  html:has(.label-print-page),
+  body:has(.label-print-page) {
     width: 50mm !important;
     margin: 0 !important;
     padding: 0 !important;
     background: white !important;
   }
 
-  body {
+  body:has(.label-print-page) {
     color: black !important;
   }
 
@@ -68,7 +211,6 @@ body {
     width: 50mm !important;
     height: 30mm !important;
     margin: 0 !important;
-    padding: 0 !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
     background: white !important;
@@ -83,5 +225,9 @@ body {
   .label-card:last-child {
     break-after: auto !important;
     page-break-after: auto !important;
+  }
+
+  .no-print {
+    display: none !important;
   }
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import LiquorLabelPrintCenter from "@/components/liquors/LiquorLabelPrintCenter";
+import { TagIcon } from "@/components/ui/icons";
 
 type Props = {
   params: Promise<{
@@ -63,24 +64,25 @@ export default async function LiquorLabelPrintCenterPage({
     <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <Link
         href={`/liquors/batches/${id}/labels`}
-        className="text-sm font-semibold text-purple-300 transition hover:text-purple-200"
+        className="text-sm font-semibold text-on-surface-variant transition hover:text-on-surface"
       >
         ← Regresar a los embotellados
       </Link>
 
-      <header className="mt-6 overflow-hidden rounded-3xl border border-purple-500/20 bg-slate-900">
-        <div className="bg-gradient-to-br from-purple-500/20 via-fuchsia-500/10 to-slate-900 p-6 sm:p-8">
+      <header className="mt-6 overflow-hidden rounded-3xl border border-outline-variant bg-surface-container">
+        <div className="p-6 sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-sm font-black uppercase tracking-[0.35em] text-purple-300">
+              <p className="font-mono text-sm font-black uppercase tracking-[0.35em] text-on-surface-variant">
                 Centro de impresión
               </p>
 
-              <h1 className="mt-3 text-4xl font-black text-white sm:text-5xl">
-                🏷️ Preparar etiquetas
+              <h1 className="mt-3 flex items-center gap-3 text-4xl font-black text-on-surface sm:text-5xl">
+                <TagIcon className="h-8 w-8 shrink-0 sm:h-10 sm:w-10" />
+                Preparar etiquetas
               </h1>
 
-              <p className="mt-4 text-xl font-bold text-purple-200">
+              <p className="mt-4 text-xl font-bold text-on-surface-variant">
                 {bottling.batch.product.icon ?? "🍹"}{" "}
                 {bottling.batch.product.name}
               </p>
@@ -105,16 +107,16 @@ export default async function LiquorLabelPrintCenterPage({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-purple-400/25 bg-purple-500/10 px-6 py-5">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-purple-300/70">
+            <div className="rounded-2xl border border-primary/25 bg-primary/[0.06] px-6 py-5">
+              <p className="font-mono text-xs font-black uppercase tracking-[0.2em] text-on-surface-variant">
                 Botellas disponibles
               </p>
 
-              <p className="mt-2 text-4xl font-black text-white">
+              <p className="mt-2 text-4xl font-black text-on-surface">
                 {formatNumber(totalBottles)}
               </p>
 
-              <p className="mt-2 text-sm text-purple-100/60">
+              <p className="mt-2 text-sm text-on-surface-variant">
                 Máximo de etiquetas
               </p>
             </div>
@@ -139,12 +141,12 @@ function InfoBadge({
   value: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-950/40 px-4 py-3">
-      <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+    <div className="rounded-xl border border-outline-variant bg-surface-dim/40 px-4 py-3">
+      <p className="text-[10px] font-black uppercase tracking-wider text-outline">
         {label}
       </p>
 
-      <p className="mt-1 font-bold text-slate-200">{value}</p>
+      <p className="mt-1 font-bold text-on-surface">{value}</p>
     </div>
   );
 }

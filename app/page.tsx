@@ -1,9 +1,35 @@
 import Link from "next/link";
+import type { ComponentType } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveProcesses } from "@/lib/brain/data/getActiveProcesses";
+import { getRecordingStatus } from "@/lib/brain/getRecordingStatus";
+import { prisma } from "@/lib/prisma";
+import {
+  type IconProps,
+  FactoryIcon,
+  FlaskIcon,
+  WalletIcon,
+  PackageIcon,
+  ClockIcon,
+  UsersIcon,
+  AlertIcon,
+  InfoIcon,
+  CheckIcon,
+  ChevronRightIcon,
+  ArrowUpRightIcon,
+  FlameIcon,
+} from "@/components/ui/icons";
 
 const TIME_ZONE = "America/Mexico_City";
+
+type Alert = {
+  icon: ComponentType<IconProps>;
+  iconClass: string;
+  title: string;
+  subtitle: string;
+  href: string;
+};
 
 export default async function HomePage() {
   const user = await getCurrentUser();
@@ -12,12 +38,17 @@ export default async function HomePage() {
     redirect("/login");
   }
 
-  const {
-    cookings,
-    millings,
-    fermentations,
-    distillations,
-  } = await getActiveProcesses();
+  const [
+    { cookings, millings, fermentations, distillations },
+    recordingStatus,
+    expiringBottles,
+    lotsCount,
+  ] = await Promise.all([
+    getActiveProcesses(),
+    getRecordingStatus(),
+    getExpiringBottles(),
+    prisma.lot.count(),
+  ]);
 
   const now = new Date();
 
@@ -40,7 +71,6 @@ export default async function HomePage() {
     weekday: "long",
     day: "numeric",
     month: "long",
-    year: "numeric",
     timeZone: TIME_ZONE,
   }).format(now);
 
@@ -50,8 +80,7 @@ export default async function HomePage() {
     timeZone: TIME_ZONE,
   }).format(now);
 
-  const firstName =
-    user.name.trim().split(/\s+/)[0] || "equipo";
+  const firstName = user.name.trim().split(/\s+/)[0] || "equipo";
 
   const activeProcesses =
     cookings.length +
@@ -59,198 +88,315 @@ export default async function HomePage() {
     fermentations.length +
     distillations.length;
 
+  const alerts = buildAlerts(recordingStatus, expiringBottles);
+
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
-      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <header className="rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.45em] text-amber-400">
-                MAESTRO
-              </p>
+    <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-8">
+      <div className="mx-auto flex max-w-6xl flex-col">
+        {/* Saludo */}
+        <div className="flex flex-col items-center py-6 text-center">
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-on-surface-variant">
+            {currentDate} · {currentTime}
+          </p>
 
-              <h1 className="mt-4 text-3xl font-black sm:text-4xl">
-                {greeting}, {firstName} 👋
-              </h1>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-primary sm:text-4xl">
+            {greeting}, {firstName}.
+          </h1>
 
-              <p className="mt-3 capitalize text-slate-400">
-                {currentDate}
-              </p>
+          <p className="mt-2 text-lg text-on-surface-variant">
+            ¿Qué necesita atención hoy?
+          </p>
 
-              <p className="mt-1 text-lg font-semibold text-amber-300">
-                {currentTime}
-              </p>
+          <div className="mt-4 h-0.5 w-8 bg-primary/30" />
+        </div>
 
-              <p className="mt-5 text-sm text-slate-400">
-                Selecciona el área donde deseas trabajar.
-              </p>
+        {/* Alertas de operación */}
+        <section className="mb-8">
+          <div className="surface-sheen overflow-hidden rounded-xl border border-outline-variant bg-surface-container-high/40 backdrop-blur">
+            <div className="flex items-center justify-between border-b border-outline-variant px-4 py-3">
+              <h3 className="font-mono text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Alertas de Operación
+              </h3>
+
+              {alerts.length > 0 && (
+                <span className="flex h-2 w-2 rounded-full bg-error" />
+              )}
             </div>
 
-            <div className="w-fit rounded-2xl border border-green-500/20 bg-green-500/10 px-5 py-4">
-              <p className="text-xs uppercase tracking-wider text-green-300/70">
-                Proceso de producción
-              </p>
+            <div className="flex flex-col divide-y divide-outline-variant">
+              {alerts.length === 0 ? (
+                <div className="flex items-center gap-3 p-4">
+                  <CheckIcon className="h-5 w-5 shrink-0 text-tertiary-fixed-dim" />
+                  <p className="text-sm font-semibold text-primary">
+                    Todo en orden. Sin pendientes urgentes.
+                  </p>
+                </div>
+              ) : (
+                alerts.map((alert, i) => {
+                  const AlertGlyph = alert.icon;
+                  return (
+                    <Link
+                      key={i}
+                      href={alert.href}
+                      className="flex items-center gap-3 p-4 transition duration-150 ease-out hover:bg-surface-container-high/60"
+                    >
+                      <AlertGlyph
+                        className={`h-5 w-5 shrink-0 ${alert.iconClass}`}
+                      />
 
-              <p className="mt-1 text-lg font-bold text-green-400">
-                {activeProcesses > 0
-                  ? `${activeProcesses} proceso${
-                      activeProcesses === 1 ? "" : "s"
-                    } activo${
-                      activeProcesses === 1 ? "" : "s"
-                    }`
-                  : "Sin procesos activos"}
-              </p>
+                      <div className="flex-grow">
+                        <p className="text-sm font-semibold text-primary">
+                          {alert.title}
+                        </p>
+                        <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wide text-on-surface-variant">
+                          {alert.subtitle}
+                        </p>
+                      </div>
+
+                      <ChevronRightIcon className="h-4 w-4 shrink-0 text-on-surface-variant" />
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </div>
-        </header>
+        </section>
 
-        <section className="mt-6 grid flex-1 gap-5 md:grid-cols-2">
-          <PillarCard
-            icon="🥃"
-            title="Proceso de Producción"
-            subtitle="Destiladora del Norte"
-            description="Lotes · Cocción · Molienda · Fermentación · Destilación · Sala"
+        {/* Módulos principales */}
+        <section className="mb-8 grid gap-4 sm:grid-cols-2">
+          <ModuleCard
+            icon={FactoryIcon}
+            eyebrow="Proceso Maestro"
+            title="Producción de tequila"
+            description="Lotes, cocción, molienda, fermentación y destilación."
             href="/plant"
             status={
-              activeProcesses > 0
-                ? "Operando"
-                : "Disponible"
+              activeProcesses > 0 ? "Operando" : "Disponible"
             }
-            statusType="active"
-            accent="amber"
+            featured
           />
 
-          <PillarCard
-            icon="🍹"
-            title="Elaboración de Licores"
-            subtitle="Producción y embotellado"
-            description="Recetas · Lotes · Producción · Embotellado · QR · Caducidad"
+          <ModuleCard
+            icon={FlaskIcon}
+            eyebrow="Especialidades"
+            title="Elaboración de licores"
+            description="Recetas, lotes, producción, embotellado y caducidad."
             href="/liquors"
-            status="En desarrollo"
-            statusType="development"
-            accent="purple"
+            status="Disponible"
+            featured
           />
 
-          <PillarCard
-            icon="💰"
-            title="Cortes de Caja"
-            subtitle="Operación Tequilitros"
-            description="Sucursales · Ventas · Salidas · Sobres · Caja fuerte · Historial"
+          <ModuleCard
+            icon={WalletIcon}
+            eyebrow="Operación Tequilitros"
+            title="Cortes de caja"
+            description="Sucursales, ventas, salidas, sobres y caja fuerte."
             href="/cash-cuts"
-            status="En desarrollo"
-            statusType="development"
-            accent="blue"
+            status="Disponible"
           />
 
-          <PillarCard
-            icon="🏢"
-            title="Administración"
-            subtitle="Dirección empresarial"
-            description="Finanzas · Compras · Proveedores · Personal · Reportes · Configuración"
+          <ModuleCard
+            icon={PackageIcon}
+            eyebrow="Eventos y sucursales"
+            title="Inventario"
+            description="Productos, paquetes, equipo, eventos y conteos."
             href="/administration"
-            status="En desarrollo"
-            statusType="development"
-            accent="slate"
+            status="Disponible"
+          />
+
+          <ModuleCard
+            icon={ClockIcon}
+            eyebrow="Checador y turnos"
+            title="Horario"
+            description="Registra tu entrada, salida y consulta tu calendario."
+            href="/timeclock"
+            status="Disponible"
+          />
+
+          <ModuleCard
+            icon={UsersIcon}
+            eyebrow="Equipo y permisos"
+            title="Personal"
+            description="Usuarios, sucursales, tarifas y permisos por módulo."
+            href="/administration/personnel"
+            status="Disponible"
           />
         </section>
 
-        <footer className="mt-8 border-t border-slate-800 pt-6 text-center">
-          <p className="text-sm font-semibold text-slate-400">
-            MAESTRO v2.0
-          </p>
+        {/* Resumen de planta */}
+        <section className="mb-6">
+          <h3 className="mb-4 text-center font-mono text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+            Resumen de Planta
+          </h3>
 
-          <p className="mt-2 text-xs text-slate-500">
-            Hecho con ☕, código y mucho ❤️ para Destiladora del Norte.
-          </p>
-        </footer>
+          <div className="grid grid-cols-3 gap-2">
+            <PlantStat
+              icon={FlaskIcon}
+              value={fermentations.length}
+              label="Fermentaciones"
+            />
+            <PlantStat
+              icon={FlameIcon}
+              value={distillations.length}
+              label="Destilaciones"
+            />
+            <PlantStat
+              icon={PackageIcon}
+              value={lotsCount}
+              label="Lotes"
+            />
+          </div>
+        </section>
       </div>
     </main>
   );
 }
 
-function PillarCard({
-  icon,
+async function getExpiringBottles() {
+  const now = new Date();
+  const in7Days = new Date(now);
+  in7Days.setDate(in7Days.getDate() + 7);
+
+  return prisma.liquorBottle.findMany({
+    where: {
+      expirationDate: { not: null, lte: in7Days },
+      status: { in: ["DISPONIBLE", "RESERVADA"] },
+    },
+    orderBy: { expirationDate: "asc" },
+    take: 3,
+    include: {
+      bottling: {
+        include: {
+          batch: {
+            include: { product: true },
+          },
+        },
+      },
+    },
+  });
+}
+
+function buildAlerts(
+  recordingStatus: Awaited<ReturnType<typeof getRecordingStatus>>,
+  expiringBottles: Awaited<ReturnType<typeof getExpiringBottles>>
+): Alert[] {
+  const alerts: Alert[] = [];
+
+  for (const c of recordingStatus.cooking) {
+    if (!c.isOverdue) continue;
+    alerts.push({
+      icon: AlertIcon,
+      iconClass: "text-secondary",
+      title: `${c.label} requiere lectura`,
+      subtitle: "Cocción · Acción requerida",
+      href: "/cooking",
+    });
+  }
+
+  for (const f of recordingStatus.fermentation) {
+    if (!f.isOverdue) continue;
+    alerts.push({
+      icon: AlertIcon,
+      iconClass: "text-secondary",
+      title: `${f.label} requiere lectura`,
+      subtitle: "Fermentación · Acción requerida",
+      href: "/fermentation",
+    });
+  }
+
+  const now = new Date();
+
+  for (const bottle of expiringBottles) {
+    if (!bottle.expirationDate) continue;
+
+    const daysLeft = Math.max(
+      0,
+      Math.ceil(
+        (bottle.expirationDate.getTime() - now.getTime()) /
+          (1000 * 60 * 60 * 24)
+      )
+    );
+
+    alerts.push({
+      icon: InfoIcon,
+      iconClass: "text-outline",
+      title: `${bottle.bottling.batch.product.name} vence en ${daysLeft} día${
+        daysLeft === 1 ? "" : "s"
+      }`,
+      subtitle: "Urgencia Media",
+      href: "/liquors/expiration",
+    });
+  }
+
+  return alerts.slice(0, 3);
+}
+
+function ModuleCard({
+  icon: Icon,
+  eyebrow,
   title,
-  subtitle,
   description,
   href,
   status,
-  statusType,
-  accent,
+  featured = false,
 }: {
-  icon: string;
+  icon: ComponentType<IconProps>;
+  eyebrow: string;
   title: string;
-  subtitle: string;
   description: string;
   href: string;
   status: string;
-  statusType: "active" | "development";
-  accent: "amber" | "purple" | "blue" | "slate";
+  featured?: boolean;
 }) {
-  const accentStyles = {
-    amber:
-      "hover:border-amber-400/60 hover:shadow-amber-400/5",
-    purple:
-      "hover:border-purple-400/60 hover:shadow-purple-400/5",
-    blue:
-      "hover:border-blue-400/60 hover:shadow-blue-400/5",
-    slate:
-      "hover:border-slate-500 hover:shadow-slate-400/5",
-  };
-
-  const iconStyles = {
-    amber: "border-amber-400/20 bg-amber-400/10",
-    purple: "border-purple-400/20 bg-purple-400/10",
-    blue: "border-blue-400/20 bg-blue-400/10",
-    slate: "border-slate-600 bg-slate-800",
-  };
-
   return (
     <Link
       href={href}
-      className={`group flex min-h-64 flex-col rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl transition duration-200 hover:-translate-y-1 hover:shadow-2xl sm:p-8 ${accentStyles[accent]}`}
+      className={`surface-sheen group relative flex flex-col justify-end overflow-hidden rounded-xl border border-outline-variant bg-surface-container p-6 transition duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.01] hover:border-primary/25 ${
+        featured ? "min-h-[200px] sm:col-span-1" : "min-h-[160px]"
+      }`}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div
-          className={`flex h-14 w-14 items-center justify-center rounded-2xl border text-3xl ${iconStyles[accent]}`}
-        >
-          {icon}
-        </div>
+      <ArrowUpRightIcon className="absolute right-5 top-5 h-6 w-6 text-primary/15 transition-colors group-hover:text-primary/40" />
 
-        <span
-          className={`rounded-full border px-3 py-1.5 text-xs font-bold ${
-            statusType === "active"
-              ? "border-green-500/30 bg-green-500/10 text-green-400"
-              : "border-amber-400/20 bg-amber-400/10 text-amber-300"
-          }`}
-        >
-          {status}
+      <div className="flex items-center gap-2">
+        <Icon className="h-5 w-5 text-on-surface-variant" />
+        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-on-surface-variant">
+          {eyebrow}
         </span>
       </div>
 
-      <div className="mt-6">
-        <h2 className="text-2xl font-bold sm:text-3xl">
-          {title}
-        </h2>
+      <h2 className="mt-2 text-xl font-bold text-primary sm:text-2xl">
+        {title}
+      </h2>
 
-        <p className="mt-2 text-sm font-medium text-slate-300">
-          {subtitle}
-        </p>
+      <p className="mt-1 text-sm text-on-surface-variant">
+        {description}
+      </p>
 
-        <p className="mt-4 leading-7 text-slate-400">
-          {description}
-        </p>
-      </div>
-
-      <div className="mt-auto flex items-center justify-between pt-8">
-        <span className="font-bold text-white">
-          Entrar
-        </span>
-
-        <span className="text-xl text-slate-400 transition group-hover:translate-x-1 group-hover:text-white">
-          →
-        </span>
-      </div>
+      <span className="mt-3 w-fit rounded-full border border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wide text-tertiary-fixed-dim">
+        {status}
+      </span>
     </Link>
+  );
+}
+
+function PlantStat({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: ComponentType<IconProps>;
+  value: number;
+  label: string;
+}) {
+  return (
+    <div className="flex flex-col items-center rounded-xl border border-outline-variant bg-surface-container-low p-4 text-center">
+      <Icon className="mb-2 h-5 w-5 text-on-surface-variant" />
+      <span className="text-xl font-semibold text-primary">
+        {value}
+      </span>
+      <span className="mt-0.5 font-mono text-[9px] uppercase tracking-wide text-on-surface-variant">
+        {label}
+      </span>
+    </div>
   );
 }

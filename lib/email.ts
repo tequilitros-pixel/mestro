@@ -3,9 +3,9 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // ⚠️ Cambia "onboarding@resend.dev" por tu propio remitente
-// (ej. "MAESTRO <no-responder@maestro-destiladora.space>")
+// (ej. "Destiladora del Norte <no-responder@maestro-destiladora.space>")
 // una vez que verifiques tu dominio en Resend.
-const FROM_ADDRESS = "MAESTRO <onboarding@resend.dev>";
+const FROM_ADDRESS = "Destiladora del Norte <onboarding@resend.dev>";
 
 export async function sendPasswordResetEmail(
   to: string,
@@ -14,11 +14,11 @@ export async function sendPasswordResetEmail(
   await resend.emails.send({
     from: FROM_ADDRESS,
     to,
-    subject: "Código para restablecer tu contraseña — MAESTRO",
+    subject: "Código para restablecer tu contraseña — Destiladora del Norte",
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
         <p style="text-transform: uppercase; letter-spacing: 3px; font-size: 12px; color: #d97706; font-weight: 700;">
-          MAESTRO — Destiladora del Norte
+          Destiladora del Norte
         </p>
         <h2 style="color: #0f172a;">Restablece tu contraseña</h2>
         <p style="color: #334155; font-size: 15px;">

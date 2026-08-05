@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -8,14 +8,30 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
+  const allowedBranchIds = await getAccessibleBranchIds();
+
   const { searchParams } = new URL(req.url);
-  const branchId = searchParams.get("branchId");
+  const requestedBranchId = searchParams.get("branchId");
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
 
+  let branchFilter: string | { in: string[] } | undefined;
+
+  if (requestedBranchId) {
+    if (allowedBranchIds && !allowedBranchIds.includes(requestedBranchId)) {
+      return NextResponse.json([]);
+    }
+    branchFilter = requestedBranchId;
+  } else if (allowedBranchIds) {
+    if (allowedBranchIds.length === 0) {
+      return NextResponse.json([]);
+    }
+    branchFilter = { in: allowedBranchIds };
+  }
+
   const movements = await prisma.cashSafeMovement.findMany({
     where: {
-      ...(branchId ? { branchId } : {}),
+      ...(branchFilter ? { branchId: branchFilter } : {}),
       ...(dateFrom || dateTo
         ? {
             createdAt: {
@@ -39,6 +55,6 @@ export async function GET(req: NextRequest) {
       notes: m.notes,
       user: m.user.name,
       createdAt: m.createdAt,
-    }))
+    })),
   );
 }

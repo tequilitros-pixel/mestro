@@ -1,7 +1,8 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 type EquipmentCardProps = {
-  icon: string;
+  icon: ReactNode;
   title: string;
   status: string;
   lot?: string;
@@ -12,11 +13,11 @@ type EquipmentCardProps = {
 };
 
 const toneStyles = {
-  green: "bg-green-400/10 text-green-400 border-green-400/30",
-  yellow: "bg-yellow-400/10 text-yellow-400 border-yellow-400/30",
-  red: "bg-red-400/10 text-red-400 border-red-400/30",
-  blue: "bg-blue-400/10 text-blue-400 border-blue-400/30",
-  slate: "bg-slate-700 text-slate-300 border-slate-600",
+  green: "bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim border-tertiary-fixed-dim/30",
+  yellow: "bg-secondary/10 text-secondary border-secondary/30",
+  red: "bg-error/10 text-error border-error/30",
+  blue: "bg-on-surface-variant/10 text-on-surface-variant border-on-surface-variant/30",
+  slate: "bg-surface-container-high text-on-surface-variant border-outline-variant",
 };
 
 export default function EquipmentCard({
@@ -32,41 +33,43 @@ export default function EquipmentCard({
   return (
     <Link
       href={href}
-      className="block rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl transition hover:border-amber-400/40 hover:bg-slate-800"
+      className="surface-sheen block rounded-xl border border-outline-variant bg-surface-container p-6 shadow-xl transition duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.01] hover:border-primary/25 hover:bg-surface-container-high"
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-4xl">{icon}</div>
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-outline-variant bg-surface-container-high text-on-surface [&_svg]:h-6 [&_svg]:w-6">
+            {icon}
+          </div>
 
-          <h3 className="mt-4 text-2xl font-bold text-white">
+          <h3 className="mt-4 text-2xl font-bold text-primary">
             {title}
           </h3>
 
           {lot && (
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-on-surface-variant">
               Lote {lot}
             </p>
           )}
         </div>
 
         <span
-          className={`rounded-full border px-3 py-1 text-xs font-bold uppercase ${toneStyles[tone]}`}
+          className={`rounded-full border px-3 py-1 font-mono text-xs font-bold uppercase ${toneStyles[tone]}`}
         >
           {status}
         </span>
       </div>
 
       <div className="mt-8">
-        <p className="text-4xl font-bold text-white">
+        <p className="text-4xl font-bold text-primary">
           {value ?? "--"}
         </p>
 
-        <p className="mt-2 text-sm text-slate-400">
+        <p className="mt-2 text-sm text-on-surface-variant">
           {subtitle ?? "Sin datos"}
         </p>
       </div>
 
-      <p className="mt-8 text-sm font-bold text-amber-400">
+      <p className="mt-8 text-sm font-bold text-on-surface-variant">
         Abrir →
       </p>
     </Link>

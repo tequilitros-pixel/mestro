@@ -41,3 +41,21 @@ yarn-error.log*
 next-env.d.ts
 
 /lib/generated/prisma
+
+# iOS (Xcode / Swift Package Manager)
+/ios/App/Pods
+/ios/App/App/public
+/ios/App/build
+/ios/App/DerivedData
+/ios/App/*.xcworkspace
+/ios/**/xcuserdata
+/ios/App/App/capacitor.config.json
+
+# Android (Gradle)
+/android/local.properties
+/android/.gradle
+/android/app/build
+/android/build
+/android/captures
+/android/app/src/main/assets/public
+/android/app/src/main/assets/capacitor.config.json

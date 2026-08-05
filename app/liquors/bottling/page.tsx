@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { BottleIcon } from "@/components/ui/icons";
 
 export default async function LiquorBottlingPage() {
   const batches = await prisma.liquorBatch.findMany({
@@ -40,36 +41,36 @@ export default async function LiquorBottlingPage() {
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
       <header>
-        <p className="text-sm font-black uppercase tracking-[0.2em] text-purple-300">
+        <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-on-surface-variant">
           Elaboración de licores
         </p>
 
-        <h1 className="mt-2 text-3xl font-black text-white">
+        <h1 className="mt-2 text-3xl font-black text-on-surface">
           Embotellado
         </h1>
 
-        <p className="mt-2 max-w-3xl text-slate-400">
+        <p className="mt-2 max-w-3xl text-on-surface-variant">
           Selecciona un lote listo para iniciar o continuar su proceso de
           embotellado.
         </p>
       </header>
 
       {batches.length === 0 ? (
-        <section className="mt-8 rounded-3xl border border-dashed border-slate-700 bg-slate-900/50 p-10 text-center">
-          <div className="text-5xl">🍾</div>
+        <section className="mt-8 rounded-3xl border border-dashed border-outline-variant bg-surface-container/50 p-10 text-center">
+          <BottleIcon className="mx-auto h-10 w-10 text-on-surface-variant" />
 
-          <h2 className="mt-5 text-2xl font-black text-white">
+          <h2 className="mt-5 text-2xl font-black text-on-surface">
             No hay lotes disponibles para embotellar
           </h2>
 
-          <p className="mx-auto mt-3 max-w-xl text-slate-400">
+          <p className="mx-auto mt-3 max-w-xl text-on-surface-variant">
             Los lotes aparecerán aquí cuando estén listos para
             embotellado.
           </p>
 
           <Link
             href="/liquors/production"
-            className="mt-6 inline-flex rounded-2xl border border-purple-500/30 bg-purple-500/10 px-5 py-3 font-black text-purple-300 transition hover:bg-purple-500/15"
+            className="mt-6 inline-flex rounded-2xl bg-primary px-5 py-3 font-black text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
           >
             Ver producción
           </Link>
@@ -82,10 +83,10 @@ export default async function LiquorBottlingPage() {
             return (
               <article
                 key={batch.id}
-                className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6"
+                className="rounded-3xl border border-outline-variant bg-surface-container/70 p-6"
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-purple-500/20 bg-purple-500/10 text-3xl">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-outline-variant bg-surface-container-high text-3xl">
                     {batch.product.icon ?? "🍾"}
                   </div>
 
@@ -98,11 +99,11 @@ export default async function LiquorBottlingPage() {
                   </span>
                 </div>
 
-                <h2 className="mt-5 text-xl font-black text-white">
+                <h2 className="mt-5 text-xl font-black text-on-surface">
                   {batch.product.name}
                 </h2>
 
-                <p className="mt-2 font-mono text-sm font-bold text-purple-300">
+                <p className="mt-2 font-mono text-sm font-bold text-on-surface-variant">
                   {batch.code}
                 </p>
 
@@ -128,9 +129,9 @@ export default async function LiquorBottlingPage() {
                 </div>
 
                 {latestBottling ? (
-                  <section className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+                  <section className="mt-5 rounded-2xl border border-outline-variant bg-surface-dim/40 p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+                      <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-outline">
                         Último embotellado
                       </p>
 
@@ -143,14 +144,14 @@ export default async function LiquorBottlingPage() {
                       </span>
                     </div>
 
-                    <p className="mt-3 font-mono text-sm font-bold text-white">
+                    <p className="mt-3 font-mono text-sm font-bold text-on-surface">
                       {latestBottling.code}
                     </p>
 
                     <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                       <div>
-                        <p className="text-slate-500">Presentación</p>
-                        <p className="mt-1 font-black text-white">
+                        <p className="text-outline">Presentación</p>
+                        <p className="mt-1 font-black text-on-surface">
                           {formatBottleSize(
                             latestBottling.bottleSizeMl
                           )}
@@ -158,30 +159,30 @@ export default async function LiquorBottlingPage() {
                       </div>
 
                       <div>
-                        <p className="text-slate-500">Producidas</p>
-                        <p className="mt-1 font-black text-white">
+                        <p className="text-outline">Producidas</p>
+                        <p className="mt-1 font-black text-on-surface">
                           {latestBottling.producedBottles}
                         </p>
                       </div>
 
                       <div>
-                        <p className="text-slate-500">Planeadas</p>
-                        <p className="mt-1 font-black text-white">
+                        <p className="text-outline">Planeadas</p>
+                        <p className="mt-1 font-black text-on-surface">
                           {latestBottling.plannedBottles ?? "—"}
                         </p>
                       </div>
 
                       <div>
-                        <p className="text-slate-500">Rechazadas</p>
-                        <p className="mt-1 font-black text-white">
+                        <p className="text-outline">Rechazadas</p>
+                        <p className="mt-1 font-black text-on-surface">
                           {latestBottling.rejectedBottles}
                         </p>
                       </div>
                     </div>
                   </section>
                 ) : (
-                  <section className="mt-5 rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 p-4">
-                    <p className="text-sm text-slate-500">
+                  <section className="mt-5 rounded-2xl border border-dashed border-outline-variant bg-background/30 p-4">
+                    <p className="text-sm text-outline">
                       Este lote todavía no tiene un embotellado
                       registrado.
                     </p>
@@ -190,14 +191,14 @@ export default async function LiquorBottlingPage() {
 
                 <Link
                   href={`/liquors/batches/${batch.id}/bottling`}
-                  className="mt-6 flex justify-center rounded-2xl bg-purple-600 px-5 py-3 font-black text-white transition hover:bg-purple-500"
+                  className="mt-6 flex justify-center rounded-2xl bg-primary px-5 py-3 font-black text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
                 >
                   {getActionLabel(batch.status, latestBottling?.status)}
                 </Link>
 
                 <Link
                   href={`/liquors/batches/${batch.id}`}
-                  className="mt-3 flex justify-center rounded-2xl border border-slate-700 px-5 py-3 font-black text-slate-300 transition hover:border-slate-600 hover:text-white"
+                  className="mt-3 flex justify-center rounded-2xl border border-outline-variant px-5 py-3 font-black text-on-surface-variant transition hover:border-outline-variant hover:text-on-surface"
                 >
                   Ver lote
                 </Link>
@@ -218,10 +219,10 @@ function InfoRow({
   value: string;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-3 last:border-b-0 last:pb-0">
-      <span className="text-sm text-slate-500">{label}</span>
+    <div className="flex items-start justify-between gap-4 border-b border-outline-variant pb-3 last:border-b-0 last:pb-0">
+      <span className="text-sm text-outline">{label}</span>
 
-      <span className="text-right text-sm font-black text-white">
+      <span className="text-right text-sm font-black text-on-surface">
         {value}
       </span>
     </div>
@@ -250,35 +251,35 @@ function getActionLabel(
 function getBatchStatusStyle(status: string) {
   switch (status) {
     case "LISTO_PARA_EMBOTELLAR":
-      return "border-green-500/30 bg-green-500/10 text-green-300";
+      return "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim";
 
     case "EMBOTELLANDO":
-      return "border-purple-500/30 bg-purple-500/10 text-purple-300";
+      return "border-secondary/30 bg-secondary/10 text-secondary";
 
     case "TERMINADO":
-      return "border-blue-500/30 bg-blue-500/10 text-blue-300";
+      return "border-on-surface-variant/30 bg-on-surface-variant/10 text-on-surface-variant";
 
     default:
-      return "border-slate-700 bg-slate-800 text-slate-300";
+      return "border-outline-variant bg-surface-container-high text-on-surface-variant";
   }
 }
 
 function getBottlingStatusStyle(status: string) {
   switch (status) {
     case "PLANEADO":
-      return "border-slate-600 bg-slate-800 text-slate-300";
+      return "border-outline-variant bg-surface-container-high text-on-surface-variant";
 
     case "ACTIVO":
-      return "border-purple-500/30 bg-purple-500/10 text-purple-300";
+      return "border-secondary/30 bg-secondary/10 text-secondary";
 
     case "TERMINADO":
-      return "border-green-500/30 bg-green-500/10 text-green-300";
+      return "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim";
 
     case "CANCELADO":
-      return "border-red-500/30 bg-red-500/10 text-red-300";
+      return "border-error/30 bg-error/10 text-error";
 
     default:
-      return "border-slate-700 bg-slate-800 text-slate-300";
+      return "border-outline-variant bg-surface-container-high text-on-surface-variant";
   }
 }
 

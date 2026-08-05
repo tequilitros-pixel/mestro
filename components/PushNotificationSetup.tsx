@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BellIcon, BellOffIcon } from "@/components/ui/icons";
 
 type NotificationStatus =
   | "idle"
@@ -171,56 +172,53 @@ export default function PushNotificationSetup() {
     }
   }
 
-  if (status === "enabled") {
-    return (
-      <p className="text-sm font-medium text-green-400">
-        🔔 Notificaciones activadas
-      </p>
-    );
+  if (status === "unsupported") {
+    return null;
   }
 
-  if (status === "unsupported") {
+  if (status === "enabled") {
     return (
-      <p className="text-sm text-red-400">
-        Este navegador no admite notificaciones push.
-      </p>
+      <div
+        className="hidden items-center gap-2 rounded-full border border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 px-3 py-1.5 text-xs font-semibold text-tertiary-fixed-dim lg:inline-flex"
+        title="Notificaciones activadas"
+      >
+        <BellIcon className="h-3.5 w-3.5 shrink-0" />
+        Notificaciones activas
+      </div>
     );
   }
 
   if (status === "denied") {
     return (
-      <div className="space-y-1">
-        <p className="text-sm text-red-400">
-          Las notificaciones están bloqueadas.
-        </p>
-
-        <p className="text-xs text-slate-400">
-          Permítelas desde la configuración del sitio y
-          vuelve a cargar MAESTRO.
-        </p>
+      <div
+        className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-on-surface-variant"
+        title="Las notificaciones están bloqueadas. Permítelas desde la configuración del sitio y vuelve a cargar MAESTRO."
+      >
+        <BellOffIcon className="h-4 w-4 shrink-0" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
-      <button
-        type="button"
-        onClick={enableNotifications}
-        disabled={status === "loading"}
-        className="rounded-xl border border-amber-400 px-3 py-2 text-sm font-semibold text-amber-400 transition hover:bg-amber-400 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {status === "loading"
-          ? "Activando..."
-          : "🔔 Activar notificaciones"}
-      </button>
-
-      {status === "error" && (
-        <p className="max-w-md text-xs text-red-400">
-          No fue posible activar las notificaciones:{" "}
-          {errorMessage}
-        </p>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={enableNotifications}
+      disabled={status === "loading"}
+      title={
+        status === "error"
+          ? `No fue posible activar las notificaciones: ${errorMessage}`
+          : "Activar notificaciones"
+      }
+      className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 ${
+        status === "error"
+          ? "border-error/40 text-error hover:bg-error/10"
+          : "border-outline-variant text-on-surface-variant hover:border-outline hover:bg-surface-container-high hover:text-on-surface"
+      }`}
+    >
+      <BellIcon className="h-4 w-4 shrink-0" />
+      <span className="hidden sm:inline">
+        {status === "loading" ? "Activando..." : "Activar notificaciones"}
+      </span>
+    </button>
   );
 }

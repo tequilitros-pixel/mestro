@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { TagIcon } from "@/components/ui/icons";
 
 type Props = {
   params: Promise<{
@@ -82,21 +83,21 @@ export default async function LiquorBottleQrPage({ params }: Props) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link
           href={`/liquors/bottles/${bottle.id}`}
-          className="text-sm font-bold text-slate-400 transition hover:text-white"
+          className="text-sm font-bold text-on-surface-variant transition hover:text-on-surface"
         >
           ← Volver a la botella
         </Link>
 
         <Link
           href="/liquors/inventory"
-          className="text-sm font-bold text-purple-300 transition hover:text-purple-200"
+          className="text-sm font-bold text-on-surface-variant transition hover:text-on-surface"
         >
           Ver inventario
         </Link>
       </div>
 
-      <section className="mt-6 overflow-hidden rounded-3xl border border-purple-500/25 bg-slate-900">
-        <div className="bg-gradient-to-br from-purple-500/20 via-fuchsia-500/10 to-slate-900 p-6 sm:p-10">
+      <section className="mt-6 overflow-hidden rounded-3xl border border-outline-variant bg-surface-container">
+        <div className="p-6 sm:p-10">
           <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
             <div className="rounded-3xl bg-white p-6">
               <img
@@ -107,15 +108,15 @@ export default async function LiquorBottleQrPage({ params }: Props) {
             </div>
 
             <div>
-              <p className="text-sm font-black uppercase tracking-[0.3em] text-purple-300">
+              <p className="font-mono text-sm font-black uppercase tracking-[0.3em] text-on-surface-variant">
                 Identidad digital
               </p>
 
-              <h1 className="mt-3 text-4xl font-black text-white sm:text-5xl">
+              <h1 className="mt-3 text-4xl font-black text-on-surface sm:text-5xl">
                 {product.icon ?? "🍾"} {bottle.code}
               </h1>
 
-              <p className="mt-3 text-2xl font-black text-purple-200">
+              <p className="mt-3 text-2xl font-black text-on-surface">
                 {product.name}
               </p>
 
@@ -157,12 +158,12 @@ export default async function LiquorBottleQrPage({ params }: Props) {
                 />
               </div>
 
-              <div className="mt-6 rounded-2xl border border-slate-700 bg-slate-950/40 p-5">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+              <div className="mt-6 rounded-2xl border border-outline-variant bg-surface-dim/40 p-5">
+                <p className="font-mono text-xs font-black uppercase tracking-[0.2em] text-outline">
                   Enlace del QR
                 </p>
 
-                <p className="mt-3 break-all font-mono text-sm text-slate-300">
+                <p className="mt-3 break-all font-mono text-sm text-on-surface-variant">
                   {publicUrl}
                 </p>
               </div>
@@ -172,17 +173,18 @@ export default async function LiquorBottleQrPage({ params }: Props) {
   href={qrImageUrl}
   target="_blank"
   rel="noreferrer"
-  className="flex-1 rounded-2xl bg-purple-600 px-5 py-4 text-center font-black text-white transition hover:bg-purple-500"
+  className="flex-1 rounded-2xl bg-primary px-5 py-4 text-center font-black text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
 >
   Ver QR completo
 </a>
-        
+
 
                 <Link
                   href={`/liquors/bottles/${bottle.id}/label`}
-                  className="flex-1 rounded-2xl border border-slate-700 px-5 py-4 text-center font-black text-slate-200 transition hover:bg-slate-800"
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl border border-outline-variant px-5 py-4 text-center font-black text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:bg-surface-container-high active:scale-[0.97]"
                 >
-                  🏷 Ver etiqueta
+                  <TagIcon className="h-5 w-5 shrink-0" />
+                  Ver etiqueta
                 </Link>
               </div>
             </div>
@@ -201,12 +203,12 @@ function InfoCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+    <div className="rounded-2xl border border-outline-variant bg-surface-dim/40 p-5">
+      <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-outline">
         {label}
       </p>
 
-      <p className="mt-3 break-words text-lg font-black text-white">
+      <p className="mt-3 break-words text-lg font-black text-on-surface">
         {value}
       </p>
     </div>

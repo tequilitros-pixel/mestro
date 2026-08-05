@@ -5,6 +5,15 @@ import PlantStatusCard from "@/components/PlantStatusCard";
 import AIReport from "@/components/ui/AIReport";
 import MissionControl from "@/components/intelligence/MissionControl";
 import RecordingBadge from "@/components/ui/RecordingBadge";
+import {
+  FlameIcon,
+  GearIcon,
+  FlaskIcon,
+  StillIcon,
+  GlassWaterIcon,
+  PackageIcon,
+  ToolboxIcon,
+} from "@/components/ui/icons";
 
 import { Predictor } from "@/lib/brain/Predictor";
 import { ExcellenceEngine } from "@/lib/brain/ExcellenceEngine";
@@ -13,6 +22,9 @@ import { getActiveProcesses } from "@/lib/brain/data/getActiveProcesses";
 import { analyzeActiveProcesses } from "@/lib/brain/analyzeActiveProcesses";
 import { getRecordingStatus } from "@/lib/brain/getRecordingStatus";
 import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import type { Equipment, EquipmentType } from "@prisma/client";
+import type { ReactNode } from "react";
 
 export default async function PlantPage() {
   const user = await getCurrentUser();
@@ -29,6 +41,36 @@ export default async function PlantPage() {
 
   const recordingStatus = await getRecordingStatus();
 
+  const allEquipment = await prisma.equipment.findMany({
+    where: { active: true },
+    orderBy: [{ type: "asc" }, { name: "asc" }],
+  });
+
+  // Para el equipo OPERANDO, enlaza directo al proceso activo
+  // que lo está usando, en vez de a la pantalla de "nuevo".
+  const activeHrefByEquipmentId = new Map<string, string>();
+
+  for (const cooking of cookings) {
+    activeHrefByEquipmentId.set(
+      cooking.equipmentId,
+      `/cooking/${cooking.id}`
+    );
+  }
+
+  for (const milling of millings) {
+    activeHrefByEquipmentId.set(
+      milling.equipmentId,
+      `/milling/${milling.id}`
+    );
+  }
+
+  for (const distillation of distillations) {
+    activeHrefByEquipmentId.set(
+      distillation.equipmentId,
+      `/distillation/${distillation.id}`
+    );
+  }
+
   const alertMessages = alerts.map(
     (alert) => `${alert.source}: ${alert.message}`
   );
@@ -38,13 +80,26 @@ export default async function PlantPage() {
       (recording) => recording.isOverdue
     ).length;
 
+  const overdueMillingCount =
+    recordingStatus.milling.filter(
+      (recording) => recording.isOverdue
+    ).length;
+
   const overdueFermentationCount =
     recordingStatus.fermentation.filter(
       (recording) => recording.isOverdue
     ).length;
 
+  const overdueDistillationCount =
+    recordingStatus.distillation.filter(
+      (recording) => recording.isOverdue
+    ).length;
+
   const overdueProcesses =
-    overdueCookingCount + overdueFermentationCount;
+    overdueCookingCount +
+    overdueMillingCount +
+    overdueFermentationCount +
+    overdueDistillationCount;
 
   const activeProcessesCount =
     cookings.length +
@@ -101,13 +156,19 @@ export default async function PlantPage() {
     activeProcessesCount,
   });
 
-  const plantStatus =
-    alertMessages.length > 0 ||
-    overdueProcesses > 0
-      ? "🟡 Planta con observaciones"
+  const plantStatusLevel: "ok" | "warning" | "neutral" =
+    alertMessages.length > 0 || overdueProcesses > 0
+      ? "warning"
       : activeProcessesCount > 0
-        ? "🟢 Planta operando normalmente"
-        : "⚪ Planta sin procesos activos";
+        ? "ok"
+        : "neutral";
+
+  const plantStatus =
+    plantStatusLevel === "warning"
+      ? "Planta con observaciones"
+      : plantStatusLevel === "ok"
+        ? "Planta operando normalmente"
+        : "Planta sin procesos activos";
 
   const greetingName =
     user?.name?.split(" ")[0] ?? "equipo";
@@ -134,17 +195,18 @@ export default async function PlantPage() {
         : ["Sin acciones pendientes."];
 
   return (
-    <main className="min-h-screen bg-slate-950 p-4 text-white sm:p-6 lg:p-8">
+    <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl space-y-8">
         <PlantHeader
           title="Destiladora del Norte"
           status={plantStatus}
+          statusLevel={plantStatusLevel}
           health={plantHealth}
         />
 
         <section>
           <div className="mb-5">
-            <p className="text-sm uppercase tracking-[0.35em] text-amber-400">
+            <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
               Estado actual
             </p>
 
@@ -152,7 +214,7 @@ export default async function PlantPage() {
               Procesos activos
             </h2>
 
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-on-surface-variant">
               Información más reciente de cada área de
               producción.
             </p>
@@ -181,7 +243,7 @@ export default async function PlantPage() {
                   className="space-y-2"
                 >
                   <PlantStatusCard
-                    icon="🔥"
+                    icon={<FlameIcon />}
                     title={cooking.equipment.name}
                     value={
                       averageTemperature !== null
@@ -238,14 +300,32 @@ export default async function PlantPage() {
                         )} °C`
                       : "Sin registro";
 
+              const recording =
+                recordingStatus.milling.find(
+                  (item) => item.id === milling.id
+                );
+
               return (
-                <PlantStatusCard
+                <div
                   key={milling.id}
-                  icon="⚙️"
-                  title={milling.equipment.name}
-                  value={value}
-                  status="ok"
-                />
+                  className="space-y-2"
+                >
+                  <PlantStatusCard
+                    icon={<GearIcon />}
+                    title={milling.equipment.name}
+                    value={value}
+                    status="ok"
+                  />
+
+                  {recording && (
+                    <RecordingBadge
+                      minutesSinceLastRecord={
+                        recording.minutesSinceLastRecord
+                      }
+                      isOverdue={recording.isOverdue}
+                    />
+                  )}
+                </div>
               );
             })}
 
@@ -305,7 +385,7 @@ export default async function PlantPage() {
                     className="space-y-2"
                   >
                     <PlantStatusCard
-                      icon="🧪"
+                      icon={<FlaskIcon />}
                       title={fermentation.tank}
                       value={value}
                       status={
@@ -366,29 +446,96 @@ export default async function PlantPage() {
                         )} °C`
                       : "Sin lectura";
 
+                const recording =
+                  recordingStatus.distillation.find(
+                    (item) =>
+                      item.id === distillation.id
+                  );
+
                 return (
-                  <PlantStatusCard
+                  <div
                     key={distillation.id}
-                    icon="🥃"
-                    title={
-                      distillation.equipment.name
-                    }
-                    value={value}
-                    status={
-                      hasAlert
-                        ? "warning"
-                        : "ok"
-                    }
-                  />
+                    className="space-y-2"
+                  >
+                    <PlantStatusCard
+                      icon={<StillIcon />}
+                      title={
+                        distillation.equipment.name
+                      }
+                      value={value}
+                      status={
+                        hasAlert
+                          ? "warning"
+                          : "ok"
+                      }
+                    />
+
+                    {recording && (
+                      <RecordingBadge
+                        minutesSinceLastRecord={
+                          recording.minutesSinceLastRecord
+                        }
+                        isOverdue={
+                          recording.isOverdue
+                        }
+                      />
+                    )}
+                  </div>
                 );
               }
             )}
 
             {activeProcessesCount === 0 && (
-              <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center sm:col-span-2 lg:col-span-4">
-                <p className="text-slate-400">
+              <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center sm:col-span-2 lg:col-span-4">
+                <p className="text-on-surface-variant">
                   No hay procesos activos en este
                   momento.
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section>
+          <div className="mb-5">
+            <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
+              Estado del equipo
+            </p>
+
+            <h2 className="mt-2 text-3xl font-bold">
+              Equipo de planta
+            </h2>
+
+            <p className="mt-2 text-sm text-on-surface-variant">
+              Disponibilidad de hornos, molinos, tinas y
+              alambiques, estén o no en uso ahora mismo.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {allEquipment.map((equipment) => {
+              const info = getEquipmentDisplay(equipment);
+              const activeHref = activeHrefByEquipmentId.get(
+                equipment.id
+              );
+
+              return (
+                <EquipmentCard
+                  key={equipment.id}
+                  icon={info.icon}
+                  title={equipment.name}
+                  status={info.statusLabel}
+                  tone={info.tone}
+                  subtitle={equipment.location ?? undefined}
+                  href={activeHref ?? info.newHref}
+                />
+              );
+            })}
+
+            {allEquipment.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center sm:col-span-2 lg:col-span-4">
+                <p className="text-on-surface-variant">
+                  No hay equipo activo registrado.
                 </p>
               </div>
             )}
@@ -414,6 +561,7 @@ export default async function PlantPage() {
 
         <MissionControl
           score={Math.round(excellence.score)}
+          level={excellence.level}
           confidence={
             totalAgaveKg > 0
               ? prediction.confidence
@@ -447,7 +595,7 @@ export default async function PlantPage() {
 
         <section>
           <div className="mb-5">
-            <p className="text-sm uppercase tracking-[0.35em] text-amber-400">
+            <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
               Acceso operativo
             </p>
 
@@ -455,7 +603,7 @@ export default async function PlantPage() {
               Procesos de la planta
             </h2>
 
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-on-surface-variant">
               Abre directamente el proceso que deseas
               consultar o actualizar.
             </p>
@@ -471,7 +619,7 @@ export default async function PlantPage() {
               return (
                 <EquipmentCard
                   key={cooking.id}
-                  icon="🔥"
+                  icon={<FlameIcon />}
                   title={cooking.equipment.name}
                   status={`Cocinando · ${cooking.lot.code}`}
                   value={
@@ -496,7 +644,7 @@ export default async function PlantPage() {
               return (
                 <EquipmentCard
                   key={milling.id}
-                  icon="⚙️"
+                  icon={<GearIcon />}
                   title={milling.equipment.name}
                   status={`Moliendo · ${milling.lot.code}`}
                   value={
@@ -536,7 +684,7 @@ export default async function PlantPage() {
                 return (
                   <EquipmentCard
                     key={fermentation.id}
-                    icon="🧪"
+                    icon={<FlaskIcon />}
                     title={fermentation.tank}
                     status={`Fermentando · ${fermentation.lot.code}`}
                     value={
@@ -574,7 +722,7 @@ export default async function PlantPage() {
                 return (
                   <EquipmentCard
                     key={distillation.id}
-                    icon="🥃"
+                    icon={<StillIcon />}
                     title={
                       distillation.equipment.name
                     }
@@ -723,4 +871,47 @@ function formatDistillationType(type: string) {
     .replace(/^\w/, (letter) =>
       letter.toUpperCase()
     );
+}
+
+const EQUIPMENT_TYPE_INFO: Record<
+  EquipmentType,
+  { icon: ReactNode; newHref: string }
+> = {
+  HORNO: { icon: <FlameIcon />, newHref: "/cooking/new" },
+  DESGARRADORA: { icon: <GearIcon />, newHref: "/milling/new" },
+  PRENSA: { icon: <GearIcon />, newHref: "/milling/new" },
+  TINA: { icon: <FlaskIcon />, newHref: "/fermentation/new" },
+  ALAMBIQUE: { icon: <StillIcon />, newHref: "/distillation/new" },
+  BOMBA: { icon: <GlassWaterIcon />, newHref: "/plant" },
+  TANQUE: { icon: <PackageIcon />, newHref: "/plant" },
+  CALDERA: { icon: <FlameIcon />, newHref: "/plant" },
+  OTRO: { icon: <ToolboxIcon />, newHref: "/plant" },
+};
+
+const EQUIPMENT_STATUS_INFO: Record<
+  Equipment["status"],
+  { label: string; tone: "green" | "yellow" | "red" | "blue" | "slate" }
+> = {
+  DISPONIBLE: { label: "Disponible", tone: "green" },
+  OPERANDO: { label: "Operando", tone: "blue" },
+  ESPERANDO: { label: "Esperando", tone: "yellow" },
+  LAVADO: { label: "En lavado", tone: "slate" },
+  MANTENIMIENTO: { label: "Mantenimiento", tone: "red" },
+};
+
+function getEquipmentDisplay(equipment: Equipment) {
+  const typeInfo =
+    EQUIPMENT_TYPE_INFO[equipment.type] ??
+    EQUIPMENT_TYPE_INFO.OTRO;
+
+  const statusInfo =
+    EQUIPMENT_STATUS_INFO[equipment.status] ??
+    EQUIPMENT_STATUS_INFO.DISPONIBLE;
+
+  return {
+    icon: typeInfo.icon,
+    newHref: typeInfo.newHref,
+    statusLabel: statusInfo.label,
+    tone: statusInfo.tone,
+  };
 }

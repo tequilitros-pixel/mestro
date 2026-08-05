@@ -8,24 +8,24 @@ export default async function LotsPage() {
   });
 
   return (
-    <main className="min-h-screen bg-slate-950 p-10 text-white">
+    <main className="min-h-screen bg-background p-10 text-on-surface">
       <div className="mx-auto max-w-6xl">
-       
+
 
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
+            <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
               MAESTRO
             </p>
-            <h1 className="mt-3 text-4xl font-bold">Lotes</h1>
-            <p className="mt-2 text-slate-400">
+            <h1 className="mt-3 text-4xl font-bold text-primary">Lotes</h1>
+            <p className="mt-2 text-on-surface-variant">
               Expedientes de producción desde recepción hasta producto terminado.
             </p>
           </div>
 
           <Link
             href="/lots/new"
-            className="rounded-xl bg-amber-400 px-5 py-3 font-bold text-slate-950"
+            className="rounded-xl bg-primary px-5 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
           >
             Nuevo lote
           </Link>
@@ -33,7 +33,7 @@ export default async function LotsPage() {
 
         <div className="grid gap-4">
           {lots.length === 0 ? (
-            <div className="rounded-2xl bg-slate-900 p-8 text-slate-400">
+            <div className="rounded-xl bg-surface-container p-8 text-on-surface-variant">
               Aún no hay lotes registrados.
             </div>
           ) : (
@@ -41,15 +41,15 @@ export default async function LotsPage() {
               <Link
                 key={lot.id}
                 href={`/lots/${lot.id}`}
-                className="rounded-2xl bg-slate-900 p-6 transition hover:bg-slate-800"
+                className="rounded-xl bg-surface-container p-6 transition hover:bg-surface-container-high"
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-slate-400">Código de lote</p>
-                    <h2 className="mt-1 text-2xl font-bold">{lot.code}</h2>
+                    <p className="text-sm text-on-surface-variant">Código de lote</p>
+                    <h2 className="mt-1 text-2xl font-bold text-primary">{lot.code}</h2>
                   </div>
 
-                  <span className="rounded-full bg-amber-400/10 px-4 py-2 text-sm font-bold text-amber-400">
+                  <span className="rounded-full border border-outline-variant bg-surface-container-high px-4 py-2 font-mono text-sm font-bold text-on-surface-variant">
                     {lot.stage}
                   </span>
                 </div>
@@ -73,9 +73,9 @@ export default async function LotsPage() {
 
 function Kpi({ title, value }: { title: string; value: string | number }) {
   return (
-    <div className="rounded-xl bg-slate-800 p-4">
-      <p className="text-sm text-slate-400">{title}</p>
-      <p className="mt-1 text-xl font-bold">{value}</p>
+    <div className="rounded-xl bg-surface-container-high p-4">
+      <p className="text-sm text-on-surface-variant">{title}</p>
+      <p className="mt-1 text-xl font-bold text-primary">{value}</p>
     </div>
   );
 }

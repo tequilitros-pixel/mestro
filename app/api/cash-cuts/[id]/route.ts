@@ -15,19 +15,42 @@ export async function GET(
 
   const { id } = await params;
 
-  const cashCut = await prisma.cashCut.findUnique({
-    where: { id },
-    include: {
-      branch: true,
-      responsible: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
-      salesByMethod: true,
-      outflows: { orderBy: { occurredAt: "asc" } },
-      inflows: { orderBy: { occurredAt: "asc" } },
-      evidences: true,
-      auditEntries: { orderBy: { createdAt: "desc" }, take: 20 },
-    },
-  });
+  let cashCut;
+  try {
+    cashCut = await prisma.cashCut.findUnique({
+      where: { id },
+      include: {
+        branch: true,
+        responsible: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, name: true } },
+        salesByMethod: true,
+        outflows: { orderBy: { occurredAt: "asc" } },
+        inflows: { orderBy: { occurredAt: "asc" } },
+        evidences: true,
+        auditEntries: { orderBy: { createdAt: "desc" }, take: 20 },
+        denominations: { orderBy: { value: "desc" } },
+        event: {
+          select: {
+            id: true,
+            code: true,
+            clientName: true,
+            location: true,
+            eventDate: true,
+          },
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching cash cut:", error);
+    return NextResponse.json(
+      {
+        error:
+          "Error al consultar el corte. Si acabas de actualizar la app, corre `npx prisma generate && npx prisma db push` y vuelve a intentar.",
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 }
+    );
+  }
 
   if (!cashCut) {
     return NextResponse.json({ error: "Corte no encontrado" }, { status: 404 });
@@ -65,6 +88,15 @@ export async function PATCH(
   if (!existing) {
     return NextResponse.json({ error: "Corte no encontrado" }, { status: 404 });
   }
+  if (user.role === "GERENTE" || user.role === "ENCARGADO") {
+    const hasAccess = await prisma.userBranch.findFirst({
+      where: { userId: user.id, branchId: existing.branchId },
+    });
+    if (!hasAccess) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    }
+  }
+
 
   if (existing.status !== "ABIERTO" && user.role !== "ADMIN") {
     return NextResponse.json(

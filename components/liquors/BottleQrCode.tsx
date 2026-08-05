@@ -29,7 +29,7 @@ export default function BottleQrCode({
 
   return (
     <div
-      className={`flex items-center justify-center bg-white ${className}`}
+      className={`flex h-full w-full items-center justify-center bg-white ${className}`}
     >
       <QRCodeSVG
         value={value}
@@ -39,6 +39,7 @@ export default function BottleQrCode({
         fgColor="#000000"
         marginSize={2}
         title="Código QR de la botella"
+        style={{ width: "100%", height: "100%" }}
       />
     </div>
   );

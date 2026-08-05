@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, startTransition } from "react";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 
 interface Branch {
@@ -30,7 +30,10 @@ export default function ExpensesPage() {
   }, []);
 
   useEffect(() => {
-    setLoading(true);
+    startTransition(() => {
+      setLoading(true);
+    });
+
     const params = new URLSearchParams();
     if (branchId) params.set("branchId", branchId);
 
@@ -51,12 +54,12 @@ export default function ExpensesPage() {
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-white">Salidas de caja</h1>
+      <h1 className="text-2xl font-bold text-on-surface">Salidas de caja</h1>
 
       <select
         value={branchId}
         onChange={(e) => setBranchId(e.target.value)}
-        className="w-full bg-slate-800 text-white rounded-lg px-3 py-2 border border-slate-600 text-sm"
+        className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
       >
         <option value="">Todas las sucursales</option>
         {branches.map((b) => (
@@ -76,17 +79,17 @@ export default function ExpensesPage() {
           {Object.entries(byCategory).map(([cat, amount]) => (
             <Card key={cat}>
               <CardLabel>{cat}</CardLabel>
-              <p className="text-white font-bold">${amount.toFixed(2)}</p>
+              <p className="text-on-surface font-bold">${amount.toFixed(2)}</p>
             </Card>
           ))}
         </div>
       )}
 
-      {loading && <p className="text-slate-400">Cargando...</p>}
+      {loading && <p className="text-on-surface-variant">Cargando...</p>}
 
       {!loading && outflows.length === 0 && (
         <Card>
-          <p className="text-slate-400 text-sm">No hay salidas registradas.</p>
+          <p className="text-on-surface-variant text-sm">No hay salidas registradas.</p>
         </Card>
       )}
 
@@ -95,15 +98,15 @@ export default function ExpensesPage() {
           <Card key={o.id}>
             <div className="flex justify-between">
               <div>
-                <p className="text-white font-semibold">{o.concept}</p>
-                <p className="text-slate-400 text-xs mt-1">
+                <p className="text-on-surface font-semibold">{o.concept}</p>
+                <p className="text-on-surface-variant text-xs mt-1">
                   {o.category} · {o.cashCut.branch.name} · {o.cashCut.code}
                 </p>
-                <p className="text-slate-500 text-xs">
+                <p className="text-outline text-xs">
                   {new Date(o.occurredAt).toLocaleDateString("es-MX")}
                 </p>
               </div>
-              <p className="text-white font-bold">${o.amount.toFixed(2)}</p>
+              <p className="text-on-surface font-bold">${o.amount.toFixed(2)}</p>
             </div>
           </Card>
         ))}

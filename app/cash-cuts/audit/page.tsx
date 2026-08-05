@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, startTransition } from "react";
+import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
@@ -11,6 +12,7 @@ interface Branch {
 
 interface AuditEntry {
   id: string;
+  cashCutId: string;
   cashCutCode: string;
   branch: string;
   action: string;
@@ -84,8 +86,8 @@ export default function AuditPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-navy-900">Auditoría</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-on-surface">Auditoría</h1>
+        <p className="text-sm text-on-surface-variant">
           Historial de creación, ediciones y cierres de cortes de caja: quién hizo qué y cuándo.
         </p>
       </div>
@@ -93,9 +95,9 @@ export default function AuditPage() {
       <Card>
         <div className="flex flex-wrap items-end gap-4 p-4">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Sucursal</label>
+            <label className="text-sm font-semibold text-on-surface-variant">Sucursal</label>
             <select
-              className="border rounded-md px-3 py-2 text-sm min-w-[180px]"
+              className="min-w-[180px] rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
               value={branchId}
               onChange={(e) => setBranchId(e.target.value)}
             >
@@ -109,20 +111,20 @@ export default function AuditPage() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Desde</label>
+            <label className="text-sm font-semibold text-on-surface-variant">Desde</label>
             <input
               type="date"
-              className="border rounded-md px-3 py-2 text-sm"
+              className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
             />
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Hasta</label>
+            <label className="text-sm font-semibold text-on-surface-variant">Hasta</label>
             <input
               type="date"
-              className="border rounded-md px-3 py-2 text-sm"
+              className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />
@@ -133,7 +135,7 @@ export default function AuditPage() {
       </Card>
 
       {error && (
-        <div className="bg-red-50 text-red-700 text-sm rounded-md p-3 border border-red-200">
+        <div className="bg-error/10 text-error text-sm rounded-md p-3 border border-error/30">
           {error}
         </div>
       )}
@@ -142,7 +144,7 @@ export default function AuditPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-navy-900 text-white text-left">
+              <tr className="bg-surface-container-high text-on-surface-variant text-left">
                 <th className="px-4 py-3">Fecha/Hora</th>
                 <th className="px-4 py-3">Corte</th>
                 <th className="px-4 py-3">Sucursal</th>
@@ -155,7 +157,7 @@ export default function AuditPage() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                  <td colSpan={7} className="px-4 py-6 text-center text-outline">
                     Cargando...
                   </td>
                 </tr>
@@ -163,7 +165,7 @@ export default function AuditPage() {
 
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                  <td colSpan={7} className="px-4 py-6 text-center text-outline">
                     No hay movimientos registrados para este filtro.
                   </td>
                 </tr>
@@ -171,14 +173,21 @@ export default function AuditPage() {
 
               {!loading &&
                 rows.map((r) => (
-                  <tr key={r.id} className="border-b last:border-0 hover:bg-gray-50">
+                  <tr key={r.id} className="border-outline-variant last:border-0 hover:bg-surface-container">
                     <td className="px-4 py-3 whitespace-nowrap">{formatDateTime(r.createdAt)}</td>
-                    <td className="px-4 py-3 font-medium">{r.cashCutCode}</td>
+                    <td className="px-4 py-3 font-medium">
+                      <Link
+                        href={`/cash-cuts/daily/${r.cashCutId}`}
+                        className="text-primary underline-offset-2 hover:underline"
+                      >
+                        {r.cashCutCode}
+                      </Link>
+                    </td>
                     <td className="px-4 py-3">{r.branch}</td>
                     <td className="px-4 py-3">{r.user}</td>
                     <td className="px-4 py-3">{ACTION_LABELS[r.action] ?? r.action}</td>
-                    <td className="px-4 py-3 text-gray-500">{r.field || "—"}</td>
-                    <td className="px-4 py-3 text-gray-500">
+                    <td className="px-4 py-3 text-on-surface-variant">{r.field || "—"}</td>
+                    <td className="px-4 py-3 text-on-surface-variant">
                       {r.oldValue || r.newValue ? (
                         <span>
                           {r.oldValue ?? "—"} → {r.newValue ?? "—"}

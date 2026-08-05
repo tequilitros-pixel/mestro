@@ -1,7 +1,17 @@
 import Link from "next/link";
+import type { ComponentType } from "react";
 import { LiquorBottleStatus } from "@prisma/client";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import {
+  type IconProps,
+  PackageIcon,
+  BottleIcon,
+  ClockIcon,
+  CheckIcon,
+  AlertIcon,
+  QrIcon,
+} from "@/components/ui/icons";
 
 type PageProps = {
   params: Promise<{
@@ -149,35 +159,35 @@ export default async function LiquorProductInventoryPage({
       <div className="mb-6">
         <Link
           href="/liquors/inventory"
-          className="inline-flex items-center gap-2 text-sm font-bold text-slate-400 transition hover:text-white"
+          className="inline-flex items-center gap-2 text-sm font-bold text-on-surface-variant transition hover:text-on-surface"
         >
           ← Volver al inventario
         </Link>
       </div>
 
-      <header className="overflow-hidden rounded-3xl border border-purple-500/20 bg-slate-900">
-        <div className="bg-gradient-to-br from-purple-500/20 via-fuchsia-500/10 to-slate-900 p-6 sm:p-8">
+      <header className="overflow-hidden rounded-3xl border border-outline-variant bg-surface-container">
+        <div className="p-6 sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex items-start gap-5">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-purple-400/20 bg-purple-500/10 text-4xl">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-outline-variant bg-surface-container-high text-4xl">
                 {product.icon ?? "🍾"}
               </div>
 
               <div>
-                <p className="text-sm font-black uppercase tracking-[0.3em] text-purple-300">
+                <p className="font-mono text-sm font-black uppercase tracking-[0.3em] text-on-surface-variant">
                   Inventario de botellas
                 </p>
 
-                <h1 className="mt-2 text-4xl font-black text-white sm:text-5xl">
+                <h1 className="mt-2 text-4xl font-black text-on-surface sm:text-5xl">
                   {product.name}
                 </h1>
 
-                <p className="mt-3 text-lg font-bold text-purple-200">
+                <p className="mt-3 text-lg font-bold text-primary">
                   {presentation}
                 </p>
 
                 {product.description ? (
-                  <p className="mt-3 max-w-2xl text-slate-400">
+                  <p className="mt-3 max-w-2xl text-on-surface-variant">
                     {product.description}
                   </p>
                 ) : null}
@@ -203,7 +213,7 @@ export default async function LiquorProductInventoryPage({
         <StatusKpi
           label="Total"
           value={totals.total}
-          icon="📦"
+          icon={PackageIcon}
           active={!selectedStatus}
           href={buildFilterUrl(product.slug, bottleSizeMl, null)}
         />
@@ -211,7 +221,7 @@ export default async function LiquorProductInventoryPage({
         <StatusKpi
           label="Disponibles"
           value={totals.available}
-          icon="🍾"
+          icon={BottleIcon}
           active={
             selectedStatus === LiquorBottleStatus.DISPONIBLE
           }
@@ -225,7 +235,7 @@ export default async function LiquorProductInventoryPage({
         <StatusKpi
           label="Reservadas"
           value={totals.reserved}
-          icon="🟡"
+          icon={ClockIcon}
           active={
             selectedStatus === LiquorBottleStatus.RESERVADA
           }
@@ -239,7 +249,7 @@ export default async function LiquorProductInventoryPage({
         <StatusKpi
           label="Vendidas"
           value={totals.sold}
-          icon="✅"
+          icon={CheckIcon}
           active={selectedStatus === LiquorBottleStatus.VENDIDA}
           href={buildFilterUrl(
             product.slug,
@@ -251,7 +261,7 @@ export default async function LiquorProductInventoryPage({
         <StatusKpi
           label="Fuera de inventario"
           value={totals.loss + totals.removed}
-          icon="⚠️"
+          icon={AlertIcon}
           active={
             selectedStatus === LiquorBottleStatus.MERMA ||
             selectedStatus === LiquorBottleStatus.RETIRADA
@@ -267,18 +277,18 @@ export default async function LiquorProductInventoryPage({
       <section className="mt-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.3em] text-purple-400">
+            <p className="font-mono text-sm font-black uppercase tracking-[0.3em] text-on-surface-variant">
               Botellas individuales
             </p>
 
-            <h2 className="mt-2 text-3xl font-black text-white">
+            <h2 className="mt-2 text-3xl font-black text-on-surface">
               {selectedStatus
                 ? getStatusLabel(selectedStatus)
                 : "Todas las botellas"}
             </h2>
           </div>
 
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-outline">
             {formatNumber(bottles.length, 0)} resultados
           </p>
         </div>
@@ -331,19 +341,19 @@ function BottleCard({
   const statusStyle = getStatusStyle(bottle.status);
 
   return (
-    <article className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 transition hover:-translate-y-1 hover:border-purple-500/40">
-      <div className="border-b border-slate-800 bg-slate-950/30 p-5">
+    <article className="overflow-hidden rounded-3xl border border-outline-variant bg-surface-container transition hover:-translate-y-1 hover:border-primary/25">
+      <div className="border-b border-outline-variant bg-background/30 p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-500">
+            <p className="font-mono text-xs font-black uppercase tracking-[0.25em] text-outline">
               Botella
             </p>
 
-            <h3 className="mt-2 break-all text-xl font-black text-white">
+            <h3 className="mt-2 break-all text-xl font-black text-on-surface">
               {bottle.code}
             </h3>
 
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-outline">
               Serie #{formatSerialNumber(bottle.serialNumber)}
             </p>
           </div>
@@ -388,7 +398,7 @@ function BottleCard({
           />
         </div>
 
-        <div className="mt-5 space-y-3 border-t border-slate-800 pt-5">
+        <div className="mt-5 space-y-3 border-t border-outline-variant pt-5">
           <BottleDetail
             label="Embotellada"
             value={formatDate(
@@ -415,7 +425,7 @@ function BottleCard({
         <div className="mt-6 flex gap-3">
           <Link
             href={`/liquors/bottles/${bottle.id}`}
-            className="flex-1 rounded-2xl bg-purple-600 px-4 py-3 text-center text-sm font-black text-white transition hover:bg-purple-500"
+            className="flex-1 rounded-2xl bg-primary px-4 py-3 text-center text-sm font-black text-on-surface transition hover:opacity-90"
           >
             Ver detalle
           </Link>
@@ -423,9 +433,9 @@ function BottleCard({
           <Link
             href={`/liquors/bottles/${bottle.id}/qr`}
             aria-label={`Ver QR de ${bottle.code}`}
-            className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-700 bg-slate-800 text-xl transition hover:border-purple-500 hover:bg-slate-700"
+            className="flex h-12 w-12 items-center justify-center rounded-2xl border border-outline-variant bg-surface-container-high transition hover:border-primary/25 hover:bg-surface-container-highest"
           >
-            ▦
+            <QrIcon className="h-5 w-5" />
           </Link>
         </div>
       </div>
@@ -441,12 +451,12 @@ function HeaderValue({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-purple-400/20 bg-purple-500/10 p-4">
-      <p className="text-xs font-bold uppercase tracking-wider text-purple-200/60">
+    <div className="rounded-2xl border border-outline-variant bg-surface-container-high p-4">
+      <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">
         {label}
       </p>
 
-      <p className="mt-2 text-2xl font-black text-white">
+      <p className="mt-2 text-2xl font-black text-on-surface">
         {value}
       </p>
     </div>
@@ -456,42 +466,42 @@ function HeaderValue({
 function StatusKpi({
   label,
   value,
-  icon,
+  icon: Icon,
   active,
   href,
 }: {
   label: string;
   value: number;
-  icon: string;
+  icon: ComponentType<IconProps>;
   active: boolean;
   href: string;
 }) {
   return (
     <Link
       href={href}
-      className={`rounded-2xl border p-5 transition ${
+      className={`rounded-2xl border p-5 transition duration-150 ease-out hover:scale-[1.02] active:scale-[0.98] ${
         active
-          ? "border-purple-500 bg-purple-500/15"
-          : "border-slate-800 bg-slate-900 hover:border-purple-500/40"
+          ? "border-primary bg-primary/10"
+          : "border-outline-variant bg-surface-container hover:border-primary/25"
       }`}
     >
       <div className="flex items-center justify-between gap-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800/80 text-xl">
-          {icon}
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-container-high/80">
+          <Icon className="h-5 w-5 text-on-surface-variant" />
         </div>
 
         {active ? (
-          <span className="rounded-full bg-purple-500 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-white">
+          <span className="rounded-full bg-primary px-2 py-1 text-[10px] font-black uppercase tracking-wider text-on-primary">
             Activo
           </span>
         ) : null}
       </div>
 
-      <p className="mt-4 text-sm font-bold text-slate-400">
+      <p className="mt-4 text-sm font-bold text-on-surface-variant">
         {label}
       </p>
 
-      <p className="mt-2 text-3xl font-black text-white">
+      <p className="mt-2 text-3xl font-black text-on-surface">
         {formatNumber(value, 0)}
       </p>
     </Link>
@@ -506,12 +516,12 @@ function BottleValue({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+    <div className="rounded-2xl border border-outline-variant bg-surface-dim/40 p-4">
+      <p className="text-xs font-bold uppercase tracking-wider text-outline">
         {label}
       </p>
 
-      <p className="mt-2 break-words font-black text-white">
+      <p className="mt-2 break-words font-black text-on-surface">
         {value}
       </p>
     </div>
@@ -527,9 +537,9 @@ function BottleDetail({
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
-      <span className="text-sm text-slate-500">{label}</span>
+      <span className="text-sm text-outline">{label}</span>
 
-      <span className="text-right text-sm font-bold text-slate-200">
+      <span className="text-right text-sm font-bold text-on-surface">
         {value}
       </span>
     </div>
@@ -538,16 +548,16 @@ function BottleDetail({
 
 function EmptyBottleList() {
   return (
-    <div className="mt-6 rounded-3xl border border-dashed border-slate-700 bg-slate-900/50 p-10 text-center">
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-purple-500/10 text-3xl">
-        🍾
+    <div className="mt-6 rounded-3xl border border-dashed border-outline-variant bg-surface-container/50 p-10 text-center">
+      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-outline-variant bg-surface-container-high">
+        <BottleIcon className="h-7 w-7 text-on-surface-variant" />
       </div>
 
-      <h3 className="mt-5 text-2xl font-black text-white">
+      <h3 className="mt-5 text-2xl font-black text-on-surface">
         No hay botellas con este filtro
       </h3>
 
-      <p className="mx-auto mt-3 max-w-xl text-slate-400">
+      <p className="mx-auto mt-3 max-w-xl text-on-surface-variant">
         Cambia el estado seleccionado o vuelve al inventario
         general.
       </p>
@@ -671,22 +681,22 @@ function getStatusLabel(status: LiquorBottleStatus) {
 function getStatusStyle(status: LiquorBottleStatus) {
   switch (status) {
     case LiquorBottleStatus.DISPONIBLE:
-      return "border-green-500/30 bg-green-500/10 text-green-300";
+      return "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim";
 
     case LiquorBottleStatus.RESERVADA:
-      return "border-yellow-500/30 bg-yellow-500/10 text-yellow-300";
+      return "border-secondary/30 bg-secondary/10 text-secondary";
 
     case LiquorBottleStatus.VENDIDA:
-      return "border-blue-500/30 bg-blue-500/10 text-blue-300";
+      return "border-on-surface-variant/30 bg-on-surface-variant/10 text-on-surface-variant";
 
     case LiquorBottleStatus.MERMA:
-      return "border-orange-500/30 bg-orange-500/10 text-orange-300";
+      return "border-error/30 bg-error/10 text-error";
 
     case LiquorBottleStatus.RETIRADA:
-      return "border-red-500/30 bg-red-500/10 text-red-300";
+      return "border-error/30 bg-error/10 text-error";
 
     default:
-      return "border-slate-600 bg-slate-800 text-slate-300";
+      return "border-outline-variant bg-surface-container-high text-on-surface-variant";
   }
 }
 

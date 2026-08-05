@@ -28,7 +28,7 @@ export function getLotEngine(lot: LotWithProcess) {
 
   if (!hasCooking) {
     return {
-      status: "🌱 Recepción",
+      status: "Recepción",
       progress: 10,
       priority: "NORMAL" as Priority,
       nextAction: "Iniciar cocción",
@@ -44,7 +44,7 @@ export function getLotEngine(lot: LotWithProcess) {
 
   if (lastCooking?.status !== "TERMINADA") {
     return {
-      status: "🔥 En cocción",
+      status: "En cocción",
       progress: 25,
       priority: "NORMAL" as Priority,
       nextAction: "Continuar cocción",
@@ -61,7 +61,7 @@ export function getLotEngine(lot: LotWithProcess) {
 
   if (!hasMilling) {
     return {
-      status: "⚙️ Listo para molienda",
+      status: "Listo para molienda",
       progress: 40,
       priority: "ALTA" as Priority,
       nextAction: "Iniciar molienda",
@@ -78,7 +78,7 @@ export function getLotEngine(lot: LotWithProcess) {
 
   if (lastMilling?.status !== "TERMINADA") {
     return {
-      status: "⚙️ En molienda",
+      status: "En molienda",
       progress: 50,
       priority: "NORMAL" as Priority,
       nextAction: "Continuar molienda",
@@ -95,7 +95,7 @@ export function getLotEngine(lot: LotWithProcess) {
 
   if (!hasFermentation) {
     return {
-      status: "🧪 Listo para fermentación",
+      status: "Listo para fermentación",
       progress: 60,
       priority: "ALTA" as Priority,
       nextAction: "Iniciar fermentación",
@@ -112,7 +112,7 @@ export function getLotEngine(lot: LotWithProcess) {
 
   if (lastFermentation?.status !== "TERMINADA") {
     return {
-      status: "🧪 Fermentando",
+      status: "Fermentando",
       progress: 75,
       priority: "NORMAL" as Priority,
       nextAction: "Registrar lectura",
@@ -130,7 +130,7 @@ export function getLotEngine(lot: LotWithProcess) {
 
   if (!hasDistillation) {
     return {
-      status: "🥃 Listo para destilar",
+      status: "Listo para destilar",
       progress: 85,
       priority: "ALTA" as Priority,
       nextAction: "Iniciar destilación",
@@ -147,7 +147,7 @@ export function getLotEngine(lot: LotWithProcess) {
 
   if (lastDistillation?.status !== "TERMINADA") {
     return {
-      status: "🥃 Destilando",
+      status: "Destilando",
       progress: 92,
       priority: "NORMAL" as Priority,
       nextAction: "Continuar destilación",
@@ -164,7 +164,7 @@ export function getLotEngine(lot: LotWithProcess) {
   }
 
   return {
-    status: "🍾 Terminado",
+    status: "Terminado",
     progress: 100,
     priority: "BAJA" as Priority,
     nextAction: "Ver resultados",

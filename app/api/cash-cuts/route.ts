@@ -58,11 +58,54 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { branchId, date, startingFund, responsibleId } = body;
+  const {
+    branchId,
+    date,
+    startingFund,
+    responsibleId,
+    startingFundDenominations,
+    eventId,
+  } = body;
 
   if (!branchId || !date || startingFund === undefined) {
     return NextResponse.json({ error: "Faltan datos: branchId, date, startingFund" }, { status: 400 });
   }
+
+  const event = eventId
+    ? await prisma.serviceEvent.findUnique({
+        where: { id: eventId },
+        include: { items: true },
+      })
+    : null;
+
+  if (eventId) {
+    if (!event) {
+      return NextResponse.json({ error: "El evento seleccionado no existe." }, { status: 404 });
+    }
+
+    if (event.stockDeductedAt) {
+      return NextResponse.json(
+        { error: "El inventario de este evento ya fue descontado en otro corte." },
+        { status: 400 }
+      );
+    }
+  }
+
+  const denominationRows: { context: "APERTURA"; value: number; quantity: number }[] =
+    Array.isArray(startingFundDenominations)
+      ? startingFundDenominations
+          .filter(
+            (d: { value?: number; quantity?: number }) =>
+              typeof d?.value === "number" &&
+              typeof d?.quantity === "number" &&
+              d.quantity > 0
+          )
+          .map((d: { value: number; quantity: number }) => ({
+            context: "APERTURA" as const,
+            value: d.value,
+            quantity: d.quantity,
+          }))
+      : [];
 
   // Código legible: CC-<CODIGO_SUCURSAL>-<FECHA>-<consecutivo del día>
   const branch = await prisma.branch.findUnique({ where: { id: branchId } });
@@ -75,22 +118,56 @@ export async function POST(request: Request) {
   });
   const code = `CC-${branch.code}-${date}-${String(dayCount + 1).padStart(2, "0")}`;
 
-  const cashCut = await prisma.cashCut.create({
-    data: {
-      code,
-      branchId,
-      date: new Date(date),
-      startingFund,
-      responsibleId: responsibleId ?? user.id,
-      createdById: user.id,
-      status: "ABIERTO",
-      auditEntries: {
-        create: {
-          action: "CREADO",
-          userId: user.id,
+  const cashCut = await prisma.$transaction(async (tx) => {
+    const created = await tx.cashCut.create({
+      data: {
+        code,
+        branchId,
+        date: new Date(date),
+        startingFund,
+        responsibleId: responsibleId ?? user.id,
+        createdById: user.id,
+        status: "ABIERTO",
+        eventId: event?.id,
+        auditEntries: {
+          create: {
+            action: "CREADO",
+            userId: user.id,
+          },
         },
+        ...(denominationRows.length > 0
+          ? { denominations: { create: denominationRows } }
+          : {}),
       },
-    },
+    });
+
+    // Si se vinculó un evento, descuenta del inventario de esta
+    // sucursal lo que se cargó a ese evento (lo enviado, o lo
+    // planeado si aún no se registró envío).
+    if (event) {
+      for (const item of event.items) {
+        const quantity = Number(item.sentQuantity ?? item.plannedQuantity);
+
+        if (!(quantity > 0)) continue;
+
+        await tx.inventoryEntry.create({
+          data: {
+            branchId,
+            productId: item.productId,
+            type: "SALIDA_EVENTO",
+            quantity: -quantity,
+            notes: `Evento ${event.code} — ${event.clientName}`,
+          },
+        });
+      }
+
+      await tx.serviceEvent.update({
+        where: { id: event.id },
+        data: { stockDeductedAt: new Date() },
+      });
+    }
+
+    return created;
   });
 
   return NextResponse.json(cashCut, { status: 201 });

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardLabel } from "@/components/ui/Card";
+import { PlusIcon } from "@/components/ui/icons";
 
 interface Branch {
   id: string;
@@ -42,9 +43,16 @@ export default function BranchesPage() {
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Sucursales</h1>
+        <h1 className="text-2xl font-bold text-on-surface">Sucursales</h1>
         <Button onClick={() => setShowForm(!showForm)}>
-          {showForm ? "Cancelar" : "+ Nueva sucursal"}
+          {showForm ? (
+            "Cancelar"
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              <PlusIcon className="h-4 w-4" />
+              Nueva sucursal
+            </span>
+          )}
         </Button>
       </div>
 
@@ -57,7 +65,7 @@ export default function BranchesPage() {
         />
       )}
 
-      {loading && <p className="text-slate-400">Cargando...</p>}
+      {loading && <p className="text-on-surface-variant">Cargando...</p>}
 
       <div className="space-y-2">
         {branches.map((b) => (
@@ -65,13 +73,17 @@ export default function BranchesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardLabel>{b.code}</CardLabel>
-                <p className="text-white font-bold text-lg">{b.name}</p>
-                {b.address && <p className="text-slate-400 text-xs mt-1">{b.address}</p>}
+                <p className="text-on-surface font-bold text-lg">{b.name}</p>
+                {b.address && (
+                  <p className="text-on-surface-variant text-xs mt-1">{b.address}</p>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <span
                   className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    b.active ? "bg-green-500/20 text-green-300" : "bg-slate-700 text-slate-400"
+                    b.active
+                      ? "bg-tertiary-fixed-dim/20 text-tertiary-fixed-dim"
+                      : "bg-surface-container-highest text-on-surface-variant"
                   }`}
                 >
                   {b.active ? "Activa" : "Inactiva"}
@@ -84,6 +96,11 @@ export default function BranchesPage() {
           </Card>
         ))}
       </div>
+
+      <p className="text-xs text-on-surface-variant">
+        Para editar la dirección o asignar una geozona a una sucursal, ve a
+        Horario &gt; Geozona.
+      </p>
     </div>
   );
 }
@@ -108,7 +125,11 @@ function NewBranchForm({ onCreated }: { onCreated: () => void }) {
     const res = await fetch("/api/branches", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, code, address: address || undefined }),
+      body: JSON.stringify({
+        name,
+        code,
+        address: address || undefined,
+      }),
     });
     setSaving(false);
 
@@ -132,7 +153,7 @@ function NewBranchForm({ onCreated }: { onCreated: () => void }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Ej. Jalpa"
-          className="w-full bg-slate-800 text-white rounded-lg px-3 py-2 border border-slate-600"
+          className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
         />
       </Card>
       <Card>
@@ -141,7 +162,7 @@ function NewBranchForm({ onCreated }: { onCreated: () => void }) {
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           placeholder="Ej. JALPA"
-          className="w-full bg-slate-800 text-white rounded-lg px-3 py-2 border border-slate-600"
+          className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
         />
       </Card>
       <Card>
@@ -149,10 +170,11 @@ function NewBranchForm({ onCreated }: { onCreated: () => void }) {
         <input
           value={address}
           onChange={(e) => setAddress(e.target.value)}
-          className="w-full bg-slate-800 text-white rounded-lg px-3 py-2 border border-slate-600"
+          className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
         />
       </Card>
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      {error && <p className="text-error text-sm">{error}</p>}
       <Button type="submit" className="w-full" disabled={saving}>
         {saving ? "Creando..." : "Crear sucursal"}
       </Button>

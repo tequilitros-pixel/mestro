@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { completeLiquorBatchStepAction } from "@/app/actions/liquorBatchAssistant";
 import LiquorPauseModal from "@/components/liquors/LiquorPauseModal";
 import LiquorFinishModal from "@/components/liquors/LiquorFinishModal";
+import { CheckIcon, PauseIcon } from "@/components/ui/icons";
 
 type BatchStep = {
   id: string;
@@ -55,25 +56,26 @@ export default function LiquorBatchAssistant({
 
   if (!currentStep) {
     return (
-      <section className="rounded-3xl border border-green-500/30 bg-green-500/10 p-8 text-center">
-        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-green-400">
+      <section className="rounded-3xl border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 p-8 text-center">
+        <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-tertiary-fixed-dim">
           Elaboración completada
         </p>
 
 
-        <h2 className="mt-3 text-3xl font-black text-white">
+        <h2 className="mt-3 text-3xl font-black text-on-surface">
           Todos los pasos fueron realizados
         </h2>
 
-        <p className="mt-3 text-slate-300">
+        <p className="mt-3 text-on-surface-variant">
           El lote está listo para continuar con el embotellado.
         </p>
         <button
   type="button"
   onClick={() => setFinishModalOpen(true)}
-  className="mt-8 w-full rounded-2xl bg-green-600 py-4 text-xl font-black text-white transition hover:bg-green-500"
+  className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl bg-tertiary-fixed-dim py-4 text-xl font-black text-on-surface transition duration-150 ease-out hover:scale-[1.02] hover:opacity-90 active:scale-[0.98]"
 >
-  ✅ Finalizar lote
+  <CheckIcon className="h-5 w-5" />
+  Finalizar lote
 </button>
 <LiquorFinishModal
   batchId={batchId}
@@ -87,49 +89,49 @@ export default function LiquorBatchAssistant({
   }
 
   return (
-    <section className="rounded-3xl border border-purple-500/30 bg-slate-900 p-6 sm:p-8">
+    <section className="rounded-3xl border border-secondary/30 bg-surface-container p-6 sm:p-8">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-purple-400">
+          <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-secondary">
             Asistente de elaboración
           </p>
 
-          <h2 className="mt-2 text-2xl font-black text-white">
+          <h2 className="mt-2 text-2xl font-black text-on-surface">
             Paso {completedCount + 1} de {totalCount}
           </h2>
         </div>
 
-        <p className="text-2xl font-black text-purple-300">
+        <p className="text-2xl font-black text-secondary">
           {progress}%
         </p>
       </div>
 
-      <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-800">
+      <div className="mt-5 h-3 overflow-hidden rounded-full bg-surface-container-high">
         <div
-          className="h-full rounded-full bg-purple-500 transition-all duration-500"
+          className="h-full rounded-full bg-secondary transition-all duration-500"
           style={{
             width: `${progress}%`,
           }}
         />
       </div>
 
-      <div className="mt-8 rounded-3xl border border-slate-800 bg-slate-950/60 p-6 sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+      <div className="mt-8 rounded-3xl border border-outline-variant bg-background/60 p-6 sm:p-8">
+        <p className="font-mono text-xs font-semibold uppercase tracking-[0.25em] text-outline">
           {formatStepType(currentStep.type)}
         </p>
 
-        <h3 className="mt-3 text-3xl font-black text-white">
+        <h3 className="mt-3 text-3xl font-black text-on-surface">
           {currentStep.title}
         </h3>
 
         {currentStep.plannedQuantity !== null &&
           currentStep.unit && (
-            <div className="mt-6 rounded-2xl border border-purple-500/20 bg-purple-500/10 p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-purple-300/70">
+            <div className="mt-6 rounded-2xl border border-secondary/20 bg-secondary/10 p-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-secondary/70">
                 Cantidad requerida
               </p>
 
-              <p className="mt-2 text-4xl font-black text-purple-200">
+              <p className="mt-2 text-4xl font-black text-secondary">
                 {formatNumber(currentStep.plannedQuantity)}{" "}
                 {currentStep.unit}
               </p>
@@ -137,12 +139,12 @@ export default function LiquorBatchAssistant({
           )}
 
         {currentStep.instruction && (
-          <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <div className="mt-6 rounded-2xl border border-outline-variant bg-surface-container/60 p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-outline">
               Objetivo del paso
             </p>
 
-            <p className="mt-3 leading-7 text-slate-300">
+            <p className="mt-3 leading-7 text-on-surface-variant">
               {currentStep.instruction}
             </p>
           </div>
@@ -156,9 +158,10 @@ export default function LiquorBatchAssistant({
         <button
   type="button"
   onClick={() => setPauseModalOpen(true)}
-  className="mt-4 w-full rounded-2xl border border-amber-500 bg-amber-500/10 py-4 text-lg font-bold text-amber-300 transition hover:bg-amber-500/20"
+  className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-secondary bg-secondary/10 py-4 text-lg font-bold text-secondary transition duration-150 ease-out hover:scale-[1.01] hover:bg-secondary/20 active:scale-[0.99]"
 >
-  ⏸ Pausar elaboración
+  <PauseIcon className="h-5 w-5" />
+  Pausar elaboración
 </button>
 
 <LiquorPauseModal
@@ -218,7 +221,7 @@ function StepForm({
 
       {step.actions.length > 0 && (
         <div>
-          <p className="text-sm font-black uppercase tracking-[0.2em] text-purple-300">
+          <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-secondary">
             Procedimiento
           </p>
 
@@ -226,13 +229,13 @@ function StepForm({
             {step.actions.map((action, index) => (
               <li
                 key={`${step.id}-action-${index}`}
-                className="flex gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4"
+                className="flex gap-4 rounded-2xl border border-outline-variant bg-surface-container/60 p-4"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-500/15 text-sm font-black text-purple-300">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary/15 text-sm font-black text-secondary">
                   {index + 1}
                 </span>
 
-                <p className="pt-1 leading-6 text-slate-200">
+                <p className="pt-1 leading-6 text-on-surface">
                   {action}
                 </p>
               </li>
@@ -245,7 +248,7 @@ function StepForm({
         <div>
           <label
             htmlFor={`actualQuantity-${step.id}`}
-            className="text-sm font-semibold text-slate-300"
+            className="text-sm font-semibold text-on-surface-variant"
           >
             Cantidad real utilizada
           </label>
@@ -261,10 +264,10 @@ function StepForm({
               onChange={(event) =>
                 setActualQuantity(event.target.value)
               }
-              className="w-full rounded-2xl border border-slate-700 bg-slate-900 p-4 text-2xl font-bold text-white outline-none transition focus:border-purple-400"
+              className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             />
 
-            <span className="shrink-0 text-lg font-bold text-slate-400">
+            <span className="shrink-0 text-lg font-bold text-on-surface-variant">
               {step.unit}
             </span>
           </div>
@@ -273,7 +276,7 @@ function StepForm({
 
       {step.checks.length > 0 && (
         <div>
-          <p className="text-sm font-black uppercase tracking-[0.2em] text-green-300">
+          <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-tertiary-fixed-dim">
             Verificar antes de continuar
           </p>
 
@@ -287,8 +290,8 @@ function StepForm({
                   key={`${step.id}-check-${index}`}
                   className={`flex cursor-pointer items-start gap-4 rounded-2xl border p-4 transition ${
                     checked
-                      ? "border-green-500/30 bg-green-500/10"
-                      : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
+                      ? "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10"
+                      : "border-outline-variant bg-surface-container/60 hover:border-outline-variant"
                   }`}
                 >
                   <input
@@ -297,14 +300,14 @@ function StepForm({
                     value={index}
                     checked={checked}
                     onChange={() => toggleCheck(index)}
-                    className="mt-1 h-5 w-5 accent-green-500"
+                    className="mt-1 h-5 w-5 accent-tertiary-fixed-dim"
                   />
 
                   <span
                     className={
                       checked
-                        ? "text-green-100"
-                        : "text-slate-300"
+                        ? "text-tertiary-fixed-dim"
+                        : "text-on-surface-variant"
                     }
                   >
                     {check}
@@ -340,11 +343,16 @@ function SubmitButton({
     <button
       type="submit"
       disabled={pending || disabled}
-      className="w-full rounded-2xl bg-purple-500 py-4 text-lg font-bold text-white transition hover:bg-purple-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-secondary py-4 text-lg font-bold text-on-surface transition duration-150 ease-out hover:scale-[1.01] hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant disabled:hover:scale-100"
     >
-      {pending
-        ? "Guardando paso..."
-        : "✓ Finalizar paso"}
+      {pending ? (
+        "Guardando paso..."
+      ) : (
+        <>
+          <CheckIcon className="h-4 w-4" />
+          Finalizar paso
+        </>
+      )}
     </button>
   );
 }

@@ -12,13 +12,13 @@ export default async function FermentationPage() {
   });
 
   return (
-    <main className="min-h-screen bg-slate-950 p-10 text-white">
+    <main className="min-h-screen bg-background p-10 text-on-surface">
       <div className="mx-auto max-w-6xl">
       
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
+            <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
               MAESTRO
             </p>
             <h1 className="mt-3 text-4xl font-bold">Fermentación</h1>
@@ -26,7 +26,7 @@ export default async function FermentationPage() {
 
           <Link
             href="/fermentation/new"
-            className="rounded-xl bg-amber-400 px-6 py-3 font-bold text-black"
+            className="rounded-xl bg-primary px-6 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
           >
             Nueva fermentación
           </Link>
@@ -34,7 +34,7 @@ export default async function FermentationPage() {
 
         <section className="mt-8 grid gap-4">
           {fermentations.length === 0 ? (
-            <div className="rounded-2xl bg-slate-900 p-8 text-center text-slate-400">
+            <div className="rounded-2xl bg-surface-container p-8 text-center text-on-surface-variant">
               No hay fermentaciones registradas.
             </div>
           ) : (
@@ -45,17 +45,17 @@ export default async function FermentationPage() {
                 <Link
                   key={fermentation.id}
                   href={`/fermentation/${fermentation.id}`}
-                  className="rounded-2xl bg-slate-900 p-6 transition hover:bg-slate-800"
+                  className="rounded-2xl bg-surface-container p-6 transition hover:bg-surface-container-high"
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-slate-400">Lote</p>
+                      <p className="text-sm text-on-surface-variant">Lote</p>
                       <h2 className="text-2xl font-bold">
                         {fermentation.lot.code}
                       </h2>
                     </div>
 
-                    <p className="text-xl font-bold text-green-400">
+                    <p className="text-xl font-bold text-tertiary-fixed-dim">
                       {fermentation.status}
                     </p>
                   </div>
@@ -82,8 +82,8 @@ export default async function FermentationPage() {
 
 function Kpi({ title, value }: { title: string; value: string | number }) {
   return (
-    <div className="rounded-xl bg-slate-800 p-4">
-      <p className="text-sm text-slate-400">{title}</p>
+    <div className="rounded-xl bg-surface-container-high p-4">
+      <p className="text-sm text-on-surface-variant">{title}</p>
       <p className="mt-1 text-xl font-bold">{value}</p>
     </div>
   );

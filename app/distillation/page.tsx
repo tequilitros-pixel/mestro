@@ -24,26 +24,26 @@ export default async function DistillationPage() {
   );
 
   return (
-    <main className="min-h-screen bg-slate-950 p-10 text-white">
+    <main className="min-h-screen bg-background p-10 text-on-surface">
       <div className="mx-auto max-w-7xl">
       
 
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
+            <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
               MAESTRO
             </p>
 
             <h1 className="mt-3 text-5xl font-bold">Destilación</h1>
 
-            <p className="mt-2 text-slate-400">
+            <p className="mt-2 text-on-surface-variant">
               Control de alambiques, destrozado, rectificación y cortes.
             </p>
           </div>
 
           <Link
             href="/distillation/new"
-            className="rounded-xl bg-amber-400 px-5 py-3 font-bold text-black"
+            className="rounded-xl bg-primary px-5 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
           >
             Nueva destilación
           </Link>
@@ -57,7 +57,7 @@ export default async function DistillationPage() {
 
         <section className="mt-10 space-y-4">
           {distillations.length === 0 ? (
-            <div className="rounded-2xl bg-slate-900 p-8 text-slate-400">
+            <div className="rounded-2xl bg-surface-container p-8 text-on-surface-variant">
               Aún no hay destilaciones registradas.
             </div>
           ) : (
@@ -65,11 +65,11 @@ export default async function DistillationPage() {
               <Link
                 key={distillation.id}
                 href={`/distillation/${distillation.id}`}
-                className="block rounded-2xl bg-slate-900 p-6 transition hover:bg-slate-800"
+                className="block rounded-2xl bg-surface-container p-6 transition hover:bg-surface-container-high"
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm uppercase tracking-[0.25em] text-amber-400">
+                    <p className="font-mono text-sm uppercase tracking-[0.25em] text-outline">
                       {distillation.type}
                     </p>
 
@@ -77,12 +77,12 @@ export default async function DistillationPage() {
                       {distillation.lot.code}
                     </h2>
 
-                    <p className="mt-2 text-slate-400">
+                    <p className="mt-2 text-on-surface-variant">
                       {distillation.equipment.name} •{" "}
                       {distillation.loadedLiters.toLocaleString()} L cargados
                     </p>
 
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="mt-1 text-sm text-outline">
                       Inicio: {distillation.startedAt.toLocaleString()}
                     </p>
                   </div>
@@ -90,8 +90,8 @@ export default async function DistillationPage() {
                   <span
                     className={`rounded-full px-4 py-2 text-sm font-bold ${
                       distillation.status === "ACTIVA"
-                        ? "bg-green-400/10 text-green-400"
-                        : "bg-slate-700 text-slate-300"
+                        ? "bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim"
+                        : "bg-surface-container-highest text-on-surface-variant"
                     }`}
                   >
                     {distillation.status}
@@ -108,9 +108,9 @@ export default async function DistillationPage() {
 
 function Card({ title, value }: { title: string; value: string | number }) {
   return (
-    <div className="rounded-2xl bg-slate-900 p-6">
-      <p className="text-slate-400">{title}</p>
-      <p className="mt-4 text-4xl font-bold text-amber-400">{value}</p>
+    <div className="rounded-2xl bg-surface-container p-6">
+      <p className="text-on-surface-variant">{title}</p>
+      <p className="mt-4 text-4xl font-bold text-primary">{value}</p>
     </div>
   );
 }

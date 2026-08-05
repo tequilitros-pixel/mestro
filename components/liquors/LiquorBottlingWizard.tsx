@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { createLiquorBottlingAction } from "@/app/actions/liquorBottling";
 import { finishLiquorBatchWithRemainderAction } from "@/app/actions/finishLiquorBatch";
+import { CheckIcon, BottleIcon } from "@/components/ui/icons";
 
 type Props = {
   batchId: string;
@@ -186,26 +187,26 @@ function finishBatchWithRemainder() {
 
   if (success) {
     return (
-      <section className="mt-6 overflow-hidden rounded-3xl border border-green-500/30 bg-slate-900">
-        <div className="bg-gradient-to-br from-green-500/20 via-emerald-500/10 to-slate-900 p-6 sm:p-10">
+      <section className="mt-6 overflow-hidden rounded-3xl border border-tertiary-fixed-dim/30 bg-surface-container">
+        <div className="bg-gradient-to-br from-tertiary-fixed-dim/20 via-tertiary-fixed-dim/10 to-surface-container p-6 sm:p-10">
           <div className="mx-auto max-w-4xl text-center">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-green-400/30 bg-green-500/15 text-4xl">
-              ✅
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/15">
+              <CheckIcon className="h-9 w-9 text-tertiary-fixed-dim" />
             </div>
 
-            <p className="mt-6 text-sm font-black uppercase tracking-[0.3em] text-green-300">
+            <p className="mt-6 text-sm font-black uppercase tracking-[0.3em] text-tertiary-fixed-dim">
               Embotellado terminado
             </p>
 
-            <h2 className="mt-3 text-4xl font-black text-white sm:text-5xl">
+            <h2 className="mt-3 text-4xl font-black text-on-surface sm:text-5xl">
               Botellas generadas correctamente
             </h2>
 
-            <p className="mt-4 font-mono text-sm font-bold text-green-300 sm:text-base">
+            <p className="mt-4 font-mono text-sm font-bold text-tertiary-fixed-dim sm:text-base">
               {success.bottlingCode}
             </p>
 
-            <p className="mx-auto mt-4 max-w-2xl text-slate-300">
+            <p className="mx-auto mt-4 max-w-2xl text-on-surface-variant">
               MAESTRO creó el registro de embotellado, las botellas
               individuales y un código QR único para cada botella.
             </p>
@@ -233,7 +234,7 @@ function finishBatchWithRemainder() {
             />
           </div>
 
-          <div className="mx-auto mt-8 max-w-4xl rounded-3xl border border-slate-700/80 bg-slate-950/50 p-6">
+          <div className="mx-auto mt-8 max-w-4xl rounded-3xl border border-outline-variant/80 bg-background/50 p-6">
             <div className="grid gap-5 sm:grid-cols-2">
               <ResultRow
                 label="Litros utilizados"
@@ -250,7 +251,7 @@ function finishBatchWithRemainder() {
           <div className="mx-auto mt-8 flex max-w-4xl flex-col gap-3 sm:flex-row">
             <Link
               href={`/liquors/batches/${batchId}`}
-              className="flex-1 rounded-2xl border border-slate-700 px-5 py-4 text-center font-black text-slate-200 transition hover:bg-slate-800"
+              className="flex-1 rounded-2xl border border-outline-variant px-5 py-4 text-center font-black text-on-surface transition hover:bg-surface-container-high"
             >
               Volver al lote
             </Link>
@@ -259,7 +260,7 @@ function finishBatchWithRemainder() {
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="flex-1 rounded-2xl bg-purple-600 px-5 py-4 font-black text-white transition hover:bg-purple-500"
+                className="flex-1 rounded-2xl bg-primary px-5 py-4 font-black text-on-surface transition hover:opacity-90"
               >
                 Embotellar volumen restante →
               </button>
@@ -271,27 +272,27 @@ function finishBatchWithRemainder() {
   }
 
   return (
-    <section className="mt-6 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900">
-      <div className="border-b border-slate-800 p-6 sm:p-8">
+    <section className="mt-6 overflow-hidden rounded-3xl border border-outline-variant bg-surface-container">
+      <div className="border-b border-outline-variant p-6 sm:p-8">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.3em] text-purple-400">
+            <p className="font-mono text-sm font-black uppercase tracking-[0.3em] text-secondary">
               Paso {step} de 3
             </p>
 
-            <h2 className="mt-3 text-3xl font-black text-white">
+            <h2 className="mt-3 text-3xl font-black text-on-surface">
               {step === 1 && "Selecciona la presentación"}
               {step === 2 && "Registra el resultado"}
               {step === 3 && "Confirma el embotellado"}
             </h2>
           </div>
 
-          <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 px-5 py-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-purple-300/70">
+          <div className="rounded-2xl border border-secondary/20 bg-secondary/10 px-5 py-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-secondary/70">
               Litros disponibles
             </p>
 
-            <p className="mt-1 text-3xl font-black text-white">
+            <p className="mt-1 text-3xl font-black text-on-surface">
               {formatNumber(availableLiters, 3)} L
             </p>
           </div>
@@ -302,7 +303,7 @@ function finishBatchWithRemainder() {
             <div
               key={number}
               className={`h-2 rounded-full ${
-                number <= step ? "bg-purple-500" : "bg-slate-800"
+                number <= step ? "bg-secondary" : "bg-surface-container-high"
               }`}
             />
           ))}
@@ -311,12 +312,12 @@ function finishBatchWithRemainder() {
 
       <div className="p-6 sm:p-8">
         {error && (
-          <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
-            <p className="text-sm font-black uppercase tracking-wider text-red-300">
+          <div className="mb-6 rounded-2xl border border-error/30 bg-error/10 p-5">
+            <p className="text-sm font-black uppercase tracking-wider text-error">
               No se pudo generar el embotellado
             </p>
 
-            <p className="mt-2 text-sm font-semibold text-red-100">
+            <p className="mt-2 text-sm font-semibold text-error">
               {error}
             </p>
           </div>
@@ -324,7 +325,7 @@ function finishBatchWithRemainder() {
 
         {step === 1 && (
           <>
-            <p className="text-slate-400">
+            <p className="text-on-surface-variant">
               Elige el tamaño de botella que utilizarás en esta corrida.
             </p>
 
@@ -349,35 +350,35 @@ function finishBatchWithRemainder() {
                     onClick={() => selectBottleSize(size.value)}
                     className={`rounded-3xl border p-5 text-left transition ${
                       selected
-                        ? "border-purple-400 bg-purple-500/15"
-                        : "border-slate-800 bg-slate-950/40 hover:border-purple-500/50 hover:bg-purple-500/10"
+                        ? "border-secondary bg-secondary/15"
+                        : "border-outline-variant bg-surface-dim/40 hover:border-secondary/50 hover:opacity-90/10"
                     }`}
                   >
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-500/10 text-2xl">
-                      🍾
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary/10">
+                      <BottleIcon className="h-6 w-6 text-secondary" />
                     </div>
 
-                    <p className="mt-5 text-2xl font-black text-white">
+                    <p className="mt-5 text-2xl font-black text-on-surface">
                       {size.label}
                     </p>
 
-                    <div className="mt-5 space-y-3 border-t border-slate-800 pt-4">
+                    <div className="mt-5 space-y-3 border-t border-outline-variant pt-4">
                       <div>
-                        <p className="text-xs uppercase tracking-wider text-slate-500">
+                        <p className="text-xs uppercase tracking-wider text-outline">
                           Botellas posibles
                         </p>
 
-                        <p className="mt-1 text-xl font-black text-purple-300">
+                        <p className="mt-1 text-xl font-black text-secondary">
                           {formatNumber(bottles, 0)}
                         </p>
                       </div>
 
                       <div>
-                        <p className="text-xs uppercase tracking-wider text-slate-500">
+                        <p className="text-xs uppercase tracking-wider text-outline">
                           Sobrante
                         </p>
 
-                        <p className="mt-1 font-bold text-slate-300">
+                        <p className="mt-1 font-bold text-on-surface-variant">
                           {formatNumber(remaining, 3)} L
                         </p>
                       </div>
@@ -394,7 +395,7 @@ function finishBatchWithRemainder() {
                 setError(null);
                 setStep(2);
               }}
-              className="mt-8 w-full rounded-2xl bg-purple-600 py-4 text-lg font-black text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+              className="mt-8 w-full rounded-2xl bg-primary py-4 text-lg font-black text-on-surface transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-outline"
             >
               Continuar →
             </button>
@@ -403,23 +404,24 @@ function finishBatchWithRemainder() {
 
         {step === 2 && bottleSizeMl && (
           <>
-            <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 p-5">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-purple-300">
+            <div className="rounded-2xl border border-secondary/20 bg-secondary/10 p-5">
+              <p className="font-mono text-xs font-black uppercase tracking-[0.2em] text-secondary">
                 Presentación seleccionada
               </p>
 
-              <p className="mt-2 text-3xl font-black text-white">
-                🍾 {selectedSize?.label}
+              <p className="mt-2 flex items-center gap-2 text-3xl font-black text-on-surface">
+                <BottleIcon className="h-6 w-6 text-secondary" />
+                {selectedSize?.label}
               </p>
 
-              <p className="mt-2 text-sm text-purple-100/70">
+              <p className="mt-2 text-sm text-secondary/70">
                 Capacidad máxima estimada: {possibleBottles} botellas
               </p>
             </div>
 
             <div className="mt-6 grid gap-5 md:grid-cols-2">
               <label className="block">
-                <span className="text-sm font-bold text-slate-300">
+                <span className="text-sm font-semibold text-on-surface-variant">
                   Botellas llenadas
                 </span>
 
@@ -433,12 +435,12 @@ function finishBatchWithRemainder() {
                     setFilledBottles(event.target.value);
                     setError(null);
                   }}
-                  className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-4 text-2xl font-black text-white outline-none transition focus:border-purple-500"
+                  className="mt-2 w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
                 />
               </label>
 
               <label className="block">
-                <span className="text-sm font-bold text-slate-300">
+                <span className="text-sm font-semibold text-on-surface-variant">
                   Botellas rechazadas
                 </span>
 
@@ -452,13 +454,13 @@ function finishBatchWithRemainder() {
                     setRejectedBottles(event.target.value);
                     setError(null);
                   }}
-                  className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-4 text-2xl font-black text-white outline-none transition focus:border-purple-500"
+                  className="mt-2 w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
                 />
               </label>
             </div>
 
             <label className="mt-5 block">
-              <span className="text-sm font-bold text-slate-300">
+              <span className="text-sm font-semibold text-on-surface-variant">
                 Observaciones
               </span>
 
@@ -467,7 +469,7 @@ function finishBatchWithRemainder() {
                 onChange={(event) => setNotes(event.target.value)}
                 rows={4}
                 placeholder="Describe incidencias, mermas o detalles del embotellado..."
-                className="mt-2 w-full resize-none rounded-2xl border border-slate-700 bg-slate-950 px-4 py-4 text-white outline-none transition placeholder:text-slate-600 focus:border-purple-500"
+                className="resize-none mt-2 w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
               />
             </label>
 
@@ -475,7 +477,7 @@ function finishBatchWithRemainder() {
               exceedsPossibleBottles ||
               rejectedExceedsFilled ||
               (filled > 0 && acceptedBottles <= 0)) && (
-              <div className="mt-5 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm font-semibold text-red-200">
+              <div className="mt-5 rounded-2xl border border-error/30 bg-error/10 p-4 text-sm font-semibold text-error">
                 {exceedsAvailableLiters &&
                   "Los litros requeridos superan el volumen disponible."}
 
@@ -519,19 +521,19 @@ function finishBatchWithRemainder() {
               />
             </div>
             {possibleBottles === 0 && availableLiters > 0.0001 && (
-  <div className="mt-6 rounded-3xl border border-amber-500/30 bg-amber-500/10 p-6">
+  <div className="mt-6 rounded-3xl border border-secondary/30 bg-secondary/10 p-6">
     <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <p className="text-sm font-black uppercase tracking-[0.25em] text-amber-300">
+        <p className="font-mono text-sm font-black uppercase tracking-[0.25em] text-secondary">
           Remanente final
         </p>
 
-        <h3 className="mt-3 text-2xl font-black text-white">
+        <h3 className="mt-3 text-2xl font-black text-on-surface">
           No alcanza para llenar una botella de{" "}
           {selectedSize?.label}
         </h3>
 
-        <p className="mt-3 max-w-2xl text-amber-100/70">
+        <p className="mt-3 max-w-2xl text-secondary/70">
           Quedan {formatNumber(availableLiters, 3)} L. Puedes
           cambiar a una presentación más pequeña o finalizar el
           lote registrando este volumen como remanente.
@@ -542,11 +544,16 @@ function finishBatchWithRemainder() {
         type="button"
         disabled={isFinishing}
         onClick={finishBatchWithRemainder}
-        className="shrink-0 rounded-2xl bg-amber-500 px-6 py-4 font-black text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+        className="flex shrink-0 items-center gap-2 rounded-2xl bg-primary px-6 py-4 font-black text-on-primary transition duration-150 ease-out hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant disabled:hover:scale-100"
       >
-        {isFinishing
-          ? "⏳ Finalizando lote..."
-          : "✓ Finalizar con remanente"}
+        {isFinishing ? (
+          "Finalizando lote..."
+        ) : (
+          <>
+            <CheckIcon className="h-4 w-4" />
+            Finalizar con remanente
+          </>
+        )}
       </button>
     </div>
   </div>
@@ -556,7 +563,7 @@ function finishBatchWithRemainder() {
               <button
                 type="button"
                 onClick={returnToSizes}
-                className="flex-1 rounded-2xl border border-slate-700 py-4 font-black text-slate-300 transition hover:bg-slate-800"
+                className="flex-1 rounded-2xl border border-outline-variant py-4 font-black text-on-surface-variant transition hover:bg-surface-container-high"
               >
                 ← Cambiar presentación
               </button>
@@ -565,7 +572,7 @@ function finishBatchWithRemainder() {
                 type="button"
                 disabled={!canContinueToConfirmation}
                 onClick={goToConfirmation}
-                className="flex-1 rounded-2xl bg-purple-600 py-4 text-lg font-black text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
+                className="flex-1 rounded-2xl bg-primary py-4 text-lg font-black text-on-surface transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-outline"
               >
                 Revisar embotellado →
               </button>
@@ -575,16 +582,16 @@ function finishBatchWithRemainder() {
 
         {step === 3 && bottleSizeMl && (
           <>
-            <div className="rounded-3xl border border-green-500/25 bg-green-500/10 p-6">
-              <p className="text-sm font-black uppercase tracking-[0.25em] text-green-300">
+            <div className="rounded-3xl border border-tertiary-fixed-dim/25 bg-tertiary-fixed-dim/10 p-6">
+              <p className="font-mono text-sm font-black uppercase tracking-[0.25em] text-tertiary-fixed-dim">
                 Resumen final
               </p>
 
-              <h3 className="mt-3 text-3xl font-black text-white">
+              <h3 className="mt-3 text-3xl font-black text-on-surface">
                 Confirma los datos antes de generar las botellas
               </h3>
 
-              <p className="mt-3 text-green-100/70">
+              <p className="mt-3 text-tertiary-fixed-dim/70">
                 Esta acción guardará el embotellado y creará una identidad
                 individual con QR para cada botella disponible.
               </p>
@@ -623,12 +630,12 @@ function finishBatchWithRemainder() {
             </div>
 
             {notes.trim() && (
-              <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              <div className="mt-5 rounded-2xl border border-outline-variant bg-surface-dim/40 p-5">
+                <p className="text-xs font-bold uppercase tracking-wider text-outline">
                   Observaciones
                 </p>
 
-                <p className="mt-2 whitespace-pre-wrap text-slate-300">
+                <p className="mt-2 whitespace-pre-wrap text-on-surface-variant">
                   {notes}
                 </p>
               </div>
@@ -642,7 +649,7 @@ function finishBatchWithRemainder() {
                   setError(null);
                   setStep(2);
                 }}
-                className="flex-1 rounded-2xl border border-slate-700 py-4 font-black text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex-1 rounded-2xl border border-outline-variant py-4 font-black text-on-surface-variant transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-50"
               >
                 ← Corregir datos
               </button>
@@ -651,15 +658,20 @@ function finishBatchWithRemainder() {
                 type="button"
                 disabled={isPending || !canContinueToConfirmation}
                 onClick={generateBottles}
-                className="flex-[2] rounded-2xl bg-green-600 py-4 text-lg font-black text-white transition hover:bg-green-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                className="flex flex-[2] items-center justify-center gap-2 rounded-2xl bg-tertiary-fixed-dim py-4 text-lg font-black text-on-surface transition duration-150 ease-out hover:scale-[1.01] hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant disabled:hover:scale-100"
               >
-                {isPending
-                  ? "⏳ Generando botellas..."
-                  : `🍾 Confirmar y generar ${acceptedBottles} botellas`}
+                {isPending ? (
+                  "Generando botellas..."
+                ) : (
+                  <>
+                    <BottleIcon className="h-5 w-5" />
+                    Confirmar y generar {acceptedBottles} botellas
+                  </>
+                )}
               </button>
             </div>
 
-            <p className="mt-4 text-center text-xs text-slate-500">
+            <p className="mt-4 text-center text-xs text-outline">
               No cierres esta pantalla mientras MAESTRO genera las botellas.
             </p>
           </>
@@ -677,12 +689,12 @@ function SummaryCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+    <div className="rounded-2xl border border-outline-variant bg-surface-dim/40 p-5">
+      <p className="font-mono text-xs font-bold uppercase tracking-[0.16em] text-outline">
         {title}
       </p>
 
-      <p className="mt-3 text-2xl font-black text-white">{value}</p>
+      <p className="mt-3 text-2xl font-black text-on-surface">{value}</p>
     </div>
   );
 }
@@ -695,12 +707,12 @@ function SuccessCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-green-500/20 bg-green-500/10 p-5 text-center">
-      <p className="text-xs font-bold uppercase tracking-wider text-green-300/70">
+    <div className="rounded-2xl border border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 p-5 text-center">
+      <p className="text-xs font-bold uppercase tracking-wider text-tertiary-fixed-dim/70">
         {title}
       </p>
 
-      <p className="mt-3 text-3xl font-black text-white">{value}</p>
+      <p className="mt-3 text-3xl font-black text-on-surface">{value}</p>
     </div>
   );
 }
@@ -714,8 +726,8 @@ function ResultRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <span className="text-sm text-slate-400">{label}</span>
-      <span className="font-black text-white">{value}</span>
+      <span className="text-sm text-on-surface-variant">{label}</span>
+      <span className="font-black text-on-surface">{value}</span>
     </div>
   );
 }

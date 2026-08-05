@@ -45,11 +45,6 @@ export default async function BottleLabelPage({ params }: Props) {
   const batch = bottling.batch;
   const product = batch.product;
 
-  const appUrl = (
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "https://maestro-destiladora.space"
-  ).replace(/\/$/, "");
-
   const totalBottles = Math.max(
     bottling.producedBottles,
     bottling._count.bottles,
@@ -64,14 +59,14 @@ export default async function BottleLabelPage({ params }: Props) {
     null;
 
   return (
-    <main className="min-h-screen bg-neutral-100 px-4 py-8 print:min-h-0 print:bg-white print:p-0">
+    <main className="min-h-screen bg-background px-4 py-8 print:min-h-0 print:bg-white print:p-0">
       <div className="mx-auto flex max-w-4xl flex-col items-center gap-8 print:block">
         <header className="flex flex-wrap items-center justify-center gap-3 print:hidden">
           <PrintButton />
 
           <Link
             href={`/liquors/bottles/${bottle.id}`}
-            className="rounded-xl border border-neutral-300 bg-white px-5 py-3 font-bold text-neutral-800 transition hover:bg-neutral-50"
+            className="rounded-xl border border-outline-variant bg-surface-container px-5 py-3 font-bold text-on-surface transition hover:bg-surface-container-high"
           >
             ← Regresar
           </Link>

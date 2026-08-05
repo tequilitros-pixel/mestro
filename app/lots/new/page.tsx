@@ -55,9 +55,9 @@ export default async function NewLotPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 p-4 text-white sm:p-6 lg:p-10">
+    <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
       <div className="mx-auto max-w-3xl">
-        <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
+        <p className="text-sm uppercase tracking-[0.4em] text-on-surface-variant">
           MAESTRO
         </p>
 
@@ -65,21 +65,21 @@ export default async function NewLotPage() {
           Nuevo lote
         </h1>
 
-        <p className="mt-3 text-slate-400">
+        <p className="mt-3 text-on-surface-variant">
           MAESTRO asignará automáticamente la fecha y el
           siguiente número consecutivo.
         </p>
 
-        <section className="mt-8 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-5">
-          <p className="text-sm text-amber-200/70">
+        <section className="mt-8 rounded-2xl border border-primary/25 bg-primary/[0.06] p-5">
+          <p className="text-sm text-on-surface-variant">
             Código estimado del nuevo lote
           </p>
 
-          <p className="mt-2 font-mono text-2xl font-bold text-amber-300 sm:text-3xl">
+          <p className="mt-2 font-mono text-2xl font-bold text-primary sm:text-3xl">
             {nextLotCodePreview}
           </p>
 
-          <p className="mt-3 text-sm text-slate-400">
+          <p className="mt-3 text-sm text-on-surface-variant">
             La fecha es una referencia. El número final es
             consecutivo y nunca se reinicia.
           </p>
@@ -87,12 +87,12 @@ export default async function NewLotPage() {
 
         <form
           action={createLot}
-          className="mt-6 space-y-6 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-8"
+          className="mt-6 space-y-6 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8"
         >
           <div>
             <label
               htmlFor="agaveKg"
-              className="block text-sm font-medium text-slate-300"
+              className="mb-2 block text-sm font-semibold text-on-surface-variant"
             >
               Kg de agave
             </label>
@@ -106,14 +106,14 @@ export default async function NewLotPage() {
               min="0.01"
               required
               placeholder="Ej. 3500"
-              className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-white outline-none transition placeholder:text-slate-500 focus:border-amber-400"
+              className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
             />
           </div>
 
           <div>
             <label
               htmlFor="art"
-              className="block text-sm font-medium text-slate-300"
+              className="mb-2 block text-sm font-semibold text-on-surface-variant"
             >
               ART
             </label>
@@ -126,14 +126,14 @@ export default async function NewLotPage() {
               step="0.01"
               min="0"
               placeholder="Opcional"
-              className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-white outline-none transition placeholder:text-slate-500 focus:border-amber-400"
+              className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
             />
           </div>
 
           <div>
             <label
               htmlFor="observations"
-              className="block text-sm font-medium text-slate-300"
+              className="mb-2 block text-sm font-semibold text-on-surface-variant"
             >
               Observaciones
             </label>
@@ -143,13 +143,13 @@ export default async function NewLotPage() {
               name="observations"
               rows={4}
               placeholder="Procedencia, calidad, condición del agave u otra información importante."
-              className="mt-2 w-full resize-none rounded-xl border border-slate-700 bg-slate-800 p-3 text-white outline-none transition placeholder:text-slate-500 focus:border-amber-400"
+              className="w-full resize-none rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-amber-400 px-5 py-3 font-bold text-slate-950 transition hover:bg-amber-300"
+            className="w-full rounded-xl bg-primary px-5 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
           >
             Crear lote automáticamente
           </button>

@@ -11,13 +11,18 @@ export default function RecordingBadge({
 
   return (
     <span
-      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-xs font-semibold ${
         isOverdue
-          ? "bg-red-500/20 text-red-400"
-          : "bg-green-500/20 text-green-400"
+          ? "bg-error/15 text-error"
+          : "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
       }`}
     >
-      {isOverdue ? `⏰ Atrasado ${text}` : `🟢 Al día · ${text}`}
+      <span
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+          isOverdue ? "bg-error" : "bg-tertiary-fixed-dim"
+        }`}
+      />
+      {isOverdue ? `Atrasado · ${text}` : `Al día · ${text}`}
     </span>
   );
 }

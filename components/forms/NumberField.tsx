@@ -40,7 +40,7 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
         {label && (
           <label
             htmlFor={id}
-            className="block text-sm font-medium text-slate-300"
+            className="block text-sm font-semibold text-on-surface-variant"
           >
             {label}
           </label>
@@ -48,10 +48,10 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
 
         <div
           className={clsx(
-            "flex items-center rounded-xl border bg-slate-950 transition",
+            "flex items-center rounded-xl border bg-background transition",
             error
-              ? "border-red-500"
-              : "border-slate-700 focus-within:border-purple-500"
+              ? "border-error"
+              : "border-outline-variant focus-within:border-primary"
           )}
         >
 
@@ -60,8 +60,8 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
             id={id}
             type="number"
             className={clsx(
-              "w-full bg-transparent px-4 py-3 outline-none",
-              "text-white placeholder:text-slate-500",
+              "w-full bg-transparent px-4 py-3 text-sm outline-none",
+              "text-on-surface placeholder:text-outline",
               "[appearance:textfield]",
               "[&::-webkit-inner-spin-button]:appearance-none",
               "[&::-webkit-outer-spin-button]:appearance-none",
@@ -71,7 +71,7 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
           />
 
           {unit && (
-            <span className="border-l border-slate-700 px-4 text-sm font-semibold text-slate-400">
+            <span className="border-l border-outline-variant px-4 text-sm font-semibold text-on-surface-variant">
               {unit}
             </span>
           )}
@@ -79,11 +79,11 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
         </div>
 
         {error ? (
-          <p className="text-sm text-red-400">
+          <p className="text-sm text-error">
             {error}
           </p>
         ) : hint ? (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-outline">
             {hint}
           </p>
         ) : null}

@@ -33,16 +33,16 @@ export default function LiquorRecipeForm({
   return (
     <form
       action={formAction}
-      className="space-y-8 rounded-3xl border border-slate-800 bg-slate-900/70 p-6 sm:p-8"
+      className="space-y-8 rounded-3xl border border-outline-variant bg-surface-container/70 p-6 sm:p-8"
     >
       {state.error && (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-200">
+        <div className="rounded-2xl border border-error/30 bg-error/10 p-4 text-error">
           {state.error}
         </div>
       )}
 
       <section>
-        <p className="text-sm font-black uppercase tracking-[0.2em] text-purple-300">
+        <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-outline">
           Información general
         </p>
 
@@ -99,7 +99,7 @@ export default function LiquorRecipeForm({
                 className={inputClassName}
               />
 
-              <span className="shrink-0 font-bold text-slate-400">
+              <span className="shrink-0 font-bold text-on-surface-variant">
                 L
               </span>
             </div>
@@ -117,7 +117,7 @@ export default function LiquorRecipeForm({
                 className={inputClassName}
               />
 
-              <span className="shrink-0 font-bold text-slate-400">
+              <span className="shrink-0 font-bold text-on-surface-variant">
                 % Alc.
               </span>
             </div>
@@ -125,8 +125,8 @@ export default function LiquorRecipeForm({
         </div>
       </section>
 
-      <section className="border-t border-slate-800 pt-8">
-        <p className="text-sm font-black uppercase tracking-[0.2em] text-purple-300">
+      <section className="border-t border-outline-variant pt-8">
+        <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-outline">
           Información adicional
         </p>
 
@@ -151,10 +151,10 @@ export default function LiquorRecipeForm({
         </div>
       </section>
 
-      <div className="flex flex-col-reverse gap-3 border-t border-slate-800 pt-6 sm:flex-row sm:justify-end">
+      <div className="flex flex-col-reverse gap-3 border-t border-outline-variant pt-6 sm:flex-row sm:justify-end">
         <Link
           href="/liquors/recipes"
-          className="rounded-2xl border border-slate-700 px-6 py-3 text-center font-bold text-slate-300 transition hover:bg-slate-800"
+          className="rounded-2xl border border-outline-variant px-6 py-3 text-center font-bold text-on-surface-variant transition hover:bg-surface-container-high"
         >
           Cancelar
         </Link>
@@ -174,7 +174,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-bold text-slate-300">
+      <span className="text-sm font-semibold text-on-surface-variant">
         {label}
       </span>
 
@@ -190,7 +190,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-2xl bg-purple-600 px-7 py-3 font-black text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+      className="rounded-2xl bg-primary px-7 py-3 font-black text-on-surface transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant"
     >
       {pending
         ? "Guardando receta..."
@@ -200,4 +200,4 @@ function SubmitButton() {
 }
 
 const inputClassName =
-  "w-full rounded-2xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-purple-400";
+  "resize-none w-full rounded-xl border border-outline-variant bg-background/60 px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary";

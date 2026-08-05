@@ -34,14 +34,14 @@ type ChartData = {
   inferior: number | null;
 };
 
-const eventIcons: Record<string, string> = {
-  AUMENTAR_VAPOR: "⬆️",
-  BAJAR_VAPOR: "⬇️",
-  SUSPENDER_VAPOR: "⏸️",
-  MIELES_AMARGAS: "🟠",
-  MIELES_DULCES: "🍯",
-  OBSERVACION: "📝",
-  FIN_COCCION: "🏁",
+const eventLabels: Record<string, string> = {
+  AUMENTAR_VAPOR: "+VAPOR",
+  BAJAR_VAPOR: "−VAPOR",
+  SUSPENDER_VAPOR: "PAUSA",
+  MIELES_AMARGAS: "AMARGAS",
+  MIELES_DULCES: "DULCES",
+  OBSERVACION: "NOTA",
+  FIN_COCCION: "FIN",
 };
 
 export default function CookingCharts({ events }: { events: CookingEvent[] }) {
@@ -86,9 +86,9 @@ export default function CookingCharts({ events }: { events: CookingEvent[] }) {
 
   if (data.length === 0) {
     return (
-      <section className="mt-8 rounded-2xl bg-slate-900 p-8">
+      <section className="mt-8 rounded-2xl bg-surface-container p-8">
         <h2 className="mb-2 text-2xl font-bold">Gráficas de cocción</h2>
-        <p className="text-slate-400">
+        <p className="text-on-surface-variant">
           Aún no hay temperaturas registradas para graficar.
         </p>
       </section>
@@ -96,25 +96,25 @@ export default function CookingCharts({ events }: { events: CookingEvent[] }) {
   }
 
   return (
-    <section className="mt-8 rounded-2xl bg-slate-900 p-8">
+    <section className="mt-8 rounded-2xl bg-surface-container p-8">
       <div className="mb-6 flex items-center justify-between gap-4">
         <h2 className="text-2xl font-bold">Gráficas de cocción</h2>
-        <p className="text-sm text-slate-400">Temperatura por hora</p>
+        <p className="text-sm text-on-surface-variant">Temperatura por hora</p>
       </div>
 
-      <div className="rounded-2xl bg-slate-800 p-5">
+      <div className="rounded-2xl bg-surface-container-high p-5">
         <div className="h-96">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 35, right: 30, left: 10, bottom: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="time" stroke="#94a3b8" />
-              <YAxis stroke="#94a3b8" unit="°C" domain={["dataMin - 5", "dataMax + 5"]} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" />
+              <XAxis dataKey="time" stroke="var(--color-outline)" />
+              <YAxis stroke="var(--color-outline)" unit="°C" domain={["dataMin - 5", "dataMax + 5"]} />
               <Tooltip
                 contentStyle={{
-                  background: "#0f172a",
-                  border: "1px solid #334155",
+                  background: "var(--color-surface-container-high)",
+                  border: "1px solid var(--color-outline-variant)",
                   borderRadius: "12px",
-                  color: "#e5e7eb",
+                  color: "var(--color-on-surface)",
                 }}
               />
               <Legend />
@@ -122,20 +122,21 @@ export default function CookingCharts({ events }: { events: CookingEvent[] }) {
   <ReferenceLine
     key={event.id}
     x={event.chartTime}
-    stroke="#facc15"
+    stroke="var(--color-secondary)"
     strokeDasharray="4 4"
     label={{
-      value: eventIcons[event.type] ?? "•",
+      value: eventLabels[event.type] ?? "•",
       position: "top",
-      fill: "#facc15",
-      fontSize: 20,
+      fill: "var(--color-secondary)",
+      fontSize: 11,
+      fontWeight: 700,
     }}
   />
 ))}
 
-              <Line type="monotone" dataKey="inferior" name="Inferior" stroke="#60a5fa" strokeWidth={3} dot connectNulls />
-              <Line type="monotone" dataKey="media" name="Media" stroke="#facc15" strokeWidth={3} dot connectNulls />
-              <Line type="monotone" dataKey="superior" name="Superior" stroke="#f87171" strokeWidth={3} dot connectNulls />
+              <Line type="monotone" dataKey="inferior" name="Inferior" stroke="var(--color-on-surface-variant)" strokeDasharray="2 3" strokeWidth={2.5} dot connectNulls />
+              <Line type="monotone" dataKey="media" name="Media" stroke="var(--color-outline)" strokeDasharray="6 3" strokeWidth={2.5} dot connectNulls />
+              <Line type="monotone" dataKey="superior" name="Superior" stroke="var(--color-on-surface)" strokeWidth={2.5} dot connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>

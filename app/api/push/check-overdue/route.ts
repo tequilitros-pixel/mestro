@@ -62,9 +62,11 @@ export async function GET(request: Request) {
     const recordingStatus = await getRecordingStatus();
 
     const cooking = recordingStatus.cooking ?? [];
+    const milling = recordingStatus.milling ?? [];
     const fermentation = recordingStatus.fermentation ?? [];
+    const distillation = recordingStatus.distillation ?? [];
 
-    const overdue = [...cooking, ...fermentation].filter(
+    const overdue = [...cooking, ...milling, ...fermentation, ...distillation].filter(
       (record) => record.isOverdue
     );
 
@@ -92,7 +94,7 @@ export async function GET(request: Request) {
     }
 
     const notificationPayload = JSON.stringify({
-      title: "⏰ MAESTRO",
+      title: "⏰ Destiladora del Norte",
       body:
         overdue.length === 1
           ? `${overdue[0].label} lleva sin registro más de 1 hora.`

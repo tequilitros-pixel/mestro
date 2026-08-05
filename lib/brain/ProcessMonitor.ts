@@ -19,17 +19,17 @@ export class ProcessMonitor {
     // Cocción
     if (state.cookingTemp !== undefined) {
       if (state.cookingTemp < MaestroKnowledge.cooking.minTemperatureC) {
-        alerts.push("🔥 Temperatura baja en cocción.");
+        alerts.push("Temperatura baja en cocción.");
       }
 
       if (state.cookingTemp > MaestroKnowledge.cooking.maxTemperatureC) {
-        alerts.push("🔥 Temperatura demasiado alta.");
+        alerts.push("Temperatura demasiado alta.");
       }
     }
 
     if (state.cookingHours !== undefined) {
       if (state.cookingHours > MaestroKnowledge.cooking.idealHours.max) {
-        alerts.push("⏰ Posible sobrecocción.");
+        alerts.push("Posible sobrecocción.");
       }
     }
 
@@ -50,7 +50,7 @@ export class ProcessMonitor {
       state.fermentationPH >
         MaestroKnowledge.fermentation.idealPh.max
     ) {
-      alerts.push("⚠ pH elevado.");
+      alerts.push("pH elevado.");
     }
 
     if (

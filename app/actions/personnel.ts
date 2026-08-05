@@ -21,6 +21,22 @@ export async function getPersonnel() {
   });
 }
 
+export async function getPersonnelById(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      email: true,
+      role: true,
+      active: true,
+      hourlyRate: true,
+      branches: { include: { branch: { select: { id: true, name: true } } } },
+    },
+  });
+}
+
 export async function getBranchesForAssignment() {
   return prisma.branch.findMany({
     select: { id: true, name: true },
@@ -67,6 +83,84 @@ export async function createPersonnel(input: CreatePersonnelInput) {
 
   revalidatePath("/administration/personnel");
   return { user };
+}
+
+interface UpdatePersonnelInput {
+  userId: string;
+  name: string;
+  username: string;
+  email?: string;
+  role: UserRole;
+  branchIds: string[];
+  newPassword?: string;
+}
+
+export async function updatePersonnel(input: UpdatePersonnelInput) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || currentUser.role !== "ADMIN") {
+    return { error: "No tienes permiso para editar usuarios" };
+  }
+
+  const existing = await prisma.user.findFirst({
+    where: { username: input.username, NOT: { id: input.userId } },
+  });
+  if (existing) {
+    return { error: "Ese nombre de usuario ya lo usa otro trabajador" };
+  }
+
+  const data: {
+    name: string;
+    username: string;
+    email: string | undefined;
+    role: UserRole;
+    password?: string;
+  } = {
+    name: input.name,
+    username: input.username,
+    email: input.email || undefined,
+    role: input.role,
+  };
+
+  if (input.newPassword) {
+    data.password = await bcrypt.hash(input.newPassword, 10);
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: input.userId }, data }),
+    prisma.userBranch.deleteMany({ where: { userId: input.userId } }),
+    prisma.userBranch.createMany({
+      data: input.branchIds.map((branchId) => ({
+        userId: input.userId,
+        branchId,
+      })),
+    }),
+  ]);
+
+  revalidatePath("/administration/personnel");
+  revalidatePath(`/administration/personnel/${input.userId}`);
+
+  return { success: true };
+}
+
+export async function updateHourlyRate(userId: string, hourlyRate: number | null) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || currentUser.role !== "ADMIN") {
+    return { error: "No tienes permiso" };
+  }
+
+  if (hourlyRate !== null && hourlyRate < 0) {
+    return { error: "La tarifa no puede ser negativa" };
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { hourlyRate },
+  });
+
+  revalidatePath("/administration/personnel");
+  revalidatePath(`/administration/personnel/${userId}`);
+
+  return { success: true };
 }
 
 export async function updatePersonnelActive(userId: string, active: boolean) {

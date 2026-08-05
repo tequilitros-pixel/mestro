@@ -108,6 +108,17 @@ maximumValue:
 
   console.log("🎉 Pasos sincronizados.");
 }
+
+main()
+  .catch((error) => {
+    console.error("❌ Error sincronizando pasos:", error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+    await pool.end();
+  });
+
 function getStepType(step: {
   type?:
     | "PREPARATION"

@@ -1,7 +1,15 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import type { ComponentType } from "react";
 import { prisma } from "@/lib/prisma";
+import {
+  type IconProps,
+  PackageIcon,
+  LockIcon,
+  TagIcon,
+  ChartBarIcon,
+} from "@/components/ui/icons";
 
 type Props = {
   params: Promise<{
@@ -136,27 +144,27 @@ export default async function EditLiquorProductPage({ params }: Props) {
     <section className="mx-auto max-w-5xl">
       <Link
         href={`/liquors/products/${product.slug}`}
-        className="text-sm font-semibold text-purple-300 transition hover:text-purple-200"
+        className="text-sm font-semibold text-on-surface-variant transition hover:text-on-surface"
       >
         ← Regresar a {product.name}
       </Link>
 
-      <header className="mt-6 rounded-3xl border border-purple-500/20 bg-slate-900 p-6 sm:p-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.35em] text-purple-400">
+      <header className="mt-6 rounded-3xl border border-outline-variant bg-surface-container p-6 sm:p-8">
+        <p className="font-mono text-sm font-semibold uppercase tracking-[0.35em] text-on-surface-variant">
           MAESTRO 3.0
         </p>
 
         <div className="mt-4 flex items-start gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-purple-500/20 bg-purple-500/10 text-4xl">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-outline-variant bg-surface-container-high text-4xl">
             {product.icon ?? "🍹"}
           </div>
 
           <div>
-            <h1 className="text-3xl font-black text-white sm:text-4xl">
+            <h1 className="text-3xl font-black text-on-surface sm:text-4xl">
               Configurar {product.name}
             </h1>
 
-            <p className="mt-2 max-w-2xl text-slate-400">
+            <p className="mt-2 max-w-2xl text-on-surface-variant">
               Define las reglas de elaboración, caducidad, etiquetado y
               trazabilidad que se aplicarán a las próximas botellas.
             </p>
@@ -220,7 +228,7 @@ export default async function EditLiquorProductPage({ params }: Props) {
                   className={`${inputClass} pr-12`}
                 />
 
-                <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center font-semibold text-slate-500">
+                <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center font-semibold text-outline">
                   %
                 </span>
               </div>
@@ -298,12 +306,12 @@ export default async function EditLiquorProductPage({ params }: Props) {
             </Field>
           </div>
 
-          <div className="mt-5 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5">
-            <p className="font-bold text-blue-200">
+          <div className="mt-5 rounded-2xl border border-on-surface-variant/20 bg-on-surface-variant/10 p-5">
+            <p className="font-bold text-on-surface-variant">
               Ejemplo con la configuración actual
             </p>
 
-            <p className="mt-2 text-sm leading-6 text-blue-100/70">
+            <p className="mt-2 text-sm leading-6 text-on-surface-variant/70">
               Una botella elaborada hoy caducará después de{" "}
               <strong>
                 {product.defaultShelfLifeDays ?? "los días indicados"}
@@ -352,47 +360,47 @@ export default async function EditLiquorProductPage({ params }: Props) {
         >
           <div className="grid gap-4 md:grid-cols-2">
             <InformationCard
-              icon="📦"
+              icon={PackageIcon}
               title="Producciones futuras"
               description="Los cambios se aplicarán únicamente a las botellas generadas después de guardar esta configuración."
             />
 
             <InformationCard
-              icon="🔒"
+              icon={LockIcon}
               title="Historial protegido"
               description="Las botellas existentes conservarán la vida útil y las alertas originales con las que fueron elaboradas."
             />
 
             <InformationCard
-              icon="🏷️"
+              icon={TagIcon}
               title="Etiqueta automática"
               description="MAESTRO podrá generar lote, serie, elaboración, caducidad, autenticidad y QR."
             />
 
             <InformationCard
-              icon="📊"
+              icon={ChartBarIcon}
               title="Alertas inteligentes"
               description="El dashboard podrá ordenar las botellas usando FEFO: primero en caducar, primero en salir."
             />
           </div>
         </FormSection>
 
-        <div className="sticky bottom-4 z-20 flex flex-col-reverse gap-3 rounded-2xl border border-slate-700 bg-slate-950/95 p-4 shadow-2xl backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-slate-500">
+        <div className="sticky bottom-4 z-20 flex flex-col-reverse gap-3 rounded-2xl border border-outline-variant bg-background/95 p-4 shadow-2xl backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-outline">
             Los cambios afectarán las próximas producciones.
           </p>
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
               href={`/liquors/products/${product.slug}`}
-              className="rounded-xl border border-slate-700 px-5 py-3 text-center font-bold text-slate-300 transition hover:border-slate-500 hover:text-white"
+              className="rounded-xl border border-outline-variant px-5 py-3 text-center font-bold text-on-surface-variant transition hover:border-outline-variant hover:text-on-surface"
             >
               Cancelar
             </Link>
 
             <button
               type="submit"
-              className="rounded-xl bg-purple-500 px-6 py-3 font-bold text-white transition hover:bg-purple-400"
+              className="rounded-xl bg-primary px-6 py-3 font-bold text-on-surface transition duration-150 ease-out hover:opacity-90 hover:scale-[1.04] active:scale-[0.97]"
             >
               Guardar configuración
             </button>
@@ -415,14 +423,14 @@ function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
-      <p className="text-sm font-semibold uppercase tracking-[0.3em] text-purple-400">
+    <section className="rounded-3xl border border-outline-variant bg-surface-container p-6 sm:p-8">
+      <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
         {eyebrow}
       </p>
 
-      <h2 className="mt-2 text-2xl font-bold text-white">{title}</h2>
+      <h2 className="mt-2 text-2xl font-bold text-on-surface">{title}</h2>
 
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">
         {description}
       </p>
 
@@ -442,10 +450,10 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="font-bold text-slate-200">{label}</span>
+      <span className="text-sm font-semibold text-on-surface-variant">{label}</span>
 
       {description && (
-        <span className="mt-1 block text-xs leading-5 text-slate-500">
+        <span className="mt-1 block text-xs leading-5 text-outline">
           {description}
         </span>
       )}
@@ -479,7 +487,7 @@ function NumberInput({
         className={`${inputClass} pr-20`}
       />
 
-      <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm font-semibold text-slate-500">
+      <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm font-semibold text-outline">
         {suffix}
       </span>
     </div>
@@ -498,18 +506,18 @@ function ToggleCard({
   description: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-start gap-4 rounded-2xl border border-slate-800 bg-slate-950/50 p-5 transition hover:border-purple-500/30">
+    <label className="flex cursor-pointer items-start gap-4 rounded-2xl border border-outline-variant bg-background/50 p-5 transition hover:border-primary/25">
       <input
         name={name}
         type="checkbox"
         defaultChecked={defaultChecked}
-        className="mt-1 h-5 w-5 shrink-0 accent-purple-500"
+        className="mt-1 h-5 w-5 shrink-0 accent-primary"
       />
 
       <span>
-        <span className="block font-bold text-white">{title}</span>
+        <span className="block font-bold text-on-surface">{title}</span>
 
-        <span className="mt-1 block text-sm leading-5 text-slate-500">
+        <span className="mt-1 block text-sm leading-5 text-outline">
           {description}
         </span>
       </span>
@@ -518,21 +526,21 @@ function ToggleCard({
 }
 
 function InformationCard({
-  icon,
+  icon: Icon,
   title,
   description,
 }: {
-  icon: string;
+  icon: ComponentType<IconProps>;
   title: string;
   description: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-5">
-      <div className="text-2xl">{icon}</div>
+    <div className="rounded-2xl border border-outline-variant bg-background/50 p-5">
+      <Icon className="h-6 w-6 text-on-surface-variant" />
 
-      <p className="mt-3 font-bold text-white">{title}</p>
+      <p className="mt-3 font-bold text-on-surface">{title}</p>
 
-      <p className="mt-2 text-sm leading-6 text-slate-500">
+      <p className="mt-2 text-sm leading-6 text-outline">
         {description}
       </p>
     </div>
@@ -567,4 +575,4 @@ function parseRequiredInteger(
 }
 
 const inputClass =
-  "w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20";
+  "resize-none w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary";

@@ -26,6 +26,16 @@ export async function POST(
   if (!cashCut) {
     return NextResponse.json({ error: "Corte no encontrado" }, { status: 404 });
   }
+    if (user.role === "GERENTE" || user.role === "ENCARGADO") {
+    const hasAccess = await prisma.userBranch.findFirst({
+      where: { userId: user.id, branchId: cashCut.branchId },
+    });
+    if (!hasAccess) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    }
+  }
+
+
   if (cashCut.status !== "ABIERTO") {
     return NextResponse.json({ error: "Este corte ya está cerrado" }, { status: 403 });
   }
@@ -38,6 +48,8 @@ export async function POST(
     envelopeNotes,
     nextFund,
     totalCostOfGoods,
+    cashCountedDenominations,
+    nextFundDenominations,
   } = body;
 
   if (typeof cashCounted !== "number" || typeof nextFund !== "number") {
@@ -46,6 +58,31 @@ export async function POST(
       { status: 400 }
     );
   }
+
+  function toDenominationRows(
+    context: "CIERRE" | "SIGUIENTE_TURNO",
+    input: unknown
+  ) {
+    if (!Array.isArray(input)) return [];
+
+    return input
+      .filter(
+        (d: { value?: number; quantity?: number }) =>
+          typeof d?.value === "number" &&
+          typeof d?.quantity === "number" &&
+          d.quantity > 0
+      )
+      .map((d: { value: number; quantity: number }) => ({
+        context,
+        value: d.value,
+        quantity: d.quantity,
+      }));
+  }
+
+  const denominationRows = [
+    ...toDenominationRows("CIERRE", cashCountedDenominations),
+    ...toDenominationRows("SIGUIENTE_TURNO", nextFundDenominations),
+  ];
 
   const [outflows, inflows] = await Promise.all([
     prisma.cashOutflow.findMany({ where: { cashCutId } }),
@@ -100,6 +137,9 @@ export async function POST(
           newValue: `diferencia: ${difference}`,
         },
       },
+      ...(denominationRows.length > 0
+        ? { denominations: { create: denominationRows } }
+        : {}),
       ...(envelopeAmount && envelopeAmount > 0
         ? {
             safeMovements: {

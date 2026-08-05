@@ -25,6 +25,28 @@ async function recalcularTotalVentas(cashCutId: string) {
   return totalSales;
 }
 
+async function checkAccessToCut(userId: string, role: string, cashCutId: string) {
+  const cashCut = await prisma.cashCut.findUnique({
+    where: { id: cashCutId },
+    select: { branchId: true, status: true },
+  });
+
+  if (!cashCut) {
+    return { ok: false, status: 404 as const, error: "Corte no encontrado", cashCut: null };
+  }
+
+  if (role === "GERENTE" || role === "ENCARGADO") {
+    const hasAccess = await prisma.userBranch.findFirst({
+      where: { userId, branchId: cashCut.branchId },
+    });
+    if (!hasAccess) {
+      return { ok: false, status: 403 as const, error: "No autorizado", cashCut: null };
+    }
+  }
+
+  return { ok: true as const, cashCut };
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -39,11 +61,13 @@ export async function POST(
 
   const { id: cashCutId } = await params;
 
-  const cashCut = await prisma.cashCut.findUnique({ where: { id: cashCutId } });
-  if (!cashCut) {
-    return NextResponse.json({ error: "Corte no encontrado" }, { status: 404 });
+  const access = await checkAccessToCut(user.id, user.role, cashCutId);
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
-  if (cashCut.status !== "ABIERTO") {
+
+   if (access.cashCut!.status !== "ABIERTO") {
+
     return NextResponse.json({ error: "Este corte ya está cerrado" }, { status: 403 });
   }
 
@@ -75,6 +99,12 @@ export async function GET(
   }
 
   const { id: cashCutId } = await params;
+
+  const access = await checkAccessToCut(user.id, user.role, cashCutId);
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
+
   const ventas = await prisma.cashSalePayment.findMany({ where: { cashCutId } });
 
   return NextResponse.json(ventas);

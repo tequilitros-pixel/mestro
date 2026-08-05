@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import { LotStage } from "@prisma/client";
+import { advanceLotStage } from "@/lib/lotStage";
 
 type FermentationSource = {
   key: string;
@@ -34,23 +36,44 @@ function avg(
 }
 
 export default async function NewFermentationPage() {
-  const discharges = await prisma.millingDischarge.findMany({
-    include: {
-      tank: true,
-      milling: {
-        include: {
-          lot: true,
+  const [discharges, existingFermentations] = await Promise.all([
+    prisma.millingDischarge.findMany({
+      include: {
+        tank: true,
+        milling: {
+          include: {
+            lot: true,
+          },
         },
       },
-    },
-    orderBy: {
-      createdAt: "asc",
-    },
+      orderBy: {
+        createdAt: "asc",
+      },
+    }),
+    /*
+     * Una descarga de molienda (lote + tina) solo debe poder
+     * iniciar UNA fermentación. Sin esto, la misma tina de
+     * mosto podría usarse dos veces por accidente.
+     */
+    prisma.fermentation.findMany({
+      select: { lotId: true, tank: true },
+    }),
+  ]);
+
+  const usedSources = new Set(
+    existingFermentations.map(
+      (fermentation) => `${fermentation.lotId}-${fermentation.tank}`
+    )
+  );
+
+  const availableDischarges = discharges.filter((discharge) => {
+    const tankName = discharge.tank?.name ?? "Sin tina";
+    return !usedSources.has(`${discharge.milling.lotId}-${tankName}`);
   });
 
   const grouped = new Map<string, typeof discharges>();
 
-  for (const discharge of discharges) {
+  for (const discharge of availableDischarges) {
     const key = `${discharge.milling.lotId}-${discharge.tankId ?? "sin-tina"}`;
     const current = grouped.get(key) ?? [];
     current.push(discharge);
@@ -99,13 +122,15 @@ export default async function NewFermentationPage() {
       },
     });
 
+    await advanceLotStage(prisma, source.lotId, LotStage.FERMENTACION);
+
     redirect("/fermentation");
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 p-10 text-white">
+    <main className="min-h-screen bg-background p-10 text-on-surface">
       <div className="mx-auto max-w-4xl">
-        <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
+        <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
           MAESTRO
         </p>
 
@@ -113,16 +138,16 @@ export default async function NewFermentationPage() {
 
         <form
           action={createFermentation}
-          className="mt-8 grid gap-5 rounded-2xl bg-slate-900 p-8"
+          className="mt-8 grid gap-5 rounded-2xl bg-surface-container p-8"
         >
-          <label className="text-sm font-bold text-slate-300">
+          <label className="text-sm font-semibold text-on-surface-variant">
             Crear desde mosto recibido
           </label>
 
           <select
             name="source"
             required
-            className="rounded-xl bg-slate-800 p-3"
+            className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
           >
             <option value="">Selecciona una tina con mosto</option>
 
@@ -136,13 +161,20 @@ export default async function NewFermentationPage() {
             ))}
           </select>
 
+          {sources.length === 0 && (
+            <p className="text-sm text-outline">
+              No hay mosto disponible para fermentar. Cada tina de
+              mosto solo puede usarse una vez.
+            </p>
+          )}
+
           <input
             name="yeast"
             placeholder="Levadura utilizada"
-            className="rounded-xl bg-slate-800 p-3"
+            className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
           />
 
-          <button className="rounded-xl bg-amber-400 px-6 py-3 font-bold text-black">
+          <button className="rounded-xl bg-primary px-6 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]">
             Iniciar fermentación
           </button>
         </form>

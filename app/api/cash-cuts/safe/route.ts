@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
 
 const ROLES_QUE_PUEDEN_RETIRAR = ["ADMIN", "GERENTE"];
 
@@ -10,11 +10,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
+  const allowedBranchIds = await getAccessibleBranchIds();
+
   const { searchParams } = new URL(req.url);
-  const branchId = searchParams.get("branchId");
+  const requestedBranchId = searchParams.get("branchId");
+
+  if (requestedBranchId && allowedBranchIds && !allowedBranchIds.includes(requestedBranchId)) {
+    return NextResponse.json({ error: "No tienes acceso a esta sucursal" }, { status: 403 });
+  }
+
+  if (allowedBranchIds && allowedBranchIds.length === 0) {
+    return NextResponse.json([]);
+  }
 
   const branches = await prisma.branch.findMany({
-    where: branchId ? { id: branchId } : undefined,
+    where: {
+      ...(requestedBranchId ? { id: requestedBranchId } : {}),
+      ...(allowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
+    },
     select: { id: true, name: true },
   });
 
@@ -60,6 +73,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "Faltan datos: branchId y amount (mayor a 0)" },
       { status: 400 }
+    );
+  }
+
+  const allowedBranchIds = await getAccessibleBranchIds();
+
+  if (allowedBranchIds && !allowedBranchIds.includes(branchId)) {
+    return NextResponse.json(
+      { error: "No tienes permiso para retirar de esta sucursal" },
+      { status: 403 }
     );
   }
 

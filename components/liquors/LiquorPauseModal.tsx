@@ -30,12 +30,12 @@ export default function LiquorPauseModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4">
-      <div className="w-full max-w-lg rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl sm:p-8">
-        <h2 className="text-3xl font-black text-white">
+      <div className="w-full max-w-lg rounded-3xl border border-outline-variant bg-surface-container p-6 shadow-2xl sm:p-8">
+        <h2 className="text-3xl font-black text-on-surface">
           ⏸ Pausar elaboración
         </h2>
 
-        <p className="mt-2 text-slate-400">
+        <p className="mt-2 text-on-surface-variant">
           La pausa debe ser temporal. El lote continuará en el mismo paso.
         </p>
 
@@ -51,8 +51,8 @@ export default function LiquorPauseModal({
                 key={option}
                 className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition ${
                   reason === option
-                    ? "border-amber-500 bg-amber-500/10"
-                    : "border-slate-700 hover:border-slate-600"
+                    ? "border-secondary bg-secondary/10"
+                    : "border-outline-variant hover:border-outline-variant"
                 }`}
               >
                 <input
@@ -61,11 +61,11 @@ export default function LiquorPauseModal({
                   value={option}
                   checked={reason === option}
                   onChange={() => setReason(option)}
-                  className="h-5 w-5 accent-amber-500"
+                  className="h-5 w-5 accent-secondary"
                   required
                 />
 
-                <span className="text-slate-200">{option}</span>
+                <span className="text-on-surface">{option}</span>
               </label>
             ))}
           </div>
@@ -73,7 +73,7 @@ export default function LiquorPauseModal({
           <div>
             <label
               htmlFor="pauseNotes"
-              className="text-sm font-semibold text-slate-300"
+              className="text-sm font-semibold text-on-surface-variant"
             >
               Observaciones
             </label>
@@ -84,7 +84,7 @@ export default function LiquorPauseModal({
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               placeholder="Describe brevemente qué ocurrió..."
-              className="mt-2 h-28 w-full resize-none rounded-2xl border border-slate-700 bg-slate-950 p-4 text-white outline-none transition focus:border-amber-500"
+              className="resize-none mt-2 h-28 w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-secondary"
             />
           </div>
 
@@ -92,7 +92,7 @@ export default function LiquorPauseModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-2xl border border-slate-700 py-4 font-bold text-white transition hover:bg-slate-800"
+              className="flex-1 rounded-2xl border border-outline-variant py-4 font-bold text-on-surface transition hover:bg-surface-container-high"
             >
               Cancelar
             </button>
@@ -116,7 +116,7 @@ function PauseSubmitButton({
     <button
       type="submit"
       disabled={pending || disabled}
-      className="flex-1 rounded-2xl bg-amber-500 py-4 font-black text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+      className="flex-1 rounded-2xl bg-primary py-4 font-black text-on-primary transition hover:bg-primary disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant"
     >
       {pending ? "Pausando..." : "⏸ Confirmar pausa"}
     </button>

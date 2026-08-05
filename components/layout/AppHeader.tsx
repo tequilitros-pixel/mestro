@@ -4,6 +4,7 @@ import Link from "next/link";
 import { logoutAction } from "@/app/actions/login";
 import PushNotificationSetup from "@/components/PushNotificationSetup";
 import { formatRole } from "@/components/layout/navigation";
+import { StillIcon, LogoutIcon } from "@/components/ui/icons";
 
 type AppHeaderUser = {
   name: string;
@@ -18,39 +19,40 @@ export default function AppHeader({
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-6">
       <Link href="/" className="group min-w-0">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-xl">
-            🤖
+        <div className="flex items-center gap-3 transition duration-150 ease-out group-hover:scale-[1.02]">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/[0.06] text-primary transition duration-150 ease-out group-hover:border-primary/30 group-hover:bg-primary/10">
+            <StillIcon className="h-6 w-6" />
           </div>
 
           <div className="min-w-0">
-            <p className="text-xl font-black tracking-wide text-amber-400 transition group-hover:text-amber-300">
-              MAESTRO
+            <p className="text-xl font-black tracking-wide text-primary">
+              Destiladora del Norte
             </p>
 
-            <p className="hidden truncate text-xs text-slate-400 sm:block">
-              Sistema Inteligente de Destiladora del Norte
+            <p className="hidden truncate text-xs text-on-surface-variant sm:block">
+              Sistema Operativo de Destiladora del Norte
             </p>
           </div>
         </div>
       </Link>
 
       <div className="flex items-center gap-2 sm:gap-4">
-        <div className="hidden rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1.5 text-xs font-semibold text-green-400 lg:block">
-          ● Sistema activo
+        <div className="hidden items-center gap-2 rounded-full border border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 px-3 py-1.5 text-xs font-semibold text-tertiary-fixed-dim lg:inline-flex">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-tertiary-fixed-dim" />
+          Sistema activo
         </div>
 
         <PushNotificationSetup />
 
         <Link
           href="/profile"
-          className="hidden rounded-xl px-3 py-2 text-right transition hover:bg-slate-900 sm:block"
+          className="hidden rounded-xl px-3 py-2 text-right transition hover:bg-surface-container sm:block"
         >
-          <p className="max-w-40 truncate text-sm font-semibold text-white">
+          <p className="max-w-40 truncate text-sm font-semibold text-on-surface">
             {user.name}
           </p>
 
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-on-surface-variant">
             {formatRole(user.role)}
           </p>
         </Link>
@@ -58,9 +60,10 @@ export default function AppHeader({
         <form action={logoutAction}>
           <button
             type="submit"
-            className="rounded-xl border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:border-slate-600 hover:bg-slate-800 hover:text-white"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] hover:border-outline hover:bg-surface-container-high hover:text-on-surface"
           >
-            Salir
+            <LogoutIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">Salir</span>
           </button>
         </form>
       </div>

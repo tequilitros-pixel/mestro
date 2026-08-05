@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -8,8 +8,34 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
+  const allowedBranchIds = await getAccessibleBranchIds();
+
   const { searchParams } = new URL(req.url);
-  const branchId = searchParams.get("branchId");
+  const requestedBranchId = searchParams.get("branchId");
+
+  let branchFilter: string | { in: string[] } | undefined;
+
+  if (requestedBranchId) {
+    if (allowedBranchIds && !allowedBranchIds.includes(requestedBranchId)) {
+      return NextResponse.json({ error: "No tienes acceso a esta sucursal" }, { status: 403 });
+    }
+    branchFilter = requestedBranchId;
+  } else if (allowedBranchIds) {
+    if (allowedBranchIds.length === 0) {
+      // Usuario sin sucursales asignadas: no ve nada.
+      return NextResponse.json({
+        period: { from: null, to: null },
+        totalSales: 0,
+        totalDifference: 0,
+        cortesConDiferencia: 0,
+        totalSafeBalance: 0,
+        salesByBranch: [],
+        safeBalances: [],
+        recentCuts: [],
+      });
+    }
+    branchFilter = { in: allowedBranchIds };
+  }
 
   const defaultFrom = new Date();
   defaultFrom.setDate(defaultFrom.getDate() - 7);
@@ -25,7 +51,7 @@ export async function GET(req: NextRequest) {
     where: {
       status: "CERRADO",
       date: { gte: dateFrom, lte: dateTo },
-      ...(branchId ? { branchId } : {}),
+      ...(branchFilter ? { branchId: branchFilter } : {}),
     },
     include: { branch: true },
     orderBy: { date: "desc" },
@@ -61,7 +87,10 @@ export async function GET(req: NextRequest) {
   );
 
   const branches = await prisma.branch.findMany({
-    where: branchId ? { id: branchId } : undefined,
+    where: {
+      ...(requestedBranchId ? { id: requestedBranchId } : {}),
+      ...(allowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
+    },
     select: { id: true, name: true },
   });
 

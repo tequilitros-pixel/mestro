@@ -9,6 +9,20 @@ import {
   toggleLiquorRecipeStepAction,
 } from "@/app/actions/liquorRecipeSteps";
 import { useActionState, useEffect, useMemo, useState } from "react";
+import type { ComponentType } from "react";
+import {
+  type IconProps,
+  ToolboxIcon,
+  PackageIcon,
+  GearIcon,
+  ClockIcon,
+  FlaskIcon,
+  ListChecksIcon,
+  CheckIcon,
+  ClipboardIcon,
+  FactoryIcon,
+  XIcon,
+} from "@/components/ui/icons";
 
 type StepType =
   | "PREPARATION"
@@ -76,55 +90,55 @@ type StepFormValues = {
 
 const STEP_OPTIONS: Array<{
   type: StepType;
-  icon: string;
+  icon: ComponentType<IconProps>;
   label: string;
   description: string;
 }> = [
   {
     type: "PREPARATION",
-    icon: "🛠️",
+    icon: ToolboxIcon,
     label: "Preparación",
     description:
       "Prepara recipientes, equipo, área de trabajo o actividades previas.",
   },
   {
     type: "INGREDIENT",
-    icon: "🧂",
+    icon: PackageIcon,
     label: "Agregar ingrediente",
     description:
       "Relaciona el paso con un ingrediente de la receta.",
   },
   {
     type: "MIXING",
-    icon: "🌀",
+    icon: GearIcon,
     label: "Mezclar",
     description:
       "Indica el tiempo y las instrucciones del mezclado.",
   },
   {
     type: "WAIT",
-    icon: "⏱️",
+    icon: ClockIcon,
     label: "Esperar",
     description:
       "Crea una espera o reposo controlado por tiempo.",
   },
   {
     type: "MEASUREMENT",
-    icon: "🧪",
+    icon: FlaskIcon,
     label: "Medición",
     description:
       "Registra alcohol, pH, Brix, temperatura u otro valor.",
   },
   {
     type: "QUALITY_CHECK",
-    icon: "✅",
+    icon: ListChecksIcon,
     label: "Control de calidad",
     description:
       "Agrega verificaciones obligatorias antes de continuar.",
   },
   {
     type: "FINISH",
-    icon: "🏁",
+    icon: CheckIcon,
     label: "Finalizar proceso",
     description:
       "Marca la liberación y cierre del procedimiento.",
@@ -259,19 +273,20 @@ export default function RecipeStepsEditor({
 
   return (
     <>
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 bg-gradient-to-r from-slate-950 to-slate-800 px-5 py-5 text-white sm:px-7">
+      <section className="overflow-hidden rounded-3xl border border-outline-variant bg-surface-container shadow-sm">
+        <div className="border-b border-outline-variant bg-surface-container-high px-5 py-5 text-on-surface sm:px-7">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">
+              <p className="font-mono text-xs font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
                 Procedimiento
               </p>
 
-              <h2 className="mt-1 text-2xl font-bold">
-                📋 Proceso Maestro
+              <h2 className="mt-1 flex items-center gap-2 text-2xl font-bold">
+                <ClipboardIcon className="h-5 w-5 text-on-surface-variant" />
+                Proceso Maestro
               </h2>
 
-              <p className="mt-1 max-w-2xl text-sm text-slate-300">
+              <p className="mt-1 max-w-2xl text-sm text-on-surface-variant">
                 Construye el procedimiento que seguirá el operador
                 durante la elaboración del licor.
               </p>
@@ -280,7 +295,7 @@ export default function RecipeStepsEditor({
             <button
               type="button"
               onClick={() => openCreateModal()}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-slate-100"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-surface-container px-5 py-3 text-sm font-bold text-on-surface transition duration-150 ease-out hover:bg-surface-container-high hover:scale-[1.04] active:scale-[0.97]"
             >
               + Agregar paso
             </button>
@@ -309,7 +324,7 @@ export default function RecipeStepsEditor({
             <button
               type="button"
               onClick={() => openCreateModal()}
-              className="mt-6 flex min-h-14 w-full items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-5 py-4 text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+              className="mt-6 flex min-h-14 w-full items-center justify-center rounded-2xl border-2 border-dashed border-outline-variant bg-surface-container-high px-5 py-4 text-sm font-bold text-on-surface-variant transition duration-150 ease-out hover:border-primary/25 hover:bg-surface-container-high hover:scale-[1.02] active:scale-[0.98]"
             >
               + Agregar otro paso
             </button>
@@ -340,39 +355,43 @@ function EmptyState({
   onAddStep: (type?: StepType) => void;
 }) {
   return (
-    <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-5 sm:p-8">
+    <div className="rounded-3xl border border-dashed border-outline-variant bg-surface-container-high p-5 sm:p-8">
       <div className="mx-auto max-w-2xl text-center">
-        <div className="text-5xl">🏭</div>
+        <FactoryIcon className="mx-auto h-12 w-12 text-on-surface-variant" />
 
-        <h3 className="mt-4 text-xl font-bold text-slate-950">
+        <h3 className="mt-4 text-xl font-bold text-on-surface">
           Construye el proceso de esta receta
         </h3>
 
-        <p className="mt-2 text-sm leading-6 text-slate-600">
+        <p className="mt-2 text-sm leading-6 text-on-surface-variant">
           Selecciona el primer tipo de paso. Después podrás cambiar
           el orden, editarlo o desactivarlo.
         </p>
       </div>
 
       <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {STEP_OPTIONS.map((option) => (
-          <button
-            key={option.type}
-            type="button"
-            onClick={() => onAddStep(option.type)}
-            className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md"
-          >
-            <span className="text-2xl">{option.icon}</span>
+        {STEP_OPTIONS.map((option) => {
+          const OptionIcon = option.icon;
 
-            <span className="mt-3 block font-bold text-slate-950">
-              {option.label}
-            </span>
+          return (
+            <button
+              key={option.type}
+              type="button"
+              onClick={() => onAddStep(option.type)}
+              className="rounded-2xl border border-outline-variant bg-surface-container p-4 text-left shadow-sm transition duration-150 ease-out hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <OptionIcon className="h-6 w-6 text-on-surface-variant" />
 
-            <span className="mt-1 block text-xs leading-5 text-slate-500">
-              {option.description}
-            </span>
-          </button>
-        ))}
+              <span className="mt-3 block font-bold text-on-surface">
+                {option.label}
+              </span>
+
+              <span className="mt-1 block text-xs leading-5 text-outline">
+                {option.description}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -392,19 +411,20 @@ function StepCard({
   onEdit: () => void;
 }) {
   const metadata = getStepMetadata(step.type);
+  const MetadataIcon = metadata.icon;
   const ingredient = step.recipeIngredient;
 
   return (
     <article
       className={`overflow-hidden rounded-2xl border shadow-sm transition ${
         step.active
-          ? `${metadata.borderClass} bg-white`
-          : "border-slate-200 bg-slate-50 opacity-70"
+          ? `${metadata.borderClass} bg-surface-container`
+          : "border-outline-variant bg-surface-container-high opacity-70"
       }`}
     >
       <div
         className={`h-1.5 w-full ${
-          step.active ? metadata.barClass : "bg-slate-300"
+          step.active ? metadata.barClass : "bg-outline-variant"
         }`}
       />
 
@@ -414,7 +434,7 @@ function StepCard({
             className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-xl font-black ${
               step.active
                 ? metadata.badgeClass
-                : "bg-slate-200 text-slate-600"
+                : "bg-surface-container-highest text-on-surface-variant"
             }`}
           >
             {index + 1}
@@ -424,37 +444,37 @@ function StepCard({
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-lg">{metadata.icon}</span>
+                  <MetadataIcon className="h-4 w-4 text-on-surface-variant" />
 
                   <span
                     className={`rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wider ${
                       step.active
                         ? metadata.labelClass
-                        : "bg-slate-200 text-slate-600"
+                        : "bg-surface-container-highest text-on-surface-variant"
                     }`}
                   >
                     {metadata.label}
                   </span>
 
                   {step.required && (
-                    <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-white">
+                    <span className="rounded-full bg-surface-container-highest px-2.5 py-1 text-[11px] font-bold text-on-surface">
                       Obligatorio
                     </span>
                   )}
 
                   {!step.active && (
-                    <span className="rounded-full bg-slate-200 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+                    <span className="rounded-full bg-surface-container-highest px-2.5 py-1 text-[11px] font-bold text-on-surface-variant">
                       Inactivo
                     </span>
                   )}
                 </div>
 
-                <h3 className="mt-3 text-lg font-bold text-slate-950">
+                <h3 className="mt-3 text-lg font-bold text-on-surface">
                   {step.title}
                 </h3>
 
                 {step.instruction && (
-                  <p className="mt-1 whitespace-pre-line text-sm leading-6 text-slate-600">
+                  <p className="mt-1 whitespace-pre-line text-sm leading-6 text-on-surface-variant">
                     {step.instruction}
                   </p>
                 )}
@@ -473,7 +493,7 @@ function StepCard({
                     type="submit"
                     disabled={index === 0}
                     title="Mover hacia arriba"
-                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-outline-variant bg-surface-container font-bold text-on-surface-variant transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     ↑
                   </button>
@@ -491,7 +511,7 @@ function StepCard({
                     type="submit"
                     disabled={index === totalSteps - 1}
                     title="Mover hacia abajo"
-                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-outline-variant bg-surface-container font-bold text-on-surface-variant transition hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     ↓
                   </button>
@@ -500,7 +520,7 @@ function StepCard({
                 <button
                   type="button"
                   onClick={onEdit}
-                  className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                  className="min-h-10 rounded-xl border border-outline-variant bg-surface-container px-3 text-sm font-bold text-on-surface-variant transition hover:bg-surface-container-high"
                 >
                   Editar
                 </button>
@@ -509,7 +529,7 @@ function StepCard({
 
             <StepDetails step={step} ingredient={ingredient} />
 
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-outline-variant pt-4">
               <form action={toggleLiquorRecipeStepAction}>
                 <input
                   type="hidden"
@@ -520,7 +540,7 @@ function StepCard({
 
                 <button
                   type="submit"
-                  className="text-sm font-bold text-slate-600 transition hover:text-slate-950"
+                  className="text-sm font-bold text-on-surface-variant transition hover:text-on-surface"
                 >
                   {step.active ? "Desactivar paso" : "Activar paso"}
                 </button>
@@ -547,7 +567,7 @@ function StepCard({
 
                 <button
                   type="submit"
-                  className="text-sm font-bold text-red-600 transition hover:text-red-800"
+                  className="text-sm font-bold text-error transition hover:opacity-80"
                 >
                   Eliminar
                 </button>
@@ -617,13 +637,13 @@ function StepDetails({
           {details.map((detail) => (
             <div
               key={`${detail.label}-${detail.value}`}
-              className="rounded-xl bg-slate-50 px-4 py-3"
+              className="rounded-xl bg-surface-container-high px-4 py-3"
             >
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-outline">
                 {detail.label}
               </p>
 
-              <p className="mt-1 text-sm font-bold text-slate-900">
+              <p className="mt-1 text-sm font-bold text-on-surface">
                 {detail.value}
               </p>
             </div>
@@ -660,8 +680,8 @@ function DetailList({
   icon: string;
 }) {
   return (
-    <div className="mt-4 rounded-xl border border-slate-200 p-4">
-      <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+    <div className="mt-4 rounded-xl border border-outline-variant p-4">
+      <p className="text-xs font-black uppercase tracking-wider text-outline">
         {title}
       </p>
 
@@ -669,9 +689,9 @@ function DetailList({
         {items.map((item, index) => (
           <div
             key={`${item}-${index}`}
-            className="flex items-start gap-2 text-sm text-slate-700"
+            className="flex items-start gap-2 text-sm text-on-surface-variant"
           >
-            <span className="font-black text-slate-950">{icon}</span>
+            <span className="font-black text-on-surface">{icon}</span>
             <span>{item}</span>
           </div>
         ))}
@@ -711,16 +731,16 @@ function StepModal({
   const isEditing = Boolean(formValues.stepId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-sm sm:items-center sm:p-5">
-      <div className="max-h-[95vh] w-full max-w-4xl overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
-        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-5 py-5 backdrop-blur sm:px-7">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-surface-dim/70 p-0 backdrop-blur-sm sm:items-center sm:p-5">
+      <div className="max-h-[95vh] w-full max-w-4xl overflow-y-auto rounded-t-3xl bg-surface-container shadow-2xl sm:rounded-3xl">
+        <div className="sticky top-0 z-10 border-b border-outline-variant bg-surface-container/95 px-5 py-5 backdrop-blur sm:px-7">
           <div className="flex items-start justify-between gap-5">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+              <p className="font-mono text-xs font-black uppercase tracking-[0.2em] text-outline">
                 Proceso Maestro
               </p>
 
-              <h2 className="mt-1 text-2xl font-black text-slate-950">
+              <h2 className="mt-1 text-2xl font-black text-on-surface">
                 {isEditing ? "Editar paso" : "Agregar paso"}
               </h2>
             </div>
@@ -729,7 +749,7 @@ function StepModal({
               type="button"
               onClick={onClose}
               disabled={isPending}
-              className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-xl font-bold text-slate-700 transition hover:bg-slate-200 disabled:opacity-50"
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-container-high text-xl font-bold text-on-surface-variant transition hover:bg-surface-container-highest disabled:opacity-50"
             >
               ×
             </button>
@@ -751,7 +771,7 @@ function StepModal({
           />
 
           <div>
-            <p className="text-sm font-black text-slate-950">
+            <p className="text-sm font-black text-on-surface">
               Tipo de paso
             </p>
 
@@ -768,19 +788,19 @@ function StepModal({
                       selected
                         ? `${getStepMetadata(option.type).borderClass} ${
                             getStepMetadata(option.type).softClass
-                          } ring-2 ring-slate-950/10`
-                        : "border-slate-200 bg-white hover:border-slate-400"
+                          } ring-2 ring-background/40`
+                        : "border-outline-variant bg-surface-container hover:border-outline"
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className="text-2xl">{option.icon}</span>
+                      <option.icon className="h-6 w-6 text-on-surface-variant" />
 
-                      <span className="font-black text-slate-950">
+                      <span className="font-black text-on-surface">
                         {option.label}
                       </span>
                     </div>
 
-                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                    <p className="mt-2 text-xs leading-5 text-outline">
                       {option.description}
                     </p>
                   </button>
@@ -793,16 +813,14 @@ function StepModal({
             className={`mt-6 rounded-2xl border p-4 ${selectedMetadata.borderClass} ${selectedMetadata.softClass}`}
           >
             <div className="flex items-center gap-3">
-              <span className="text-2xl">
-                {selectedMetadata.icon}
-              </span>
+              <selectedMetadata.icon className="h-5 w-5 text-on-surface-variant" />
 
               <div>
-                <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+                <p className="text-xs font-black uppercase tracking-wider text-outline">
                   Paso seleccionado
                 </p>
 
-                <p className="font-black text-slate-950">
+                <p className="font-black text-on-surface">
                   {selectedMetadata.label}
                 </p>
               </div>
@@ -868,7 +886,7 @@ function StepModal({
                 </select>
 
                 {ingredients.length === 0 && (
-                  <p className="mt-2 text-sm font-semibold text-amber-700">
+                  <p className="mt-2 text-sm font-semibold text-secondary">
                     Primero agrega ingredientes a la receta.
                   </p>
                 )}
@@ -894,7 +912,7 @@ function StepModal({
                     className={`${inputClassName} pr-24`}
                   />
 
-                  <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm font-bold text-slate-500">
+                  <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm font-bold text-outline">
                     minutos
                   </span>
                 </div>
@@ -923,7 +941,7 @@ function StepModal({
                   className={inputClassName}
                 />
 
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-outline">
                   Cada línea se convertirá en una acción separada.
                 </p>
               </Field>
@@ -942,7 +960,7 @@ function StepModal({
                   className={inputClassName}
                 />
 
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-outline">
                   El operador deberá confirmar estas verificaciones.
                 </p>
               </Field>
@@ -972,17 +990,17 @@ function StepModal({
           </div>
 
           {state.error && (
-            <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+            <div className="mt-6 rounded-2xl border border-error/30 bg-error/10 px-4 py-3 text-sm font-bold text-error">
               {state.error}
             </div>
           )}
 
-          <div className="mt-8 flex flex-col-reverse gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:justify-end">
+          <div className="mt-8 flex flex-col-reverse gap-3 border-t border-outline-variant pt-6 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={onClose}
               disabled={isPending}
-              className="min-h-12 rounded-xl border border-slate-300 px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+              className="min-h-12 rounded-xl border border-outline-variant px-5 text-sm font-bold text-on-surface-variant transition hover:bg-surface-container-high disabled:opacity-50"
             >
               Cancelar
             </button>
@@ -995,7 +1013,7 @@ function StepModal({
                 (formValues.type === "INGREDIENT" &&
                   !formValues.recipeIngredientId)
               }
-              className="min-h-12 rounded-xl bg-slate-950 px-6 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-12 rounded-xl bg-primary px-6 text-sm font-black text-on-primary transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isPending
                 ? "Guardando..."
@@ -1021,8 +1039,8 @@ function MeasurementFields({
   ) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 sm:p-5">
-      <h3 className="font-black text-slate-950">
+    <div className="rounded-2xl border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 p-4 sm:p-5">
+      <h3 className="font-black text-on-surface">
         Configuración de la medición
       </h3>
 
@@ -1105,9 +1123,9 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-black text-slate-800">
+      <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
         {label}
-        {required && <span className="ml-1 text-red-600">*</span>}
+        {required && <span className="ml-1 text-error">*</span>}
       </span>
 
       {children}
@@ -1129,21 +1147,21 @@ function ToggleField({
   description: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+    <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-outline-variant bg-surface-container-high p-4">
       <input
         type="checkbox"
         name={name}
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="mt-1 h-5 w-5 rounded border-slate-300"
+        className="mt-1 h-5 w-5 rounded border-outline-variant"
       />
 
       <span>
-        <span className="block text-sm font-black text-slate-900">
+        <span className="block text-sm font-black text-on-surface">
           {title}
         </span>
 
-        <span className="mt-1 block text-xs leading-5 text-slate-500">
+        <span className="mt-1 block text-xs leading-5 text-outline">
           {description}
         </span>
       </span>
@@ -1187,79 +1205,79 @@ function getStepMetadata(type: StepType) {
   switch (type) {
     case "PREPARATION":
       return {
-        icon: "🛠️",
+        icon: ToolboxIcon,
         label: "Preparación",
-        barClass: "bg-slate-500",
-        borderClass: "border-slate-300",
-        badgeClass: "bg-slate-200 text-slate-800",
-        labelClass: "bg-slate-200 text-slate-800",
-        softClass: "bg-slate-100",
+        barClass: "bg-outline",
+        borderClass: "border-outline-variant",
+        badgeClass: "bg-surface-container-high text-on-surface-variant",
+        labelClass: "bg-surface-container-high text-on-surface-variant",
+        softClass: "bg-surface-container-high",
       };
 
     case "INGREDIENT":
       return {
-        icon: "🧂",
+        icon: PackageIcon,
         label: "Ingrediente",
-        barClass: "bg-blue-500",
-        borderClass: "border-blue-200",
-        badgeClass: "bg-blue-100 text-blue-800",
-        labelClass: "bg-blue-100 text-blue-800",
-        softClass: "bg-blue-50",
+        barClass: "bg-primary",
+        borderClass: "border-primary/25",
+        badgeClass: "bg-primary/10 text-primary",
+        labelClass: "bg-primary/10 text-primary",
+        softClass: "bg-primary/[0.06]",
       };
 
     case "MIXING":
       return {
-        icon: "🌀",
+        icon: GearIcon,
         label: "Mezcla",
-        barClass: "bg-violet-500",
-        borderClass: "border-violet-200",
-        badgeClass: "bg-violet-100 text-violet-800",
-        labelClass: "bg-violet-100 text-violet-800",
-        softClass: "bg-violet-50",
+        barClass: "bg-outline",
+        borderClass: "border-outline-variant",
+        badgeClass: "bg-surface-container-high text-on-surface-variant",
+        labelClass: "bg-surface-container-high text-on-surface-variant",
+        softClass: "bg-surface-container-high",
       };
 
     case "WAIT":
       return {
-        icon: "⏱️",
+        icon: ClockIcon,
         label: "Espera",
-        barClass: "bg-amber-500",
-        borderClass: "border-amber-200",
-        badgeClass: "bg-amber-100 text-amber-800",
-        labelClass: "bg-amber-100 text-amber-800",
-        softClass: "bg-amber-50",
+        barClass: "bg-secondary",
+        borderClass: "border-secondary/30",
+        badgeClass: "bg-secondary/10 text-secondary",
+        labelClass: "bg-secondary/10 text-secondary",
+        softClass: "bg-secondary/10",
       };
 
     case "MEASUREMENT":
       return {
-        icon: "🧪",
+        icon: FlaskIcon,
         label: "Medición",
-        barClass: "bg-emerald-500",
-        borderClass: "border-emerald-200",
-        badgeClass: "bg-emerald-100 text-emerald-800",
-        labelClass: "bg-emerald-100 text-emerald-800",
-        softClass: "bg-emerald-50",
+        barClass: "bg-tertiary-fixed-dim",
+        borderClass: "border-tertiary-fixed-dim/30",
+        badgeClass: "bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim",
+        labelClass: "bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim",
+        softClass: "bg-tertiary-fixed-dim/10",
       };
 
     case "QUALITY_CHECK":
       return {
-        icon: "✅",
+        icon: ListChecksIcon,
         label: "Control de calidad",
-        barClass: "bg-teal-500",
-        borderClass: "border-teal-200",
-        badgeClass: "bg-teal-100 text-teal-800",
-        labelClass: "bg-teal-100 text-teal-800",
-        softClass: "bg-teal-50",
+        barClass: "bg-primary",
+        borderClass: "border-primary/25",
+        badgeClass: "bg-primary/10 text-primary",
+        labelClass: "bg-primary/10 text-primary",
+        softClass: "bg-primary/[0.06]",
       };
 
     case "FINISH":
       return {
-        icon: "🏁",
+        icon: CheckIcon,
         label: "Finalización",
-        barClass: "bg-red-500",
-        borderClass: "border-red-200",
-        badgeClass: "bg-red-100 text-red-800",
-        labelClass: "bg-red-100 text-red-800",
-        softClass: "bg-red-50",
+        barClass: "bg-error",
+        borderClass: "border-error/30",
+        badgeClass: "bg-error/10 text-error",
+        labelClass: "bg-error/10 text-error",
+        softClass: "bg-error/10",
       };
   }
 }
@@ -1317,4 +1335,4 @@ function formatNumber(value: number | string) {
 }
 
 const inputClassName =
-  "min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10";
+  "resize-none w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-secondary";

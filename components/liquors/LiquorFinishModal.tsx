@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { finishLiquorBatchAction } from "@/app/actions/liquorBatchFinish";
+import { CheckIcon } from "@/components/ui/icons";
 
 type Props = {
   batchId: string;
@@ -59,14 +60,15 @@ export default function LiquorFinishModal({
     validFinalAlcohol;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-3 sm:p-6">
-      <div className="flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-green-500/30 bg-slate-900 shadow-2xl">
-        <header className="shrink-0 border-b border-slate-800 px-6 py-5 sm:px-8">
-          <h2 className="text-3xl font-black text-white">
-            ✅ Finalizar lote
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-surface-dim/80 p-3 sm:p-6">
+      <div className="flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-tertiary-fixed-dim/30 bg-surface-container shadow-2xl">
+        <header className="shrink-0 border-b border-outline-variant px-6 py-5 sm:px-8">
+          <h2 className="flex items-center gap-2 text-3xl font-black text-on-surface">
+            <CheckIcon className="h-7 w-7 text-tertiary-fixed-dim" />
+            Finalizar lote
           </h2>
 
-          <p className="mt-2 text-slate-400">
+          <p className="mt-2 text-on-surface-variant">
             Registra los resultados finales antes de liberar el lote
             para embotellado.
           </p>
@@ -86,7 +88,7 @@ export default function LiquorFinishModal({
             <div>
               <label
                 htmlFor="finalLiters"
-                className="text-sm font-semibold text-slate-300"
+                className="text-sm font-semibold text-on-surface-variant"
               >
                 Litros finales obtenidos
               </label>
@@ -103,10 +105,10 @@ export default function LiquorFinishModal({
                   onChange={(event) =>
                     setFinalLiters(event.target.value)
                   }
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-950 p-4 text-2xl font-bold text-white outline-none transition focus:border-green-500"
+                  className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-tertiary-fixed-dim"
                 />
 
-                <span className="shrink-0 text-lg font-bold text-slate-400">
+                <span className="shrink-0 text-lg font-bold text-on-surface-variant">
                   L
                 </span>
               </div>
@@ -115,7 +117,7 @@ export default function LiquorFinishModal({
             <div>
               <label
                 htmlFor="finalAlcohol"
-                className="text-sm font-semibold text-slate-300"
+                className="text-sm font-semibold text-on-surface-variant"
               >
                 Alcohol final medido
               </label>
@@ -133,10 +135,10 @@ export default function LiquorFinishModal({
                   onChange={(event) =>
                     setFinalAlcohol(event.target.value)
                   }
-                  className="w-full rounded-2xl border border-slate-700 bg-slate-950 p-4 text-2xl font-bold text-white outline-none transition focus:border-green-500"
+                  className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-tertiary-fixed-dim"
                 />
 
-                <span className="shrink-0 text-lg font-bold text-slate-400">
+                <span className="shrink-0 text-lg font-bold text-on-surface-variant">
                   %
                 </span>
               </div>
@@ -145,7 +147,7 @@ export default function LiquorFinishModal({
             <div>
               <label
                 htmlFor="finalNotes"
-                className="text-sm font-semibold text-slate-300"
+                className="text-sm font-semibold text-on-surface-variant"
               >
                 Observaciones finales
               </label>
@@ -158,12 +160,12 @@ export default function LiquorFinishModal({
                   setNotes(event.target.value)
                 }
                 placeholder="Registra cualquier observación importante..."
-                className="mt-2 h-28 w-full resize-none rounded-2xl border border-slate-700 bg-slate-950 p-4 text-white outline-none transition focus:border-green-500"
+                className="resize-none mt-2 h-28 w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-tertiary-fixed-dim"
               />
             </div>
 
             <div>
-              <p className="text-sm font-black uppercase tracking-[0.2em] text-green-300">
+              <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-tertiary-fixed-dim">
                 Verificación final
               </p>
 
@@ -215,12 +217,12 @@ export default function LiquorFinishModal({
             </div>
           </div>
 
-          <footer className="shrink-0 border-t border-slate-800 bg-slate-900 px-6 py-5 sm:px-8">
+          <footer className="shrink-0 border-t border-outline-variant bg-surface-container px-6 py-5 sm:px-8">
             <div className="flex flex-col-reverse gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 rounded-2xl border border-slate-700 py-4 font-bold text-white transition hover:bg-slate-800"
+                className="flex-1 rounded-2xl border border-outline-variant py-4 font-bold text-on-surface transition hover:bg-surface-container-high"
               >
                 Cancelar
               </button>
@@ -247,8 +249,8 @@ function CheckOption({
     <label
       className={`flex cursor-pointer items-start gap-4 rounded-2xl border p-4 transition ${
         checked
-          ? "border-green-500/30 bg-green-500/10"
-          : "border-slate-700 hover:border-slate-600"
+          ? "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10"
+          : "border-outline-variant hover:border-outline-variant"
       }`}
     >
       <input
@@ -257,14 +259,14 @@ function CheckOption({
         onChange={(event) =>
           onChange(event.target.checked)
         }
-        className="mt-1 h-5 w-5 shrink-0 accent-green-500"
+        className="mt-1 h-5 w-5 shrink-0 accent-tertiary-fixed-dim"
       />
 
       <span
         className={
           checked
-            ? "text-green-100"
-            : "text-slate-300"
+            ? "text-tertiary-fixed-dim"
+            : "text-on-surface-variant"
         }
       >
         {label}
@@ -284,11 +286,16 @@ function FinishSubmitButton({
     <button
       type="submit"
       disabled={pending || disabled}
-      className="flex-1 rounded-2xl bg-green-600 py-4 font-black text-white transition hover:bg-green-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+      className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-tertiary-fixed-dim py-4 font-black text-on-surface transition duration-150 ease-out hover:scale-[1.02] hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant disabled:hover:scale-100"
     >
-      {pending
-        ? "Finalizando lote..."
-        : "✅ Finalizar lote"}
+      {pending ? (
+        "Finalizando lote..."
+      ) : (
+        <>
+          <CheckIcon className="h-4 w-4" />
+          Finalizar lote
+        </>
+      )}
     </button>
   );
 }

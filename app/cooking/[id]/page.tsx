@@ -3,11 +3,23 @@ import { getCurrentUser } from "@/lib/auth";
 import {
   CookingEventType,
   CookingStatus,
+  EquipmentStatus,
+  LotStage,
 } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
+import { advanceLotStage } from "@/lib/lotStage";
 
 import CookingCharts from "@/components/CookingCharts";
 import FinishCookingModal from "@/components/FinishCookingModal";
+import {
+  FlameIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  PauseIcon,
+  ClipboardIcon,
+  type IconProps,
+} from "@/components/ui/icons";
+import type { ComponentType } from "react";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -33,6 +45,9 @@ export default async function CookingDetailPage({
   });
 
   if (!cooking) notFound();
+
+  const cookingEquipmentId = cooking.equipmentId;
+  const cookingLotId = cooking.lotId;
 
   const hasStartedVapor = cooking.events.some(
     (event) =>
@@ -393,6 +408,20 @@ export default async function CookingDetailPage({
           },
         });
 
+        await transaction.equipment.update({
+          where: { id: cookingEquipmentId },
+          data: {
+            status: EquipmentStatus.DISPONIBLE,
+            currentLoad: 0,
+          },
+        });
+
+        await advanceLotStage(
+          transaction,
+          cookingLotId,
+          LotStage.MOLIENDA
+        );
+
         return updatedCooking;
       }
     );
@@ -405,12 +434,12 @@ export default async function CookingDetailPage({
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 p-4 text-white sm:p-6 lg:p-10">
+    <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
       <div className="mx-auto max-w-6xl">
        
 
         <header className="mt-8">
-          <p className="text-sm uppercase tracking-[0.4em] text-amber-400">
+          <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
             MAESTRO
           </p>
 
@@ -420,7 +449,7 @@ export default async function CookingDetailPage({
                 Cocción {cooking.lot.code}
               </h1>
 
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-on-surface-variant">
                 Horno {cooking.equipment.name} · Inicio{" "}
                 {formatDateTime(cooking.startedAt)}
               </p>
@@ -474,11 +503,11 @@ export default async function CookingDetailPage({
           />
         </section>
 
-        <section className="mt-6 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
+        <section className="mt-6 overflow-hidden rounded-2xl border border-outline-variant bg-surface-container">
           <div className="p-6">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-on-surface-variant">
                   Avance estimado de cocción
                 </p>
 
@@ -487,13 +516,13 @@ export default async function CookingDetailPage({
                     {cookingProgress.percentage}%
                   </h2>
 
-                  <p className="pb-1 text-sm text-slate-400">
+                  <p className="pb-1 text-sm text-on-surface-variant">
                     Meta operativa: 32 horas
                   </p>
                 </div>
               </div>
 
-              <div className="text-sm text-slate-400 sm:text-right">
+              <div className="text-sm text-on-surface-variant sm:text-right">
                 <p>
                   Tiempo transcurrido:{" "}
                   {cookingProgress.duration}
@@ -506,9 +535,9 @@ export default async function CookingDetailPage({
               </div>
             </div>
 
-            <div className="mt-5 h-4 overflow-hidden rounded-full bg-slate-800">
+            <div className="mt-5 h-4 overflow-hidden rounded-full bg-surface-container-high">
               <div
-                className="h-full rounded-full bg-amber-400 transition-all duration-500"
+                className="h-full rounded-full bg-primary transition-all duration-500"
                 style={{
                   width: `${cookingProgress.percentage}%`,
                 }}
@@ -516,7 +545,7 @@ export default async function CookingDetailPage({
             </div>
           </div>
 
-          <div className="grid border-t border-slate-800 sm:grid-cols-3">
+          <div className="grid border-t border-outline-variant sm:grid-cols-3">
             <ProcessIndicator
               title="Temperatura"
               value={getTemperatureStatus(
@@ -548,27 +577,27 @@ export default async function CookingDetailPage({
         <section
           className={`mt-6 rounded-2xl border p-6 ${
             cookingHealth === "ATENCION"
-              ? "border-red-500/30 bg-red-500/10"
+              ? "border-error/30 bg-error/10"
               : cookingHealth === "TERMINADA"
-                ? "border-blue-500/30 bg-blue-500/10"
+                ? "border-on-surface-variant/30 bg-on-surface-variant/10"
                 : cookingHealth === "LISTA"
-                  ? "border-green-500/30 bg-green-500/10"
-                  : "border-amber-400/30 bg-amber-400/10"
+                  ? "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10"
+                  : "border-secondary/30 bg-secondary/10"
           }`}
         >
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-400">
+          <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
             Análisis de MAESTRO
           </p>
 
           <h2
             className={`mt-3 text-2xl font-bold sm:text-3xl ${
               cookingHealth === "ATENCION"
-                ? "text-red-400"
+                ? "text-error"
                 : cookingHealth === "TERMINADA"
-                  ? "text-blue-400"
+                  ? "text-on-surface-variant"
                   : cookingHealth === "LISTA"
-                    ? "text-green-400"
-                    : "text-amber-300"
+                    ? "text-tertiary-fixed-dim"
+                    : "text-secondary"
             }`}
           >
             {getCookingHealthTitle(cookingHealth)}
@@ -584,13 +613,11 @@ export default async function CookingDetailPage({
             }).map((message) => (
               <div
                 key={message}
-                className="flex items-start gap-3 rounded-xl bg-slate-950/40 p-3"
+                className="flex items-start gap-3 rounded-xl bg-surface-dim/40 p-3"
               >
-                <span className="mt-0.5 text-amber-400">
-                  ●
-                </span>
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-on-surface-variant" />
 
-                <p className="text-slate-200">
+                <p className="text-on-surface">
                   {message}
                 </p>
               </div>
@@ -598,20 +625,20 @@ export default async function CookingDetailPage({
           </div>
         </section>
 
-        <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
+        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-6 sm:p-8">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold">
                 Última temperatura
               </h2>
 
-              <p className="mt-1 text-sm text-slate-400">
+              <p className="mt-1 text-sm text-on-surface-variant">
                 Lectura más reciente del horno.
               </p>
             </div>
 
             {lastTemperature && (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-outline">
                 {formatDateTime(
                   lastTemperature.createdAt
                 )}
@@ -643,8 +670,8 @@ export default async function CookingDetailPage({
               />
             </div>
           ) : (
-            <div className="mt-6 rounded-2xl border border-dashed border-slate-700 p-8 text-center">
-              <p className="text-slate-400">
+            <div className="mt-6 rounded-2xl border border-dashed border-outline-variant p-8 text-center">
+              <p className="text-on-surface-variant">
                 Todavía no hay temperaturas
                 registradas.
               </p>
@@ -652,13 +679,13 @@ export default async function CookingDetailPage({
           )}
         </section>
 
-        <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
+        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-6 sm:p-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
               Resumen del cocimiento
             </h2>
 
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-on-surface-variant">
               Extracciones y valores acumulados del
               proceso.
             </p>
@@ -754,13 +781,13 @@ export default async function CookingDetailPage({
         )}
 
         {!hasFinished && (
-          <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-8">
+          <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
             <div className="mb-6">
               <h2 className="text-2xl font-bold">
                 Acciones de cocción
               </h2>
 
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-on-surface-variant">
                 Registra únicamente lo que ocurra en
                 el horno.
               </p>
@@ -776,15 +803,16 @@ export default async function CookingDetailPage({
                   }
                 />
 
-                <button className="w-full rounded-xl bg-amber-400 px-6 py-4 text-lg font-bold text-black transition hover:bg-amber-300">
-                  🔥 Iniciar vapor
+                <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 text-lg font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]">
+                  <FlameIcon className="h-5 w-5" />
+                  Iniciar vapor
                 </button>
               </form>
             ) : (
               <div className="space-y-8">
                 <form
                   action={addTemperatureEvent}
-                  className="rounded-2xl border border-slate-700 bg-slate-800 p-5 sm:p-6"
+                  className="rounded-2xl border border-outline-variant bg-surface-container-high p-5 sm:p-6"
                 >
                   <h3 className="mb-4 text-xl font-bold">
                     Registrar temperaturas
@@ -822,10 +850,10 @@ export default async function CookingDetailPage({
                   <input
                     name="notes"
                     placeholder="Observaciones opcionales"
-                    className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-white outline-none transition placeholder:text-slate-500 focus:border-amber-400"
+                    className="mt-4 w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
                   />
 
-                  <button className="mt-4 w-full rounded-xl bg-amber-400 px-6 py-3 font-bold text-black transition hover:bg-amber-300">
+                  <button className="mt-4 w-full rounded-xl bg-primary px-6 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]">
                     Guardar temperaturas
                   </button>
                 </form>
@@ -836,7 +864,8 @@ export default async function CookingDetailPage({
                     type={
                       CookingEventType.AUMENTAR_VAPOR
                     }
-                    label="⬆️ Aumentar vapor"
+                    icon={ArrowUpIcon}
+                    label="Aumentar vapor"
                   />
 
                   <SimpleActionForm
@@ -844,7 +873,8 @@ export default async function CookingDetailPage({
                     type={
                       CookingEventType.BAJAR_VAPOR
                     }
-                    label="⬇️ Disminuir vapor"
+                    icon={ArrowDownIcon}
+                    label="Disminuir vapor"
                   />
 
                   <SimpleActionForm
@@ -852,7 +882,8 @@ export default async function CookingDetailPage({
                     type={
                       CookingEventType.SUSPENDER_VAPOR
                     }
-                    label="⏸ Suspender vapor"
+                    icon={PauseIcon}
+                    label="Suspender vapor"
                   />
 
                   <HoneyActionForm
@@ -860,7 +891,8 @@ export default async function CookingDetailPage({
                     type={
                       CookingEventType.MIELES_AMARGAS
                     }
-                    label="🟠 Extraer mieles amargas"
+                    icon={FlameIcon}
+                    label="Extraer mieles amargas"
                   />
 
                   <HoneyActionForm
@@ -868,7 +900,8 @@ export default async function CookingDetailPage({
                     type={
                       CookingEventType.MIELES_DULCES
                     }
-                    label="🟡 Extraer mieles dulces"
+                    icon={FlameIcon}
+                    label="Extraer mieles dulces"
                   />
 
                   <SimpleActionForm
@@ -876,13 +909,14 @@ export default async function CookingDetailPage({
                     type={
                       CookingEventType.OBSERVACION
                     }
-                    label="📝 Guardar observación"
+                    icon={ClipboardIcon}
+                    label="Guardar observación"
                     notesRequired
                   />
                 </div>
 
-                <div className="border-t border-slate-700 pt-6">
-                  <p className="mb-3 text-sm text-slate-400">
+                <div className="border-t border-outline-variant pt-6">
+                  <p className="mb-3 text-sm text-on-surface-variant">
                     Finaliza únicamente después de
                     confirmar los resultados oficiales.
                   </p>
@@ -920,26 +954,26 @@ export default async function CookingDetailPage({
 
         <CookingCharts events={cooking.events} />
 
-        <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-8">
+        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
               Bitácora de cocción
             </h2>
 
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-on-surface-variant">
               Historial completo del proceso, del
               registro más reciente al más antiguo.
             </p>
           </div>
 
           {cooking.events.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center">
-              <p className="text-slate-400">
+            <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center">
+              <p className="text-on-surface-variant">
                 Aún no hay eventos registrados.
               </p>
             </div>
           ) : (
-            <div className="relative space-y-5 before:absolute before:bottom-3 before:left-[11px] before:top-3 before:w-px before:bg-slate-700">
+            <div className="relative space-y-5 before:absolute before:bottom-3 before:left-[11px] before:top-3 before:w-px before:bg-surface-container-highest">
               {[...cooking.events]
                 .reverse()
                 .map((event, index) => (
@@ -948,22 +982,22 @@ export default async function CookingDetailPage({
                     className="relative pl-9"
                   >
                     <div
-                      className={`absolute left-0 top-6 h-6 w-6 rounded-full border-4 border-slate-900 ${
+                      className={`absolute left-0 top-6 h-6 w-6 rounded-full border-4 border-outline-variant ${
                         index === 0
-                          ? "bg-amber-400"
-                          : "bg-slate-600"
+                          ? "bg-primary"
+                          : "bg-surface-container-highest"
                       }`}
                     />
 
-                    <div className="rounded-2xl border border-slate-700 bg-slate-800 p-5">
+                    <div className="rounded-2xl border border-outline-variant bg-surface-container-high p-5">
                       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="font-semibold text-amber-400">
+                        <p className="font-semibold text-primary">
                           {getCookingEventLabel(
                             event.type
                           )}
                         </p>
 
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-on-surface-variant">
                           {formatDateTime(
                             event.createdAt
                           )}
@@ -1041,12 +1075,12 @@ export default async function CookingDetailPage({
                       )}
 
                       {event.notes && (
-                        <div className="mt-4 rounded-xl bg-slate-900 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <div className="mt-4 rounded-xl bg-surface-container p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-outline">
                             Observaciones
                           </p>
 
-                          <p className="mt-2 whitespace-pre-wrap text-slate-300">
+                          <p className="mt-2 whitespace-pre-wrap text-on-surface-variant">
                             {event.notes}
                           </p>
                         </div>
@@ -1097,25 +1131,25 @@ function CookingClosureAct({
       : "-";
 
   return (
-    <section className="mt-8 overflow-hidden rounded-3xl border border-green-500/30 bg-slate-900">
-      <header className="border-b border-green-500/20 bg-green-500/10 p-6 sm:p-8">
-        <p className="text-xs font-bold uppercase tracking-[0.3em] text-green-400">
+    <section className="mt-8 overflow-hidden rounded-3xl border border-tertiary-fixed-dim/30 bg-surface-container">
+      <header className="border-b border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 p-6 sm:p-8">
+        <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-tertiary-fixed-dim">
           Acta de cierre
         </p>
 
         <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-white sm:text-3xl">
+            <h2 className="text-2xl font-bold text-on-surface sm:text-3xl">
               Cocción terminada
             </h2>
 
-            <p className="mt-2 text-sm text-slate-300">
+            <p className="mt-2 text-sm text-on-surface-variant">
               El horno quedó cerrado y bloqueado para
               nuevos registros.
             </p>
           </div>
 
-          <div className="w-fit rounded-full border border-green-500/40 bg-green-500/10 px-4 py-2 font-mono text-sm font-bold text-green-300">
+          <div className="w-fit rounded-full border border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 px-4 py-2 font-mono text-sm font-bold text-tertiary-fixed-dim">
             {closureCode ?? "Acta sin folio"}
           </div>
         </div>
@@ -1214,23 +1248,23 @@ function CookingClosureAct({
         </div>
 
         {finalNotes && (
-          <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950 p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <div className="mt-4 rounded-2xl border border-outline-variant bg-background p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-outline">
               Observaciones finales
             </p>
 
-            <p className="mt-2 whitespace-pre-wrap text-slate-300">
+            <p className="mt-2 whitespace-pre-wrap text-on-surface-variant">
               {finalNotes}
             </p>
           </div>
         )}
 
-        <div className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-5">
-          <p className="font-bold text-amber-300">
+        <div className="mt-6 rounded-2xl border border-outline-variant bg-surface-container-high/60 p-5">
+          <p className="font-bold text-primary">
             Siguiente etapa: Molienda
           </p>
 
-          <p className="mt-1 text-sm text-amber-100/70">
+          <p className="mt-1 text-sm text-on-surface-variant">
             La cocción quedó documentada y disponible
             para continuar con la descarga y molienda
             del agave.
@@ -1253,23 +1287,23 @@ function Kpi({
   highlight?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <p className="text-sm text-slate-400">
+    <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+      <p className="text-sm text-on-surface-variant">
         {title}
       </p>
 
       <p
         className={`mt-2 text-2xl font-bold ${
           highlight
-            ? "text-green-400"
-            : "text-white"
+            ? "text-tertiary-fixed-dim"
+            : "text-on-surface"
         }`}
       >
         {value}
       </p>
 
       {detail && (
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-xs text-outline">
           {detail}
         </p>
       )}
@@ -1295,8 +1329,8 @@ function TemperatureCard({
         : "Calentando";
 
   return (
-    <div className="rounded-2xl border border-slate-700 bg-slate-800 p-5">
-      <p className="text-sm text-slate-400">
+    <div className="rounded-2xl border border-outline-variant bg-surface-container-high p-5">
+      <p className="text-sm text-on-surface-variant">
         {title}
       </p>
 
@@ -1310,8 +1344,8 @@ function TemperatureCard({
         className={`mt-2 text-xs font-semibold ${
           numericValue !== null &&
           numericValue >= 90
-            ? "text-green-400"
-            : "text-amber-400"
+            ? "text-tertiary-fixed-dim"
+            : "text-secondary"
         }`}
       >
         {status}
@@ -1330,16 +1364,16 @@ function ProcessIndicator({
   warning: boolean;
 }) {
   return (
-    <div className="border-slate-800 p-5 sm:border-r sm:last:border-r-0">
-      <p className="text-xs uppercase tracking-wider text-slate-500">
+    <div className="border-outline-variant p-5 sm:border-r sm:last:border-r-0">
+      <p className="text-xs uppercase tracking-wider text-outline">
         {title}
       </p>
 
       <p
         className={`mt-1 font-bold ${
           warning
-            ? "text-amber-400"
-            : "text-green-400"
+            ? "text-secondary"
+            : "text-tertiary-fixed-dim"
         }`}
       >
         {warning ? "● " : "✓ "}
@@ -1360,30 +1394,47 @@ function CookingStatusBadge({
 }) {
   const styles = {
     ATENCION:
-      "border-red-500/40 bg-red-500/10 text-red-400",
+      "border-error/40 bg-error/10 text-error",
     CALENTANDO:
-      "border-amber-400/40 bg-amber-400/10 text-amber-300",
+      "border-secondary/40 bg-secondary/10 text-secondary",
     LISTA:
-      "border-green-500/40 bg-green-500/10 text-green-400",
+      "border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim",
     TERMINADA:
-      "border-blue-500/40 bg-blue-500/10 text-blue-400",
+      "border-on-surface-variant/40 bg-on-surface-variant/10 text-on-surface-variant",
+  };
+
+  const dotStyles: Record<
+    | "ATENCION"
+    | "CALENTANDO"
+    | "LISTA"
+    | "TERMINADA",
+    string
+  > = {
+    ATENCION: "bg-error",
+    CALENTANDO: "bg-secondary",
+    LISTA: "bg-tertiary-fixed-dim",
+    TERMINADA: "bg-on-surface-variant",
   };
 
   return (
     <div
-      className={`w-fit rounded-full border px-4 py-2 text-sm font-bold ${styles[status]}`}
+      className={`flex w-fit items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold ${styles[status]}`}
     >
+      <span
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotStyles[status]}`}
+      />
+
       {status === "ATENCION" &&
-        "🔴 Requiere atención"}
+        "Requiere atención"}
 
       {status === "CALENTANDO" &&
-        "🟡 Cocción en proceso"}
+        "Cocción en proceso"}
 
       {status === "LISTA" &&
-        "🟢 Temperatura alcanzada"}
+        "Temperatura alcanzada"}
 
       {status === "TERMINADA" &&
-        "🔵 Cocción terminada"}
+        "Cocción terminada"}
     </div>
   );
 }
@@ -1391,18 +1442,20 @@ function CookingStatusBadge({
 function SimpleActionForm({
   action,
   type,
+  icon: Icon,
   label,
   notesRequired = false,
 }: {
   action: (formData: FormData) => Promise<void>;
   type: CookingEventType;
+  icon: ComponentType<IconProps>;
   label: string;
   notesRequired?: boolean;
 }) {
   return (
     <form
       action={action}
-      className="rounded-2xl border border-slate-700 bg-slate-800 p-4"
+      className="rounded-2xl border border-outline-variant bg-surface-container-high p-4"
     >
       <input
         type="hidden"
@@ -1418,10 +1471,11 @@ function SimpleActionForm({
             ? "Escribe la observación"
             : "Observación opcional"
         }
-        className="mb-3 w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-white outline-none placeholder:text-slate-500 focus:border-amber-400"
+        className="mb-3 w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
       />
 
-      <button className="w-full rounded-xl bg-slate-700 px-5 py-4 font-bold transition hover:bg-slate-600">
+      <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-surface-container-highest px-5 py-4 font-bold transition duration-150 ease-out hover:scale-[1.04] hover:bg-surface-container-highest active:scale-[0.97]">
+        <Icon className="h-4 w-4" />
         {label}
       </button>
     </form>
@@ -1431,18 +1485,20 @@ function SimpleActionForm({
 function HoneyActionForm({
   action,
   type,
+  icon: Icon,
   label,
 }: {
   action: (formData: FormData) => Promise<void>;
   type:
     | typeof CookingEventType.MIELES_AMARGAS
     | typeof CookingEventType.MIELES_DULCES;
+  icon: ComponentType<IconProps>;
   label: string;
 }) {
   return (
     <form
       action={action}
-      className="rounded-2xl border border-slate-700 bg-slate-800 p-4"
+      className="rounded-2xl border border-outline-variant bg-surface-container-high p-4"
     >
       <input
         type="hidden"
@@ -1485,11 +1541,12 @@ function HoneyActionForm({
         <input
           name="notes"
           placeholder="Observación opcional"
-          className="w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-white outline-none placeholder:text-slate-500 focus:border-amber-400"
+          className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
         />
       </div>
 
-      <button className="mt-3 w-full rounded-xl bg-slate-700 px-5 py-4 font-bold transition hover:bg-slate-600">
+      <button className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-surface-container-highest px-5 py-4 font-bold transition duration-150 ease-out hover:scale-[1.04] hover:bg-surface-container-highest active:scale-[0.97]">
+        <Icon className="h-4 w-4" />
         {label}
       </button>
     </form>
@@ -1524,13 +1581,13 @@ function NumberField({
         max={max}
         required={required}
         placeholder={placeholder}
-        className={`w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-white outline-none transition placeholder:text-slate-500 focus:border-amber-400 ${
+        className={`w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary ${
           suffix ? "pr-14" : ""
         }`}
       />
 
       {suffix && (
-        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-slate-500">
+        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-outline">
           {suffix}
         </span>
       )}
@@ -1546,8 +1603,8 @@ function Mini({
   value: string | number;
 }) {
   return (
-    <div className="rounded-xl bg-slate-900 p-3">
-      <p className="text-xs text-slate-400">
+    <div className="rounded-xl bg-surface-container p-3">
+      <p className="text-xs text-on-surface-variant">
         {title}
       </p>
 
@@ -1566,16 +1623,16 @@ function ActValue({
   highlight?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
-      <p className="text-xs uppercase tracking-wider text-slate-500">
+    <div className="rounded-2xl border border-outline-variant bg-background p-4">
+      <p className="text-xs uppercase tracking-wider text-outline">
         {title}
       </p>
 
       <p
         className={`mt-2 font-bold ${
           highlight
-            ? "text-green-400"
-            : "text-white"
+            ? "text-tertiary-fixed-dim"
+            : "text-on-surface"
         }`}
       >
         {value}
@@ -1974,16 +2031,16 @@ function getCookingEventLabel(
     CookingEventType,
     string
   > = {
-    INICIO_COCCION: "▶️ Inicio de cocción",
-    INICIO_VAPOR: "🔥 Inicio de vapor",
-    TEMPERATURA: "🌡️ Temperatura",
-    MIELES_AMARGAS: "🟠 Mieles amargas",
-    MIELES_DULCES: "🟡 Mieles dulces",
-    BAJAR_VAPOR: "⬇️ Disminuir vapor",
-    AUMENTAR_VAPOR: "⬆️ Aumentar vapor",
-    SUSPENDER_VAPOR: "⏸️ Suspender vapor",
-    FIN_COCCION: "🏁 Cierre de cocción",
-    OBSERVACION: "📝 Observación",
+    INICIO_COCCION: "Inicio de cocción",
+    INICIO_VAPOR: "Inicio de vapor",
+    TEMPERATURA: "Temperatura",
+    MIELES_AMARGAS: "Mieles amargas",
+    MIELES_DULCES: "Mieles dulces",
+    BAJAR_VAPOR: "Disminuir vapor",
+    AUMENTAR_VAPOR: "Aumentar vapor",
+    SUSPENDER_VAPOR: "Suspender vapor",
+    FIN_COCCION: "Cierre de cocción",
+    OBSERVACION: "Observación",
   };
 
   return labels[type];

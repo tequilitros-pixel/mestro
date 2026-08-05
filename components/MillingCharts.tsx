@@ -54,15 +54,15 @@ export default function MillingCharts({ events }: { events: MillingEvent[] }) {
 
   if (events.length === 0) {
     return (
-      <section className="mt-8 rounded-2xl bg-slate-900 p-8">
+      <section className="mt-8 rounded-2xl bg-surface-container p-8">
         <h2 className="mb-2 text-2xl font-bold">Gráficas de molienda</h2>
-        <p className="text-slate-400">Aún no hay eventos para graficar.</p>
+        <p className="text-on-surface-variant">Aún no hay eventos para graficar.</p>
       </section>
     );
   }
 
   return (
-    <section className="mt-8 rounded-2xl bg-slate-900 p-8">
+    <section className="mt-8 rounded-2xl bg-surface-container p-8">
       <h2 className="mb-6 text-2xl font-bold">Gráficas de molienda</h2>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -85,7 +85,7 @@ function Chart({
   dataKey: keyof ChartData;
 }) {
   return (
-    <div className="rounded-2xl bg-slate-800 p-5">
+    <div className="rounded-2xl bg-surface-container-high p-5">
       <h3 className="mb-4 font-bold">{title}</h3>
 
       <div className="h-64">

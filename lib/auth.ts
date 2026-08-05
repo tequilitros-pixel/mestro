@@ -26,3 +26,40 @@ export async function requireAdmin() {
 
   return user;
 }
+export async function requireModuleAccess(moduleKey: string) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  if (user.role === "ADMIN") {
+    return user;
+  }
+
+  const permission = await prisma.modulePermission.findUnique({
+    where: { userId_moduleKey: { userId: user.id, moduleKey } },
+  });
+
+  if (!permission) {
+    redirect("/cooking");
+  }
+
+  return user;
+}
+export async function getAccessibleBranchIds(): Promise<string[] | null> {
+  const user = await getCurrentUser();
+
+  if (!user) return [];
+
+  if (user.role === "ADMIN") {
+    return null;
+  }
+
+  const branches = await prisma.userBranch.findMany({
+    where: { userId: user.id },
+    select: { branchId: true },
+  });
+
+  return branches.map((b) => b.branchId);
+}

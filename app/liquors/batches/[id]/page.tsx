@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import LiquorBatchAssistant from "@/components/liquors/LiquorBatchAssistant";
 import { resumeLiquorBatchAction } from "@/app/actions/liquorBatchPause";
+import { TagIcon, PackageIcon, CheckIcon, BottleIcon } from "@/components/ui/icons";
 
 type Props = {
   params: Promise<{
@@ -75,18 +76,12 @@ export default async function LiquorBatchPage({ params }: Props) {
   );
 
   /*
-   * Se convierte el estado a texto para evitar problemas de TypeScript
-   * si el enum tiene un nombre diferente.
-   *
-   * La tarjeta aparecerá con cualquiera de estos estados.
+   * Un lote se considera "liberado" (procedimiento de elaboración
+   * terminado) tanto si ya está listo para embotellar como si ya
+   * tiene uno o más embotellados en curso — en ambos casos debe
+   * mostrar la tarjeta de "liberado", no el asistente de pasos.
    */
-  const releasedStatuses = [
-    "LISTO_PARA_EMBOTELLAR",
-    "READY_FOR_BOTTLING",
-    "LIBERADO",
-    "FINALIZADO",
-    "COMPLETADO",
-  ];
+  const releasedStatuses = ["LISTO_PARA_EMBOTELLAR", "EMBOTELLANDO"];
 
   const currentStatus = String(batch.status);
 
@@ -98,34 +93,34 @@ const isReleased = releasedStatuses.includes(currentStatus);
     <section className="mx-auto max-w-6xl">
       <Link
         href={`/liquors/products/${batch.product.slug}`}
-        className="text-sm font-semibold text-purple-300 transition hover:text-purple-200"
+        className="text-sm font-semibold text-on-surface-variant transition hover:text-on-surface"
       >
         ← Regresar a {batch.product.name}
       </Link>
 
-      <header className="mt-6 rounded-3xl border border-purple-500/20 bg-slate-900 p-6 sm:p-8">
+      <header className="mt-6 rounded-3xl border border-outline-variant bg-surface-container p-6 sm:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.35em] text-purple-400">
+            <p className="font-mono text-sm font-semibold uppercase tracking-[0.35em] text-on-surface-variant">
               Orden de elaboración
             </p>
 
-            <h1 className="mt-3 text-4xl font-black text-white sm:text-5xl">
+            <h1 className="mt-3 text-4xl font-black text-on-surface sm:text-5xl">
               {batch.product.icon ?? "🍹"} {batch.code}
             </h1>
 
-            <p className="mt-3 text-slate-400">
+            <p className="mt-3 text-on-surface-variant">
               {batch.product.name} · {batch.recipe.name} · Versión{" "}
               {batch.recipe.version}
             </p>
           </div>
 
-          <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 px-5 py-4">
-            <p className="text-xs uppercase tracking-wider text-purple-300/70">
+          <div className="rounded-2xl border border-primary/25 bg-primary/[0.06] px-5 py-4">
+            <p className="text-xs uppercase tracking-wider text-on-surface-variant">
               Volumen objetivo
             </p>
 
-            <p className="mt-1 text-3xl font-black text-purple-200">
+            <p className="mt-1 text-3xl font-black text-on-surface">
               {formatNumber(batch.plannedLiters)} L
             </p>
           </div>
@@ -191,50 +186,50 @@ const isReleased = releasedStatuses.includes(currentStatus);
     totalProducedBottles={totalProducedBottles}
   />
       ) : batch.status === "PAUSADO" ? (
-        <section className="mt-6 rounded-3xl border border-amber-500/40 bg-amber-500/10 p-6 sm:p-8">
-          <p className="text-sm font-black uppercase tracking-[0.3em] text-amber-300">
-            ⏸ Elaboración pausada
+        <section className="mt-6 rounded-3xl border border-secondary/40 bg-secondary/10 p-6 sm:p-8">
+          <p className="font-mono text-sm font-black uppercase tracking-[0.3em] text-secondary">
+            Elaboración pausada
           </p>
 
-          <h2 className="mt-3 text-3xl font-black text-white">
+          <h2 className="mt-3 text-3xl font-black text-on-surface">
             El lote está temporalmente detenido
           </h2>
 
-          <div className="mt-6 space-y-4 rounded-2xl border border-amber-500/20 bg-slate-950/40 p-5">
+          <div className="mt-6 space-y-4 rounded-2xl border border-secondary/20 bg-surface-dim/40 p-5">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <p className="text-xs font-semibold uppercase tracking-wider text-outline">
                 Motivo
               </p>
 
-              <p className="mt-1 font-bold text-amber-100">
+              <p className="mt-1 font-bold text-secondary">
                 {batch.pauseReason ?? "Sin motivo registrado"}
               </p>
             </div>
 
             {batch.pauseNotes && (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-wider text-outline">
                   Observaciones
                 </p>
 
-                <p className="mt-1 text-slate-300">{batch.pauseNotes}</p>
+                <p className="mt-1 text-on-surface-variant">{batch.pauseNotes}</p>
               </div>
             )}
 
             {batch.pausedAt && (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-wider text-outline">
                   Pausado desde
                 </p>
 
-                <p className="mt-1 text-slate-300">
+                <p className="mt-1 text-on-surface-variant">
                   {formatDateTime(batch.pausedAt)}
                 </p>
               </div>
             )}
           </div>
 
-          <p className="mt-5 text-sm text-amber-100/70">
+          <p className="mt-5 text-sm text-secondary/70">
             La elaboración debe reanudarse lo antes posible. Mientras el lote
             esté pausado no se podrán completar pasos.
           </p>
@@ -244,9 +239,9 @@ const isReleased = releasedStatuses.includes(currentStatus);
 
             <button
               type="submit"
-              className="w-full rounded-2xl bg-amber-500 py-4 text-lg font-black text-slate-950 transition hover:bg-amber-400"
+              className="w-full rounded-2xl bg-primary py-4 text-lg font-black text-on-primary transition duration-150 ease-out hover:scale-[1.02] hover:bg-primary active:scale-[0.98]"
             >
-              ▶ Reanudar elaboración
+              Reanudar elaboración
             </button>
           </form>
         </section>
@@ -272,46 +267,46 @@ const isReleased = releasedStatuses.includes(currentStatus);
           />
         </div>
       ) : (
-        <section className="mt-6 rounded-3xl border border-amber-400/30 bg-amber-400/10 p-8 text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-300">
+        <section className="mt-6 rounded-3xl border border-secondary/30 bg-secondary/10 p-8 text-center">
+          <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-secondary">
             Procedimiento no disponible
           </p>
 
-          <h2 className="mt-3 text-2xl font-black text-white">
+          <h2 className="mt-3 text-2xl font-black text-on-surface">
             Este lote no tiene pasos registrados
           </h2>
 
-          <p className="mt-3 text-amber-100/80">
+          <p className="mt-3 text-secondary/80">
             Este lote probablemente fue creado antes de agregar el procedimiento
             guiado. Crea un lote nuevo para probar las instrucciones completas.
           </p>
         </section>
       )}
 
-      <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
+      <section className="mt-6 rounded-3xl border border-outline-variant bg-surface-container p-6 sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-purple-400">
+            <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
               Resumen del procedimiento
             </p>
 
-            <h2 className="mt-2 text-2xl font-bold text-white">
+            <h2 className="mt-2 text-2xl font-bold text-on-surface">
               Pasos del lote
             </h2>
           </div>
 
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-on-surface-variant">
             {completedSteps}/{totalSteps} completados
           </p>
         </div>
 
         {batch.steps.length === 0 ? (
-          <div className="mt-6 rounded-2xl border border-dashed border-slate-700 p-8 text-center">
-            <p className="text-lg font-bold text-white">
+          <div className="mt-6 rounded-2xl border border-dashed border-outline-variant p-8 text-center">
+            <p className="text-lg font-bold text-on-surface">
               Sin pasos de elaboración
             </p>
 
-            <p className="mt-2 text-slate-400">
+            <p className="mt-2 text-on-surface-variant">
               El procedimiento no fue copiado cuando se creó este lote.
             </p>
           </div>
@@ -325,22 +320,22 @@ const isReleased = releasedStatuses.includes(currentStatus);
                   key={step.id}
                   className={`rounded-2xl border p-5 ${
                     completed
-                      ? "border-green-500/30 bg-green-500/10"
-                      : "border-slate-800 bg-slate-950/40"
+                      ? "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10"
+                      : "border-outline-variant bg-surface-dim/40"
                   }`}
                 >
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-outline">
                         Paso {step.position} · {formatStepType(step.type)}
                       </p>
 
-                      <p className="mt-1 text-lg font-bold text-white">
+                      <p className="mt-1 text-lg font-bold text-on-surface">
                         {step.title}
                       </p>
 
                       {step.instruction && (
-                        <p className="mt-2 max-w-3xl text-sm text-slate-400">
+                        <p className="mt-2 max-w-3xl text-sm text-on-surface-variant">
                           {step.instruction}
                         </p>
                       )}
@@ -348,7 +343,7 @@ const isReleased = releasedStatuses.includes(currentStatus);
 
                     <div className="flex shrink-0 items-center gap-3">
                       {step.plannedQuantity !== null && step.unit && (
-                        <p className="font-black text-purple-300">
+                        <p className="font-black text-on-surface">
                           {formatNumber(step.plannedQuantity)} {step.unit}
                         </p>
                       )}
@@ -356,8 +351,8 @@ const isReleased = releasedStatuses.includes(currentStatus);
                       <span
                         className={`rounded-full px-3 py-1 text-xs font-bold ${
                           completed
-                            ? "bg-green-500/20 text-green-300"
-                            : "bg-slate-800 text-slate-400"
+                            ? "bg-tertiary-fixed-dim/20 text-tertiary-fixed-dim"
+                            : "bg-surface-container-high text-on-surface-variant"
                         }`}
                       >
                         {completed ? "Completado" : "Pendiente"}
@@ -371,12 +366,12 @@ const isReleased = releasedStatuses.includes(currentStatus);
         )}
       </section>
 
-      <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-purple-400">
+      <section className="mt-6 rounded-3xl border border-outline-variant bg-surface-container p-6 sm:p-8">
+        <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
           Ingredientes del lote
         </p>
 
-        <h2 className="mt-2 text-2xl font-bold text-white">
+        <h2 className="mt-2 text-2xl font-bold text-on-surface">
           Cantidades calculadas
         </h2>
 
@@ -386,27 +381,27 @@ const isReleased = releasedStatuses.includes(currentStatus);
               key={ingredient.id}
               className={`rounded-2xl border p-5 ${
                 ingredient.completed
-                  ? "border-green-500/30 bg-green-500/10"
-                  : "border-slate-800 bg-slate-950/40"
+                  ? "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10"
+                  : "border-outline-variant bg-surface-dim/40"
               }`}
             >
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="font-bold text-white">{ingredient.name}</p>
+                  <p className="font-bold text-on-surface">{ingredient.name}</p>
 
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-outline">
                     Base: {formatNumber(ingredient.baseQuantity)}{" "}
                     {ingredient.unit}
                   </p>
                 </div>
 
                 <div className="text-right">
-                  <p className="text-xl font-black text-purple-300">
+                  <p className="text-xl font-black text-on-surface">
                     {formatNumber(ingredient.scaledQuantity)} {ingredient.unit}
                   </p>
 
                   {ingredient.actualQuantity !== null && (
-                    <p className="mt-1 text-xs text-green-300">
+                    <p className="mt-1 text-xs text-tertiary-fixed-dim">
                       Real: {formatNumber(ingredient.actualQuantity)}{" "}
                       {ingredient.unit}
                     </p>
@@ -432,18 +427,19 @@ const isReleased = releasedStatuses.includes(currentStatus);
         />
       </section>
 {totalProducedBottles > 0 && (
-  <section className="mt-6 rounded-3xl border border-purple-500/25 bg-purple-500/10 p-6 sm:p-8">
+  <section className="mt-6 rounded-3xl border border-primary/25 bg-primary/[0.06] p-6 sm:p-8">
     <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <p className="text-sm font-black uppercase tracking-[0.25em] text-purple-300">
+        <p className="font-mono text-sm font-black uppercase tracking-[0.25em] text-on-surface-variant">
           Etiquetas disponibles
         </p>
 
-        <h2 className="mt-3 text-2xl font-black text-white">
-          🏷️ Imprimir etiquetas de las botellas producidas
+        <h2 className="mt-3 flex items-center gap-2 text-2xl font-black text-on-surface">
+          <TagIcon className="h-6 w-6 shrink-0" />
+          Imprimir etiquetas de las botellas producidas
         </h2>
 
-        <p className="mt-2 max-w-2xl text-slate-300">
+        <p className="mt-2 max-w-2xl text-on-surface-variant">
           Este lote tiene {formatNumber(totalProducedBottles, 0)}{" "}
           {totalProducedBottles === 1 ? "botella registrada" : "botellas registradas"}.
           Puedes imprimir sus etiquetas aunque el lote todavía no esté terminado.
@@ -452,24 +448,25 @@ const isReleased = releasedStatuses.includes(currentStatus);
 
       <Link
         href={`/liquors/batches/${batch.id}/labels`}
-        className="shrink-0 rounded-2xl bg-purple-600 px-7 py-4 text-center text-lg font-black text-white transition hover:bg-purple-500"
+        className="shrink-0 inline-flex items-center gap-2 rounded-2xl bg-primary px-7 py-4 text-center text-lg font-black text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
       >
-        🏷️ Ir al centro de impresión
+        <TagIcon className="h-5 w-5 shrink-0" />
+        Ir al centro de impresión
       </Link>
     </div>
   </section>
 )}
-      <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-purple-400">
+      <section className="mt-6 rounded-3xl border border-outline-variant bg-surface-container p-6 sm:p-8">
+        <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
           Historial del lote
         </p>
 
-        <h2 className="mt-2 text-2xl font-bold text-white">
+        <h2 className="mt-2 text-2xl font-bold text-on-surface">
           Eventos registrados
         </h2>
 
         {batch.events.length === 0 ? (
-          <p className="mt-6 text-slate-400">
+          <p className="mt-6 text-on-surface-variant">
             No existen eventos registrados.
           </p>
         ) : (
@@ -477,26 +474,26 @@ const isReleased = releasedStatuses.includes(currentStatus);
             {batch.events.map((event) => (
               <div
                 key={event.id}
-                className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5"
+                className="rounded-2xl border border-outline-variant bg-surface-dim/40 p-5"
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="font-bold text-white">
+                  <p className="font-bold text-on-surface">
                     {formatEventType(event.type)}
                   </p>
 
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-outline">
                     {formatDateTime(event.createdAt)}
                   </p>
                 </div>
 
                 {event.notes && (
-                  <p className="mt-3 text-sm leading-6 text-slate-400">
+                  <p className="mt-3 text-sm leading-6 text-on-surface-variant">
                     {event.notes}
                   </p>
                 )}
 
                 {event.ingredientName && (
-                  <p className="mt-2 text-sm text-purple-300">
+                  <p className="mt-2 text-sm text-on-surface-variant">
                     {event.ingredientName}
                     {event.ingredientQuantity !== null &&
                       ` · ${formatNumber(event.ingredientQuantity)}`}
@@ -531,26 +528,26 @@ function LiquorBatchFinishedCard({
   finalNotes: string | null;
 }) {
   return (
-    <section className="mt-6 overflow-hidden rounded-3xl border border-green-500/30 bg-slate-900 shadow-2xl shadow-green-950/20">
-      <div className="bg-gradient-to-br from-green-500/20 via-emerald-500/10 to-slate-900 p-6 sm:p-8">
+    <section className="mt-6 overflow-hidden rounded-3xl border border-tertiary-fixed-dim/30 bg-surface-container shadow-2xl shadow-tertiary-fixed-dim/20">
+      <div className="bg-gradient-to-br from-tertiary-fixed-dim/20 via-tertiary-fixed-dim/10 to-surface-container p-6 sm:p-8">
         <div className="text-center">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-green-400/30 bg-green-500/15 text-4xl">
-            ✅
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/15">
+            <CheckIcon className="h-9 w-9 text-tertiary-fixed-dim" />
           </div>
 
-          <p className="mt-6 text-sm font-black uppercase tracking-[0.3em] text-green-300">
+          <p className="mt-6 text-sm font-black uppercase tracking-[0.3em] text-tertiary-fixed-dim">
             Lote terminado
           </p>
 
-          <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">
+          <h2 className="mt-3 text-3xl font-black text-on-surface sm:text-4xl">
             {productIcon ?? "🍹"} {productName}
           </h2>
 
-          <p className="mt-2 font-mono text-lg font-bold text-green-300">
+          <p className="mt-2 font-mono text-lg font-bold text-tertiary-fixed-dim">
             {batchCode}
           </p>
 
-          <p className="mx-auto mt-4 max-w-2xl text-slate-300">
+          <p className="mx-auto mt-4 max-w-2xl text-on-surface-variant">
             La elaboración y el embotellado fueron cerrados correctamente.
             Este lote ya no tiene acciones pendientes.
           </p>
@@ -574,12 +571,12 @@ function LiquorBatchFinishedCard({
         </div>
 
         {finalNotes && (
-          <div className="mx-auto mt-6 max-w-4xl rounded-2xl border border-slate-700 bg-slate-950/40 p-5">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+          <div className="mx-auto mt-6 max-w-4xl rounded-2xl border border-outline-variant bg-surface-dim/40 p-5">
+            <p className="font-mono text-xs font-black uppercase tracking-[0.2em] text-outline">
               Notas finales
             </p>
 
-            <p className="mt-3 whitespace-pre-wrap text-slate-300">
+            <p className="mt-3 whitespace-pre-wrap text-on-surface-variant">
               {finalNotes}
             </p>
           </div>
@@ -589,22 +586,24 @@ function LiquorBatchFinishedCard({
   {totalProducedBottles > 0 && (
     <Link
       href={`/liquors/batches/${batchId}/labels`}
-      className="rounded-2xl bg-green-600 px-5 py-4 text-center font-black text-white transition hover:bg-green-500"
+      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-tertiary-fixed-dim px-5 py-4 text-center font-black text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:bg-tertiary-fixed-dim active:scale-[0.97]"
     >
-      🏷️ Imprimir etiquetas
+      <TagIcon className="h-5 w-5 shrink-0" />
+      Imprimir etiquetas
     </Link>
   )}
 
   <Link
     href="/liquors/inventory"
-    className="rounded-2xl bg-purple-600 px-5 py-4 text-center font-black text-white transition hover:bg-purple-500"
+    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-4 text-center font-black text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
   >
-    📦 Ver inventario
+    <PackageIcon className="h-5 w-5 shrink-0" />
+    Ver inventario
   </Link>
 
   <Link
     href="/liquors/batches"
-    className="rounded-2xl border border-slate-700 px-5 py-4 text-center font-black text-slate-200 transition hover:bg-slate-800"
+    className="rounded-2xl border border-outline-variant px-5 py-4 text-center font-black text-on-surface transition hover:bg-surface-container-high"
   >
     Volver a lotes
   </Link>
@@ -622,12 +621,12 @@ function FinishedKpi({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-green-500/20 bg-green-500/10 p-5 text-center">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-green-300/70">
+    <div className="rounded-2xl border border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 p-5 text-center">
+      <p className="font-mono text-xs font-bold uppercase tracking-[0.16em] text-tertiary-fixed-dim/70">
         {title}
       </p>
 
-      <p className="mt-3 text-xl font-black text-white">
+      <p className="mt-3 text-xl font-black text-on-surface">
         {value}
       </p>
     </div>
@@ -659,38 +658,38 @@ function LiquorBatchReleasedCard({
   totalProducedBottles: number;
 }) {
   return (
-    <section className="mt-6 overflow-hidden rounded-3xl border border-green-500/30 bg-slate-900 shadow-2xl shadow-green-950/20">
-      <div className="border-b border-green-500/20 bg-gradient-to-r from-green-500/20 via-emerald-500/10 to-slate-900 p-6 sm:p-8">
+    <section className="mt-6 overflow-hidden rounded-3xl border border-tertiary-fixed-dim/30 bg-surface-container shadow-2xl shadow-tertiary-fixed-dim/20">
+      <div className="border-b border-tertiary-fixed-dim/20 bg-gradient-to-r from-tertiary-fixed-dim/20 via-tertiary-fixed-dim/10 to-surface-container p-6 sm:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-green-400/30 bg-green-500/10 px-4 py-2">
-              <span className="text-lg">✓</span>
+            <div className="inline-flex items-center gap-2 rounded-full border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 px-4 py-2">
+              <CheckIcon className="h-4 w-4 shrink-0 text-tertiary-fixed-dim" />
 
-              <p className="text-xs font-black uppercase tracking-[0.3em] text-green-300">
+              <p className="font-mono text-xs font-black uppercase tracking-[0.3em] text-tertiary-fixed-dim">
                 Lote liberado
               </p>
             </div>
 
-            <h2 className="mt-5 text-3xl font-black text-white sm:text-4xl">
+            <h2 className="mt-5 text-3xl font-black text-on-surface sm:text-4xl">
               {productIcon ?? "🍹"} {productName}
             </h2>
 
-            <p className="mt-2 font-mono text-lg font-bold text-green-300">
+            <p className="mt-2 font-mono text-lg font-bold text-tertiary-fixed-dim">
               {batchCode}
             </p>
 
-            <p className="mt-4 max-w-2xl text-slate-300">
+            <p className="mt-4 max-w-2xl text-on-surface-variant">
               La elaboración concluyó correctamente y el lote quedó autorizado
               para continuar con el proceso de embotellado.
             </p>
           </div>
 
-          <div className="rounded-3xl border border-green-400/30 bg-green-500/10 px-6 py-5 text-center">
-            <p className="text-xs font-black uppercase tracking-[0.25em] text-green-300">
+          <div className="rounded-3xl border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 px-6 py-5 text-center">
+            <p className="font-mono text-xs font-black uppercase tracking-[0.25em] text-tertiary-fixed-dim">
               Estado actual
             </p>
 
-            <p className="mt-2 text-xl font-black text-white">
+            <p className="mt-2 text-xl font-black text-on-surface">
               Listo para embotellar
             </p>
           </div>
@@ -733,26 +732,26 @@ function LiquorBatchReleasedCard({
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+          <div className="rounded-2xl border border-outline-variant bg-surface-dim/40 p-5">
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-outline">
               Responsable
             </p>
 
-            <p className="mt-2 text-xl font-black text-white">
+            <p className="mt-2 text-xl font-black text-on-surface">
               {responsibleName}
             </p>
 
-            <p className="mt-4 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+            <p className="mt-4 text-xs font-bold uppercase tracking-[0.2em] text-outline">
               Fecha de liberación
             </p>
 
-            <p className="mt-2 font-semibold text-slate-300">
+            <p className="mt-2 font-semibold text-on-surface-variant">
               {formatDateTime(finishedAt)}
             </p>
           </div>
 
-          <div className="rounded-2xl border border-green-500/20 bg-green-500/5 p-5">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-green-300">
+          <div className="rounded-2xl border border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/5 p-5">
+            <p className="font-mono text-xs font-black uppercase tracking-[0.2em] text-tertiary-fixed-dim">
               Verificación
             </p>
 
@@ -765,18 +764,19 @@ function LiquorBatchReleasedCard({
           </div>
         </div>
 
-        <div className="mt-6 rounded-3xl border border-purple-500/25 bg-purple-500/10 p-6">
-          <p className="text-sm font-black uppercase tracking-[0.25em] text-purple-300">
+        <div className="mt-6 rounded-3xl border border-primary/25 bg-primary/[0.06] p-6">
+          <p className="font-mono text-sm font-black uppercase tracking-[0.25em] text-on-surface-variant">
             Próxima etapa
           </p>
 
           <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h3 className="text-2xl font-black text-white">
-                🍾 Embotellado
+              <h3 className="flex items-center gap-2 text-2xl font-black text-on-surface">
+                <BottleIcon className="h-6 w-6 shrink-0" />
+                Embotellado
               </h3>
 
-              <p className="mt-2 max-w-2xl text-slate-300">
+              <p className="mt-2 max-w-2xl text-on-surface-variant">
                 Registra las botellas obtenidas, las mermas y la información
                 necesaria para generar los códigos QR e ingresar el producto al
                 inventario.
@@ -785,7 +785,7 @@ function LiquorBatchReleasedCard({
 
             <Link
               href={`/liquors/batches/${batchId}/bottling`}
-              className="shrink-0 rounded-2xl bg-green-600 px-7 py-4 text-center text-lg font-black text-white transition hover:bg-green-500"
+              className="shrink-0 rounded-2xl bg-tertiary-fixed-dim px-7 py-4 text-center text-lg font-black text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:bg-tertiary-fixed-dim active:scale-[0.97]"
             >
               Continuar a embotellado →
             </Link>
@@ -795,21 +795,21 @@ function LiquorBatchReleasedCard({
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
           <a
             href="#historial-lote"
-            className="flex-1 rounded-2xl border border-slate-700 px-5 py-3 text-center font-bold text-slate-300 transition hover:border-slate-600 hover:bg-slate-800"
+            className="flex-1 rounded-2xl border border-outline-variant px-5 py-3 text-center font-bold text-on-surface-variant transition hover:border-outline-variant hover:bg-surface-container-high"
           >
             Ver historial
           </a>
 
           <Link
             href="/liquors/batches"
-            className="flex-1 rounded-2xl border border-slate-700 px-5 py-3 text-center font-bold text-slate-300 transition hover:border-slate-600 hover:bg-slate-800"
+            className="flex-1 rounded-2xl border border-outline-variant px-5 py-3 text-center font-bold text-on-surface-variant transition hover:border-outline-variant hover:bg-surface-container-high"
           >
             Volver a lotes
           </Link>
 
           <Link
   href="/liquors"
-  className="flex-1 rounded-2xl border border-slate-700 px-5 py-3 text-center font-bold text-slate-300 transition hover:border-slate-600 hover:bg-slate-800"
+  className="flex-1 rounded-2xl border border-outline-variant px-5 py-3 text-center font-bold text-on-surface-variant transition hover:border-outline-variant hover:bg-surface-container-high"
 >
   Crear nuevo lote
 </Link>
@@ -829,14 +829,14 @@ function ReleasedKpi({
   detail: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+    <div className="rounded-2xl border border-outline-variant bg-surface-dim/40 p-5">
+      <p className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-outline">
         {title}
       </p>
 
-      <p className="mt-3 text-2xl font-black text-white">{value}</p>
+      <p className="mt-3 text-2xl font-black text-on-surface">{value}</p>
 
-      <p className="mt-2 text-xs text-slate-500">{detail}</p>
+      <p className="mt-2 text-xs text-outline">{detail}</p>
     </div>
   );
 }
@@ -844,11 +844,11 @@ function ReleasedKpi({
 function VerificationItem({ text }: { text: string }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-green-500/20 text-sm font-black text-green-300">
-        ✓
+      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-tertiary-fixed-dim/20 text-tertiary-fixed-dim">
+        <CheckIcon className="h-3.5 w-3.5" />
       </span>
 
-      <p className="font-semibold text-slate-200">{text}</p>
+      <p className="font-semibold text-on-surface">{text}</p>
     </div>
   );
 }
@@ -863,10 +863,10 @@ function Kpi({
   detail: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <p className="text-sm text-slate-400">{title}</p>
-      <p className="mt-2 text-2xl font-black text-white">{value}</p>
-      <p className="mt-2 text-xs text-slate-500">{detail}</p>
+    <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+      <p className="text-sm text-on-surface-variant">{title}</p>
+      <p className="mt-2 text-2xl font-black text-on-surface">{value}</p>
+      <p className="mt-2 text-xs text-outline">{detail}</p>
     </div>
   );
 }

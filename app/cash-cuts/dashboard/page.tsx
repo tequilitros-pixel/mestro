@@ -82,8 +82,8 @@ export default function DashboardPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-navy-900">Dashboard</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-on-surface">Dashboard</h1>
+        <p className="text-sm text-on-surface-variant">
           Ventas, diferencias de caja y saldo de caja fuerte — últimos 7 días por defecto.
         </p>
       </div>
@@ -91,26 +91,26 @@ export default function DashboardPage() {
       <Card>
         <div className="flex flex-wrap items-end gap-4 p-4">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Desde</label>
+            <label className="text-sm font-semibold text-on-surface-variant">Desde</label>
             <input
               type="date"
-              className="border rounded-md px-3 py-2 text-sm"
+              className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-500">Hasta</label>
+            <label className="text-sm font-semibold text-on-surface-variant">Hasta</label>
             <input
               type="date"
-              className="border rounded-md px-3 py-2 text-sm"
+              className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />
           </div>
           <button
             onClick={loadDashboard}
-            className="bg-yellow-400 text-slate-900 font-semibold rounded-lg px-4 py-2 text-sm"
+            className="bg-primary text-on-primary font-semibold rounded-lg px-4 py-2 text-sm transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97]"
           >
             Filtrar
           </button>
@@ -118,30 +118,30 @@ export default function DashboardPage() {
       </Card>
 
       {error && (
-        <div className="bg-red-50 text-red-700 text-sm rounded-md p-3 border border-red-200">
+        <div className="bg-error/10 text-error text-sm rounded-md p-3 border border-error/30">
           {error}
         </div>
       )}
 
-      {loading && <p className="text-gray-400 text-sm">Cargando...</p>}
+      {loading && <p className="text-outline text-sm">Cargando...</p>}
 
       {!loading && data && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <div className="p-4">
-                <div className="text-sm text-gray-500">Ventas totales</div>
-                <div className="text-2xl font-bold text-navy-900">
+                <div className="text-sm text-on-surface-variant">Ventas totales</div>
+                <div className="text-2xl font-bold text-on-surface">
                   {formatCurrency(data.totalSales)}
                 </div>
               </div>
             </Card>
             <Card>
               <div className="p-4">
-                <div className="text-sm text-gray-500">Diferencia acumulada</div>
+                <div className="text-sm text-on-surface-variant">Diferencia acumulada</div>
                 <div
                   className={`text-2xl font-bold ${
-                    data.totalDifference < 0 ? "text-red-600" : "text-green-700"
+                    data.totalDifference < 0 ? "text-error" : "text-tertiary-fixed-dim"
                   }`}
                 >
                   {formatCurrency(data.totalDifference)}
@@ -150,16 +150,16 @@ export default function DashboardPage() {
             </Card>
             <Card>
               <div className="p-4">
-                <div className="text-sm text-gray-500">Cortes con diferencia</div>
-                <div className="text-2xl font-bold text-navy-900">
+                <div className="text-sm text-on-surface-variant">Cortes con diferencia</div>
+                <div className="text-2xl font-bold text-on-surface">
                   {data.cortesConDiferencia}
                 </div>
               </div>
             </Card>
             <Card>
               <div className="p-4">
-                <div className="text-sm text-gray-500">Saldo en caja fuerte</div>
-                <div className="text-2xl font-bold text-navy-900">
+                <div className="text-sm text-on-surface-variant">Saldo en caja fuerte</div>
+                <div className="text-2xl font-bold text-on-surface">
                   {formatCurrency(data.totalSafeBalance)}
                 </div>
               </div>
@@ -168,22 +168,22 @@ export default function DashboardPage() {
 
           <Card>
             <div className="p-4 space-y-3">
-              <h2 className="text-sm font-semibold text-gray-600">Ventas por sucursal</h2>
+              <h2 className="text-sm font-semibold text-on-surface-variant">Ventas por sucursal</h2>
               {data.salesByBranch.length === 0 && (
-                <p className="text-gray-400 text-sm">Sin cortes cerrados en este periodo.</p>
+                <p className="text-outline text-sm">Sin cortes cerrados en este periodo.</p>
               )}
               {data.salesByBranch.map((b) => (
                 <div key={b.branch}>
                   <div className="flex justify-between text-sm mb-1">
                     <span className="font-medium">{b.branch}</span>
-                    <span className="text-gray-500">
+                    <span className="text-on-surface-variant">
                       {formatCurrency(b.totalSales)} · {b.count}{" "}
                       {b.count === 1 ? "corte" : "cortes"}
                     </span>
                   </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2">
+                  <div className="w-full bg-surface-container-high rounded-full h-2">
                     <div
-                      className="bg-navy-900 h-2 rounded-full"
+                      className="bg-primary h-2 rounded-full"
                       style={{ width: `${(b.totalSales / maxBranchSales) * 100}%` }}
                     />
                   </div>
@@ -194,13 +194,13 @@ export default function DashboardPage() {
 
           <Card>
             <div className="p-4 space-y-2">
-              <h2 className="text-sm font-semibold text-gray-600">
+              <h2 className="text-sm font-semibold text-on-surface-variant">
                 Saldo por sucursal (caja fuerte)
               </h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {data.safeBalances.map((s) => (
-                  <div key={s.branch} className="border rounded-md px-3 py-2">
-                    <div className="text-xs text-gray-500">{s.branch}</div>
+                  <div key={s.branch} className="border border-outline-variant bg-surface-container-high text-on-surface rounded-md px-3 py-2">
+                    <div className="text-xs text-on-surface-variant">{s.branch}</div>
                     <div className="font-semibold">{formatCurrency(s.balance)}</div>
                   </div>
                 ))}
@@ -212,7 +212,7 @@ export default function DashboardPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-navy-900 text-white text-left">
+                  <tr className="bg-surface-container-high text-on-surface-variant text-left">
                     <th className="px-4 py-3">Corte</th>
                     <th className="px-4 py-3">Sucursal</th>
                     <th className="px-4 py-3">Fecha</th>
@@ -223,13 +223,13 @@ export default function DashboardPage() {
                 <tbody>
                   {data.recentCuts.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                      <td colSpan={5} className="px-4 py-6 text-center text-outline">
                         Sin cortes en este periodo.
                       </td>
                     </tr>
                   )}
                   {data.recentCuts.map((c) => (
-                    <tr key={c.id} className="border-b last:border-0 hover:bg-gray-50">
+                    <tr key={c.id} className="border-outline-variant last:border-0 hover:bg-surface-container">
                       <td className="px-4 py-3 font-medium">{c.code}</td>
                       <td className="px-4 py-3">{c.branch}</td>
                       <td className="px-4 py-3">{formatDate(c.date)}</td>
@@ -239,8 +239,8 @@ export default function DashboardPage() {
                       <td
                         className={`px-4 py-3 text-right font-semibold ${
                           c.difference != null && Math.abs(c.difference) > 10
-                            ? "text-red-600"
-                            : "text-gray-500"
+                            ? "text-error"
+                            : "text-on-surface-variant"
                         }`}
                       >
                         {c.difference != null ? formatCurrency(c.difference) : "—"}

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { LiquorBottleStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { BottleIcon, CheckIcon, AlertIcon } from "@/components/ui/icons";
 
 type Props = {
   params: Promise<{
@@ -84,14 +85,14 @@ export default async function PublicBottleTracePage({ params }: Props) {
     bottle.status !== LiquorBottleStatus.RETIRADA;
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6">
-      <section className="mx-auto max-w-3xl overflow-hidden rounded-3xl border border-purple-500/25 bg-slate-900 shadow-2xl shadow-purple-950/30">
-        <header className="bg-gradient-to-br from-purple-500/20 via-fuchsia-500/10 to-slate-900 p-6 text-center sm:p-10">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl border border-purple-400/20 bg-purple-500/10 text-5xl">
-            {product.icon ?? "🍾"}
+    <main className="min-h-screen bg-background px-4 py-8 text-on-surface sm:px-6">
+      <section className="mx-auto max-w-3xl overflow-hidden rounded-3xl border border-primary/25 bg-surface-container shadow-2xl">
+        <header className="bg-surface-container-high p-6 text-center sm:p-10">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl border border-outline-variant bg-surface-container-highest text-5xl">
+            {product.icon ?? <BottleIcon className="h-10 w-10 text-on-surface-variant" />}
           </div>
 
-          <p className="mt-6 text-sm font-black uppercase tracking-[0.3em] text-purple-300">
+          <p className="mt-6 text-sm font-black uppercase tracking-[0.3em] text-on-surface-variant">
             Casa Destiladora del Norte
           </p>
 
@@ -99,7 +100,7 @@ export default async function PublicBottleTracePage({ params }: Props) {
             {product.name}
           </h1>
 
-          <p className="mt-3 font-mono text-xl font-black text-purple-200">
+          <p className="mt-3 font-mono text-xl font-black text-primary">
             {bottle.code}
           </p>
 
@@ -168,39 +169,40 @@ export default async function PublicBottleTracePage({ params }: Props) {
           </section>
 
           {product.description ? (
-            <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+            <section className="mt-6 rounded-2xl border border-outline-variant bg-surface-dim/40 p-5">
+              <p className="font-mono text-xs font-black uppercase tracking-[0.2em] text-outline">
                 Descripción del producto
               </p>
 
-              <p className="mt-3 leading-7 text-slate-300">
+              <p className="mt-3 leading-7 text-on-surface-variant">
                 {product.description}
               </p>
             </section>
           ) : null}
 
-          <section className="mt-6 rounded-2xl border border-purple-500/20 bg-purple-500/5 p-5">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-purple-300">
+          <section className="mt-6 rounded-2xl border border-outline-variant bg-surface-container-high/40 p-5">
+            <p className="font-mono text-xs font-black uppercase tracking-[0.2em] text-on-surface-variant">
               Trazabilidad
             </p>
 
-            <p className="mt-3 leading-7 text-slate-300">
+            <p className="mt-3 leading-7 text-on-surface-variant">
               Esta botella fue registrada individualmente durante el
               proceso de embotellado. Su lote, número de serie y código
-              digital permiten comprobar su origen dentro de MAESTRO.
+              digital permiten comprobar su origen dentro de nuestro
+              sistema operativo.
             </p>
           </section>
 
-          <footer className="mt-8 border-t border-slate-800 pt-6 text-center">
-            <p className="font-black text-white">
+          <footer className="mt-8 border-t border-outline-variant pt-6 text-center">
+            <p className="font-black text-on-surface">
               Casa Destiladora del Norte
             </p>
 
-            <p className="mt-2 text-sm text-slate-500">
-              Certificado digital administrado por MAESTRO
+            <p className="mt-2 text-sm text-outline">
+              Certificado digital administrado por Destiladora del Norte
             </p>
 
-            <p className="mt-3 font-mono text-xs text-slate-600">
+            <p className="mt-3 font-mono text-xs text-outline">
               {authenticityCode}
             </p>
           </footer>
@@ -219,20 +221,20 @@ function AuthenticityCertificate({
 }) {
   if (!isCirculating) {
     return (
-      <section className="rounded-3xl border border-red-500/30 bg-red-500/10 p-6 text-center sm:p-8">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-2 border-red-400/40 bg-red-500/15 text-4xl">
-          !
+      <section className="rounded-3xl border border-error/30 bg-error/10 p-6 text-center sm:p-8">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-2 border-error/40 bg-error/15">
+          <AlertIcon className="h-10 w-10 text-error" />
         </div>
 
-        <p className="mt-5 text-sm font-black uppercase tracking-[0.25em] text-red-300">
+        <p className="mt-5 text-sm font-black uppercase tracking-[0.25em] text-error">
           Producto fuera de circulación
         </p>
 
-        <h2 className="mt-3 text-2xl font-black text-white">
+        <h2 className="mt-3 text-2xl font-black text-on-surface">
           Botella retirada
         </h2>
 
-        <p className="mx-auto mt-3 max-w-xl leading-7 text-slate-300">
+        <p className="mx-auto mt-3 max-w-xl leading-7 text-on-surface-variant">
           Esta botella existe en el sistema, pero fue marcada como
           retirada o merma. No debe considerarse disponible para venta.
         </p>
@@ -243,25 +245,25 @@ function AuthenticityCertificate({
   }
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-green-500/5 to-slate-950 p-6 text-center sm:p-8">
-      <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-500/10 blur-3xl" />
+    <section className="relative overflow-hidden rounded-3xl border border-tertiary-fixed-dim/30 bg-gradient-to-br from-tertiary-fixed-dim/15 via-tertiary-fixed-dim/5 to-surface-dim p-6 text-center sm:p-8">
+      <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-tertiary-fixed-dim/10 blur-3xl" />
 
       <div className="relative">
-        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border-4 border-emerald-400/50 bg-emerald-500/15 text-5xl shadow-xl shadow-emerald-950/40">
-          ✓
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border-4 border-tertiary-fixed-dim/50 bg-tertiary-fixed-dim/15 shadow-xl shadow-tertiary-fixed-dim/20">
+          <CheckIcon className="h-12 w-12 text-tertiary-fixed-dim" />
         </div>
 
-        <p className="mt-5 text-sm font-black uppercase tracking-[0.3em] text-emerald-300">
+        <p className="mt-5 text-sm font-black uppercase tracking-[0.3em] text-tertiary-fixed-dim">
           Certificado de autenticidad
         </p>
 
-        <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">
+        <h2 className="mt-3 text-3xl font-black text-on-surface sm:text-4xl">
           Botella original
         </h2>
 
-        <p className="mx-auto mt-4 max-w-xl leading-7 text-slate-300">
+        <p className="mx-auto mt-4 max-w-xl leading-7 text-on-surface-variant">
           El código escaneado corresponde a una botella registrada por
-          Casa Destiladora del Norte dentro del sistema MAESTRO.
+          Casa Destiladora del Norte dentro de su sistema operativo.
         </p>
 
         <CertificateCode value={authenticityCode} />
@@ -272,12 +274,12 @@ function AuthenticityCertificate({
 
 function CertificateCode({ value }: { value: string }) {
   return (
-    <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-4">
-      <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+    <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-background/60 px-4 py-4">
+      <p className="font-mono text-xs font-black uppercase tracking-[0.2em] text-outline">
         Código de autenticidad
       </p>
 
-      <p className="mt-2 break-all font-mono text-lg font-black tracking-wider text-white">
+      <p className="mt-2 break-all font-mono text-lg font-black tracking-wider text-on-surface">
         {value}
       </p>
     </div>
@@ -292,12 +294,12 @@ function InfoCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">
+    <div className="rounded-2xl border border-outline-variant bg-surface-dim/40 p-5">
+      <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-outline">
         {label}
       </p>
 
-      <p className="mt-3 break-words text-lg font-black text-white">
+      <p className="mt-3 break-words text-lg font-black text-on-surface">
         {value}
       </p>
     </div>
@@ -329,22 +331,22 @@ function getPublicStatusLabel(status: LiquorBottleStatus) {
 function getPublicStatusStyle(status: LiquorBottleStatus) {
   switch (status) {
     case LiquorBottleStatus.DISPONIBLE:
-      return "border-green-500/30 bg-green-500/10 text-green-300";
+      return "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim";
 
     case LiquorBottleStatus.RESERVADA:
-      return "border-yellow-500/30 bg-yellow-500/10 text-yellow-300";
+      return "border-secondary/30 bg-secondary/10 text-secondary";
 
     case LiquorBottleStatus.VENDIDA:
-      return "border-blue-500/30 bg-blue-500/10 text-blue-300";
+      return "border-on-surface-variant/30 bg-on-surface-variant/10 text-on-surface-variant";
 
     case LiquorBottleStatus.MERMA:
-      return "border-orange-500/30 bg-orange-500/10 text-orange-300";
+      return "border-error/30 bg-error/10 text-error";
 
     case LiquorBottleStatus.RETIRADA:
-      return "border-red-500/30 bg-red-500/10 text-red-300";
+      return "border-error/30 bg-error/10 text-error";
 
     default:
-      return "border-slate-600 bg-slate-800 text-slate-300";
+      return "border-outline-variant bg-surface-container-high text-on-surface-variant";
   }
 }
 

@@ -10,6 +10,14 @@ import {
   moveLiquorRecipeIngredientUpAction,
   saveLiquorRecipeIngredientAction,
 } from "@/app/actions/liquorRecipeIngredients";
+import {
+  FlaskIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  PencilIcon,
+  TrashIcon,
+  XIcon,
+} from "@/components/ui/icons";
 
 type RecipeIngredient = {
   id: string;
@@ -61,18 +69,19 @@ export default function RecipeIngredientsEditor({
   }
 
   return (
-    <section className="rounded-3xl border border-slate-800 bg-slate-900/70">
-      <header className="flex flex-col gap-4 border-b border-slate-800 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+    <section className="rounded-3xl border border-outline-variant bg-surface-container/70">
+      <header className="flex flex-col gap-4 border-b border-outline-variant p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
-          <p className="text-sm font-black uppercase tracking-[0.2em] text-purple-300">
+          <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-outline">
             Fórmula
           </p>
 
-          <h2 className="mt-2 text-2xl font-black text-white">
-            🧪 Ingredientes
+          <h2 className="mt-2 flex items-center gap-2 text-2xl font-black text-on-surface">
+            <FlaskIcon className="h-5 w-5 text-on-surface-variant" />
+            Ingredientes
           </h2>
 
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-sm text-on-surface-variant">
             Materias primas, cantidades y orden de incorporación.
           </p>
         </div>
@@ -80,7 +89,7 @@ export default function RecipeIngredientsEditor({
         <button
           type="button"
           onClick={openCreateForm}
-          className="rounded-2xl bg-purple-600 px-5 py-3 font-black text-white transition hover:bg-purple-500"
+          className="rounded-2xl bg-primary px-5 py-3 font-black text-on-surface transition hover:opacity-90"
         >
           + Agregar ingrediente
         </button>
@@ -89,7 +98,7 @@ export default function RecipeIngredientsEditor({
       {ingredients.length === 0 ? (
         <EmptyIngredients onCreate={openCreateForm} />
       ) : (
-        <div className="divide-y divide-slate-800">
+        <div className="divide-y divide-outline-variant">
           {ingredients.map((ingredient, index) => (
             <IngredientRow
               key={ingredient.id}
@@ -103,8 +112,8 @@ export default function RecipeIngredientsEditor({
         </div>
       )}
 
-      <footer className="border-t border-slate-800 px-6 py-4 sm:px-8">
-        <p className="text-sm text-slate-500">
+      <footer className="border-t border-outline-variant px-6 py-4 sm:px-8">
+        <p className="text-sm text-outline">
           {ingredients.length === 1
             ? "1 ingrediente registrado"
             : `${ingredients.length} ingredientes registrados`}
@@ -141,39 +150,39 @@ function IngredientRow({
     <article className="p-5 sm:p-6">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-start gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-700 bg-slate-950 font-black text-slate-300">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-outline-variant bg-background font-black text-on-surface-variant">
             {ingredient.position}
           </div>
 
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-lg font-black text-white">
+              <h3 className="text-lg font-black text-on-surface">
                 {ingredient.name}
               </h3>
 
               {ingredient.optional && (
-                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-black text-amber-300">
+                <span className="rounded-full border border-outline-variant bg-surface-container-high px-2.5 py-1 text-xs font-black text-on-surface-variant">
                   Opcional
                 </span>
               )}
 
               {ingredient.rawMaterialId ? (
-                <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-1 text-xs font-bold text-green-300">
+                <span className="rounded-full border border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 px-2.5 py-1 text-xs font-bold text-tertiary-fixed-dim">
                   Materia prima vinculada
                 </span>
               ) : (
-                <span className="rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-400">
+                <span className="rounded-full border border-outline-variant bg-surface-container-high px-2.5 py-1 text-xs font-bold text-on-surface-variant">
                   Ingrediente personalizado
                 </span>
               )}
             </div>
 
-            <p className="mt-2 text-xl font-black text-purple-200">
+            <p className="mt-2 text-xl font-black text-primary">
               {formatQuantity(ingredient.quantity)} {ingredient.unit}
             </p>
 
             {ingredient.notes && (
-              <p className="mt-2 max-w-2xl text-sm text-slate-400">
+              <p className="mt-2 max-w-2xl text-sm text-on-surface-variant">
                 {ingredient.notes}
               </p>
             )}
@@ -198,9 +207,10 @@ function IngredientRow({
           <button
             type="button"
             onClick={onEdit}
-            className="rounded-xl border border-slate-700 px-3 py-2 text-sm font-bold text-slate-200 transition hover:border-purple-500/50 hover:bg-purple-500/10"
+            className="flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-bold text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:border-outline active:scale-[0.97]"
           >
-            ✏️ Editar
+            <PencilIcon className="h-3.5 w-3.5" />
+            Editar
           </button>
 
           <DeleteIngredientForm
@@ -247,9 +257,13 @@ function MoveIngredientForm({
             ? "Mover ingrediente arriba"
             : "Mover ingrediente abajo"
         }
-        className="rounded-xl border border-slate-700 px-3 py-2 text-sm font-black text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-25"
+        className="rounded-xl border border-outline-variant px-3 py-2 text-sm font-black text-on-surface-variant transition duration-150 ease-out hover:scale-[1.04] hover:bg-surface-container-high active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:scale-100"
       >
-        {direction === "up" ? "↑" : "↓"}
+        {direction === "up" ? (
+          <ArrowUpIcon className="h-4 w-4" />
+        ) : (
+          <ArrowDownIcon className="h-4 w-4" />
+        )}
       </button>
     </form>
   );
@@ -286,9 +300,10 @@ function DeleteIngredientForm({
 
       <button
         type="submit"
-        className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300 transition hover:bg-red-500/20"
+        className="flex items-center gap-1.5 rounded-xl border border-error/30 bg-error/10 px-3 py-2 text-sm font-bold text-error transition duration-150 ease-out hover:scale-[1.04] hover:bg-error/20 active:scale-[0.97]"
       >
-        🗑 Eliminar
+        <TrashIcon className="h-3.5 w-3.5" />
+        Eliminar
       </button>
     </form>
   );
@@ -365,14 +380,14 @@ function IngredientFormModal({
         }
       }}
     >
-      <div className="max-h-[95vh] w-full overflow-y-auto rounded-t-3xl border border-slate-700 bg-slate-900 shadow-2xl sm:max-w-2xl sm:rounded-3xl">
-        <header className="flex items-start justify-between gap-4 border-b border-slate-800 p-6">
+      <div className="max-h-[95vh] w-full overflow-y-auto rounded-t-3xl border border-outline-variant bg-surface-container shadow-2xl sm:max-w-2xl sm:rounded-3xl">
+        <header className="flex items-start justify-between gap-4 border-b border-outline-variant p-6">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.2em] text-purple-300">
+            <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-outline">
               Constructor de recetas
             </p>
 
-            <h2 className="mt-2 text-2xl font-black text-white">
+            <h2 className="mt-2 text-2xl font-black text-on-surface">
               {ingredient
                 ? "Editar ingrediente"
                 : "Nuevo ingrediente"}
@@ -382,10 +397,10 @@ function IngredientFormModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 text-xl text-slate-300 transition hover:bg-slate-800"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-outline-variant text-on-surface-variant transition duration-150 ease-out hover:scale-[1.04] hover:bg-surface-container-high active:scale-[0.97]"
             aria-label="Cerrar formulario"
           >
-            ×
+            <XIcon className="h-4 w-4" />
           </button>
         </header>
 
@@ -401,7 +416,7 @@ function IngredientFormModal({
           )}
 
           {state.error && (
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm font-bold text-red-200">
+            <div className="rounded-2xl border border-error/30 bg-error/10 p-4 text-sm font-bold text-error">
               {state.error}
             </div>
           )}
@@ -478,31 +493,31 @@ function IngredientFormModal({
             />
           </Field>
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-700 bg-slate-950/50 p-4">
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-outline-variant bg-background/50 p-4">
             <input
               name="optional"
               type="checkbox"
               defaultChecked={ingredient?.optional ?? false}
-              className="mt-1 h-5 w-5 accent-purple-600"
+              className="mt-1 h-5 w-5 accent-primary"
             />
 
             <span>
-              <span className="block font-black text-white">
+              <span className="block font-black text-on-surface">
                 Ingrediente opcional
               </span>
 
-              <span className="mt-1 block text-sm text-slate-400">
+              <span className="mt-1 block text-sm text-on-surface-variant">
                 Márcalo cuando la receta pueda ejecutarse sin este
                 ingrediente.
               </span>
             </span>
           </label>
 
-          <div className="flex flex-col-reverse gap-3 border-t border-slate-800 pt-6 sm:flex-row sm:justify-end">
+          <div className="flex flex-col-reverse gap-3 border-t border-outline-variant pt-6 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-2xl border border-slate-700 px-6 py-3 font-bold text-slate-300 transition hover:bg-slate-800"
+              className="rounded-2xl border border-outline-variant px-6 py-3 font-bold text-on-surface-variant transition hover:bg-surface-container-high"
             >
               Cancelar
             </button>
@@ -526,7 +541,7 @@ function SaveIngredientButton({
     <button
       type="submit"
       disabled={pending}
-      className="rounded-2xl bg-purple-600 px-7 py-3 font-black text-white transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+      className="rounded-2xl bg-primary px-7 py-3 font-black text-on-surface transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant"
     >
       {pending
         ? "Guardando..."
@@ -544,13 +559,13 @@ function EmptyIngredients({
 }) {
   return (
     <div className="px-6 py-12 text-center sm:px-8">
-      <div className="text-5xl">🧪</div>
+      <FlaskIcon className="mx-auto h-12 w-12 text-on-surface-variant" />
 
-      <h3 className="mt-5 text-xl font-black text-white">
+      <h3 className="mt-5 text-xl font-black text-on-surface">
         La receta todavía no tiene ingredientes
       </h3>
 
-      <p className="mx-auto mt-3 max-w-lg text-slate-400">
+      <p className="mx-auto mt-3 max-w-lg text-on-surface-variant">
         Agrega las materias primas oficiales y sus cantidades para
         construir la fórmula base.
       </p>
@@ -558,7 +573,7 @@ function EmptyIngredients({
       <button
         type="button"
         onClick={onCreate}
-        className="mt-6 rounded-2xl border border-purple-500/30 bg-purple-500/10 px-5 py-3 font-black text-purple-200 transition hover:bg-purple-500/20"
+        className="mt-6 rounded-2xl border border-primary/25 bg-primary/[0.06] px-5 py-3 font-black text-primary transition duration-150 ease-out hover:scale-[1.02] hover:bg-primary/10 active:scale-[0.98]"
       >
         + Registrar primer ingrediente
       </button>
@@ -577,12 +592,12 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-black text-slate-200">
+      <span className="text-sm font-semibold text-on-surface-variant">
         {label}
       </span>
 
       {description && (
-        <span className="mt-1 block text-xs text-slate-500">
+        <span className="mt-1 block text-xs text-outline">
           {description}
         </span>
       )}
@@ -599,4 +614,4 @@ function formatQuantity(quantity: number) {
 }
 
 const inputClassName =
-  "w-full rounded-2xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-purple-400";
+  "resize-none w-full rounded-xl border border-outline-variant bg-background/60 px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary";

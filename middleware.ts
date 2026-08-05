@@ -1,14 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = [
-  "/login",
-  "/q",
-  "/forgot-password",
-  "/reset-password",
-];
-
-const PUBLIC_API_PATHS = ["/api/push/check-overdue"];
+const PUBLIC_PATHS = ["/login", "/q", "/forgot-password", "/reset-password"];
 
 const OPERATOR_ALLOWED_PATHS = [
   "/cooking",
@@ -24,37 +17,13 @@ function matchesPath(pathname: string, path: string) {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const isPublicPage = PUBLIC_PATHS.some((path) =>
-    matchesPath(pathname, path)
-  );
-
-  const isPublicApi = PUBLIC_API_PATHS.some((path) =>
-    matchesPath(pathname, path)
-  );
-
-  /*
-   * Los cron jobs no usan la cookie maestro_user.
-   * Esta ruta se protege en route.ts mediante CRON_SECRET.
-   */
-  if (isPublicPage) {
   const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", pathname);
 
-  requestHeaders.set("x-maestro-public-route", "true");
+  const isPublicPage = PUBLIC_PATHS.some((path) => matchesPath(pathname, path));
 
-  return NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  });
-}
-
-  /*
-   * Las páginas públicas pueden abrirse sin iniciar sesión.
-   * Esto incluye /login, /forgot-password, /reset-password,
-   * y cualquier QR bajo /q/[token].
-   */
   if (isPublicPage) {
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
   const hasSession = request.cookies.has("maestro_user");
@@ -66,14 +35,14 @@ export function middleware(request: NextRequest) {
   const role = request.cookies.get("maestro_role")?.value;
 
   const isAllowedForOperator = OPERATOR_ALLOWED_PATHS.some((path) =>
-    matchesPath(pathname, path)
+    matchesPath(pathname, path),
   );
 
   if (role === "OPERATOR" && !isAllowedForOperator) {
     return NextResponse.redirect(new URL("/cooking", request.url));
   }
 
-  return NextResponse.next();
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {
