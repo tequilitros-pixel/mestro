@@ -12,6 +12,8 @@ model User {
   username                  String                 @unique
   email                     String?                @unique
   password                  String
+  failedLoginAttempts       Int                    @default(0)
+  lockedUntil               DateTime?
   role                      UserRole
   active                    Boolean                @default(true)
   createdAt                 DateTime               @default(now())
@@ -399,6 +401,14 @@ model LiquorProduct {
   batches   LiquorBatch[]
   createdBy User?          @relation("LiquorProductCreatedBy", fields: [createdById], references: [id])
   recipes   LiquorRecipe[]
+
+  // Producto terminado equivalente en el inventario de sucursales:
+  // al terminar un embotellado se abonan las botellas creadas a esta
+  // ficha (ver createLiquorBottlingAction). Opcional porque no todos
+  // los productos de licores tienen todavía su contraparte de
+  // inventario configurada.
+  inventoryProductId String?           @unique
+  inventoryProduct    InventoryProduct? @relation(fields: [inventoryProductId], references: [id])
 
   @@index([createdById])
   @@index([active])
@@ -1252,6 +1262,7 @@ model PasswordResetCode {
   code      String
   expiresAt DateTime
   used      Boolean  @default(false)
+  attempts  Int      @default(0)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1317,6 +1328,7 @@ model InventoryProduct {
   eventItems        ServiceEventItem[]
   equipmentKitItems EquipmentKitItem[]
   posIngredientOf   PosVariantIngredient[]
+  liquorProduct     LiquorProduct?
 
   @@index([name])
   @@index([category])
@@ -1519,6 +1531,10 @@ enum InventoryEntryType {
   // evento: descuenta lo cargado (ServiceEventItem) del inventario
   // de la sucursal donde se abre el corte.
   SALIDA_EVENTO
+  // Entrada automática al terminar un embotellado (createLiquorBottlingAction):
+  // abona las botellas recién creadas a la sucursal de resguardo del
+  // producto terminado (LiquorProduct.inventoryProductId).
+  PRODUCCION
 }
 
 model InventoryEntry {

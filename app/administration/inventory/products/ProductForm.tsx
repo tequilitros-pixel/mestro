@@ -5,18 +5,7 @@ import {
   createInventoryProductAction,
   type CreateInventoryProductResult,
 } from "./actions";
-
-const categories = [
-  "Tequila",
-  "Licores",
-  "Refrescos",
-  "Ingredientes",
-  "Trastes",
-  "Vasos",
-  "Equipo de stand",
-  "Herramientas",
-];
-
+import { PRODUCT_CATEGORIES } from "./categories";
 
 const units = [
   "Pieza",
@@ -35,8 +24,10 @@ type EventPackage = { id: string; name: string };
 
 export default function ProductForm({
   packages,
+  onSuccess,
 }: {
   packages: EventPackage[];
+  onSuccess?: () => void;
 }) {
   const [result, setResult] = useState<CreateInventoryProductResult | null>(
     null,
@@ -66,6 +57,7 @@ export default function ProductForm({
 
       form?.reset();
       setSelectedPackages([]);
+      onSuccess?.();
     }
   }
 
@@ -73,15 +65,11 @@ export default function ProductForm({
     <form
       id="inventory-product-form"
       action={handleSubmit}
-      className="space-y-6 rounded-2xl border border-outline-variant bg-surface-container p-6"
+      className="space-y-6"
     >
-      <div>
-        <h2 className="text-xl font-bold text-on-surface">Nuevo producto</h2>
-
-        <p className="mt-1 text-sm text-on-surface-variant">
-          Registra bebidas, insumos, herramientas o equipo.
-        </p>
-      </div>
+      <p className="text-sm text-on-surface-variant">
+        Registra bebidas, insumos, herramientas o equipo.
+      </p>
 
       {result && (
         <div
@@ -131,7 +119,7 @@ export default function ProductForm({
               Selecciona una categoría
             </option>
 
-            {categories.map((category) => (
+            {PRODUCT_CATEGORIES.map((category) => (
               <option key={category} value={category}>
                 {category}
               </option>

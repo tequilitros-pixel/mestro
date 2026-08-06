@@ -3,6 +3,7 @@
 import { InventoryItemType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { PRODUCT_CATEGORIES } from "./categories";
 
 export type CreateInventoryProductResult =
   | {
@@ -194,6 +195,30 @@ export async function toggleProductActiveAction(
     return { success: false, error: "No fue posible actualizar el producto." };
   }
 }
+export async function updateProductCategoryAction(
+  productId: string,
+  category: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    if (!PRODUCT_CATEGORIES.includes(category as (typeof PRODUCT_CATEGORIES)[number])) {
+      return { success: false, error: "Selecciona una categoría válida." };
+    }
+
+    await prisma.inventoryProduct.update({
+      where: { id: productId },
+      data: { category },
+    });
+
+    revalidatePath("/administration/inventory/products");
+    revalidatePath(`/administration/inventory/products/${productId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating product category:", error);
+    return { success: false, error: "No fue posible cambiar la categoría." };
+  }
+}
+
 export async function updateInventoryProductAction(
   productId: string,
   formData: FormData,

@@ -122,6 +122,7 @@ export async function createLiquorBottlingAction(
     showExpirationOnLabel: true,
     requiresQr: true,
     requiresSerialNumber: true,
+    inventoryProductId: true,
   },
 },
 
@@ -347,6 +348,38 @@ await tx.liquorBottleMovement.createMany({
   })),
 });
 
+/*
+ * Todo lo que se termina de embotellar (licores, sangría) se abona
+ * automáticamente al inventario de la sucursal Veliz, convertido a
+ * mililitros para compartir el mismo stock que ya consume el Punto
+ * de Venta al servir tragos. Si el producto todavía no tiene su
+ * insumo de inventario vinculado (LiquorProduct.inventoryProductId),
+ * se omite sin bloquear el embotellado.
+ */
+if (batch.product.inventoryProductId) {
+  const veliz = await tx.branch.findFirst({
+    where: { code: "VELIZ" },
+    select: { id: true },
+  });
+
+  if (!veliz) {
+    throw new Error(
+      "No se encontró la sucursal Veliz para abonar el inventario producido.",
+    );
+  }
+
+  await tx.inventoryEntry.create({
+    data: {
+      branchId: veliz.id,
+      productId: batch.product.inventoryProductId,
+      type: "PRODUCCION",
+      quantity: producedBottles * bottleSizeMl,
+      entryDate: now,
+      notes: `Embotellado ${bottling.code} · ${producedBottles} botellas de ${bottleSizeMl}ml de ${batch.product.name}.`,
+    },
+  });
+}
+
       const remainingLiters = roundLiters(
         Math.max(availableLiters - litersUsed, 0)
       );
@@ -375,6 +408,8 @@ await tx.liquorBottleMovement.createMany({
     revalidatePath(`/liquors/batches/${batchId}/bottling`);
     revalidatePath("/liquors/bottling");
     revalidatePath("/liquors/inventory");
+    revalidatePath("/administration/inventory/sucursales/stock");
+    revalidatePath("/administration/inventory/sucursales");
 
     return {
       success: true,

@@ -3,8 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { PlusIcon, ChevronRightIcon } from "@/components/ui/icons";
 import { getProductVisual } from "@/lib/pos/productVisual";
 
-export default async function PosProductsPage() {
-  const categories = await prisma.posCategory.findMany({
+export default async function PosProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ category?: string }>;
+}) {
+  const { category: selectedCategoryId } = await searchParams;
+
+  const allCategories = await prisma.posCategory.findMany({
     orderBy: { position: "asc" },
     include: {
       products: {
@@ -14,18 +20,15 @@ export default async function PosProductsPage() {
     },
   });
 
-  return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-on-surface">
-            Productos del catálogo
-          </h1>
-          <p className="text-sm text-on-surface-variant">
-            Variantes, precios y recetas de ingredientes.
-          </p>
-        </div>
+  const categories = selectedCategoryId
+    ? allCategories.filter((c) => c.id === selectedCategoryId)
+    : allCategories;
 
+  const showGroupHeadings = !selectedCategoryId;
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-5 p-6">
+      <div className="flex items-center justify-end">
         <Link
           href="/pos/products/new"
           className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97]"
@@ -35,7 +38,36 @@ export default async function PosProductsPage() {
         </Link>
       </div>
 
-      {categories.length === 0 && (
+      {allCategories.length > 0 && (
+        <div className="-mx-6 flex gap-1 overflow-x-auto border-b border-outline-variant px-6">
+          <Link
+            href="/pos/products"
+            className={`shrink-0 border-b-2 px-3 pb-2.5 text-sm font-semibold transition ${
+              !selectedCategoryId
+                ? "border-primary text-primary"
+                : "border-transparent text-on-surface-variant hover:text-on-surface"
+            }`}
+          >
+            Todas
+          </Link>
+          {allCategories.map((cat) => (
+            <Link
+              key={cat.id}
+              href={`/pos/products?category=${cat.id}`}
+              className={`shrink-0 border-b-2 px-3 pb-2.5 text-sm font-semibold transition ${
+                selectedCategoryId === cat.id
+                  ? "border-primary text-primary"
+                  : "border-transparent text-on-surface-variant hover:text-on-surface"
+              }`}
+            >
+              {cat.name}
+              <span className="ml-1.5 opacity-60">{cat.products.length}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {allCategories.length === 0 && (
         <div className="rounded-xl border border-outline-variant bg-surface-container p-6 text-center">
           <p className="text-sm text-on-surface-variant">
             Primero crea una categoría.
@@ -51,19 +83,10 @@ export default async function PosProductsPage() {
 
       {categories.map((cat) => (
         <div key={cat.id}>
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase text-on-surface-variant">
-            {cat.name}
-            {!cat.active && (
-              <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-[10px] font-bold text-on-surface-variant">
-                Inactiva
-              </span>
-            )}
-          </h2>
-
-          {cat.products.length === 0 && (
-            <p className="mb-4 text-sm text-on-surface-variant">
-              Sin productos en esta categoría.
-            </p>
+          {showGroupHeadings && (
+            <h2 className="mb-3 text-sm font-semibold uppercase text-on-surface-variant">
+              {cat.name}
+            </h2>
           )}
 
           <div className="mb-4 space-y-2">

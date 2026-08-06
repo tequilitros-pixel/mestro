@@ -59,6 +59,10 @@ export async function createPersonnel(input: CreatePersonnelInput) {
     return { error: "No tienes permiso para crear usuarios" };
   }
 
+  if (input.password.length < 8) {
+    return { error: "La contraseña debe tener al menos 8 caracteres" };
+  }
+
   const existing = await prisma.user.findUnique({
     where: { username: input.username },
   });
@@ -99,6 +103,10 @@ export async function updatePersonnel(input: UpdatePersonnelInput) {
   const currentUser = await getCurrentUser();
   if (!currentUser || currentUser.role !== "ADMIN") {
     return { error: "No tienes permiso para editar usuarios" };
+  }
+
+  if (input.newPassword && input.newPassword.length < 8) {
+    return { error: "La contraseña debe tener al menos 8 caracteres" };
   }
 
   const existing = await prisma.user.findFirst({

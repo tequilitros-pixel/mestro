@@ -1,10 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import AddPackageItemForm from "./AddPackageItemForm";
-import RemoveItemButton from "./RemoveItemButton";
 import EditPackageForm from "./EditPackageForm";
-import { PackageIcon, ToolboxIcon } from "@/components/ui/icons";
-
+import PackageItemsManager from "./PackageItemsManager";
 
 export default async function EventPackageDetailPage({
   params,
@@ -17,7 +14,6 @@ export default async function EventPackageDetailPage({
     where: { id },
     include: {
       items: {
-        include: { product: true },
         orderBy: { sortOrder: "asc" },
       },
     },
@@ -30,18 +26,17 @@ export default async function EventPackageDetailPage({
   const products = await prisma.inventoryProduct.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, unit: true, itemType: true },
+    select: { id: true, name: true, unit: true, category: true },
   });
 
-  const consumables = products.filter((p) => p.itemType !== "EQUIPMENT");
-  const equipment = products.filter((p) => p.itemType === "EQUIPMENT");
-
-  const consumableItems = eventPackage.items.filter(
-    (item) => item.product.itemType !== "EQUIPMENT",
-  );
-  const equipmentItems = eventPackage.items.filter(
-    (item) => item.product.itemType === "EQUIPMENT",
-  );
+  const items = eventPackage.items.map((item) => ({
+    id: item.id,
+    productId: item.productId,
+    quantity: Number(item.quantity),
+    calculationType: item.calculationType,
+    isRequired: item.isRequired,
+    guestsPerBlock: item.guestsPerBlock,
+  }));
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
@@ -52,7 +47,8 @@ export default async function EventPackageDetailPage({
             {eventPackage.description || "Sin descripción"}
           </p>
         </div>
-                <EditPackageForm
+
+        <EditPackageForm
           pkg={{
             id: eventPackage.id,
             name: eventPackage.name,
@@ -67,71 +63,10 @@ export default async function EventPackageDetailPage({
           }}
         />
 
-
         <section className="space-y-4">
-          <h2 className="flex items-center gap-2 text-xl font-bold text-on-surface">
-            <PackageIcon className="h-5 w-5 text-on-surface-variant" />
-            Inventario consumible / retornable
-          </h2>
+          <h2 className="text-xl font-bold text-on-surface">Productos del paquete</h2>
 
-          <div className="rounded-2xl border border-outline-variant bg-surface-container divide-y divide-outline-variant">
-            {consumableItems.length === 0 && (
-              <p className="p-6 text-sm text-on-surface-variant">
-                Aún no hay productos consumibles en este paquete.
-              </p>
-            )}
-            {consumableItems.map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-4">
-                <div>
-                  <p className="font-medium text-on-surface">{item.product.name}</p>
-                  <p className="text-sm text-on-surface-variant">
-                    {item.quantity.toString()} {item.product.unit} ·{" "}
-                    {item.calculationType} {item.isRequired ? "· Obligatorio" : ""}
-                  </p>
-                </div>
-                <RemoveItemButton itemId={item.id} packageId={id} />
-              </div>
-            ))}
-          </div>
-
-          <AddPackageItemForm
-            packageId={id}
-            products={consumables}
-            title="Agregar producto consumible"
-          />
-        </section>
-
-        <section className="space-y-4">
-          <h2 className="flex items-center gap-2 text-xl font-bold text-on-surface">
-            <ToolboxIcon className="h-5 w-5 text-on-surface-variant" />
-            Equipo a subir
-          </h2>
-
-          <div className="rounded-2xl border border-outline-variant bg-surface-container divide-y divide-outline-variant">
-            {equipmentItems.length === 0 && (
-              <p className="p-6 text-sm text-on-surface-variant">
-                Aún no hay equipo en este paquete.
-              </p>
-            )}
-            {equipmentItems.map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-4">
-                <div>
-                  <p className="font-medium text-on-surface">{item.product.name}</p>
-                  <p className="text-sm text-on-surface-variant">
-                    {item.quantity.toString()} {item.product.unit}{" "}
-                    {item.isRequired ? "· Obligatorio" : ""}
-                  </p>
-                </div>
-                <RemoveItemButton itemId={item.id} packageId={id} />
-              </div>
-            ))}
-          </div>
-
-          <AddPackageItemForm
-            packageId={id}
-            products={equipment}
-            title="Agregar equipo"
-          />
+          <PackageItemsManager packageId={id} products={products} items={items} />
         </section>
       </div>
     </main>

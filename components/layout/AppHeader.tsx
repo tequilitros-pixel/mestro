@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { logoutAction } from "@/app/actions/login";
-import PushNotificationSetup from "@/components/PushNotificationSetup";
 import { formatRole } from "@/components/layout/navigation";
 import { StillIcon, LogoutIcon } from "@/components/ui/icons";
 
@@ -37,13 +36,6 @@ export default function AppHeader({
       </Link>
 
       <div className="flex items-center gap-2 sm:gap-4">
-        <div className="hidden items-center gap-2 rounded-full border border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 px-3 py-1.5 text-xs font-semibold text-tertiary-fixed-dim lg:inline-flex">
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-tertiary-fixed-dim" />
-          Sistema activo
-        </div>
-
-        <PushNotificationSetup />
-
         <Link
           href="/profile"
           className="hidden rounded-xl px-3 py-2 text-right transition hover:bg-surface-container sm:block"

@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+// Requiere runtime de Node (no Edge) porque Prisma usa el driver
+// nativo de pg, que no corre en el runtime Edge.
+export const runtime = "nodejs";
 
 const PUBLIC_PATHS = ["/login", "/q", "/forgot-password", "/reset-password"];
 
@@ -14,7 +19,7 @@ function matchesPath(pathname: string, path: string) {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const requestHeaders = new Headers(request.headers);
@@ -26,19 +31,37 @@ export function middleware(request: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  const hasSession = request.cookies.has("maestro_user");
+  const userId = request.cookies.get("maestro_user")?.value;
 
-  if (!hasSession) {
+  if (!userId) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  const role = request.cookies.get("maestro_role")?.value;
+  /*
+   * El rol se verifica contra la base de datos en cada request en
+   * lugar de confiar en la cookie "maestro_role": esa cookie la
+   * puede modificar libremente quien la posea (es texto plano sin
+   * firmar), así que usarla para decidir acceso permitiría que un
+   * OPERATOR se autoasignara otro rol y se saltara la restricción
+   * de abajo. Esta consulta es la única fuente confiable del rol.
+   */
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, active: true },
+  });
+
+  if (!user || !user.active) {
+    const response = NextResponse.redirect(new URL("/login", request.url));
+    response.cookies.delete("maestro_user");
+    response.cookies.delete("maestro_role");
+    return response;
+  }
 
   const isAllowedForOperator = OPERATOR_ALLOWED_PATHS.some((path) =>
     matchesPath(pathname, path),
   );
 
-  if (role === "OPERATOR" && !isAllowedForOperator) {
+  if (user.role === "OPERATOR" && !isAllowedForOperator) {
     return NextResponse.redirect(new URL("/cooking", request.url));
   }
 

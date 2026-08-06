@@ -46,6 +46,7 @@ export default async function LoginPage({
   }).format(now);
 
   const hasError = params?.error === "1";
+  const isLocked = params?.error === "locked";
   const justReset = params?.reset === "1";
 
 
@@ -94,6 +95,13 @@ export default async function LoginPage({
           {hasError && (
             <div className="mb-5 rounded-xl border border-error/30 bg-error/10 p-3 text-sm text-error">
               Correo o contraseña incorrectos.
+            </div>
+          )}
+
+          {isLocked && (
+            <div className="mb-5 rounded-xl border border-error/30 bg-error/10 p-3 text-sm text-error">
+              Demasiados intentos fallidos. Por seguridad, esta cuenta se
+              bloqueó temporalmente — intenta de nuevo en 15 minutos.
             </div>
           )}
 

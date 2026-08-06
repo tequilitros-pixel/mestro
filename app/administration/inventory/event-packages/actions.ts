@@ -147,6 +147,77 @@ export async function removeEventPackageItemAction(
     return { success: false, error: "No fue posible quitar el producto." };
   }
 }
+export async function updateEventPackageItemAction(
+  itemId: string,
+  packageId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const calculationType = formData.get("calculationType")?.toString() ?? "";
+    const quantity = readOptionalNumber(formData.get("quantity"));
+    const guestsPerBlock = readOptionalNumber(formData.get("guestsPerBlock"));
+    const isRequired = formData.get("isRequired") === "on";
+
+    if (quantity === null || quantity <= 0) {
+      return { success: false, error: "La cantidad debe ser mayor a cero." };
+    }
+
+    const validTypes = ["FIXED", "PER_GUEST", "PER_GUEST_BLOCK", "MANUAL"];
+    if (!validTypes.includes(calculationType)) {
+      return { success: false, error: "Selecciona un tipo de cálculo válido." };
+    }
+
+    if (calculationType === "PER_GUEST_BLOCK" && (guestsPerBlock === null || guestsPerBlock <= 0)) {
+      return { success: false, error: "Indica cuántos invitados por bloque." };
+    }
+
+    await prisma.eventPackageItem.update({
+      where: { id: itemId },
+      data: {
+        quantity,
+        calculationType: calculationType as PackageItemCalculationType,
+        guestsPerBlock:
+          calculationType === "PER_GUEST_BLOCK" && guestsPerBlock !== null
+            ? Math.trunc(guestsPerBlock)
+            : null,
+        isRequired,
+      },
+    });
+
+    revalidatePath(`/administration/inventory/event-packages/${packageId}`);
+
+    return { success: true, message: "Producto actualizado." };
+  } catch (error) {
+    console.error("Error updating package item:", error);
+    return { success: false, error: "No fue posible actualizar el producto." };
+  }
+}
+
+export async function deleteEventPackageAction(
+  packageId: string,
+): Promise<ActionResult> {
+  try {
+    const eventCount = await prisma.serviceEvent.count({ where: { packageId } });
+
+    if (eventCount > 0) {
+      return {
+        success: false,
+        error:
+          "Este paquete ya se usó en eventos. No se puede eliminar sin perder ese historial — mejor desactívalo.",
+      };
+    }
+
+    await prisma.eventPackage.delete({ where: { id: packageId } });
+
+    revalidatePath("/administration/inventory/event-packages");
+
+    return { success: true, message: "Paquete eliminado." };
+  } catch (error) {
+    console.error("Error deleting event package:", error);
+    return { success: false, error: "No fue posible eliminar el paquete." };
+  }
+}
+
 export async function updateEventPackageAction(
   packageId: string,
   formData: FormData,

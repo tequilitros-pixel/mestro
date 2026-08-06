@@ -7,12 +7,7 @@ import {
   deleteInventoryProductAction,
   type CreateInventoryProductResult,
 } from "../actions";
-
-const categories = [
-  "Tequila", "Licores", "Refrescos", "Ingredientes",
-  "Trastes", "Vasos", "Equipo de stand", "Herramientas",
-];
-
+import { PRODUCT_CATEGORIES } from "../categories";
 
 const units = [
   "Pieza", "Botella", "Caja", "Bolsa", "Litro", "Mililitro",
@@ -111,7 +106,7 @@ export default function EditProductForm({ product }: { product: Product }) {
               defaultValue={product.category}
               className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             >
-              {categories.map((c) => (
+              {PRODUCT_CATEGORIES.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>

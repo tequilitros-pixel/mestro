@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import ProductForm from "./ProductForm";
+import NewProductModal from "./NewProductModal";
 import ProductsList from "./ProductsList";
 
 export default async function InventoryProductsPage() {
@@ -28,7 +28,7 @@ export default async function InventoryProductsPage() {
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl space-y-8">
+      <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-on-surface-variant">
@@ -43,22 +43,19 @@ export default async function InventoryProductsPage() {
             </p>
           </div>
 
-          <Link
-            href="/administration/inventory"
-            className="inline-flex w-fit items-center gap-2 rounded-xl border border-outline-variant bg-surface-container px-4 py-2 text-sm font-semibold text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:border-primary/25 hover:text-on-surface active:scale-[0.97]"
-          >
-            ← Regresar a Inventario
-          </Link>
+          <div className="flex w-fit shrink-0 items-center gap-3">
+            <Link
+              href="/administration/inventory"
+              className="inline-flex items-center gap-2 rounded-xl border border-outline-variant bg-surface-container px-4 py-2 text-sm font-semibold text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:border-primary/25 hover:text-on-surface active:scale-[0.97]"
+            >
+              ← Regresar a Inventario
+            </Link>
+
+            <NewProductModal packages={packages} />
+          </div>
         </div>
 
-        <ProductForm packages={packages} />
-
-        <div>
-          <h2 className="mb-4 text-xl font-bold text-on-surface">
-            Productos existentes ({products.length})
-          </h2>
-          <ProductsList products={productsForList} />
-        </div>
+        <ProductsList products={productsForList} />
       </div>
     </main>
   );

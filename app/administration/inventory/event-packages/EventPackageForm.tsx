@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { createEventPackageAction, type ActionResult } from "./actions";
 
-export default function EventPackageForm() {
+export default function EventPackageForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   const [result, setResult] = useState<ActionResult | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -21,6 +21,7 @@ export default function EventPackageForm() {
         "event-package-form",
       ) as HTMLFormElement | null;
       form?.reset();
+      onSuccess?.();
     }
   }
 
@@ -28,14 +29,11 @@ export default function EventPackageForm() {
     <form
       id="event-package-form"
       action={handleSubmit}
-      className="space-y-6 rounded-2xl border border-outline-variant bg-surface-container p-6"
+      className="space-y-6"
     >
-      <div>
-        <h2 className="text-xl font-bold text-on-surface">Nuevo paquete</h2>
-        <p className="mt-1 text-sm text-on-surface-variant">
-          Ej. Barra Chica, Barra Mediana, Barra Grande.
-        </p>
-      </div>
+      <p className="text-sm text-on-surface-variant">
+        Ej. Barra Chica, Barra Mediana, Barra Grande.
+      </p>
 
       {result && (
         <div

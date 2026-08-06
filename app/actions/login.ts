@@ -26,13 +26,40 @@ export async function loginAction(formData: FormData) {
     redirect("/login?error=1");
   }
 
+  const MAX_ATTEMPTS = 10;
+  const LOCK_MINUTES = 15;
+
+  if (user!.lockedUntil && user!.lockedUntil > new Date()) {
+    redirect("/login?error=locked");
+  }
+
   const passwordMatches = await bcrypt.compare(
     password,
-    user.password
+    user!.password
   );
 
   if (!passwordMatches) {
+    const attempts = user!.failedLoginAttempts + 1;
+
+    await prisma.user.update({
+      where: { id: user!.id },
+      data: {
+        failedLoginAttempts: attempts,
+        lockedUntil:
+          attempts >= MAX_ATTEMPTS
+            ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000)
+            : null,
+      },
+    });
+
     redirect("/login?error=1");
+  }
+
+  if (user!.failedLoginAttempts > 0 || user!.lockedUntil) {
+    await prisma.user.update({
+      where: { id: user!.id },
+      data: { failedLoginAttempts: 0, lockedUntil: null },
+    });
   }
 
   const cookieStore = await cookies();

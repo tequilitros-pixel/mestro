@@ -2,7 +2,7 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
-import { INGREDIENTS, PRODUCTS } from "../lib/pos/tequilitrosSeedData";
+import { INGREDIENTS, PRODUCTS, EQUIPMENT_ITEMS } from "../lib/pos/tequilitrosSeedData";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -22,22 +22,30 @@ async function main() {
   const ingredientIds = new Map<string, string>();
 
   for (const ingredient of INGREDIENTS) {
+    // canBeSold: true en todos — así quedan disponibles como insumos
+    // seleccionables al armar paquetes/kits de Eventos, además de
+    // usarse como receta del Punto de Venta. isActive: true los deja
+    // visibles para cualquier sucursal (el catálogo no está limitado
+    // por sucursal).
     const saved = await prisma.inventoryProduct.upsert({
       where: { code: ingredient.code },
       update: {
         name: ingredient.name,
         unit: ingredient.unit,
+        category: ingredient.category,
+        canBeSold: true,
+        isActive: true,
       },
       create: {
         code: ingredient.code,
         name: ingredient.name,
-        category: "Insumos Bar (Tequilitros)",
+        category: ingredient.category,
         unit: ingredient.unit,
         itemType: "CONSUMABLE",
         trackStock: true,
         trackBatch: false,
         trackExpiration: false,
-        canBeSold: false,
+        canBeSold: true,
         mustReturn: false,
         minimumStock: 0,
         isActive: true,
@@ -48,8 +56,49 @@ async function main() {
     console.log(`  ✓ ${ingredient.name} (${ingredient.code})`);
   }
 
+  // 1.5. Equipo/insumos de logística (upsert por código). No son
+  // ingredientes de receta, así que no se marcan canBeSold: se siembran
+  // para poder armarlos en Paquetes de Evento y llevar su control de
+  // existencias/retorno.
+  console.log("\nEquipo / Logística:");
+
+  for (const item of EQUIPMENT_ITEMS) {
+    await prisma.inventoryProduct.upsert({
+      where: { code: item.code },
+      update: {
+        name: item.name,
+        unit: item.unit,
+        category: item.category,
+        itemType: item.itemType,
+        mustReturn: item.mustReturn,
+        isActive: true,
+      },
+      create: {
+        code: item.code,
+        name: item.name,
+        category: item.category,
+        unit: item.unit,
+        itemType: item.itemType,
+        trackStock: true,
+        trackBatch: false,
+        trackExpiration: false,
+        canBeSold: false,
+        mustReturn: item.mustReturn,
+        minimumStock: 0,
+        isActive: true,
+      },
+    });
+    console.log(`  ✓ ${item.name} (${item.code})`);
+  }
+
   // 2. Categorías del punto de venta (upsert por nombre).
+  //    CATEGORY_RENAMES mapea nombres legados -> nombre nuevo: si la
+  //    categoría vieja existe en la base, se renombra en vez de crear
+  //    una categoría nueva y dejar la vieja huérfana.
   console.log("\nCategorías:");
+  const CATEGORY_RENAMES: Record<string, string> = {
+    "Cócteles": "Tequilitros",
+  };
   const categoryIds = new Map<string, string>();
   const categoryNames = [...new Set(PRODUCTS.map((p) => p.categoryName))];
 
@@ -57,9 +106,25 @@ async function main() {
     let category = await prisma.posCategory.findFirst({ where: { name } });
 
     if (!category) {
-      category = await prisma.posCategory.create({
-        data: { name, position: index },
-      });
+      const legacyName = Object.entries(CATEGORY_RENAMES).find(
+        ([, newName]) => newName === name,
+      )?.[0];
+
+      const legacyCategory = legacyName
+        ? await prisma.posCategory.findFirst({ where: { name: legacyName } })
+        : null;
+
+      if (legacyCategory) {
+        category = await prisma.posCategory.update({
+          where: { id: legacyCategory.id },
+          data: { name },
+        });
+        console.log(`  ✓ ${legacyName} → ${name} (renombrada)`);
+      } else {
+        category = await prisma.posCategory.create({
+          data: { name, position: index },
+        });
+      }
     }
 
     categoryIds.set(name, category.id);
@@ -67,15 +132,17 @@ async function main() {
   }
 
   // 3. Productos + variantes + recetas de ingredientes.
-  //    Idempotente: si el producto ya existe (mismo nombre+categoría),
-  //    se reemplazan sus variantes/ingredientes por completo.
+  //    Idempotente: se busca el producto por NOMBRE (no por
+  //    nombre+categoría) para que, si alguna vez quedó en la categoría
+  //    equivocada (p. ej. un reacomodo de menú), el reseed lo corrija en
+  //    vez de crear un duplicado en la categoría nueva.
   console.log("\nProductos:");
 
   for (const [index, productDef] of PRODUCTS.entries()) {
     const categoryId = categoryIds.get(productDef.categoryName)!;
 
     let product = await prisma.posProduct.findFirst({
-      where: { categoryId, name: productDef.name },
+      where: { name: productDef.name },
     });
 
     if (!product) {
@@ -90,7 +157,7 @@ async function main() {
     } else {
       await prisma.posProduct.update({
         where: { id: product.id },
-        data: { icon: productDef.color, active: true },
+        data: { categoryId, icon: productDef.color, active: true },
       });
       await prisma.posProductVariant.deleteMany({
         where: { productId: product.id },
