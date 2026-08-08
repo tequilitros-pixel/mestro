@@ -5,6 +5,7 @@ import PlantStatusCard from "@/components/PlantStatusCard";
 import AIReport from "@/components/ui/AIReport";
 import MissionControl from "@/components/intelligence/MissionControl";
 import RecordingBadge from "@/components/ui/RecordingBadge";
+import PageTabs from "@/components/ui/PageTabs";
 import {
   FlameIcon,
   GearIcon,
@@ -13,6 +14,8 @@ import {
   GlassWaterIcon,
   PackageIcon,
   ToolboxIcon,
+  BrainIcon,
+  GridIcon,
 } from "@/components/ui/icons";
 
 import { Predictor } from "@/lib/brain/Predictor";
@@ -204,543 +207,581 @@ export default async function PlantPage() {
           health={plantHealth}
         />
 
-        <section>
-          <div className="mb-5">
-            <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
-              Estado actual
-            </p>
+        <PageTabs
+          tabs={[
+            {
+              key: "procesos",
+              label: "Procesos activos",
+              icon: <FlameIcon className="h-4 w-4" />,
+              content: (
+                <>
+                          <section>
+                            <div className="mb-5">
+                              <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
+                                Estado actual
+                              </p>
 
-            <h2 className="mt-2 text-3xl font-bold">
-              Procesos activos
-            </h2>
+                              <h2 className="mt-2 text-3xl font-bold">
+                                Procesos activos
+                              </h2>
 
-            <p className="mt-2 text-sm text-on-surface-variant">
-              Información más reciente de cada área de
-              producción.
-            </p>
-          </div>
+                              <p className="mt-2 text-sm text-on-surface-variant">
+                                Información más reciente de cada área de
+                                producción.
+                              </p>
+                            </div>
 
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {cookings.map((cooking) => {
-              const averageTemperature =
-                getCookingAverageTemperature(
-                  cooking.events
-                );
+                            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                              {cookings.map((cooking) => {
+                                const averageTemperature =
+                                  getCookingAverageTemperature(
+                                    cooking.events
+                                  );
 
-              const recording =
-                recordingStatus.cooking.find(
-                  (item) => item.id === cooking.id
-                );
+                                const recording =
+                                  recordingStatus.cooking.find(
+                                    (item) => item.id === cooking.id
+                                  );
 
-              const hasTemperatureAlert =
-                averageTemperature !== null &&
-                (averageTemperature < 85 ||
-                  averageTemperature > 100);
+                                const hasTemperatureAlert =
+                                  averageTemperature !== null &&
+                                  (averageTemperature < 85 ||
+                                    averageTemperature > 100);
 
-              return (
-                <div
-                  key={cooking.id}
-                  className="space-y-2"
-                >
-                  <PlantStatusCard
-                    icon={<FlameIcon />}
-                    title={cooking.equipment.name}
-                    value={
-                      averageTemperature !== null
-                        ? `${formatNumber(
-                            averageTemperature
-                          )} °C`
-                        : "Sin lectura"
-                    }
-                    status={
-                      hasTemperatureAlert
-                        ? "warning"
-                        : "ok"
-                    }
-                  />
+                                return (
+                                  <div
+                                    key={cooking.id}
+                                    className="space-y-2"
+                                  >
+                                    <PlantStatusCard
+                                      icon={<FlameIcon />}
+                                      title={cooking.equipment.name}
+                                      value={
+                                        averageTemperature !== null
+                                          ? `${formatNumber(
+                                              averageTemperature
+                                            )} °C`
+                                          : "Sin lectura"
+                                      }
+                                      status={
+                                        hasTemperatureAlert
+                                          ? "warning"
+                                          : "ok"
+                                      }
+                                    />
 
-                  {recording && (
-                    <RecordingBadge
-                      minutesSinceLastRecord={
-                        recording.minutesSinceLastRecord
-                      }
-                      isOverdue={recording.isOverdue}
-                    />
-                  )}
-                </div>
-              );
-            })}
+                                    {recording && (
+                                      <RecordingBadge
+                                        minutesSinceLastRecord={
+                                          recording.minutesSinceLastRecord
+                                        }
+                                        isOverdue={recording.isOverdue}
+                                      />
+                                    )}
+                                  </div>
+                                );
+                              })}
 
-            {millings.map((milling) => {
-              const lastBrix =
-                getLatestValidNumber(
-                  milling.events,
-                  "brix"
-                );
+                              {millings.map((milling) => {
+                                const lastBrix =
+                                  getLatestValidNumber(
+                                    milling.events,
+                                    "brix"
+                                  );
 
-              const lastTemperature =
-                getLatestValidNumber(
-                  milling.events,
-                  "temperature"
-                );
+                                const lastTemperature =
+                                  getLatestValidNumber(
+                                    milling.events,
+                                    "temperature"
+                                  );
 
-              const value =
-                milling.mashLiters !== null
-                  ? `${formatNumber(
-                      milling.mashLiters,
-                      0
-                    )} L`
-                  : lastBrix !== null
-                    ? `${formatNumber(
-                        lastBrix
-                      )} °Brix`
-                    : lastTemperature !== null
-                      ? `${formatNumber(
-                          lastTemperature
-                        )} °C`
-                      : "Sin registro";
+                                const value =
+                                  milling.mashLiters !== null
+                                    ? `${formatNumber(
+                                        milling.mashLiters,
+                                        0
+                                      )} L`
+                                    : lastBrix !== null
+                                      ? `${formatNumber(
+                                          lastBrix
+                                        )} °Brix`
+                                      : lastTemperature !== null
+                                        ? `${formatNumber(
+                                            lastTemperature
+                                          )} °C`
+                                        : "Sin registro";
 
-              const recording =
-                recordingStatus.milling.find(
-                  (item) => item.id === milling.id
-                );
+                                const recording =
+                                  recordingStatus.milling.find(
+                                    (item) => item.id === milling.id
+                                  );
 
-              return (
-                <div
-                  key={milling.id}
-                  className="space-y-2"
-                >
-                  <PlantStatusCard
-                    icon={<GearIcon />}
-                    title={milling.equipment.name}
-                    value={value}
-                    status="ok"
-                  />
+                                return (
+                                  <div
+                                    key={milling.id}
+                                    className="space-y-2"
+                                  >
+                                    <PlantStatusCard
+                                      icon={<GearIcon />}
+                                      title={milling.equipment.name}
+                                      value={value}
+                                      status="ok"
+                                    />
 
-                  {recording && (
-                    <RecordingBadge
-                      minutesSinceLastRecord={
-                        recording.minutesSinceLastRecord
-                      }
-                      isOverdue={recording.isOverdue}
-                    />
-                  )}
-                </div>
-              );
-            })}
+                                    {recording && (
+                                      <RecordingBadge
+                                        minutesSinceLastRecord={
+                                          recording.minutesSinceLastRecord
+                                        }
+                                        isOverdue={recording.isOverdue}
+                                      />
+                                    )}
+                                  </div>
+                                );
+                              })}
 
-            {fermentations.map(
-              (fermentation) => {
-                const currentBrix =
-                  getLatestValidNumber(
-                    fermentation.readings,
-                    "brix"
-                  ) ??
-                  Number(
-                    fermentation.initialBrix
-                  );
+                              {fermentations.map(
+                                (fermentation) => {
+                                  const currentBrix =
+                                    getLatestValidNumber(
+                                      fermentation.readings,
+                                      "brix"
+                                    ) ??
+                                    Number(
+                                      fermentation.initialBrix
+                                    );
 
-                const currentAlcohol =
-                  getLatestValidNumber(
-                    fermentation.readings,
-                    "alcohol"
-                  );
+                                  const currentAlcohol =
+                                    getLatestValidNumber(
+                                      fermentation.readings,
+                                      "alcohol"
+                                    );
 
-                const currentTemperature =
-                  getLatestValidNumber(
-                    fermentation.readings,
-                    "temperature"
-                  ) ??
-                  Number(
-                    fermentation.initialTemperature
-                  );
+                                  const currentTemperature =
+                                    getLatestValidNumber(
+                                      fermentation.readings,
+                                      "temperature"
+                                    ) ??
+                                    Number(
+                                      fermentation.initialTemperature
+                                    );
 
-                const hasAlert =
-                  alertMessages.some((message) =>
-                    message.startsWith(
-                      fermentation.tank
-                    )
-                  ) ||
-                  currentTemperature < 25 ||
-                  currentTemperature > 35;
+                                  const hasAlert =
+                                    alertMessages.some((message) =>
+                                      message.startsWith(
+                                        fermentation.tank
+                                      )
+                                    ) ||
+                                    currentTemperature < 25 ||
+                                    currentTemperature > 35;
 
-                const recording =
-                  recordingStatus.fermentation.find(
-                    (item) =>
-                      item.id === fermentation.id
-                  );
+                                  const recording =
+                                    recordingStatus.fermentation.find(
+                                      (item) =>
+                                        item.id === fermentation.id
+                                    );
 
-                const value =
-                  currentAlcohol !== null
-                    ? `${formatNumber(
-                        currentAlcohol
-                      )}% alcohol`
-                    : `${formatNumber(
-                        currentBrix
-                      )} °Brix`;
+                                  const value =
+                                    currentAlcohol !== null
+                                      ? `${formatNumber(
+                                          currentAlcohol
+                                        )}% alcohol`
+                                      : `${formatNumber(
+                                          currentBrix
+                                        )} °Brix`;
 
-                return (
-                  <div
-                    key={fermentation.id}
-                    className="space-y-2"
-                  >
-                    <PlantStatusCard
-                      icon={<FlaskIcon />}
-                      title={fermentation.tank}
-                      value={value}
-                      status={
-                        hasAlert
-                          ? "warning"
-                          : "ok"
-                      }
-                    />
+                                  return (
+                                    <div
+                                      key={fermentation.id}
+                                      className="space-y-2"
+                                    >
+                                      <PlantStatusCard
+                                        icon={<FlaskIcon />}
+                                        title={fermentation.tank}
+                                        value={value}
+                                        status={
+                                          hasAlert
+                                            ? "warning"
+                                            : "ok"
+                                        }
+                                      />
 
-                    {recording && (
-                      <RecordingBadge
-                        minutesSinceLastRecord={
-                          recording.minutesSinceLastRecord
-                        }
-                        isOverdue={
-                          recording.isOverdue
-                        }
-                      />
-                    )}
-                  </div>
-                );
-              }
-            )}
+                                      {recording && (
+                                        <RecordingBadge
+                                          minutesSinceLastRecord={
+                                            recording.minutesSinceLastRecord
+                                          }
+                                          isOverdue={
+                                            recording.isOverdue
+                                          }
+                                        />
+                                      )}
+                                    </div>
+                                  );
+                                }
+                              )}
 
-            {distillations.map(
-              (distillation) => {
-                const alcohol =
-                  getLatestValidNumber(
-                    distillation.events,
-                    "alcoholCorrected"
-                  ) ??
-                  getLatestValidNumber(
-                    distillation.events,
-                    "alcohol"
-                  );
+                              {distillations.map(
+                                (distillation) => {
+                                  const alcohol =
+                                    getLatestValidNumber(
+                                      distillation.events,
+                                      "alcoholCorrected"
+                                    ) ??
+                                    getLatestValidNumber(
+                                      distillation.events,
+                                      "alcohol"
+                                    );
 
-                const temperature =
-                  getLatestValidNumber(
-                    distillation.events,
-                    "temperature"
-                  );
+                                  const temperature =
+                                    getLatestValidNumber(
+                                      distillation.events,
+                                      "temperature"
+                                    );
 
-                const hasAlert =
-                  (alcohol !== null &&
-                    (alcohol < 0 ||
-                      alcohol > 100)) ||
-                  (temperature !== null &&
-                    temperature > 110);
+                                  const hasAlert =
+                                    (alcohol !== null &&
+                                      (alcohol < 0 ||
+                                        alcohol > 100)) ||
+                                    (temperature !== null &&
+                                      temperature > 110);
 
-                const value =
-                  alcohol !== null
-                    ? `${formatNumber(
-                        alcohol
-                      )} °GL`
-                    : temperature !== null
-                      ? `${formatNumber(
-                          temperature
-                        )} °C`
-                      : "Sin lectura";
+                                  const value =
+                                    alcohol !== null
+                                      ? `${formatNumber(
+                                          alcohol
+                                        )} °GL`
+                                      : temperature !== null
+                                        ? `${formatNumber(
+                                            temperature
+                                          )} °C`
+                                        : "Sin lectura";
 
-                const recording =
-                  recordingStatus.distillation.find(
-                    (item) =>
-                      item.id === distillation.id
-                  );
+                                  const recording =
+                                    recordingStatus.distillation.find(
+                                      (item) =>
+                                        item.id === distillation.id
+                                    );
 
-                return (
-                  <div
-                    key={distillation.id}
-                    className="space-y-2"
-                  >
-                    <PlantStatusCard
-                      icon={<StillIcon />}
-                      title={
-                        distillation.equipment.name
-                      }
-                      value={value}
-                      status={
-                        hasAlert
-                          ? "warning"
-                          : "ok"
-                      }
-                    />
+                                  return (
+                                    <div
+                                      key={distillation.id}
+                                      className="space-y-2"
+                                    >
+                                      <PlantStatusCard
+                                        icon={<StillIcon />}
+                                        title={
+                                          distillation.equipment.name
+                                        }
+                                        value={value}
+                                        status={
+                                          hasAlert
+                                            ? "warning"
+                                            : "ok"
+                                        }
+                                      />
 
-                    {recording && (
-                      <RecordingBadge
-                        minutesSinceLastRecord={
-                          recording.minutesSinceLastRecord
-                        }
-                        isOverdue={
-                          recording.isOverdue
-                        }
-                      />
-                    )}
-                  </div>
-                );
-              }
-            )}
+                                      {recording && (
+                                        <RecordingBadge
+                                          minutesSinceLastRecord={
+                                            recording.minutesSinceLastRecord
+                                          }
+                                          isOverdue={
+                                            recording.isOverdue
+                                          }
+                                        />
+                                      )}
+                                    </div>
+                                  );
+                                }
+                              )}
 
-            {activeProcessesCount === 0 && (
-              <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center sm:col-span-2 lg:col-span-4">
-                <p className="text-on-surface-variant">
-                  No hay procesos activos en este
-                  momento.
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
+                              {activeProcessesCount === 0 && (
+                                <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center sm:col-span-2 lg:col-span-4">
+                                  <p className="text-on-surface-variant">
+                                    No hay procesos activos en este
+                                    momento.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </section>
+                </>
+              ),
+            },
+            {
+              key: "equipo",
+              label: "Equipo",
+              icon: <ToolboxIcon className="h-4 w-4" />,
+              content: (
+                <>
+                          <section>
+                            <div className="mb-5">
+                              <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
+                                Estado del equipo
+                              </p>
 
-        <section>
-          <div className="mb-5">
-            <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
-              Estado del equipo
-            </p>
+                              <h2 className="mt-2 text-3xl font-bold">
+                                Equipo de planta
+                              </h2>
 
-            <h2 className="mt-2 text-3xl font-bold">
-              Equipo de planta
-            </h2>
+                              <p className="mt-2 text-sm text-on-surface-variant">
+                                Disponibilidad de hornos, molinos, tinas y
+                                alambiques, estén o no en uso ahora mismo.
+                              </p>
+                            </div>
 
-            <p className="mt-2 text-sm text-on-surface-variant">
-              Disponibilidad de hornos, molinos, tinas y
-              alambiques, estén o no en uso ahora mismo.
-            </p>
-          </div>
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                              {allEquipment.map((equipment) => {
+                                const info = getEquipmentDisplay(equipment);
+                                const activeHref = activeHrefByEquipmentId.get(
+                                  equipment.id
+                                );
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {allEquipment.map((equipment) => {
-              const info = getEquipmentDisplay(equipment);
-              const activeHref = activeHrefByEquipmentId.get(
-                equipment.id
-              );
+                                return (
+                                  <EquipmentCard
+                                    key={equipment.id}
+                                    icon={info.icon}
+                                    title={equipment.name}
+                                    status={info.statusLabel}
+                                    tone={info.tone}
+                                    subtitle={equipment.location ?? undefined}
+                                    href={activeHref ?? info.newHref}
+                                  />
+                                );
+                              })}
 
-              return (
-                <EquipmentCard
-                  key={equipment.id}
-                  icon={info.icon}
-                  title={equipment.name}
-                  status={info.statusLabel}
-                  tone={info.tone}
-                  subtitle={equipment.location ?? undefined}
-                  href={activeHref ?? info.newHref}
-                />
-              );
-            })}
+                              {allEquipment.length === 0 && (
+                                <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center sm:col-span-2 lg:col-span-4">
+                                  <p className="text-on-surface-variant">
+                                    No hay equipo activo registrado.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </section>
+                </>
+              ),
+            },
+            {
+              key: "maestro",
+              label: "MAESTRO",
+              icon: <BrainIcon className="h-4 w-4" />,
+              content: (
+                <>
+                          <MaestroCard
+                            message={maestroMessage}
+                            tasks={maestroTasks}
+                            production={
+                              totalAgaveKg > 0
+                                ? `${prediction.expectedLiters.toFixed(
+                                    0
+                                  )} L estimados`
+                                : "Sin producción estimada"
+                            }
+                            confidence={
+                              totalAgaveKg > 0
+                                ? prediction.confidence
+                                : 0
+                            }
+                          />
 
-            {allEquipment.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center sm:col-span-2 lg:col-span-4">
-                <p className="text-on-surface-variant">
-                  No hay equipo activo registrado.
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
+                          <MissionControl
+                            score={Math.round(excellence.score)}
+                            level={excellence.level}
+                            confidence={
+                              totalAgaveKg > 0
+                                ? prediction.confidence
+                                : 0
+                            }
+                            expectedLiters={
+                              totalAgaveKg > 0
+                                ? Math.round(
+                                    prediction.expectedLiters
+                                  )
+                                : 0
+                            }
+                            recommendation={
+                              learning.recommendation
+                            }
+                            recommendations={recommendations}
+                            alerts={alertMessages}
+                          />
 
-        <MaestroCard
-          message={maestroMessage}
-          tasks={maestroTasks}
-          production={
-            totalAgaveKg > 0
-              ? `${prediction.expectedLiters.toFixed(
-                  0
-                )} L estimados`
-              : "Sin producción estimada"
-          }
-          confidence={
-            totalAgaveKg > 0
-              ? prediction.confidence
-              : 0
-          }
+                          <AIReport
+                            score={Math.round(excellence.score)}
+                            confidence={
+                              totalAgaveKg > 0
+                                ? prediction.confidence
+                                : 0
+                            }
+                            recommendation={
+                              learning.recommendation
+                            }
+                          />
+                </>
+              ),
+            },
+            {
+              key: "accesos",
+              label: "Accesos",
+              icon: <GridIcon className="h-4 w-4" />,
+              content: (
+                <>
+
+                          <section>
+                            <div className="mb-5">
+                              <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
+                                Acceso operativo
+                              </p>
+
+                              <h2 className="mt-2 text-3xl font-bold">
+                                Procesos de la planta
+                              </h2>
+
+                              <p className="mt-2 text-sm text-on-surface-variant">
+                                Abre directamente el proceso que deseas
+                                consultar o actualizar.
+                              </p>
+                            </div>
+
+                            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                              {cookings.map((cooking) => {
+                                const averageTemperature =
+                                  getCookingAverageTemperature(
+                                    cooking.events
+                                  );
+
+                                return (
+                                  <EquipmentCard
+                                    key={cooking.id}
+                                    icon={<FlameIcon />}
+                                    title={cooking.equipment.name}
+                                    status={`Cocinando · ${cooking.lot.code}`}
+                                    value={
+                                      averageTemperature !== null
+                                        ? `${formatNumber(
+                                            averageTemperature
+                                          )} °C promedio`
+                                        : "Sin temperatura"
+                                    }
+                                    href={`/cooking/${cooking.id}`}
+                                  />
+                                );
+                              })}
+
+                              {millings.map((milling) => {
+                                const lastBrix =
+                                  getLatestValidNumber(
+                                    milling.events,
+                                    "brix"
+                                  );
+
+                                return (
+                                  <EquipmentCard
+                                    key={milling.id}
+                                    icon={<GearIcon />}
+                                    title={milling.equipment.name}
+                                    status={`Moliendo · ${milling.lot.code}`}
+                                    value={
+                                      milling.mashLiters !== null
+                                        ? `${formatNumber(
+                                            milling.mashLiters,
+                                            0
+                                          )} L recuperados`
+                                        : lastBrix !== null
+                                          ? `${formatNumber(
+                                              lastBrix
+                                            )} °Brix`
+                                          : `${milling.events.length} registros`
+                                    }
+                                    href={`/milling/${milling.id}`}
+                                  />
+                                );
+                              })}
+
+                              {fermentations.map(
+                                (fermentation) => {
+                                  const currentBrix =
+                                    getLatestValidNumber(
+                                      fermentation.readings,
+                                      "brix"
+                                    ) ??
+                                    Number(
+                                      fermentation.initialBrix
+                                    );
+
+                                  const currentAlcohol =
+                                    getLatestValidNumber(
+                                      fermentation.readings,
+                                      "alcohol"
+                                    );
+
+                                  return (
+                                    <EquipmentCard
+                                      key={fermentation.id}
+                                      icon={<FlaskIcon />}
+                                      title={fermentation.tank}
+                                      status={`Fermentando · ${fermentation.lot.code}`}
+                                      value={
+                                        currentAlcohol !== null
+                                          ? `${formatNumber(
+                                              currentAlcohol
+                                            )}% alcohol`
+                                          : `${formatNumber(
+                                              currentBrix
+                                            )} °Brix`
+                                      }
+                                      href={`/fermentation/${fermentation.id}`}
+                                    />
+                                  );
+                                }
+                              )}
+
+                              {distillations.map(
+                                (distillation) => {
+                                  const alcohol =
+                                    getLatestValidNumber(
+                                      distillation.events,
+                                      "alcoholCorrected"
+                                    ) ??
+                                    getLatestValidNumber(
+                                      distillation.events,
+                                      "alcohol"
+                                    );
+
+                                  const processType =
+                                    formatDistillationType(
+                                      distillation.type
+                                    );
+
+                                  return (
+                                    <EquipmentCard
+                                      key={distillation.id}
+                                      icon={<StillIcon />}
+                                      title={
+                                        distillation.equipment.name
+                                      }
+                                      status={`${processType} · ${distillation.lot.code}`}
+                                      value={
+                                        alcohol !== null
+                                          ? `${formatNumber(
+                                              alcohol
+                                            )} °GL`
+                                          : "Sin alcohol registrado"
+                                      }
+                                      href={`/distillation/${distillation.id}`}
+                                    />
+                                  );
+                                }
+                              )}
+                            </div>
+                          </section>
+                </>
+              ),
+            },
+          ]}
         />
-
-        <MissionControl
-          score={Math.round(excellence.score)}
-          level={excellence.level}
-          confidence={
-            totalAgaveKg > 0
-              ? prediction.confidence
-              : 0
-          }
-          expectedLiters={
-            totalAgaveKg > 0
-              ? Math.round(
-                  prediction.expectedLiters
-                )
-              : 0
-          }
-          recommendation={
-            learning.recommendation
-          }
-          recommendations={recommendations}
-          alerts={alertMessages}
-        />
-
-        <AIReport
-          score={Math.round(excellence.score)}
-          confidence={
-            totalAgaveKg > 0
-              ? prediction.confidence
-              : 0
-          }
-          recommendation={
-            learning.recommendation
-          }
-        />
-
-        <section>
-          <div className="mb-5">
-            <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
-              Acceso operativo
-            </p>
-
-            <h2 className="mt-2 text-3xl font-bold">
-              Procesos de la planta
-            </h2>
-
-            <p className="mt-2 text-sm text-on-surface-variant">
-              Abre directamente el proceso que deseas
-              consultar o actualizar.
-            </p>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {cookings.map((cooking) => {
-              const averageTemperature =
-                getCookingAverageTemperature(
-                  cooking.events
-                );
-
-              return (
-                <EquipmentCard
-                  key={cooking.id}
-                  icon={<FlameIcon />}
-                  title={cooking.equipment.name}
-                  status={`Cocinando · ${cooking.lot.code}`}
-                  value={
-                    averageTemperature !== null
-                      ? `${formatNumber(
-                          averageTemperature
-                        )} °C promedio`
-                      : "Sin temperatura"
-                  }
-                  href={`/cooking/${cooking.id}`}
-                />
-              );
-            })}
-
-            {millings.map((milling) => {
-              const lastBrix =
-                getLatestValidNumber(
-                  milling.events,
-                  "brix"
-                );
-
-              return (
-                <EquipmentCard
-                  key={milling.id}
-                  icon={<GearIcon />}
-                  title={milling.equipment.name}
-                  status={`Moliendo · ${milling.lot.code}`}
-                  value={
-                    milling.mashLiters !== null
-                      ? `${formatNumber(
-                          milling.mashLiters,
-                          0
-                        )} L recuperados`
-                      : lastBrix !== null
-                        ? `${formatNumber(
-                            lastBrix
-                          )} °Brix`
-                        : `${milling.events.length} registros`
-                  }
-                  href={`/milling/${milling.id}`}
-                />
-              );
-            })}
-
-            {fermentations.map(
-              (fermentation) => {
-                const currentBrix =
-                  getLatestValidNumber(
-                    fermentation.readings,
-                    "brix"
-                  ) ??
-                  Number(
-                    fermentation.initialBrix
-                  );
-
-                const currentAlcohol =
-                  getLatestValidNumber(
-                    fermentation.readings,
-                    "alcohol"
-                  );
-
-                return (
-                  <EquipmentCard
-                    key={fermentation.id}
-                    icon={<FlaskIcon />}
-                    title={fermentation.tank}
-                    status={`Fermentando · ${fermentation.lot.code}`}
-                    value={
-                      currentAlcohol !== null
-                        ? `${formatNumber(
-                            currentAlcohol
-                          )}% alcohol`
-                        : `${formatNumber(
-                            currentBrix
-                          )} °Brix`
-                    }
-                    href={`/fermentation/${fermentation.id}`}
-                  />
-                );
-              }
-            )}
-
-            {distillations.map(
-              (distillation) => {
-                const alcohol =
-                  getLatestValidNumber(
-                    distillation.events,
-                    "alcoholCorrected"
-                  ) ??
-                  getLatestValidNumber(
-                    distillation.events,
-                    "alcohol"
-                  );
-
-                const processType =
-                  formatDistillationType(
-                    distillation.type
-                  );
-
-                return (
-                  <EquipmentCard
-                    key={distillation.id}
-                    icon={<StillIcon />}
-                    title={
-                      distillation.equipment.name
-                    }
-                    status={`${processType} · ${distillation.lot.code}`}
-                    value={
-                      alcohol !== null
-                        ? `${formatNumber(
-                            alcohol
-                          )} °GL`
-                        : "Sin alcohol registrado"
-                    }
-                    href={`/distillation/${distillation.id}`}
-                  />
-                );
-              }
-            )}
-          </div>
-        </section>
       </div>
     </main>
   );

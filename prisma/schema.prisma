@@ -2027,3 +2027,47 @@ model PosSalePayment {
 
   @@index([saleId])
 }
+
+/*
+ * Reglas de notificaciones push configurables desde Personal.
+ * Un solo cron (GitHub Action, cada hora) llama a
+ * /api/push/check-rules, que recorre las reglas activas y solo
+ * evalúa las que ya cumplieron su propia frecuencia
+ * (lastCheckedAt + checkFrequencyMinutes) — así cada regla puede
+ * tener su propio "cuándo" sin necesitar un cron distinto.
+ */
+enum NotificationTriggerType {
+  STOCK_BAJO
+  LICOR_CADUCIDAD
+  RECONTEO_PENDIENTE
+  CORTE_DIFERENCIA
+  PROCESO_ATRASADO
+}
+
+model NotificationRule {
+  id          String                   @id @default(cuid())
+  name        String
+  triggerType NotificationTriggerType
+  active      Boolean                  @default(true)
+
+  // Destinatarios: roles que reciben esta notificación.
+  recipientRoles UserRole[]
+
+  // Cada cuánto se vuelve a evaluar esta regla (minutos).
+  checkFrequencyMinutes Int @default(60)
+
+  // Parámetros propios de cada tipo de disparador, ej. para
+  // LICOR_CADUCIDAD: { "daysBeforeExpiration": 7 }; para
+  // CORTE_DIFERENCIA: { "minDifference": 10 }.
+  thresholdConfig Json?
+
+  lastCheckedAt DateTime?
+  lastSentAt    DateTime?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active])
+  @@index([triggerType])
+}

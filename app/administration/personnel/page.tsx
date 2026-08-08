@@ -9,7 +9,8 @@ import {
   updatePersonnelActive,
 } from "@/app/actions/personnel";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
-import { PlusIcon, XIcon } from "@/components/ui/icons";
+import { PlusIcon, UsersIcon } from "@/components/ui/icons";
+import PageTabs from "@/components/ui/PageTabs";
 import {
   ROLE_LABELS,
   ROLES_CON_SUCURSAL,
@@ -41,7 +42,6 @@ export default function PersonnelPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [showCreateForm, setShowCreateForm] = useState(false);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<PersonnelRole | "TODOS">(
     "TODOS"
@@ -120,7 +120,6 @@ export default function PersonnelPage() {
     setPassword("");
     setRole("ENCARGADO");
     setBranchIds([]);
-    setShowCreateForm(false);
     await loadAll();
   }
 
@@ -172,17 +171,6 @@ export default function PersonnelPage() {
             </p>
           </div>
 
-          <button
-            onClick={() => setShowCreateForm((v) => !v)}
-            className="inline-flex w-fit items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
-          >
-            {showCreateForm ? (
-              <XIcon className="h-4 w-4" />
-            ) : (
-              <PlusIcon className="h-4 w-4" />
-            )}
-            {showCreateForm ? "Cancelar" : "Nuevo usuario"}
-          </button>
         </div>
 
         {error && (
@@ -213,304 +201,317 @@ export default function PersonnelPage() {
           </Card>
         </section>
 
-        {showCreateForm && (
-          <section className="overflow-hidden rounded-3xl border border-primary/25 bg-surface-container">
-            <div className="border-b border-outline-variant bg-primary/[0.06] p-6 sm:p-8">
-              <p className="font-mono text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant">
-                Alta de personal
-              </p>
+        <PageTabs
+          tabs={[
+            {
+              key: "equipo",
+              label: "Equipo",
+              icon: <UsersIcon className="h-4 w-4" />,
+              content: (
+                <>
+                          <section className="space-y-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="relative w-full sm:max-w-xs">
+                                <input
+                                  value={search}
+                                  onChange={(e) => setSearch(e.target.value)}
+                                  placeholder="Buscar por nombre o usuario..."
+                                  className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+                                />
+                              </div>
 
-              <h2 className="mt-2 text-2xl font-bold text-on-surface">
-                Nuevo usuario
-              </h2>
-
-              <p className="mt-1 text-sm text-on-surface-variant">
-                Define su identidad, rol y las sucursales donde puede operar.
-              </p>
-            </div>
-
-            <div className="space-y-5 p-6 sm:p-8">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Nombre completo">
-                  <input
-                    placeholder="Ej. Juana Pérez"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
-                  />
-                </Field>
-
-                <Field label="Usuario">
-                  <input
-                    placeholder="jperez"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
-                  />
-                </Field>
-
-                <Field label="Email (opcional)">
-                  <input
-                    placeholder="correo@ejemplo.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
-                  />
-                </Field>
-
-                <Field label="Contraseña">
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
-                  />
-                </Field>
-              </div>
-
-              <Field label="Rol">
-                <div className="flex flex-wrap gap-2">
-                  {(Object.keys(ROLE_LABELS) as PersonnelRole[]).map((key) => {
-                    const RoleIcon = ROLE_ICON[key];
-
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setRole(key)}
-                        className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition ${
-                          role === key
-                            ? ROLE_BADGE_CLASS[key]
-                            : "border-outline-variant text-on-surface-variant hover:border-primary/40 hover:text-on-surface"
-                        }`}
-                      >
-                        <RoleIcon className="h-4 w-4" />
-                        {ROLE_LABELS[key]}
-                      </button>
-                    );
-                  })}
-                </div>
-              </Field>
-
-              {ROLES_CON_SUCURSAL.includes(role) && (
-                <Field label="Sucursales asignadas">
-                  <div className="flex flex-wrap gap-2">
-                    {branches.map((b) => (
-                      <label
-                        key={b.id}
-                        className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
-                          branchIds.includes(b.id)
-                            ? "border-primary/40 bg-primary/10 text-primary"
-                            : "border-outline-variant bg-background text-on-surface-variant hover:border-primary/40"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={branchIds.includes(b.id)}
-                          onChange={() => toggleBranch(b.id)}
-                          className="h-4 w-4 accent-primary"
-                        />
-                        {b.name}
-                      </label>
-                    ))}
-                  </div>
-                </Field>
-              )}
-
-              {formError && <p className="text-sm text-error">{formError}</p>}
-
-              <div className="flex flex-wrap gap-3 border-t border-outline-variant pt-5">
-                <button
-                  onClick={handleCreate}
-                  disabled={submitting}
-                  className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97] disabled:opacity-60 disabled:hover:scale-100"
-                >
-                  {submitting ? "Creando..." : "Crear usuario"}
-                </button>
-
-                <button
-                  onClick={() => setShowCreateForm(false)}
-                  className="rounded-xl border border-outline-variant px-6 py-3 text-sm font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-on-surface"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          </section>
-        )}
-
-        <section className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative w-full sm:max-w-xs">
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por nombre o usuario..."
-                className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setRoleFilter("TODOS")}
-                className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition ${
-                  roleFilter === "TODOS"
-                    ? "bg-primary text-on-primary"
-                    : "border border-outline-variant text-on-surface-variant hover:border-primary/40 hover:text-on-surface"
-                }`}
-              >
-                Todos
-              </button>
-
-              {(Object.keys(ROLE_LABELS) as PersonnelRole[]).map((key) => (
-                <button
-                  key={key}
-                  onClick={() => setRoleFilter(key)}
-                  className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition ${
-                    roleFilter === key
-                      ? ROLE_BADGE_CLASS[key]
-                      : "border border-outline-variant text-on-surface-variant hover:border-primary/40 hover:text-on-surface"
-                  }`}
-                >
-                  {ROLE_LABELS[key]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-outline-variant bg-surface-container-high text-left">
-                    <th className="px-4 py-3 font-mono text-xs uppercase tracking-wide text-on-surface-variant">
-                      Nombre
-                    </th>
-                    <th className="px-4 py-3 font-mono text-xs uppercase tracking-wide text-on-surface-variant">
-                      Rol
-                    </th>
-                    <th className="px-4 py-3 font-mono text-xs uppercase tracking-wide text-on-surface-variant">
-                      Sucursales
-                    </th>
-                    <th className="px-4 py-3 font-mono text-xs uppercase tracking-wide text-on-surface-variant">
-                      Estatus
-                    </th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading && (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-10 text-center text-outline">
-                        Cargando...
-                      </td>
-                    </tr>
-                  )}
-                  {!loading && filteredUsers.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-10 text-center text-outline">
-                        {users.length === 0
-                          ? "Sin usuarios registrados."
-                          : "Ningún usuario coincide con la búsqueda."}
-                      </td>
-                    </tr>
-                  )}
-                  {!loading &&
-                    filteredUsers.map((u) => {
-                      const RoleIcon = ROLE_ICON[u.role];
-
-                      return (
-                      <tr
-                        key={u.id}
-                        className="border-b border-outline-variant transition last:border-0 hover:bg-surface-container-high/60"
-                      >
-                        <td className="px-4 py-3">
-                          <Link
-                            href={`/administration/personnel/${u.id}`}
-                            className="group flex items-center gap-3"
-                          >
-                            <span
-                              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-black ring-2 ${ROLE_AVATAR_CLASS[u.role]}`}
-                            >
-                              {getInitials(u.name)}
-                            </span>
-
-                            <span className="min-w-0">
-                              <span className="block truncate font-semibold text-on-surface group-hover:text-primary">
-                                {u.name}
-                              </span>
-                              <span className="block truncate text-xs text-on-surface-variant">
-                                @{u.username}
-                              </span>
-                            </span>
-                          </Link>
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${ROLE_BADGE_CLASS[u.role]}`}
-                          >
-                            <RoleIcon className="h-3.5 w-3.5" />
-                            {ROLE_LABELS[u.role]}
-                          </span>
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {u.branches.length > 0 ? (
-                            <div className="flex flex-wrap gap-1.5">
-                              {u.branches.map((b) => (
-                                <span
-                                  key={b.branch.id}
-                                  className="rounded-full bg-surface-container-high px-2.5 py-1 text-xs text-on-surface-variant"
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  onClick={() => setRoleFilter("TODOS")}
+                                  className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition ${
+                                    roleFilter === "TODOS"
+                                      ? "bg-primary text-on-primary"
+                                      : "border border-outline-variant text-on-surface-variant hover:border-primary/40 hover:text-on-surface"
+                                  }`}
                                 >
-                                  {b.branch.name}
-                                </span>
-                              ))}
+                                  Todos
+                                </button>
+
+                                {(Object.keys(ROLE_LABELS) as PersonnelRole[]).map((key) => (
+                                  <button
+                                    key={key}
+                                    onClick={() => setRoleFilter(key)}
+                                    className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition ${
+                                      roleFilter === key
+                                        ? ROLE_BADGE_CLASS[key]
+                                        : "border border-outline-variant text-on-surface-variant hover:border-primary/40 hover:text-on-surface"
+                                    }`}
+                                  >
+                                    {ROLE_LABELS[key]}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          ) : (
-                            <span className="text-outline">—</span>
-                          )}
-                        </td>
 
-                        <td className="px-4 py-3">
-                          {u.active ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-tertiary-fixed-dim">
-                              <span className="h-1.5 w-1.5 rounded-full bg-tertiary-fixed-dim" />
-                              Activo
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-outline">
-                              <span className="h-1.5 w-1.5 rounded-full bg-outline" />
-                              Inactivo
-                            </span>
-                          )}
-                        </td>
+                            <div className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b border-outline-variant bg-surface-container-high text-left">
+                                      <th className="px-4 py-3 font-mono text-xs uppercase tracking-wide text-on-surface-variant">
+                                        Nombre
+                                      </th>
+                                      <th className="px-4 py-3 font-mono text-xs uppercase tracking-wide text-on-surface-variant">
+                                        Rol
+                                      </th>
+                                      <th className="px-4 py-3 font-mono text-xs uppercase tracking-wide text-on-surface-variant">
+                                        Sucursales
+                                      </th>
+                                      <th className="px-4 py-3 font-mono text-xs uppercase tracking-wide text-on-surface-variant">
+                                        Estatus
+                                      </th>
+                                      <th className="px-4 py-3" />
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {loading && (
+                                      <tr>
+                                        <td colSpan={5} className="px-4 py-10 text-center text-outline">
+                                          Cargando...
+                                        </td>
+                                      </tr>
+                                    )}
+                                    {!loading && filteredUsers.length === 0 && (
+                                      <tr>
+                                        <td colSpan={5} className="px-4 py-10 text-center text-outline">
+                                          {users.length === 0
+                                            ? "Sin usuarios registrados."
+                                            : "Ningún usuario coincide con la búsqueda."}
+                                        </td>
+                                      </tr>
+                                    )}
+                                    {!loading &&
+                                      filteredUsers.map((u) => {
+                                        const RoleIcon = ROLE_ICON[u.role];
 
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-3">
-                            <button
-                              onClick={() => handleToggleActive(u.id, u.active)}
-                              className="text-xs font-semibold text-on-surface-variant transition hover:text-primary"
-                            >
-                              {u.active ? "Desactivar" : "Activar"}
-                            </button>
-                            <Link
-                              href={`/administration/personnel/${u.id}/permissions`}
-                              className="text-xs font-semibold text-on-surface-variant transition hover:text-primary"
-                            >
-                              Permisos
-                            </Link>
-                          </div>
-                        </td>
-                      </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
+                                        return (
+                                        <tr
+                                          key={u.id}
+                                          className="border-b border-outline-variant transition last:border-0 hover:bg-surface-container-high/60"
+                                        >
+                                          <td className="px-4 py-3">
+                                            <Link
+                                              href={`/administration/personnel/${u.id}`}
+                                              className="group flex items-center gap-3"
+                                            >
+                                              <span
+                                                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-black ring-2 ${ROLE_AVATAR_CLASS[u.role]}`}
+                                              >
+                                                {getInitials(u.name)}
+                                              </span>
+
+                                              <span className="min-w-0">
+                                                <span className="block truncate font-semibold text-on-surface group-hover:text-primary">
+                                                  {u.name}
+                                                </span>
+                                                <span className="block truncate text-xs text-on-surface-variant">
+                                                  @{u.username}
+                                                </span>
+                                              </span>
+                                            </Link>
+                                          </td>
+
+                                          <td className="px-4 py-3">
+                                            <span
+                                              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${ROLE_BADGE_CLASS[u.role]}`}
+                                            >
+                                              <RoleIcon className="h-3.5 w-3.5" />
+                                              {ROLE_LABELS[u.role]}
+                                            </span>
+                                          </td>
+
+                                          <td className="px-4 py-3">
+                                            {u.branches.length > 0 ? (
+                                              <div className="flex flex-wrap gap-1.5">
+                                                {u.branches.map((b) => (
+                                                  <span
+                                                    key={b.branch.id}
+                                                    className="rounded-full bg-surface-container-high px-2.5 py-1 text-xs text-on-surface-variant"
+                                                  >
+                                                    {b.branch.name}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            ) : (
+                                              <span className="text-outline">—</span>
+                                            )}
+                                          </td>
+
+                                          <td className="px-4 py-3">
+                                            {u.active ? (
+                                              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-tertiary-fixed-dim">
+                                                <span className="h-1.5 w-1.5 rounded-full bg-tertiary-fixed-dim" />
+                                                Activo
+                                              </span>
+                                            ) : (
+                                              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-outline">
+                                                <span className="h-1.5 w-1.5 rounded-full bg-outline" />
+                                                Inactivo
+                                              </span>
+                                            )}
+                                          </td>
+
+                                          <td className="px-4 py-3">
+                                            <div className="flex justify-end gap-3">
+                                              <button
+                                                onClick={() => handleToggleActive(u.id, u.active)}
+                                                className="text-xs font-semibold text-on-surface-variant transition hover:text-primary"
+                                              >
+                                                {u.active ? "Desactivar" : "Activar"}
+                                              </button>
+                                              <Link
+                                                href={`/administration/personnel/${u.id}/permissions`}
+                                                className="text-xs font-semibold text-on-surface-variant transition hover:text-primary"
+                                              >
+                                                Permisos
+                                              </Link>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                        );
+                                      })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </section>
+                </>
+              ),
+            },
+            {
+              key: "alta",
+              label: "Alta de personal",
+              icon: <PlusIcon className="h-4 w-4" />,
+              content: (
+                <>
+                            <section className="overflow-hidden rounded-3xl border border-primary/25 bg-surface-container">
+                              <div className="border-b border-outline-variant bg-primary/[0.06] p-6 sm:p-8">
+                                <p className="font-mono text-xs font-black uppercase tracking-[0.3em] text-on-surface-variant">
+                                  Alta de personal
+                                </p>
+
+                                <h2 className="mt-2 text-2xl font-bold text-on-surface">
+                                  Nuevo usuario
+                                </h2>
+
+                                <p className="mt-1 text-sm text-on-surface-variant">
+                                  Define su identidad, rol y las sucursales donde puede operar.
+                                </p>
+                              </div>
+
+                              <div className="space-y-5 p-6 sm:p-8">
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                  <Field label="Nombre completo">
+                                    <input
+                                      placeholder="Ej. Juana Pérez"
+                                      value={name}
+                                      onChange={(e) => setName(e.target.value)}
+                                      className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+                                    />
+                                  </Field>
+
+                                  <Field label="Usuario">
+                                    <input
+                                      placeholder="jperez"
+                                      value={username}
+                                      onChange={(e) => setUsername(e.target.value)}
+                                      className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+                                    />
+                                  </Field>
+
+                                  <Field label="Email (opcional)">
+                                    <input
+                                      placeholder="correo@ejemplo.com"
+                                      value={email}
+                                      onChange={(e) => setEmail(e.target.value)}
+                                      className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+                                    />
+                                  </Field>
+
+                                  <Field label="Contraseña">
+                                    <input
+                                      type="password"
+                                      placeholder="••••••••"
+                                      value={password}
+                                      onChange={(e) => setPassword(e.target.value)}
+                                      className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+                                    />
+                                  </Field>
+                                </div>
+
+                                <Field label="Rol">
+                                  <div className="flex flex-wrap gap-2">
+                                    {(Object.keys(ROLE_LABELS) as PersonnelRole[]).map((key) => {
+                                      const RoleIcon = ROLE_ICON[key];
+
+                                      return (
+                                        <button
+                                          key={key}
+                                          type="button"
+                                          onClick={() => setRole(key)}
+                                          className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                                            role === key
+                                              ? ROLE_BADGE_CLASS[key]
+                                              : "border-outline-variant text-on-surface-variant hover:border-primary/40 hover:text-on-surface"
+                                          }`}
+                                        >
+                                          <RoleIcon className="h-4 w-4" />
+                                          {ROLE_LABELS[key]}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </Field>
+
+                                {ROLES_CON_SUCURSAL.includes(role) && (
+                                  <Field label="Sucursales asignadas">
+                                    <div className="flex flex-wrap gap-2">
+                                      {branches.map((b) => (
+                                        <label
+                                          key={b.id}
+                                          className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+                                            branchIds.includes(b.id)
+                                              ? "border-primary/40 bg-primary/10 text-primary"
+                                              : "border-outline-variant bg-background text-on-surface-variant hover:border-primary/40"
+                                          }`}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={branchIds.includes(b.id)}
+                                            onChange={() => toggleBranch(b.id)}
+                                            className="h-4 w-4 accent-primary"
+                                          />
+                                          {b.name}
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </Field>
+                                )}
+
+                                {formError && <p className="text-sm text-error">{formError}</p>}
+
+                                <div className="flex flex-wrap gap-3 border-t border-outline-variant pt-5">
+                                  <button
+                                    onClick={handleCreate}
+                                    disabled={submitting}
+                                    className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97] disabled:opacity-60 disabled:hover:scale-100"
+                                  >
+                                    {submitting ? "Creando..." : "Crear usuario"}
+                                  </button>
+
+                                </div>
+                              </div>
+                            </section>
+                </>
+              ),
+            },
+          ]}
+        />
       </div>
     </main>
   );

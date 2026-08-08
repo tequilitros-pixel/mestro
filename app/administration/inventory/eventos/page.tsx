@@ -1,18 +1,14 @@
 import Link from "next/link";
-import type { ComponentType } from "react";
 import { prisma } from "@/lib/prisma";
 import {
-  type IconProps,
-  MartiniIcon,
-  ToolboxIcon,
-  ListChecksIcon,
-  ChevronRightIcon,
   PlusIcon,
   CalendarIcon,
 } from "@/components/ui/icons";
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
+  new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(
+    value
+  );
 
 const statusLabels: Record<string, string> = {
   DRAFT: "Borrador",
@@ -24,62 +20,50 @@ const statusLabels: Record<string, string> = {
   CANCELLED: "Cancelado",
 };
 
-const sections: {
-  title: string;
-  description: string;
-  href: string;
-  icon: ComponentType<IconProps>;
-}[] = [
-  {
-    title: "Paquetes de eventos",
-    description: "Crea paquetes editables y define los productos que deben llevarse a cada evento.",
-    href: "/administration/inventory/event-packages",
-    icon: MartiniIcon,
-  },
-  {
-    title: "Kits de equipo",
-    description: "Define modalidades de equipo (toldo, remolque, etc.) que se prestan por evento.",
-    href: "/administration/inventory/equipment-kits",
-    icon: ToolboxIcon,
-  },
-  {
-    title: "Control de eventos",
-    description: "Registra lo que sale, lo que regresa y calcula automáticamente el consumo.",
-    href: "/administration/inventory/events",
-    icon: ListChecksIcon,
-  },
-];
-
 export default async function EventosInventoryPage() {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const [activeEventsCount, pendingReturnsCount, activePackagesCount, recentEvents, upcomingEvents] =
-    await Promise.all([
-      prisma.serviceEvent.count({ where: { status: { notIn: ["COMPLETED", "CANCELLED"] } } }),
-      prisma.serviceEvent.count({ where: { status: "RETURN_PENDING" } }),
-      prisma.eventPackage.count({ where: { isActive: true } }),
-      prisma.serviceEvent.findMany({
-        where: { eventDate: { gte: thirtyDaysAgo } },
-        include: { items: true },
-      }),
-      prisma.serviceEvent.findMany({
-        where: { eventDate: { gte: new Date() }, status: { notIn: ["COMPLETED", "CANCELLED"] } },
-        orderBy: { eventDate: "asc" },
-        take: 6,
-        include: { package: true },
-      }),
-    ]);
+  const [
+    activeEventsCount,
+    pendingReturnsCount,
+    activePackagesCount,
+    recentEvents,
+    upcomingEvents,
+  ] = await Promise.all([
+    prisma.serviceEvent.count({
+      where: { status: { notIn: ["COMPLETED", "CANCELLED"] } },
+    }),
+    prisma.serviceEvent.count({ where: { status: "RETURN_PENDING" } }),
+    prisma.eventPackage.count({ where: { isActive: true } }),
+    prisma.serviceEvent.findMany({
+      where: { eventDate: { gte: thirtyDaysAgo } },
+      include: { items: true },
+    }),
+    prisma.serviceEvent.findMany({
+      where: {
+        eventDate: { gte: new Date() },
+        status: { notIn: ["COMPLETED", "CANCELLED"] },
+      },
+      orderBy: { eventDate: "asc" },
+      take: 6,
+      include: { package: true },
+    }),
+  ]);
 
   const consumedCostLast30Days = recentEvents.reduce((total, event) => {
     const eventCost = event.items.reduce((sum, item) => {
       if (item.itemType === "EQUIPMENT") return sum;
       const sent =
-        item.sentQuantity !== null ? Number(item.sentQuantity) : Number(item.plannedQuantity);
-      const returned = item.returnedQuantity !== null ? Number(item.returnedQuantity) : 0;
+        item.sentQuantity !== null
+          ? Number(item.sentQuantity)
+          : Number(item.plannedQuantity);
+      const returned =
+        item.returnedQuantity !== null ? Number(item.returnedQuantity) : 0;
       const damaged = Number(item.damagedQuantity);
       const consumed = Math.max(sent - returned - damaged, 0);
-      const cost = item.unitCost !== null ? consumed * Number(item.unitCost) : 0;
+      const cost =
+        item.unitCost !== null ? consumed * Number(item.unitCost) : 0;
       return sum + cost;
     }, 0);
     return total + eventCost;
@@ -96,7 +80,9 @@ export default async function EventosInventoryPage() {
             >
               ← Inventario
             </Link>
-            <h1 className="text-3xl font-bold sm:text-4xl">Inventario de eventos</h1>
+            <h1 className="text-3xl font-bold sm:text-4xl">
+              Inventario de eventos
+            </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-on-surface-variant sm:text-base">
               Paquetes, kits de equipo y control de salida/regreso por evento.
             </p>
@@ -111,14 +97,22 @@ export default async function EventosInventoryPage() {
           </Link>
         </div>
 
+        {/*
+          Los KPIs se quedan fijos arriba: son el pulso del área y
+          deben verse sin importar en qué pestaña esté el usuario.
+        */}
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
             <p className="text-xs text-on-surface-variant">Eventos activos</p>
-            <p className="mt-1 text-2xl font-bold text-on-surface">{activeEventsCount}</p>
+            <p className="mt-1 text-2xl font-bold text-on-surface">
+              {activeEventsCount}
+            </p>
           </div>
 
           <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-            <p className="text-xs text-on-surface-variant">Pendientes de regreso</p>
+            <p className="text-xs text-on-surface-variant">
+              Pendientes de regreso
+            </p>
             <p
               className={`mt-1 text-2xl font-bold ${
                 pendingReturnsCount > 0 ? "text-error" : "text-on-surface"
@@ -129,7 +123,9 @@ export default async function EventosInventoryPage() {
           </div>
 
           <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-            <p className="text-xs text-on-surface-variant">Consumo en eventos (30 días)</p>
+            <p className="text-xs text-on-surface-variant">
+              Consumo en eventos (30 días)
+            </p>
             <p className="mt-1 text-2xl font-bold text-on-surface">
               {formatCurrency(consumedCostLast30Days)}
             </p>
@@ -137,19 +133,25 @@ export default async function EventosInventoryPage() {
 
           <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
             <p className="text-xs text-on-surface-variant">Paquetes activos</p>
-            <p className="mt-1 text-2xl font-bold text-on-surface">{activePackagesCount}</p>
+            <p className="mt-1 text-2xl font-bold text-on-surface">
+              {activePackagesCount}
+            </p>
           </div>
         </section>
 
         <section className="rounded-2xl border border-outline-variant bg-surface-container">
           <div className="flex items-center gap-2 p-5 pb-0">
             <CalendarIcon className="h-4 w-4 text-on-surface-variant" />
-            <h2 className="text-sm font-semibold text-on-surface-variant">Próximos eventos</h2>
+            <h2 className="text-sm font-semibold text-on-surface-variant">
+              Próximos eventos
+            </h2>
           </div>
 
           <div className="divide-y divide-outline-variant p-5">
             {upcomingEvents.length === 0 && (
-              <p className="text-sm text-on-surface-variant">No hay eventos próximos.</p>
+              <p className="text-sm text-on-surface-variant">
+                No hay eventos próximos.
+              </p>
             )}
             {upcomingEvents.map((event) => (
               <Link
@@ -158,9 +160,12 @@ export default async function EventosInventoryPage() {
                 className="flex items-center justify-between py-3 transition hover:opacity-80"
               >
                 <div>
-                  <p className="font-medium text-on-surface">{event.clientName}</p>
+                  <p className="font-medium text-on-surface">
+                    {event.clientName}
+                  </p>
                   <p className="text-sm text-on-surface-variant">
-                    {event.location} · {new Date(event.eventDate).toLocaleDateString("es-MX")}
+                    {event.location} ·{" "}
+                    {new Date(event.eventDate).toLocaleDateString("es-MX")}
                     {event.package ? ` · ${event.package.name}` : ""}
                   </p>
                 </div>
@@ -170,34 +175,6 @@ export default async function EventosInventoryPage() {
               </Link>
             ))}
           </div>
-        </section>
-
-        <section className="grid gap-5 md:grid-cols-3">
-          {sections.map((section) => {
-            const Icon = section.icon;
-            return (
-              <Link
-                key={section.href}
-                href={section.href}
-                className="group rounded-2xl border border-outline-variant bg-surface-container p-6 transition duration-200 ease-out hover:-translate-y-1 hover:border-primary/25 hover:bg-surface-container/80"
-              >
-                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-container-high">
-                  <Icon className="h-6 w-6 text-on-surface-variant" />
-                </div>
-
-                <h2 className="text-xl font-semibold text-on-surface">{section.title}</h2>
-
-                <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-                  {section.description}
-                </p>
-
-                <div className="mt-6 flex items-center gap-2 text-sm font-semibold text-on-surface-variant">
-                  Abrir
-                  <ChevronRightIcon className="h-4 w-4 transition group-hover:translate-x-1" />
-                </div>
-              </Link>
-            );
-          })}
         </section>
       </div>
     </main>

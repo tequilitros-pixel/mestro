@@ -2,6 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
 import { Prisma } from "@prisma/client";
+import PageTabs from "@/components/ui/PageTabs";
+import { AlertIcon, ClockIcon, CalendarIcon } from "@/components/ui/icons";
 
 export default async function LiquorExpirationPage() {
   const now = new Date();
@@ -97,23 +99,54 @@ export default async function LiquorExpirationPage() {
         />
       </section>
 
-      <ExpirationSection
-        title="Botellas caducadas"
-        bottles={expired}
-        emptyText="No hay botellas caducadas."
-      />
-
-      <ExpirationSection
-        title="Caducan en los próximos 30 días"
-        bottles={next30Days}
-        emptyText="No hay botellas próximas a vencer."
-      />
-
-      <ExpirationSection
-        title="Caducan entre 31 y 60 días"
-        bottles={next60Days}
-        emptyText="No hay botellas en este periodo."
-      />
+      {/*
+        Antes las tres listas venían apiladas una tras otra, así que
+        para hallar una botella había que recorrer todo. En pestañas
+        se entra directo al nivel de urgencia que interesa, y el
+        contador dice cuántas hay sin necesidad de abrirla.
+      */}
+      <div className="mt-8">
+        <PageTabs
+          tabs={[
+            {
+              key: "caducadas",
+              label: `Caducadas (${expired.length})`,
+              icon: <AlertIcon className="h-4 w-4" />,
+              content: (
+                <ExpirationSection
+                  title="Botellas caducadas"
+                  bottles={expired}
+                  emptyText="No hay botellas caducadas."
+                />
+              ),
+            },
+            {
+              key: "30-dias",
+              label: `Próximos 30 días (${next30Days.length})`,
+              icon: <ClockIcon className="h-4 w-4" />,
+              content: (
+                <ExpirationSection
+                  title="Caducan en los próximos 30 días"
+                  bottles={next30Days}
+                  emptyText="No hay botellas próximas a vencer."
+                />
+              ),
+            },
+            {
+              key: "60-dias",
+              label: `31 a 60 días (${next60Days.length})`,
+              icon: <CalendarIcon className="h-4 w-4" />,
+              content: (
+                <ExpirationSection
+                  title="Caducan entre 31 y 60 días"
+                  bottles={next60Days}
+                  emptyText="No hay botellas en este periodo."
+                />
+              ),
+            },
+          ]}
+        />
+      </div>
     </main>
   );
 }

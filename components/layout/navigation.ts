@@ -7,6 +7,7 @@ import {
   WalletIcon,
   PackageIcon,
   ClockIcon,
+  BellIcon,
   UsersIcon,
   FlameIcon,
   GearIcon,
@@ -419,6 +420,11 @@ export const SUBMENUS: Record<
       href: "/administration/personnel/timeclock",
       label: "Turnos abiertos",
       icon: ClockIcon,
+    },
+    {
+      href: "/administration/personnel/notifications",
+      label: "Notificaciones",
+      icon: BellIcon,
     },
   ],
 };
