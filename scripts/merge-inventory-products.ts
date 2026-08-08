@@ -19,11 +19,21 @@
  *   npx tsx scripts/merge-inventory-products.ts "peñafiel" "toronja" --apply
  */
 
+import "dotenv/config";
 import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
-const prisma = new PrismaClient();
+/*
+ * Prisma 7 ya no abre la conexión solo: exige un adaptador explícito.
+ * Se arma aquí igual que en lib/prisma.ts, porque ese módulo vive del
+ * lado de Next y trae consigo el cacheo en globalThis que no hace
+ * falta en un script de una sola corrida.
+ */
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
-const args = process.argv.slice(2).filter((arg) => arg !== "--apply");
+const args = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 const apply = process.argv.includes("--apply");
 
 const [SOURCE_MATCH, TARGET_MATCH] = args;
@@ -93,6 +103,43 @@ async function main() {
   console.log(
     `\nFusión: "${source.name}" → "${target.name}" (se conserva ${target.code})`
   );
+
+  /*
+   * Detalle de las recetas del punto de venta que usan el producto
+   * que va a desaparecer. Es lo que más duele equivocarse: si la
+   * receta decía "1 botella" y el producto que se queda se mide en
+   * ml, la cantidad se vuelve "1 ml" y el descuento de inventario
+   * queda mil veces corto sin que nadie se entere.
+   */
+  const affectedRecipes = await prisma.posVariantIngredient.findMany({
+    where: { inventoryProductId: source.id },
+    select: {
+      quantity: true,
+      variant: {
+        select: { name: true, product: { select: { name: true } } },
+      },
+    },
+  });
+
+  if (affectedRecipes.length > 0) {
+    console.log("\nRecetas del punto de venta que lo usan:");
+
+    for (const ingredient of affectedRecipes) {
+      console.log(
+        `  ${ingredient.variant.product.name} · ${ingredient.variant.name}: ${ingredient.quantity} ${source.unit}`
+      );
+    }
+  }
+
+  if (source.unit !== target.unit) {
+    console.error(
+      `\nALTO: las unidades no coinciden ("${source.unit}" vs "${target.unit}"). Las cantidades de arriba están en ${source.unit} y quedarían interpretadas como ${target.unit}. Corrige la unidad o la receta antes de fusionar, o vuelve a correrlo con --force si ya lo revisaste.`
+    );
+
+    if (!process.argv.includes("--force")) {
+      return;
+    }
+  }
 
   if (!apply) {
     console.log(
@@ -275,4 +322,7 @@ main()
     console.error(error);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+    await pool.end();
+  });
