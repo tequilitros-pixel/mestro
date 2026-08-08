@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import * as webpush from "web-push";
 
 import { prisma } from "@/lib/prisma";
-import { getRecordingStatus } from "@/lib/brain/getRecordingStatus";
+import {
+  checkStockBajo,
+  checkLicorCaducidad,
+  checkReconteoPendiente,
+  checkCorteDiferencia,
+  checkProcesoAtrasado,
+  type NotificationCheckResult,
+} from "@/lib/notifications/checks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,9 +24,7 @@ function configureWebPush() {
   }
 
   if (!subject.startsWith("mailto:") && !subject.startsWith("https://")) {
-    throw new Error(
-      "VAPID_SUBJECT debe comenzar con mailto: o https://"
-    );
+    throw new Error("VAPID_SUBJECT debe comenzar con mailto: o https://");
   }
 
   if (!publicKey) {
@@ -33,148 +38,164 @@ function configureWebPush() {
   webpush.setVapidDetails(subject, publicKey, privateKey);
 }
 
+async function runCheck(
+  triggerType: string,
+  thresholdConfig: unknown,
+  lastCheckedAt: Date | null,
+): Promise<NotificationCheckResult> {
+  const config = (thresholdConfig ?? {}) as {
+    daysBeforeExpiration?: number;
+    minDifference?: number;
+  };
+
+  switch (triggerType) {
+    case "STOCK_BAJO":
+      return checkStockBajo();
+    case "LICOR_CADUCIDAD":
+      return checkLicorCaducidad(config.daysBeforeExpiration ?? 7);
+    case "RECONTEO_PENDIENTE":
+      return checkReconteoPendiente();
+    case "CORTE_DIFERENCIA":
+      return checkCorteDiferencia(config.minDifference ?? 10, lastCheckedAt);
+    case "PROCESO_ATRASADO":
+      return checkProcesoAtrasado();
+    default:
+      return null;
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const cronSecret = process.env.CRON_SECRET;
 
     if (!cronSecret) {
-      console.error(
-        "[PUSH CHECK OVERDUE] Falta la variable CRON_SECRET"
-      );
-
+      console.error("[PUSH CHECK] Falta la variable CRON_SECRET");
       return NextResponse.json(
         { error: "Configuración incompleta del servidor" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     const authHeader = request.headers.get("authorization");
 
     if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
     configureWebPush();
 
-    const recordingStatus = await getRecordingStatus();
+    const now = new Date();
 
-    const cooking = recordingStatus.cooking ?? [];
-    const milling = recordingStatus.milling ?? [];
-    const fermentation = recordingStatus.fermentation ?? [];
-    const distillation = recordingStatus.distillation ?? [];
-
-    const overdue = [...cooking, ...milling, ...fermentation, ...distillation].filter(
-      (record) => record.isOverdue
-    );
-
-    if (overdue.length === 0) {
-      return NextResponse.json({
-        success: true,
-        sent: 0,
-        overdueCount: 0,
-        subscriptionsCount: 0,
-        message: "No hay procesos vencidos",
-      });
-    }
-
-    const subscriptions =
-      await prisma.pushSubscription.findMany();
-
-    if (subscriptions.length === 0) {
-      return NextResponse.json({
-        success: true,
-        sent: 0,
-        overdueCount: overdue.length,
-        subscriptionsCount: 0,
-        message: "No existen dispositivos suscritos",
-      });
-    }
-
-    const notificationPayload = JSON.stringify({
-      title: "⏰ Destiladora del Norte",
-      body:
-        overdue.length === 1
-          ? `${overdue[0].label} lleva sin registro más de 1 hora.`
-          : `${overdue.length} procesos llevan sin registro más de 1 hora.`,
-      url: "/control-room",
+    const rules = await prisma.notificationRule.findMany({
+      where: { active: true },
     });
 
+    const dueRules = rules.filter((rule) => {
+      if (!rule.lastCheckedAt) return true;
+      const minutesSinceCheck =
+        (now.getTime() - rule.lastCheckedAt.getTime()) / (1000 * 60);
+      return minutesSinceCheck >= rule.checkFrequencyMinutes;
+    });
+
+    let evaluated = 0;
+    let triggered = 0;
     let sent = 0;
     let failed = 0;
     let removed = 0;
 
-    for (const subscription of subscriptions) {
-      try {
-        await webpush.sendNotification(
-          {
-            endpoint: subscription.endpoint,
-            keys: {
-              p256dh: subscription.p256dh,
-              auth: subscription.auth,
-            },
-          },
-          notificationPayload
-        );
+    for (const rule of dueRules) {
+      evaluated += 1;
 
-        sent += 1;
-      } catch (error: unknown) {
-        failed += 1;
+      const result = await runCheck(
+        rule.triggerType,
+        rule.thresholdConfig,
+        rule.lastCheckedAt,
+      );
 
-        const pushError = error as {
-          statusCode?: number;
-          message?: string;
-          body?: string;
-        };
-
-        console.error("[PUSH SEND ERROR]", {
-          subscriptionId: subscription.id,
-          statusCode: pushError.statusCode,
-          message: pushError.message,
-          body: pushError.body,
+      if (!result) {
+        await prisma.notificationRule.update({
+          where: { id: rule.id },
+          data: { lastCheckedAt: now },
         });
+        continue;
+      }
 
-        if (
-          pushError.statusCode === 404 ||
-          pushError.statusCode === 410
-        ) {
-          await prisma.pushSubscription.delete({
-            where: { id: subscription.id },
+      triggered += 1;
+
+      const subscriptions = await prisma.pushSubscription.findMany({
+        where: { user: { role: { in: rule.recipientRoles }, active: true } },
+      });
+
+      const payload = JSON.stringify({
+        title: result.title,
+        body: result.body,
+        url: result.url,
+      });
+
+      for (const subscription of subscriptions) {
+        try {
+          await webpush.sendNotification(
+            {
+              endpoint: subscription.endpoint,
+              keys: { p256dh: subscription.p256dh, auth: subscription.auth },
+            },
+            payload,
+          );
+
+          sent += 1;
+        } catch (error: unknown) {
+          failed += 1;
+
+          const pushError = error as {
+            statusCode?: number;
+            message?: string;
+            body?: string;
+          };
+
+          console.error("[PUSH SEND ERROR]", {
+            ruleId: rule.id,
+            subscriptionId: subscription.id,
+            statusCode: pushError.statusCode,
+            message: pushError.message,
+            body: pushError.body,
           });
 
-          removed += 1;
+          if (pushError.statusCode === 404 || pushError.statusCode === 410) {
+            await prisma.pushSubscription.delete({
+              where: { id: subscription.id },
+            });
+
+            removed += 1;
+          }
         }
       }
+
+      await prisma.notificationRule.update({
+        where: { id: rule.id },
+        data: { lastCheckedAt: now, lastSentAt: now },
+      });
     }
 
     return NextResponse.json({
       success: true,
+      rulesEvaluated: evaluated,
+      rulesTriggered: triggered,
       sent,
       failed,
       removed,
-      overdueCount: overdue.length,
-      subscriptionsCount: subscriptions.length,
     });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Error desconocido";
+    const message = error instanceof Error ? error.message : "Error desconocido";
 
-    console.error("[PUSH CHECK OVERDUE ERROR]", error);
+    console.error("[PUSH CHECK ERROR]", error);
 
     return NextResponse.json(
       {
         success: false,
         error: "No fue posible revisar las notificaciones",
-        detail:
-          process.env.NODE_ENV === "development"
-            ? message
-            : undefined,
+        detail: process.env.NODE_ENV === "development" ? message : undefined,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

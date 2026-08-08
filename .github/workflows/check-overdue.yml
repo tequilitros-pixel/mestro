@@ -1,8 +1,8 @@
-name: Revisar procesos atrasados
+name: Revisar reglas de notificación
 
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "*/15 * * * *"
 
   workflow_dispatch:
 
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Llamar endpoint de MAESTRO
+      - name: Evaluar reglas de notificación activas
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
