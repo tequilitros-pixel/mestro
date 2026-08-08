@@ -17,6 +17,9 @@
  *
  *   npx tsx scripts/merge-inventory-products.ts "peñafiel" "toronja"
  *   npx tsx scripts/merge-inventory-products.ts "peñafiel" "toronja" --apply
+ *
+ * Si se miden distinto, --factor=N convierte las cantidades:
+ *   ... "peñafiel" "refresco de toronja" --factor=1800 --apply
  */
 
 import "dotenv/config";
@@ -37,6 +40,15 @@ const args = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 const apply = process.argv.includes("--apply");
 
 const [SOURCE_MATCH, TARGET_MATCH] = args;
+
+/*
+ * Cuando los dos productos se miden distinto (uno en botella y otro
+ * en ml, por decir), las cantidades del que desaparece se multiplican
+ * por este factor al pasarlas al que se queda.
+ */
+const factor = Number(
+  process.argv.find((arg) => arg.startsWith("--factor="))?.split("=")[1] ?? 1
+);
 
 async function main() {
   if (!SOURCE_MATCH || !TARGET_MATCH) {
@@ -131,14 +143,18 @@ async function main() {
     }
   }
 
-  if (source.unit !== target.unit) {
+  if (source.unit !== target.unit && factor === 1) {
     console.error(
-      `\nALTO: las unidades no coinciden ("${source.unit}" vs "${target.unit}"). Las cantidades de arriba están en ${source.unit} y quedarían interpretadas como ${target.unit}. Corrige la unidad o la receta antes de fusionar, o vuelve a correrlo con --force si ya lo revisaste.`
+      `\nALTO: las unidades no coinciden ("${source.unit}" vs "${target.unit}"). Las cantidades de arriba están en ${source.unit} y quedarían interpretadas como ${target.unit}. Pasa el equivalente con --factor=<n> (por ejemplo --factor=1800 si cada ${source.unit} son 1800 ${target.unit}).`
     );
 
-    if (!process.argv.includes("--force")) {
-      return;
-    }
+    return;
+  }
+
+  if (factor !== 1) {
+    console.log(
+      `\nConversión: cada ${source.unit} se convierte en ${factor} ${target.unit}.`
+    );
   }
 
   if (!apply) {
@@ -149,16 +165,60 @@ async function main() {
   }
 
   await prisma.$transaction(async (tx) => {
-    // Tablas sin restricción de unicidad: basta con reapuntar.
-    const entries = await tx.inventoryEntry.updateMany({
+    /*
+     * Tablas sin restricción de unicidad: basta con reapuntar. Cuando
+     * hay conversión de unidad las cantidades se recalculan una por
+     * una, porque `updateMany` no sabe multiplicar por sí mismo.
+     */
+    const pendingEntries = await tx.inventoryEntry.findMany({
       where: { productId: source.id },
-      data: { productId: target.id },
+      select: { id: true, quantity: true },
     });
 
-    const eventItems = await tx.serviceEventItem.updateMany({
+    for (const entry of pendingEntries) {
+      await tx.inventoryEntry.update({
+        where: { id: entry.id },
+        data: {
+          productId: target.id,
+          quantity: new Prisma.Decimal(String(entry.quantity)).times(factor),
+        },
+      });
+    }
+
+    const entries = { count: pendingEntries.length };
+
+    const pendingEventItems = await tx.serviceEventItem.findMany({
       where: { productId: source.id },
-      data: { productId: target.id },
+      select: {
+        id: true,
+        plannedQuantity: true,
+        sentQuantity: true,
+        returnedQuantity: true,
+        damagedQuantity: true,
+        lostQuantity: true,
+      },
     });
+
+    for (const item of pendingEventItems) {
+      const scale = (value: Prisma.Decimal | null) =>
+        value === null
+          ? null
+          : new Prisma.Decimal(String(value)).times(factor);
+
+      await tx.serviceEventItem.update({
+        where: { id: item.id },
+        data: {
+          productId: target.id,
+          plannedQuantity: scale(item.plannedQuantity)!,
+          sentQuantity: scale(item.sentQuantity),
+          returnedQuantity: scale(item.returnedQuantity),
+          damagedQuantity: scale(item.damagedQuantity)!,
+          lostQuantity: scale(item.lostQuantity)!,
+        },
+      });
+    }
+
+    const eventItems = { count: pendingEventItems.length };
 
     const rawLinks = await tx.rawMaterial.updateMany({
       where: { inventoryProductId: source.id },
@@ -298,16 +358,26 @@ async function mergeUnique<T extends Row>(
 
     const fromTarget = group.find((row) => row[productField] === targetId);
 
+    // La cantidad viaja en la unidad del que se queda.
+    const converted = new Prisma.Decimal(
+      String(fromSource[quantityField])
+    ).times(factor);
+
     if (fromTarget) {
       const total = new Prisma.Decimal(
         String(fromTarget[quantityField])
-      ).plus(new Prisma.Decimal(String(fromSource[quantityField])));
+      ).plus(converted);
 
       await setQuantity(fromTarget.id, total);
       await remove(fromSource.id);
       merged += 1;
     } else {
       await repoint(fromSource.id);
+
+      if (factor !== 1) {
+        await setQuantity(fromSource.id, converted);
+      }
+
       moved += 1;
     }
   }
