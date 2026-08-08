@@ -198,6 +198,11 @@ export const SUBMENUS: Record<
       icon: BookIcon,
     },
     {
+      href: "/liquors/raw-materials",
+      label: "Materia prima",
+      icon: FlaskIcon,
+    },
+    {
       href: "/liquors/batches",
       label: "Lotes",
       icon: TagIcon,

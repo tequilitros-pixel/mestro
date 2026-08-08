@@ -345,6 +345,11 @@ function Field({
     <label>
       <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
         {label}
+        {required && (
+          <span className="ml-1 text-error" aria-hidden="true">
+            *
+          </span>
+        )}
       </span>
 
       <div className="relative">
@@ -357,7 +362,7 @@ function Field({
           min={min}
           max={max}
           required={required}
-          className={`w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary ${
+          className={`peer w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary user-invalid:border-error ${
             suffix ? "pr-12" : ""
           }`}
         />
@@ -365,6 +370,12 @@ function Field({
         {suffix && (
           <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-outline">
             {suffix}
+          </span>
+        )}
+
+        {required && (
+          <span className="mt-1 hidden text-xs font-semibold text-error peer-user-invalid:block">
+            Este dato es obligatorio para cerrar.
           </span>
         )}
       </div>

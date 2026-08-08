@@ -1,15 +1,21 @@
 import { prisma } from "@/lib/prisma";
-import { CookingEventType, CookingStatus, EquipmentStatus, LotStage } from "@prisma/client";
+import { CookingEventType, CookingStatus, LotStage } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
+import { findAvailableEquipment, reserveEquipment } from "@/lib/equipmentAvailability";
 
 export default async function NewCookingPage() {
-  const lots = await prisma.lot.findMany({ orderBy: { createdAt: "desc" } });
-
-  const ovens = await prisma.equipment.findMany({
-    where: { type: "HORNO", active: true },
-    orderBy: { name: "asc" },
+  /*
+   * Solo lotes que todavía pueden entrar al horno. Un lote ya
+   * molido, fermentado o terminado no debe aparecer: antes salían
+   * todos y se podía arrancar una cocción sobre un lote cerrado.
+   */
+  const lots = await prisma.lot.findMany({
+    where: { stage: { in: [LotStage.RECEPCION, LotStage.COCCION] } },
+    orderBy: { createdAt: "desc" },
   });
+
+  const ovens = await findAvailableEquipment(["HORNO"]);
 
   async function createCooking(formData: FormData) {
     "use server";
@@ -18,6 +24,16 @@ export default async function NewCookingPage() {
     const equipmentId = formData.get("equipmentId") as string;
     const agaveKg = Number(formData.get("agaveKg"));
     const notes = formData.get("notes") as string;
+
+    // Se reserva el horno ANTES de crear la cocción: si alguien más
+    // lo tomó mientras este formulario estaba abierto, no se crea
+    // nada y se regresa al listado en vez de dejar dos lotes en el
+    // mismo equipo.
+    const reserved = await reserveEquipment(prisma, equipmentId, agaveKg);
+
+    if (!reserved) {
+      redirect("/cooking/new?error=equipo-ocupado");
+    }
 
     const cooking = await prisma.cooking.create({
       data: {
@@ -35,17 +51,43 @@ export default async function NewCookingPage() {
       },
     });
 
-    await prisma.equipment.update({
-      where: { id: equipmentId },
-      data: {
-        status: EquipmentStatus.OPERANDO,
-        currentLoad: agaveKg,
-      },
-    });
-
     await advanceLotStage(prisma, lotId, LotStage.COCCION);
 
     redirect(`/cooking/${cooking.id}`);
+  }
+
+  const blockers: string[] = [];
+
+  if (lots.length === 0) {
+    blockers.push(
+      "No hay lotes en recepción o cocción. Crea un lote nuevo antes de iniciar el horno.",
+    );
+  }
+
+  if (ovens.length === 0) {
+    blockers.push(
+      "Todos los hornos están ocupados o fuera de servicio. Cierra la cocción en curso para liberar uno.",
+    );
+  }
+
+  if (blockers.length > 0) {
+    return (
+      <main className="mx-auto max-w-5xl p-8 text-on-surface">
+        <h1 className="text-4xl font-bold">Nueva Cocción</h1>
+
+        <div className="mt-8 space-y-3 rounded-2xl border border-secondary/30 bg-secondary/10 p-8">
+          <h2 className="text-xl font-bold text-secondary">
+            Todavía no se puede iniciar una cocción
+          </h2>
+
+          {blockers.map((blocker) => (
+            <p key={blocker} className="text-sm text-on-surface-variant">
+              {blocker}
+            </p>
+          ))}
+        </div>
+      </main>
+    );
   }
 
   return (

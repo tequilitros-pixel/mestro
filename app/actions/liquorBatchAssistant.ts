@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { RawMaterialMovementType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { applyMovement } from "./rawMaterials";
 
 export async function completeLiquorBatchStepAction(
   formData: FormData
@@ -37,7 +39,18 @@ export async function completeLiquorBatchStepAction(
     },
     include: {
       batch: true,
-      batchIngredient: true,
+      // Se trae la receta del ingrediente para saber a qué materia
+      // prima descontarle lo que se acaba de agregar.
+      batchIngredient: {
+        include: {
+          recipeIngredient: {
+            select: {
+              rawMaterialId: true,
+              rawMaterial: { select: { name: true, baseUnit: true } },
+            },
+          },
+        },
+      },
     },
   });
 
@@ -158,7 +171,32 @@ export async function completeLiquorBatchStepAction(
       },
     });
 
-   
+    /*
+     * Descuento del almacén de materia prima.
+     *
+     * Se hace aquí, al completar el paso, con la cantidad REAL que
+     * capturó el operador — no con la planeada — para que el stock
+     * refleje lo que de verdad se usó.
+     *
+     * Solo aplica si el ingrediente de la receta está vinculado a una
+     * materia prima. Si no lo está, la elaboración continúa igual: no
+     * se bloquea el proceso por un catálogo incompleto.
+     */
+    const rawMaterialId =
+      step.batchIngredient?.recipeIngredient?.rawMaterialId ?? null;
+
+    const consumed = actualQuantity ?? step.batchIngredient?.scaledQuantity ?? 0;
+
+    if (rawMaterialId && consumed > 0) {
+      await applyMovement(tx, {
+        rawMaterialId,
+        type: RawMaterialMovementType.CONSUMO_RECETA,
+        amount: consumed,
+        liquorBatchId: batchId,
+        createdById: user.id,
+        notes: `Consumido en ${step.batch.code} · paso ${step.position}: ${step.title}.`,
+      });
+    }
   });
 
   revalidatePath(`/liquors/batches/${batchId}`);

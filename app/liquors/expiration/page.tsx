@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
 import { Prisma } from "@prisma/client";
 
 export default async function LiquorExpirationPage() {
@@ -31,6 +32,10 @@ export default async function LiquorExpirationPage() {
               product: true,
             },
           },
+
+          // Las botellas de granel (tequila blanco del proceso) no
+          // tienen lote: su origen es la materia prima.
+          rawMaterial: true,
         },
       },
     },
@@ -148,6 +153,7 @@ type BottleWithRelations = Prisma.LiquorBottleGetPayload<{
             product: true;
           };
         };
+        rawMaterial: true;
       };
     };
   };
@@ -176,7 +182,7 @@ function ExpirationSection({
         <div className="mt-4 overflow-hidden rounded-3xl border border-outline-variant bg-surface-container/60">
           <div className="divide-y divide-outline-variant">
             {bottles.map((bottle) => {
-              const batch = bottle.bottling.batch;
+              const origin = resolveBottleOrigin(bottle.bottling);
 
               return (
                 <div
@@ -185,8 +191,8 @@ function ExpirationSection({
                 >
                   <div>
                     <p className="font-black text-on-surface">
-                      {batch.product.icon ?? "🍾"}{" "}
-                      {batch.product.name}
+                      {origin.productIcon ?? "🍾"}{" "}
+                      {origin.productName}
                     </p>
 
                     <p className="mt-1 font-mono text-sm text-on-surface-variant">
@@ -194,7 +200,8 @@ function ExpirationSection({
                     </p>
 
                     <p className="mt-2 text-sm text-outline">
-                      Lote: {batch.code}
+                      {origin.fromBulk ? origin.sourceLabel : "Lote"}:{" "}
+                      {origin.sourceCode}
                     </p>
                   </div>
 

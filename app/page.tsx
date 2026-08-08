@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getActiveProcesses } from "@/lib/brain/data/getActiveProcesses";
 import { getRecordingStatus } from "@/lib/brain/getRecordingStatus";
 import { prisma } from "@/lib/prisma";
+import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
 import {
   type IconProps,
   FactoryIcon,
@@ -270,6 +271,10 @@ async function getExpiringBottles() {
           batch: {
             include: { product: true },
           },
+
+          // El tequila blanco se embotella del granel y no tiene lote:
+          // el nombre a mostrar sale de la materia prima.
+          rawMaterial: true,
         },
       },
     },
@@ -320,9 +325,9 @@ function buildAlerts(
     alerts.push({
       icon: InfoIcon,
       iconClass: "text-outline",
-      title: `${bottle.bottling.batch.product.name} vence en ${daysLeft} día${
-        daysLeft === 1 ? "" : "s"
-      }`,
+      title: `${
+        resolveBottleOrigin(bottle.bottling).productName
+      } vence en ${daysLeft} día${daysLeft === 1 ? "" : "s"}`,
       subtitle: "Urgencia Media",
       href: "/liquors/expiration",
     });

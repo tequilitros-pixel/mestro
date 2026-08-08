@@ -5,6 +5,13 @@ import FinishFermentationModal from "@/components/FinishFermentationModal";
 import { FermentationStatus, LotStage } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
+import PageTabs from "@/components/ui/PageTabs";
+import {
+  ClipboardIcon,
+  HomeIcon,
+  ChartLineIcon,
+  BookIcon,
+} from "@/components/ui/icons";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -344,11 +351,592 @@ export default async function FermentationDetailPage({ params }: Props) {
 
   const latestReading = fermentation.readings[0];
 
+  const homeTabContent = (
+    <>
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Kpi
+          title="Tina"
+          value={fermentation.tank}
+          detail="Equipo asignado"
+        />
+
+        <Kpi
+          title="Mosto"
+          value={`${formatNumber(
+            fermentation.mustLiters,
+            0
+          )} L`}
+          detail="Volumen cargado"
+        />
+
+        <Kpi
+          title="Estado"
+          value={formatStatus(fermentation.status)}
+          detail={
+            isFinished
+              ? "Proceso cerrado"
+              : "Proceso activo"
+          }
+          highlight={!isFinished}
+        />
+
+        <Kpi
+          title="Lecturas"
+          value={fermentation.readings.length}
+          detail={
+            latestReading
+              ? `Última: ${formatTime(
+                  latestReading.createdAt
+                )}`
+              : "Sin lecturas"
+          }
+        />
+      </section>
+
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <MeasurementKpi
+          title="°Brix actual"
+          value={formatNumber(currentBrix)}
+          previous={previousBrix}
+          current={currentBrix}
+          lowerIsBetter
+        />
+
+        <MeasurementKpi
+          title="pH actual"
+          value={formatNumber(currentPh)}
+          previous={previousPh}
+          current={currentPh}
+        />
+
+        <MeasurementKpi
+          title="Temperatura"
+          value={`${formatNumber(currentTemp)} °C`}
+          previous={previousTemp}
+          current={currentTemp}
+          suffix=" °C"
+        />
+
+        <MeasurementKpi
+          title="Alcohol"
+          value={
+            currentAlcohol !== null
+              ? `${formatNumber(currentAlcohol)} %`
+              : "Sin registro"
+          }
+          previous={previousAlcohol}
+          current={currentAlcohol}
+          suffix=" %"
+        />
+
+        <Kpi
+          title="Sacarímetro"
+          value={
+            currentSaccharometer !== null
+              ? formatNumber(currentSaccharometer)
+              : "Sin registro"
+          }
+          detail="Último valor válido"
+        />
+      </section>
+
+      <section className="mt-6 grid gap-4 sm:grid-cols-3">
+        <Kpi
+          title="Ácido cítrico total"
+          value={`${formatNumber(totalAcid)} g`}
+          detail="Acumulado del proceso"
+        />
+
+        <Kpi
+          title="Bicarbonato total"
+          value={`${formatNumber(totalBicarbonate)} g`}
+          detail="Acumulado del proceso"
+        />
+
+        <Kpi
+          title="Calentamiento total"
+          value={`${formatNumber(
+            totalHeatingMinutes,
+            0
+          )} min`}
+          detail="Tiempo acumulado"
+        />
+      </section>
+
+      <section className="mt-6 overflow-hidden rounded-2xl border border-outline-variant bg-surface-container">
+        <div className="p-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-sm text-on-surface-variant">
+                Avance de fermentación
+              </p>
+
+              <div className="mt-1 flex items-end gap-3">
+                <p className="text-4xl font-bold">
+                  {progress.toFixed(0)}%
+                </p>
+
+                <p className="pb-1 text-sm text-on-surface-variant">
+                  hacia la meta de {TARGET_BRIX} °Brix
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-5 text-center sm:text-right">
+              <ProgressValue
+                title="Inicial"
+                value={`${formatNumber(initialBrix)}°`}
+              />
+
+              <ProgressValue
+                title="Actual"
+                value={`${formatNumber(currentBrix)}°`}
+              />
+
+              <ProgressValue
+                title="Meta"
+                value={`${TARGET_BRIX}°`}
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 h-4 overflow-hidden rounded-full bg-surface-container-high">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="grid border-t border-outline-variant sm:grid-cols-3">
+          <ProcessIndicator
+            title="Temperatura"
+            value={temperatureStatus}
+            warning={temperatureNeedsAttention}
+          />
+
+          <ProcessIndicator
+            title="pH"
+            value={phStatus}
+            warning={phNeedsAttention}
+          />
+
+          <ProcessIndicator
+            title="°Brix"
+            value={brixStatus}
+            warning={false}
+          />
+        </div>
+      </section>
+
+      <section
+        className={`mt-6 rounded-2xl border p-6 ${
+          health === "ATENCION"
+            ? "border-error/30 bg-error/10"
+            : health === "LISTA"
+              ? "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10"
+              : health === "TERMINADA"
+                ? "border-on-surface-variant/30 bg-on-surface-variant/10"
+                : "border-secondary/30 bg-secondary/10"
+        }`}
+      >
+        <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
+          Análisis de MAESTRO
+        </p>
+
+        <h2
+          className={`mt-3 text-2xl font-bold sm:text-3xl ${
+            health === "ATENCION"
+              ? "text-error"
+              : health === "LISTA"
+                ? "text-tertiary-fixed-dim"
+                : health === "TERMINADA"
+                  ? "text-on-surface-variant"
+                  : "text-secondary"
+          }`}
+        >
+          {getHealthTitle(health)}
+        </h2>
+
+        <div className="mt-5 space-y-3">
+          {maestroMessages.map((message) => (
+            <div
+              key={message}
+              className="flex items-start gap-3 rounded-xl bg-surface-dim/40 p-3"
+            >
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-on-surface-variant" />
+
+              <p className="text-on-surface">{message}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {isFinished && (
+        <ClosureAct
+          closureCode={fermentation.closureCode}
+          lotCode={fermentation.lot.code}
+          tank={fermentation.tank}
+          mustLiters={fermentation.mustLiters}
+          initialBrix={fermentation.initialBrix}
+          finalBrix={fermentation.finalBrix}
+          finalPh={fermentation.finalPh}
+          finalAlcohol={fermentation.finalAlcohol}
+          finalNotes={fermentation.finalNotes}
+          startedAt={fermentation.startedAt}
+          finishedAt={fermentation.finishedAt}
+          finishedByName={fermentation.finishedBy?.name}
+          readingsCount={fermentation.readings.length}
+        />
+      )}
+    </>
+  );
+
+  const registrarTabContent = (
+    <>
+      {!isFinished && (
+        <section className="rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold">
+              Registrar nueva lectura
+            </h2>
+
+            <p className="mt-2 text-sm text-on-surface-variant">
+              Solo llena los campos que mediste o las
+              acciones que realizaste.
+            </p>
+          </div>
+
+          <form
+            action={addReading}
+            className="grid gap-4 md:grid-cols-2"
+          >
+            <Field
+              name="brix"
+              label="°Brix"
+              placeholder="Ej. 8.5"
+              step="0.01"
+              min="0"
+            />
+
+            <Field
+              name="ph"
+              label="pH"
+              placeholder="Ej. 4.5"
+              step="0.01"
+              min="0"
+              max="14"
+            />
+
+            <Field
+              name="temperature"
+              label="Temperatura"
+              placeholder="Ej. 30"
+              step="0.01"
+              min="0"
+              suffix="°C"
+            />
+
+            <Field
+              name="alcohol"
+              label="Alcohol"
+              placeholder="Ej. 6.5"
+              step="0.01"
+              min="0"
+              suffix="%"
+            />
+
+            <Field
+              name="saccharometer"
+              label="Sacarímetro / densímetro"
+              placeholder="Ej. 5"
+              step="0.01"
+            />
+
+            <Field
+              name="citricAcidGrams"
+              label="Ácido cítrico agregado"
+              placeholder="Ej. 300"
+              step="0.01"
+              min="0"
+              suffix="g"
+            />
+
+            <Field
+              name="bicarbonateGrams"
+              label="Bicarbonato agregado"
+              placeholder="Ej. 100"
+              step="0.01"
+              min="0"
+              suffix="g"
+            />
+
+            <Field
+              name="heatingMinutes"
+              label="Tiempo de calentamiento"
+              placeholder="Ej. 15"
+              step="1"
+              min="0"
+              suffix="min"
+            />
+
+            <label className="md:col-span-2">
+              <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
+                Observaciones
+              </span>
+
+              <textarea
+                name="notes"
+                rows={3}
+                placeholder="Describe espuma, aroma, movimiento, correcciones o cualquier situación importante."
+                className="w-full resize-none rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+              />
+            </label>
+
+            <button
+              type="submit"
+              className="rounded-xl bg-primary px-6 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97] md:col-span-2"
+            >
+              Guardar lectura
+            </button>
+          </form>
+
+          <div className="mt-6 border-t border-outline-variant pt-6">
+            <p className="mb-3 text-sm text-on-surface-variant">
+              Finaliza únicamente cuando hayas confirmado
+              los valores finales del proceso.
+            </p>
+
+            <FinishFermentationModal
+              lotCode={fermentation.lot.code}
+              tank={fermentation.tank}
+              mustLiters={fermentation.mustLiters}
+              currentBrix={currentBrix}
+              currentPh={currentPh}
+              currentAlcohol={currentAlcohol}
+              currentTemperature={currentTemp}
+              readingsCount={fermentation.readings.length}
+              action={finishFermentation}
+            />
+          </div>
+        </section>
+      )}
+            {isFinished && (
+          <section className="rounded-2xl border border-outline-variant bg-surface-container p-8 text-center">
+            <h2 className="text-xl font-bold text-on-surface">
+              Esta etapa ya está cerrada
+            </h2>
+
+            <p className="mx-auto mt-2 max-w-md text-sm text-on-surface-variant">
+              Ya no se pueden registrar más datos. Consulta lo capturado en las
+              pestañas Home, Gráficas y Bitácora.
+            </p>
+          </section>
+        )}
+    </>
+  );
+
+  const graficasTabContent = (
+    <FermentationCharts
+      readings={fermentation.readings}
+    />
+  );
+
+  const bitacoraTabContent = (
+    <>
+      <section className="rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold">
+            Bitácora de fermentación
+          </h2>
+
+          <p className="mt-2 text-sm text-on-surface-variant">
+            Historial completo, de la lectura más reciente a
+            la más antigua.
+          </p>
+        </div>
+
+        {fermentation.readings.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center">
+            <p className="text-on-surface-variant">
+              Aún no hay lecturas registradas.
+            </p>
+          </div>
+        ) : (
+          <div className="relative space-y-5 before:absolute before:bottom-3 before:left-[11px] before:top-3 before:w-px before:bg-surface-container-highest">
+            {fermentation.readings.map((reading, index) => (
+              <article
+                key={reading.id}
+                className="relative pl-9"
+              >
+                <div
+                  className={`absolute left-0 top-6 h-6 w-6 rounded-full border-4 border-outline-variant ${
+                    index === 0
+                      ? "bg-primary"
+                      : "bg-surface-container-highest"
+                  }`}
+                />
+
+                <div className="rounded-2xl border border-outline-variant bg-surface-container-high p-5">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="font-semibold text-on-surface">
+                      {index === 0
+                        ? "Lectura más reciente"
+                        : `Lectura #${
+                            fermentation.readings.length -
+                            index
+                          }`}
+                    </p>
+
+                    <p className="text-sm text-on-surface-variant">
+                      {formatDateTime(reading.createdAt)}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    {reading.brix !== null && (
+                      <Mini
+                        title="°Brix"
+                        value={formatNumber(reading.brix)}
+                      />
+                    )}
+
+                    {reading.ph !== null && (
+                      <Mini
+                        title="pH"
+                        value={formatNumber(reading.ph)}
+                      />
+                    )}
+
+                    {reading.temperature !== null && (
+                      <Mini
+                        title="Temperatura"
+                        value={`${formatNumber(
+                          reading.temperature
+                        )} °C`}
+                      />
+                    )}
+
+                    {reading.alcohol !== null && (
+                      <Mini
+                        title="Alcohol"
+                        value={`${formatNumber(
+                          reading.alcohol
+                        )} %`}
+                      />
+                    )}
+
+                    {reading.saccharometer !== null && (
+                      <Mini
+                        title="Sacarímetro"
+                        value={formatNumber(
+                          reading.saccharometer
+                        )}
+                      />
+                    )}
+                  </div>
+
+                  {(Number(
+                    reading.citricAcidGrams ?? 0
+                  ) > 0 ||
+                    Number(
+                      reading.bicarbonateGrams ?? 0
+                    ) > 0 ||
+                    Number(reading.heatingMinutes ?? 0) >
+                      0) && (
+                    <div className="mt-4 border-t border-outline-variant pt-4">
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                        Acciones realizadas
+                      </p>
+
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {Number(
+                          reading.citricAcidGrams ?? 0
+                        ) > 0 && (
+                          <Mini
+                            title="Ácido cítrico"
+                            value={`${formatNumber(
+                              reading.citricAcidGrams
+                            )} g`}
+                          />
+                        )}
+
+                        {Number(
+                          reading.bicarbonateGrams ?? 0
+                        ) > 0 && (
+                          <Mini
+                            title="Bicarbonato"
+                            value={`${formatNumber(
+                              reading.bicarbonateGrams
+                            )} g`}
+                          />
+                        )}
+
+                        {Number(
+                          reading.heatingMinutes ?? 0
+                        ) > 0 && (
+                          <Mini
+                            title="Calentamiento"
+                            value={`${formatNumber(
+                              reading.heatingMinutes,
+                              0
+                            )} min`}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {reading.notes && (
+                    <div className="mt-4 rounded-xl bg-surface-container p-4">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-outline">
+                        Observaciones
+                      </p>
+
+                      <p className="text-on-surface-variant">
+                        {reading.notes}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
+  );
+
+  const tabs = [
+    {
+      key: "home",
+      label: "Home",
+      icon: <HomeIcon className="h-4 w-4" />,
+      content: homeTabContent,
+    },
+    {
+      key: "registrar",
+      label: "Registrar datos",
+      icon: <ClipboardIcon className="h-4 w-4" />,
+      content: registrarTabContent,
+    },
+    {
+      key: "graficas",
+      label: "Gráficas",
+      icon: <ChartLineIcon className="h-4 w-4" />,
+      content: graficasTabContent,
+    },
+    {
+      key: "bitacora",
+      label: "Bitácora",
+      icon: <BookIcon className="h-4 w-4" />,
+      content: bitacoraTabContent,
+    },
+  ];
+
   return (
     <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
       <div className="mx-auto max-w-6xl">
-       
-
         <header className="mt-8">
           <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
             MAESTRO
@@ -373,535 +961,9 @@ export default async function FermentationDetailPage({ params }: Props) {
           </div>
         </header>
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Kpi
-            title="Tina"
-            value={fermentation.tank}
-            detail="Equipo asignado"
-          />
-
-          <Kpi
-            title="Mosto"
-            value={`${formatNumber(
-              fermentation.mustLiters,
-              0
-            )} L`}
-            detail="Volumen cargado"
-          />
-
-          <Kpi
-            title="Estado"
-            value={formatStatus(fermentation.status)}
-            detail={
-              isFinished
-                ? "Proceso cerrado"
-                : "Proceso activo"
-            }
-            highlight={!isFinished}
-          />
-
-          <Kpi
-            title="Lecturas"
-            value={fermentation.readings.length}
-            detail={
-              latestReading
-                ? `Última: ${formatTime(
-                    latestReading.createdAt
-                  )}`
-                : "Sin lecturas"
-            }
-          />
-        </section>
-
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <MeasurementKpi
-            title="°Brix actual"
-            value={formatNumber(currentBrix)}
-            previous={previousBrix}
-            current={currentBrix}
-            lowerIsBetter
-          />
-
-          <MeasurementKpi
-            title="pH actual"
-            value={formatNumber(currentPh)}
-            previous={previousPh}
-            current={currentPh}
-          />
-
-          <MeasurementKpi
-            title="Temperatura"
-            value={`${formatNumber(currentTemp)} °C`}
-            previous={previousTemp}
-            current={currentTemp}
-            suffix=" °C"
-          />
-
-          <MeasurementKpi
-            title="Alcohol"
-            value={
-              currentAlcohol !== null
-                ? `${formatNumber(currentAlcohol)} %`
-                : "Sin registro"
-            }
-            previous={previousAlcohol}
-            current={currentAlcohol}
-            suffix=" %"
-          />
-
-          <Kpi
-            title="Sacarímetro"
-            value={
-              currentSaccharometer !== null
-                ? formatNumber(currentSaccharometer)
-                : "Sin registro"
-            }
-            detail="Último valor válido"
-          />
-        </section>
-
-        <section className="mt-6 grid gap-4 sm:grid-cols-3">
-          <Kpi
-            title="Ácido cítrico total"
-            value={`${formatNumber(totalAcid)} g`}
-            detail="Acumulado del proceso"
-          />
-
-          <Kpi
-            title="Bicarbonato total"
-            value={`${formatNumber(totalBicarbonate)} g`}
-            detail="Acumulado del proceso"
-          />
-
-          <Kpi
-            title="Calentamiento total"
-            value={`${formatNumber(
-              totalHeatingMinutes,
-              0
-            )} min`}
-            detail="Tiempo acumulado"
-          />
-        </section>
-
-        <section className="mt-6 overflow-hidden rounded-2xl border border-outline-variant bg-surface-container">
-          <div className="p-6">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-sm text-on-surface-variant">
-                  Avance de fermentación
-                </p>
-
-                <div className="mt-1 flex items-end gap-3">
-                  <p className="text-4xl font-bold">
-                    {progress.toFixed(0)}%
-                  </p>
-
-                  <p className="pb-1 text-sm text-on-surface-variant">
-                    hacia la meta de {TARGET_BRIX} °Brix
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-5 text-center sm:text-right">
-                <ProgressValue
-                  title="Inicial"
-                  value={`${formatNumber(initialBrix)}°`}
-                />
-
-                <ProgressValue
-                  title="Actual"
-                  value={`${formatNumber(currentBrix)}°`}
-                />
-
-                <ProgressValue
-                  title="Meta"
-                  value={`${TARGET_BRIX}°`}
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 h-4 overflow-hidden rounded-full bg-surface-container-high">
-              <div
-                className="h-full rounded-full bg-primary transition-all duration-500"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="grid border-t border-outline-variant sm:grid-cols-3">
-            <ProcessIndicator
-              title="Temperatura"
-              value={temperatureStatus}
-              warning={temperatureNeedsAttention}
-            />
-
-            <ProcessIndicator
-              title="pH"
-              value={phStatus}
-              warning={phNeedsAttention}
-            />
-
-            <ProcessIndicator
-              title="°Brix"
-              value={brixStatus}
-              warning={false}
-            />
-          </div>
-        </section>
-
-        <section
-          className={`mt-6 rounded-2xl border p-6 ${
-            health === "ATENCION"
-              ? "border-error/30 bg-error/10"
-              : health === "LISTA"
-                ? "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10"
-                : health === "TERMINADA"
-                  ? "border-on-surface-variant/30 bg-on-surface-variant/10"
-                  : "border-secondary/30 bg-secondary/10"
-          }`}
-        >
-          <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
-            Análisis de MAESTRO
-          </p>
-
-          <h2
-            className={`mt-3 text-2xl font-bold sm:text-3xl ${
-              health === "ATENCION"
-                ? "text-error"
-                : health === "LISTA"
-                  ? "text-tertiary-fixed-dim"
-                  : health === "TERMINADA"
-                    ? "text-on-surface-variant"
-                    : "text-secondary"
-            }`}
-          >
-            {getHealthTitle(health)}
-          </h2>
-
-          <div className="mt-5 space-y-3">
-            {maestroMessages.map((message) => (
-              <div
-                key={message}
-                className="flex items-start gap-3 rounded-xl bg-surface-dim/40 p-3"
-              >
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-on-surface-variant" />
-
-                <p className="text-on-surface">{message}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {isFinished && (
-          <ClosureAct
-            closureCode={fermentation.closureCode}
-            lotCode={fermentation.lot.code}
-            tank={fermentation.tank}
-            mustLiters={fermentation.mustLiters}
-            initialBrix={fermentation.initialBrix}
-            finalBrix={fermentation.finalBrix}
-            finalPh={fermentation.finalPh}
-            finalAlcohol={fermentation.finalAlcohol}
-            finalNotes={fermentation.finalNotes}
-            startedAt={fermentation.startedAt}
-            finishedAt={fermentation.finishedAt}
-            finishedByName={fermentation.finishedBy?.name}
-            readingsCount={fermentation.readings.length}
-          />
-        )}
-
-        {!isFinished && (
-          <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold">
-                Registrar nueva lectura
-              </h2>
-
-              <p className="mt-2 text-sm text-on-surface-variant">
-                Solo llena los campos que mediste o las
-                acciones que realizaste.
-              </p>
-            </div>
-
-            <form
-              action={addReading}
-              className="grid gap-4 md:grid-cols-2"
-            >
-              <Field
-                name="brix"
-                label="°Brix"
-                placeholder="Ej. 8.5"
-                step="0.01"
-                min="0"
-              />
-
-              <Field
-                name="ph"
-                label="pH"
-                placeholder="Ej. 4.5"
-                step="0.01"
-                min="0"
-                max="14"
-              />
-
-              <Field
-                name="temperature"
-                label="Temperatura"
-                placeholder="Ej. 30"
-                step="0.01"
-                min="0"
-                suffix="°C"
-              />
-
-              <Field
-                name="alcohol"
-                label="Alcohol"
-                placeholder="Ej. 6.5"
-                step="0.01"
-                min="0"
-                suffix="%"
-              />
-
-              <Field
-                name="saccharometer"
-                label="Sacarímetro / densímetro"
-                placeholder="Ej. 5"
-                step="0.01"
-              />
-
-              <Field
-                name="citricAcidGrams"
-                label="Ácido cítrico agregado"
-                placeholder="Ej. 300"
-                step="0.01"
-                min="0"
-                suffix="g"
-              />
-
-              <Field
-                name="bicarbonateGrams"
-                label="Bicarbonato agregado"
-                placeholder="Ej. 100"
-                step="0.01"
-                min="0"
-                suffix="g"
-              />
-
-              <Field
-                name="heatingMinutes"
-                label="Tiempo de calentamiento"
-                placeholder="Ej. 15"
-                step="1"
-                min="0"
-                suffix="min"
-              />
-
-              <label className="md:col-span-2">
-                <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
-                  Observaciones
-                </span>
-
-                <textarea
-                  name="notes"
-                  rows={3}
-                  placeholder="Describe espuma, aroma, movimiento, correcciones o cualquier situación importante."
-                  className="w-full resize-none rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
-                />
-              </label>
-
-              <button
-                type="submit"
-                className="rounded-xl bg-primary px-6 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97] md:col-span-2"
-              >
-                Guardar lectura
-              </button>
-            </form>
-
-            <div className="mt-6 border-t border-outline-variant pt-6">
-              <p className="mb-3 text-sm text-on-surface-variant">
-                Finaliza únicamente cuando hayas confirmado
-                los valores finales del proceso.
-              </p>
-
-              <FinishFermentationModal
-                lotCode={fermentation.lot.code}
-                tank={fermentation.tank}
-                mustLiters={fermentation.mustLiters}
-                currentBrix={currentBrix}
-                currentPh={currentPh}
-                currentAlcohol={currentAlcohol}
-                currentTemperature={currentTemp}
-                readingsCount={fermentation.readings.length}
-                action={finishFermentation}
-              />
-            </div>
-          </section>
-        )}
-
-        <FermentationCharts
-          readings={fermentation.readings}
-        />
-
-        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold">
-              Bitácora de fermentación
-            </h2>
-
-            <p className="mt-2 text-sm text-on-surface-variant">
-              Historial completo, de la lectura más reciente a
-              la más antigua.
-            </p>
-          </div>
-
-          {fermentation.readings.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center">
-              <p className="text-on-surface-variant">
-                Aún no hay lecturas registradas.
-              </p>
-            </div>
-          ) : (
-            <div className="relative space-y-5 before:absolute before:bottom-3 before:left-[11px] before:top-3 before:w-px before:bg-surface-container-highest">
-              {fermentation.readings.map((reading, index) => (
-                <article
-                  key={reading.id}
-                  className="relative pl-9"
-                >
-                  <div
-                    className={`absolute left-0 top-6 h-6 w-6 rounded-full border-4 border-outline-variant ${
-                      index === 0
-                        ? "bg-primary"
-                        : "bg-surface-container-highest"
-                    }`}
-                  />
-
-                  <div className="rounded-2xl border border-outline-variant bg-surface-container-high p-5">
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="font-semibold text-on-surface">
-                        {index === 0
-                          ? "Lectura más reciente"
-                          : `Lectura #${
-                              fermentation.readings.length -
-                              index
-                            }`}
-                      </p>
-
-                      <p className="text-sm text-on-surface-variant">
-                        {formatDateTime(reading.createdAt)}
-                      </p>
-                    </div>
-
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                      {reading.brix !== null && (
-                        <Mini
-                          title="°Brix"
-                          value={formatNumber(reading.brix)}
-                        />
-                      )}
-
-                      {reading.ph !== null && (
-                        <Mini
-                          title="pH"
-                          value={formatNumber(reading.ph)}
-                        />
-                      )}
-
-                      {reading.temperature !== null && (
-                        <Mini
-                          title="Temperatura"
-                          value={`${formatNumber(
-                            reading.temperature
-                          )} °C`}
-                        />
-                      )}
-
-                      {reading.alcohol !== null && (
-                        <Mini
-                          title="Alcohol"
-                          value={`${formatNumber(
-                            reading.alcohol
-                          )} %`}
-                        />
-                      )}
-
-                      {reading.saccharometer !== null && (
-                        <Mini
-                          title="Sacarímetro"
-                          value={formatNumber(
-                            reading.saccharometer
-                          )}
-                        />
-                      )}
-                    </div>
-
-                    {(Number(
-                      reading.citricAcidGrams ?? 0
-                    ) > 0 ||
-                      Number(
-                        reading.bicarbonateGrams ?? 0
-                      ) > 0 ||
-                      Number(reading.heatingMinutes ?? 0) >
-                        0) && (
-                      <div className="mt-4 border-t border-outline-variant pt-4">
-                        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
-                          Acciones realizadas
-                        </p>
-
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          {Number(
-                            reading.citricAcidGrams ?? 0
-                          ) > 0 && (
-                            <Mini
-                              title="Ácido cítrico"
-                              value={`${formatNumber(
-                                reading.citricAcidGrams
-                              )} g`}
-                            />
-                          )}
-
-                          {Number(
-                            reading.bicarbonateGrams ?? 0
-                          ) > 0 && (
-                            <Mini
-                              title="Bicarbonato"
-                              value={`${formatNumber(
-                                reading.bicarbonateGrams
-                              )} g`}
-                            />
-                          )}
-
-                          {Number(
-                            reading.heatingMinutes ?? 0
-                          ) > 0 && (
-                            <Mini
-                              title="Calentamiento"
-                              value={`${formatNumber(
-                                reading.heatingMinutes,
-                                0
-                              )} min`}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {reading.notes && (
-                      <div className="mt-4 rounded-xl bg-surface-container p-4">
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-outline">
-                          Observaciones
-                        </p>
-
-                        <p className="text-on-surface-variant">
-                          {reading.notes}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
+        <div className="mt-8">
+          <PageTabs tabs={tabs} />
+        </div>
       </div>
     </main>
   );

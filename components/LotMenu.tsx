@@ -46,7 +46,7 @@ export default function LotMenu({
       icon: FlaskIcon,
     },
     {
-      href: `/distillation`,
+      href: `/distillation/${id}`,
       label: "Destilación",
       icon: GlassWaterIcon,
     },

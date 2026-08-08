@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ComponentType } from "react";
 import { LiquorBottleStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
 import {
   type IconProps,
   PackageIcon,
@@ -10,14 +11,19 @@ import {
   CheckIcon,
   AlertIcon,
   TrashIcon,
+  HomeIcon,
+  CalendarIcon,
 } from "@/components/ui/icons";
+import PageTabs from "@/components/ui/PageTabs";
 
 type InventoryGroup = {
   key: string;
   productId: string;
   productName: string;
-  productSlug: string;
+  /** null cuando el grupo es de granel: no hay producto de catálogo. */
+  productSlug: string | null;
   productIcon: string;
+  sourceLabel: string;
   bottleSizeMl: number;
 
   total: number;
@@ -46,6 +52,7 @@ export default async function LiquorInventoryPage() {
       bottleSizeMl: true,
       batch: {
         select: {
+          code: true,
           product: {
             select: {
               id: true,
@@ -55,6 +62,16 @@ export default async function LiquorInventoryPage() {
               active: true,
             },
           },
+        },
+      },
+
+      // El tequila blanco se embotella desde el granel del proceso, sin
+      // lote ni producto de catálogo: su origen es la materia prima.
+      rawMaterial: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
         },
       },
       bottles: {
@@ -147,129 +164,156 @@ const totals = inventoryGroups.reduce(
         </div>
       </header>
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <InventoryKpi
-          icon={PackageIcon}
-          title="Total"
-          value={totals.total}
-          detail="Botellas registradas"
+      <div className="mt-6">
+        <PageTabs
+          tabs={[
+            {
+              key: "resumen",
+              label: "Resumen",
+              icon: <HomeIcon className="h-4 w-4" />,
+              content: (
+                <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                  <InventoryKpi
+                    icon={PackageIcon}
+                    title="Total"
+                    value={totals.total}
+                    detail="Botellas registradas"
+                  />
+
+                  <InventoryKpi
+                    icon={BottleIcon}
+                    title="Disponibles"
+                    value={totals.available}
+                    detail="Existencia actual"
+                  />
+
+                  <InventoryKpi
+                    icon={ClockIcon}
+                    title="Reservadas"
+                    value={totals.reserved}
+                    detail="Apartadas"
+                  />
+
+                  <InventoryKpi
+                    icon={CheckIcon}
+                    title="Vendidas"
+                    value={totals.sold}
+                    detail="Salidas registradas"
+                  />
+
+                  <InventoryKpi
+                    icon={AlertIcon}
+                    title="Merma"
+                    value={totals.loss}
+                    detail="Producto perdido"
+                  />
+
+                  <InventoryKpi
+                    icon={TrashIcon}
+                    title="Retiradas"
+                    value={totals.removed}
+                    detail="Fuera de circulación"
+                  />
+                </section>
+              ),
+            },
+            {
+              key: "existencias",
+              label: "Existencias",
+              icon: <BottleIcon className="h-4 w-4" />,
+              content: (
+                <section>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="font-mono text-sm font-black uppercase tracking-[0.3em] text-on-surface-variant">
+                        Producto terminado
+                      </p>
+
+                      <h2 className="mt-2 text-3xl font-black text-on-surface">
+                        Existencias por presentación
+                      </h2>
+                    </div>
+
+                    <p className="text-sm text-outline">
+                      {inventoryGroups.length} grupos de inventario
+                    </p>
+                  </div>
+
+                  {inventoryGroups.length === 0 ? (
+                    <EmptyInventory />
+                  ) : (
+                    <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                      {inventoryGroups.map((group) => (
+                        <InventoryCard key={group.key} group={group} />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              ),
+            },
+            {
+              key: "caducidades",
+              label: "Caducidades",
+              icon: <CalendarIcon className="h-4 w-4" />,
+              content: (
+                <section className="rounded-3xl border border-outline-variant bg-surface-container p-6 sm:p-8">
+                  <div>
+                    <p className="font-mono text-sm font-black uppercase tracking-[0.3em] text-on-surface-variant">
+                      Control de caducidades
+                    </p>
+
+                    <h2 className="mt-2 text-3xl font-black text-on-surface">
+                      Estado del inventario actual
+                    </h2>
+
+                    <p className="mt-2 text-sm text-on-surface-variant">
+                      Análisis de botellas disponibles y reservadas según su fecha de
+                      caducidad.
+                    </p>
+                  </div>
+
+                  <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                    <ExpirationKpi
+                      title="Vigentes"
+                      value={totals.healthy}
+                      detail="Sin riesgo próximo"
+                      tone="green"
+                    />
+
+                    <ExpirationKpi
+                      title="Alerta amarilla"
+                      value={totals.yellowAlert}
+                      detail="Próximas a caducar"
+                      tone="yellow"
+                    />
+
+                    <ExpirationKpi
+                      title="Alerta roja"
+                      value={totals.redAlert}
+                      detail="Salida prioritaria"
+                      tone="orange"
+                    />
+
+                    <ExpirationKpi
+                      title="Caducadas"
+                      value={totals.expired}
+                      detail="Requieren atención"
+                      tone="red"
+                    />
+
+                    <ExpirationKpi
+                      title="Sin caducidad"
+                      value={totals.withoutExpiration}
+                      detail="Falta información"
+                      tone="slate"
+                    />
+                  </div>
+                </section>
+              ),
+            },
+          ]}
         />
-
-        <InventoryKpi
-          icon={BottleIcon}
-          title="Disponibles"
-          value={totals.available}
-          detail="Existencia actual"
-        />
-
-        <InventoryKpi
-          icon={ClockIcon}
-          title="Reservadas"
-          value={totals.reserved}
-          detail="Apartadas"
-        />
-
-        <InventoryKpi
-          icon={CheckIcon}
-          title="Vendidas"
-          value={totals.sold}
-          detail="Salidas registradas"
-        />
-
-        <InventoryKpi
-          icon={AlertIcon}
-          title="Merma"
-          value={totals.loss}
-          detail="Producto perdido"
-        />
-
-        <InventoryKpi
-          icon={TrashIcon}
-          title="Retiradas"
-          value={totals.removed}
-          detail="Fuera de circulación"
-        />
-      </section>
-<section className="mt-8 rounded-3xl border border-outline-variant bg-surface-container p-6 sm:p-8">
-  <div>
-    <p className="font-mono text-sm font-black uppercase tracking-[0.3em] text-on-surface-variant">
-      Control de caducidades
-    </p>
-
-    <h2 className="mt-2 text-3xl font-black text-on-surface">
-      Estado del inventario actual
-    </h2>
-
-    <p className="mt-2 text-sm text-on-surface-variant">
-      Análisis de botellas disponibles y reservadas según su fecha de
-      caducidad.
-    </p>
-  </div>
-
-  <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-    <ExpirationKpi
-      title="Vigentes"
-      value={totals.healthy}
-      detail="Sin riesgo próximo"
-      tone="green"
-    />
-
-    <ExpirationKpi
-      title="Alerta amarilla"
-      value={totals.yellowAlert}
-      detail="Próximas a caducar"
-      tone="yellow"
-    />
-
-    <ExpirationKpi
-      title="Alerta roja"
-      value={totals.redAlert}
-      detail="Salida prioritaria"
-      tone="orange"
-    />
-
-    <ExpirationKpi
-      title="Caducadas"
-      value={totals.expired}
-      detail="Requieren atención"
-      tone="red"
-    />
-
-    <ExpirationKpi
-      title="Sin caducidad"
-      value={totals.withoutExpiration}
-      detail="Falta información"
-      tone="slate"
-    />
-  </div>
-</section>
-      <section className="mt-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="font-mono text-sm font-black uppercase tracking-[0.3em] text-on-surface-variant">
-              Producto terminado
-            </p>
-
-            <h2 className="mt-2 text-3xl font-black text-on-surface">
-              Existencias por presentación
-            </h2>
-          </div>
-
-          <p className="text-sm text-outline">
-            {inventoryGroups.length} grupos de inventario
-          </p>
-        </div>
-
-        {inventoryGroups.length === 0 ? (
-          <EmptyInventory />
-        ) : (
-          <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {inventoryGroups.map((group) => (
-              <InventoryCard key={group.key} group={group} />
-            ))}
-          </div>
-        )}
-      </section>
+      </div>
     </section>
   );
 }
@@ -428,12 +472,20 @@ function InventoryCard({ group }: { group: InventoryGroup }) {
           />
         </div>
 
-        <Link
-          href={`/liquors/inventory/${group.productSlug}?size=${group.bottleSizeMl}`}
-          className="mt-6 block w-full rounded-2xl bg-primary px-5 py-4 text-center font-black text-on-surface transition hover:opacity-90"
-        >
-          Ver botellas →
-        </Link>
+        {/* El detalle por producto se navega por slug; el granel no
+            tiene producto de catálogo al que dirigir. */}
+        {group.productSlug ? (
+          <Link
+            href={`/liquors/inventory/${group.productSlug}?size=${group.bottleSizeMl}`}
+            className="mt-6 block w-full rounded-2xl bg-primary px-5 py-4 text-center font-black text-on-surface transition hover:opacity-90"
+          >
+            Ver botellas →
+          </Link>
+        ) : (
+          <p className="mt-6 w-full rounded-2xl border border-outline-variant bg-surface-dim/40 px-5 py-4 text-center text-sm font-black text-outline">
+            {group.sourceLabel}
+          </p>
+        )}
       </div>
     </article>
   );
@@ -610,6 +662,7 @@ function buildInventoryGroups(
   bottlings: Array<{
     bottleSizeMl: number;
     batch: {
+      code: string;
       product: {
         id: string;
         name: string;
@@ -617,7 +670,12 @@ function buildInventoryGroups(
         icon: string | null;
         active: boolean;
       };
-    };
+    } | null;
+    rawMaterial: {
+      id: string;
+      code: string;
+      name: string;
+    } | null;
    bottles: Array<{
   status: LiquorBottleStatus;
   expirationDate: Date | null;
@@ -629,17 +687,28 @@ function buildInventoryGroups(
   const groups = new Map<string, InventoryGroup>();
 
   for (const bottling of bottlings) {
-    const product = bottling.batch.product;
-    const key = `${product.id}-${bottling.bottleSizeMl}`;
+    const origin = resolveBottleOrigin(bottling);
+    const product = bottling.batch?.product ?? null;
+
+    /*
+     * Los embotellados de granel (tequila blanco del proceso) no tienen
+     * lote ni producto de catálogo, así que el grupo se identifica con
+     * la materia prima de la que salieron.
+     */
+    const identityId =
+      product?.id ?? bottling.rawMaterial?.id ?? origin.sourceCode;
+
+    const key = `${identityId}-${bottling.bottleSizeMl}`;
 
     const current =
       groups.get(key) ??
       {
         key,
-        productId: product.id,
-        productName: product.name,
-        productSlug: product.slug,
-        productIcon: product.icon ?? "🍾",
+        productId: identityId,
+        productName: origin.productName,
+        productSlug: product?.slug ?? null,
+        productIcon: origin.productIcon ?? "🍾",
+        sourceLabel: origin.sourceLabel,
         bottleSizeMl: bottling.bottleSizeMl,
         total: 0,
         available: 0,

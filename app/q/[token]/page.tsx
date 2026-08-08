@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
 import { LiquorBottleStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { BottleIcon, CheckIcon, AlertIcon } from "@/components/ui/icons";
@@ -53,6 +54,16 @@ export default async function PublicBottleTracePage({ params }: Props) {
               },
             },
           },
+
+          // El tequila blanco se embotella a granel: no tiene lote de
+          // elaboración, su origen es la materia prima del proceso.
+          rawMaterial: {
+            select: {
+              code: true,
+              name: true,
+              description: true,
+            },
+          },
         },
       },
     },
@@ -62,17 +73,12 @@ export default async function PublicBottleTracePage({ params }: Props) {
     notFound();
   }
 
-  const batch = bottle.bottling.batch;
-  const product = batch.product;
+  const origin = resolveBottleOrigin(bottle.bottling);
 
-  const alcohol =
-    batch.finalAlcohol ??
-    batch.initialAlcohol ??
-    batch.recipe.targetAlcohol ??
-    product.defaultAlcohol;
+  const alcohol = origin.alcohol;
 
   const expirationDate =
-    bottle.expirationDate ?? batch.expirationDate;
+    bottle.expirationDate ?? origin.expirationDate;
 
   const statusStyle = getPublicStatusStyle(bottle.status);
   const authenticityCode = createAuthenticityCode(
@@ -89,7 +95,7 @@ export default async function PublicBottleTracePage({ params }: Props) {
       <section className="mx-auto max-w-3xl overflow-hidden rounded-3xl border border-primary/25 bg-surface-container shadow-2xl">
         <header className="bg-surface-container-high p-6 text-center sm:p-10">
           <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl border border-outline-variant bg-surface-container-highest text-5xl">
-            {product.icon ?? <BottleIcon className="h-10 w-10 text-on-surface-variant" />}
+            {origin.productIcon ?? <BottleIcon className="h-10 w-10 text-on-surface-variant" />}
           </div>
 
           <p className="mt-6 text-sm font-black uppercase tracking-[0.3em] text-on-surface-variant">
@@ -97,7 +103,7 @@ export default async function PublicBottleTracePage({ params }: Props) {
           </p>
 
           <h1 className="mt-3 text-4xl font-black sm:text-5xl">
-            {product.name}
+            {origin.productName}
           </h1>
 
           <p className="mt-3 font-mono text-xl font-black text-primary">
@@ -136,7 +142,7 @@ export default async function PublicBottleTracePage({ params }: Props) {
               }
             />
 
-            <InfoCard label="Lote" value={batch.code} />
+            <InfoCard label={origin.sourceLabel} value={origin.sourceCode} />
 
             <InfoCard
               label="Número de serie"
@@ -147,7 +153,11 @@ export default async function PublicBottleTracePage({ params }: Props) {
 
             <InfoCard
               label="Elaboración"
-              value={formatDate(batch.productionDate)}
+              value={
+                origin.productionDate
+                  ? formatDate(origin.productionDate)
+                  : formatDate(bottle.bottledAt)
+              }
             />
 
             <InfoCard
@@ -168,14 +178,14 @@ export default async function PublicBottleTracePage({ params }: Props) {
             />
           </section>
 
-          {product.description ? (
+          {origin.productDescription ? (
             <section className="mt-6 rounded-2xl border border-outline-variant bg-surface-dim/40 p-5">
               <p className="font-mono text-xs font-black uppercase tracking-[0.2em] text-outline">
                 Descripción del producto
               </p>
 
               <p className="mt-3 leading-7 text-on-surface-variant">
-                {product.description}
+                {origin.productDescription}
               </p>
             </section>
           ) : null}

@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { DistillationType, EquipmentStatus, LotStage } from "@prisma/client";
+import { DistillationType, LotStage } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
+import { findAvailableEquipment, reserveEquipment } from "@/lib/equipmentAvailability";
 
 type DistillationSource = {
   key: string;
@@ -59,10 +60,22 @@ export default async function NewDistillationPage() {
   for (const destrozado of finishedDestrozados) {
     if (usedTypes.has(`${destrozado.lotId}-RECTIFICACION`)) continue;
 
+    /*
+     * Litros que pasan a rectificación: el corazón si se cortó, y si
+     * no, el total obtenido.
+     *
+     * OJO con el `??`: solo cae al respaldo cuando el valor es null,
+     * NO cuando es 0. Un destrozado cerrado sin registrar cortes deja
+     * `finalHeartLiters` en 0, y con `??` el destrozado quedaba fuera
+     * de la lista para siempre — el lote se atoraba sin poder
+     * rectificarse y sin ningún aviso.
+     */
     const heartLiters =
-      destrozado.finalHeartLiters ?? destrozado.finalLiters;
+      destrozado.finalHeartLiters && destrozado.finalHeartLiters > 0
+        ? destrozado.finalHeartLiters
+        : destrozado.finalLiters;
 
-    if (!heartLiters) continue;
+    if (!heartLiters || heartLiters <= 0) continue;
 
     sources.push({
       key: `${destrozado.lotId}-RECTIFICACION`,
@@ -75,15 +88,7 @@ export default async function NewDistillationPage() {
     });
   }
 
-  const equipments = await prisma.equipment.findMany({
-    where: {
-      type: "ALAMBIQUE",
-      active: true,
-    },
-    orderBy: {
-      name: "asc",
-    },
-  });
+  const equipments = await findAvailableEquipment(["ALAMBIQUE"]);
 
   async function createDistillation(formData: FormData) {
     "use server";
@@ -98,6 +103,12 @@ export default async function NewDistillationPage() {
         ? Number(initialAlcoholRaw)
         : null;
 
+    const reserved = await reserveEquipment(prisma, equipmentId, loadedLiters);
+
+    if (!reserved) {
+      redirect("/distillation/new?error=equipo-ocupado");
+    }
+
     const distillation = await prisma.distillation.create({
       data: {
         lotId,
@@ -105,14 +116,6 @@ export default async function NewDistillationPage() {
         type,
         loadedLiters,
         initialAlcohol,
-      },
-    });
-
-    await prisma.equipment.update({
-      where: { id: equipmentId },
-      data: {
-        status: EquipmentStatus.OPERANDO,
-        currentLoad: loadedLiters,
       },
     });
 
@@ -125,6 +128,46 @@ export default async function NewDistillationPage() {
     );
 
     redirect(`/distillation/${distillation.id}`);
+  }
+
+  const blockers: string[] = [];
+
+  if (sources.length === 0) {
+    blockers.push(
+      "No hay fermentaciones ni destrozados terminados esperando alambique. Cierra la etapa anterior del lote que quieres destilar.",
+    );
+  }
+
+  if (equipments.length === 0) {
+    blockers.push(
+      "Todos los alambiques están ocupados o fuera de servicio. Libera uno para poder continuar.",
+    );
+  }
+
+  if (blockers.length > 0) {
+    return (
+      <main className="min-h-screen bg-background p-10 text-on-surface">
+        <div className="mx-auto max-w-4xl">
+          <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
+            MAESTRO
+          </p>
+
+          <h1 className="mt-3 text-4xl font-bold">Nueva destilación</h1>
+
+          <div className="mt-8 space-y-3 rounded-2xl border border-secondary/30 bg-secondary/10 p-8">
+            <h2 className="text-xl font-bold text-secondary">
+              Todavía no se puede iniciar una destilación
+            </h2>
+
+            {blockers.map((blocker) => (
+              <p key={blocker} className="text-sm text-on-surface-variant">
+                {blocker}
+              </p>
+            ))}
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (

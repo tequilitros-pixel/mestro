@@ -10,6 +10,13 @@ import {
 } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
+import PageTabs from "@/components/ui/PageTabs";
+import {
+  ClipboardIcon,
+  HomeIcon,
+  ChartLineIcon,
+  BookIcon,
+} from "@/components/ui/icons";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -447,33 +454,9 @@ export default async function MillingDetailPage({
     redirect(`/milling/${id}`);
   }
 
-  return (
-    <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
-      <div className="mx-auto max-w-6xl">
-    
-
-        <header className="mt-8">
-          <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
-            MAESTRO
-          </p>
-
-          <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold sm:text-4xl">
-                Molienda {milling.lot.code}
-              </h1>
-
-              <p className="mt-2 text-sm text-on-surface-variant">
-                {milling.equipment.name} · Inicio{" "}
-                {formatDateTime(milling.startedAt)}
-              </p>
-            </div>
-
-            <MillingStatusBadge status={millingHealth} />
-          </div>
-        </header>
-
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  const homeTabContent = (
+    <>
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Kpi
             title="Equipo"
             value={milling.equipment.name}
@@ -671,9 +654,13 @@ export default async function MillingDetailPage({
             tanksUsed={tanksUsed}
           />
         )}
+    </>
+  );
 
+  const registrarTabContent = (
+    <>
         {!hasFinished && (
-          <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
+          <section className="rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
             <div className="mb-6">
               <h2 className="text-2xl font-bold">
                 Descargas a fermentación
@@ -803,10 +790,28 @@ export default async function MillingDetailPage({
             </div>
           </section>
         )}
+            {hasFinished && (
+          <section className="rounded-2xl border border-outline-variant bg-surface-container p-8 text-center">
+            <h2 className="text-xl font-bold text-on-surface">
+              Esta etapa ya está cerrada
+            </h2>
 
-        <MillingCharts events={milling.events} />
+            <p className="mx-auto mt-2 max-w-md text-sm text-on-surface-variant">
+              Ya no se pueden registrar más datos. Consulta lo capturado en las
+              pestañas Home, Gráficas y Bitácora.
+            </p>
+          </section>
+        )}
+    </>
+  );
 
-        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
+  const graficasTabContent = (
+    <MillingCharts events={milling.events} />
+  );
+
+  const bitacoraTabContent = (
+    <>
+        <section className="rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
               Descargas registradas
@@ -1042,6 +1047,63 @@ export default async function MillingDetailPage({
             </div>
           )}
         </section>
+    </>
+  );
+
+  const tabs = [
+    {
+      key: "home",
+      label: "Home",
+      icon: <HomeIcon className="h-4 w-4" />,
+      content: homeTabContent,
+    },
+    {
+      key: "registrar",
+      label: "Registrar datos",
+      icon: <ClipboardIcon className="h-4 w-4" />,
+      content: registrarTabContent,
+    },
+    {
+      key: "graficas",
+      label: "Gráficas",
+      icon: <ChartLineIcon className="h-4 w-4" />,
+      content: graficasTabContent,
+    },
+    {
+      key: "bitacora",
+      label: "Bitácora",
+      icon: <BookIcon className="h-4 w-4" />,
+      content: bitacoraTabContent,
+    },
+  ];
+
+  return (
+    <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
+      <div className="mx-auto max-w-6xl">
+        <header className="mt-8">
+          <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
+            MAESTRO
+          </p>
+
+          <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold sm:text-4xl">
+                Molienda {milling.lot.code}
+              </h1>
+
+              <p className="mt-2 text-sm text-on-surface-variant">
+                {milling.equipment.name} · Inicio{" "}
+                {formatDateTime(milling.startedAt)}
+              </p>
+            </div>
+
+            <MillingStatusBadge status={millingHealth} />
+          </div>
+        </header>
+
+        <div className="mt-8">
+          <PageTabs tabs={tabs} />
+        </div>
       </div>
     </main>
   );

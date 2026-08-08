@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import PayrollReport from "./PayrollReport";
+import PayrollDashboard from "./PayrollDashboard";
 
 export default async function PayrollPage() {
   const user = await getCurrentUser();
@@ -9,22 +9,21 @@ export default async function PayrollPage() {
     redirect("/login");
   }
 
-    if (user.role !== "ADMIN") {
+  if (user.role !== "ADMIN") {
     redirect("/timeclock");
   }
 
-
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
-      <div className="mx-auto max-w-4xl space-y-6">
+      <div className="mx-auto max-w-6xl space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Reporte semanal de nómina</h1>
+          <h1 className="text-3xl font-bold">Nómina y horarios</h1>
           <p className="mt-2 text-on-surface-variant">
-            Horas trabajadas y pago sugerido por trabajador.
+            Costo de mano de obra, horas trabajadas y su impacto en las ventas.
           </p>
         </div>
 
-        <PayrollReport />
+        <PayrollDashboard />
       </div>
     </main>
   );

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/icons";
 import type { ComponentType } from "react";
 import type { IconProps } from "@/components/ui/icons";
+import SendToLiquorBatch from "./SendToLiquorBatch";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -54,6 +55,36 @@ export default async function LotDetailPage({ params }: Props) {
 
   const lastFermentationReading = lastFermentation?.readings.at(-1);
 
+  /*
+   * Recetas disponibles para convertir este lote en una elaboración.
+   * Se marca cuáles tienen producto de inventario vinculado, porque
+   * sin ese vínculo el embotellado no abona nada al inventario y el
+   * usuario no se entera.
+   */
+  const recipeOptions = isFinished
+    ? await prisma.liquorRecipe.findMany({
+        where: { active: true },
+        orderBy: [{ product: { name: "asc" } }, { version: "desc" }],
+        select: {
+          id: true,
+          name: true,
+          version: true,
+          productId: true,
+          product: {
+            select: { name: true, icon: true, inventoryProductId: true },
+          },
+        },
+      })
+    : [];
+
+  const sentBatches = isFinished
+    ? await prisma.liquorBatch.findMany({
+        where: { lotId: lot.id },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, code: true },
+      })
+    : [];
+
   return (
     <main className="min-h-screen bg-background p-10 text-on-surface">
       <div className="mx-auto max-w-7xl">
@@ -77,6 +108,27 @@ export default async function LotDetailPage({ params }: Props) {
         </div>
 
         <LotMenu id={lot.id} isFinished={isFinished} />
+
+        {isFinished && (
+          <div className="mt-8">
+            <SendToLiquorBatch
+              lotId={lot.id}
+              lotCode={lot.code}
+              totalLiters={totalLiters}
+              alreadySent={sentBatches}
+              recipes={recipeOptions.map((recipe) => ({
+                id: recipe.id,
+                name: recipe.name,
+                version: recipe.version,
+                productId: recipe.productId,
+                productName: recipe.product.name,
+                productIcon: recipe.product.icon,
+                hasInventoryLink: recipe.product.inventoryProductId !== null,
+              }))}
+            />
+          </div>
+        )}
+
         <section className="mt-8 rounded-xl bg-surface-container p-8">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div>

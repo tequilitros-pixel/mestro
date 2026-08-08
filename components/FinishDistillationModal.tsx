@@ -34,30 +34,69 @@ export default function FinishDistillationModal({
 
             <form action={onConfirm} className="mt-8 space-y-4">
 
-              <input
-                name="finalLiters"
-                type="number"
-                step="0.01"
-                placeholder="Litros finales"
-                required
-                className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
-              />
+              {/*
+                Estos campos son obligatorios: sin etiqueta visible y sin
+                aviso de error, el botón de cerrar parecía no responder.
+              */}
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
+                  Litros finales
+                  <span className="ml-1 text-error" aria-hidden="true">
+                    *
+                  </span>
+                </span>
 
-              <input
-                name="finalAlcohol"
-                type="number"
-                step="0.01"
-                placeholder="Alcohol final corregido (%)"
-                required
-                className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
-              />
+                <input
+                  name="finalLiters"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Ej. 180.5"
+                  required
+                  className="peer w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary user-invalid:border-error"
+                />
 
-              <textarea
-                name="finalNotes"
-                rows={4}
-                placeholder="Observaciones finales"
-                className="w-full resize-none rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
-              />
+                <span className="mt-1 hidden text-xs font-semibold text-error peer-user-invalid:block">
+                  Este dato es obligatorio para cerrar.
+                </span>
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
+                  Alcohol final corregido (%)
+                  <span className="ml-1 text-error" aria-hidden="true">
+                    *
+                  </span>
+                </span>
+
+                <input
+                  name="finalAlcohol"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  placeholder="Ej. 55"
+                  required
+                  className="peer w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary user-invalid:border-error"
+                />
+
+                <span className="mt-1 hidden text-xs font-semibold text-error peer-user-invalid:block">
+                  Este dato es obligatorio para cerrar.
+                </span>
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
+                  Observaciones finales
+                </span>
+
+                <textarea
+                  name="finalNotes"
+                  rows={4}
+                  placeholder="Detalles del corte, aroma, incidencias."
+                  className="w-full resize-none rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+                />
+              </label>
 
               <div className="flex gap-4">
 

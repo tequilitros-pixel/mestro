@@ -137,8 +137,33 @@ export default async function LiquorProductInventoryPage({
 
   const totals = countBottleStatuses(allProductBottles);
 
+  /*
+   * Esta pantalla se navega por slug de producto, y las botellas de
+   * granel (tequila blanco, que sale del proceso y no de una receta)
+   * no pertenecen a ningún producto del catálogo. La consulta ya las
+   * deja fuera al filtrar por `batch.productId`; aquí solo se estrecha
+   * el tipo para poder leer el lote sin comprobaciones extra.
+   */
+  const productBottles = bottles.flatMap((bottle) => {
+    const batch = bottle.bottling.batch;
+
+    if (!batch) {
+      return [];
+    }
+
+    return [
+      {
+        ...bottle,
+        bottling: {
+          ...bottle.bottling,
+          batch,
+        },
+      },
+    ];
+  });
+
   const availableLiters =
-    bottles
+    productBottles
       .filter(
         (bottle) =>
           bottle.status === LiquorBottleStatus.DISPONIBLE
@@ -197,7 +222,7 @@ export default async function LiquorProductInventoryPage({
             <div className="grid min-w-[260px] grid-cols-2 gap-3">
               <HeaderValue
                 label="Botellas mostradas"
-                value={formatNumber(bottles.length, 0)}
+                value={formatNumber(productBottles.length, 0)}
               />
 
               <HeaderValue
@@ -209,69 +234,71 @@ export default async function LiquorProductInventoryPage({
         </div>
       </header>
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatusKpi
-          label="Total"
-          value={totals.total}
-          icon={PackageIcon}
-          active={!selectedStatus}
-          href={buildFilterUrl(product.slug, bottleSizeMl, null)}
-        />
+      <section className="mt-6">
+        <div className="inline-flex flex-wrap gap-1 rounded-2xl border border-outline-variant bg-surface-container p-1.5">
+          <StatusFilter
+            label="Total"
+            value={totals.total}
+            icon={PackageIcon}
+            active={!selectedStatus}
+            href={buildFilterUrl(product.slug, bottleSizeMl, null)}
+          />
 
-        <StatusKpi
-          label="Disponibles"
-          value={totals.available}
-          icon={BottleIcon}
-          active={
-            selectedStatus === LiquorBottleStatus.DISPONIBLE
-          }
-          href={buildFilterUrl(
-            product.slug,
-            bottleSizeMl,
-            LiquorBottleStatus.DISPONIBLE
-          )}
-        />
+          <StatusFilter
+            label="Disponibles"
+            value={totals.available}
+            icon={BottleIcon}
+            active={
+              selectedStatus === LiquorBottleStatus.DISPONIBLE
+            }
+            href={buildFilterUrl(
+              product.slug,
+              bottleSizeMl,
+              LiquorBottleStatus.DISPONIBLE
+            )}
+          />
 
-        <StatusKpi
-          label="Reservadas"
-          value={totals.reserved}
-          icon={ClockIcon}
-          active={
-            selectedStatus === LiquorBottleStatus.RESERVADA
-          }
-          href={buildFilterUrl(
-            product.slug,
-            bottleSizeMl,
-            LiquorBottleStatus.RESERVADA
-          )}
-        />
+          <StatusFilter
+            label="Reservadas"
+            value={totals.reserved}
+            icon={ClockIcon}
+            active={
+              selectedStatus === LiquorBottleStatus.RESERVADA
+            }
+            href={buildFilterUrl(
+              product.slug,
+              bottleSizeMl,
+              LiquorBottleStatus.RESERVADA
+            )}
+          />
 
-        <StatusKpi
-          label="Vendidas"
-          value={totals.sold}
-          icon={CheckIcon}
-          active={selectedStatus === LiquorBottleStatus.VENDIDA}
-          href={buildFilterUrl(
-            product.slug,
-            bottleSizeMl,
-            LiquorBottleStatus.VENDIDA
-          )}
-        />
+          <StatusFilter
+            label="Vendidas"
+            value={totals.sold}
+            icon={CheckIcon}
+            active={selectedStatus === LiquorBottleStatus.VENDIDA}
+            href={buildFilterUrl(
+              product.slug,
+              bottleSizeMl,
+              LiquorBottleStatus.VENDIDA
+            )}
+          />
 
-        <StatusKpi
-          label="Fuera de inventario"
-          value={totals.loss + totals.removed}
-          icon={AlertIcon}
-          active={
-            selectedStatus === LiquorBottleStatus.MERMA ||
-            selectedStatus === LiquorBottleStatus.RETIRADA
-          }
-          href={buildFilterUrl(
-            product.slug,
-            bottleSizeMl,
-            LiquorBottleStatus.MERMA
-          )}
-        />
+          <StatusFilter
+            label="Fuera de inventario"
+            value={totals.loss + totals.removed}
+            icon={AlertIcon}
+            active={
+              selectedStatus === LiquorBottleStatus.MERMA ||
+              selectedStatus === LiquorBottleStatus.RETIRADA
+            }
+            href={buildFilterUrl(
+              product.slug,
+              bottleSizeMl,
+              LiquorBottleStatus.MERMA
+            )}
+          />
+        </div>
       </section>
 
       <section className="mt-8">
@@ -289,15 +316,15 @@ export default async function LiquorProductInventoryPage({
           </div>
 
           <p className="text-sm text-outline">
-            {formatNumber(bottles.length, 0)} resultados
+            {formatNumber(productBottles.length, 0)} resultados
           </p>
         </div>
 
-        {bottles.length === 0 ? (
+        {productBottles.length === 0 ? (
           <EmptyBottleList />
         ) : (
           <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {bottles.map((bottle) => (
+            {productBottles.map((bottle) => (
               <BottleCard key={bottle.id} bottle={bottle} />
             ))}
           </div>
@@ -463,7 +490,7 @@ function HeaderValue({
   );
 }
 
-function StatusKpi({
+function StatusFilter({
   label,
   value,
   icon: Icon,
@@ -479,31 +506,23 @@ function StatusKpi({
   return (
     <Link
       href={href}
-      className={`rounded-2xl border p-5 transition duration-150 ease-out hover:scale-[1.02] active:scale-[0.98] ${
+      className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${
         active
-          ? "border-primary bg-primary/10"
-          : "border-outline-variant bg-surface-container hover:border-primary/25"
+          ? "bg-primary text-on-primary shadow"
+          : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
       }`}
     >
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-container-high/80">
-          <Icon className="h-5 w-5 text-on-surface-variant" />
-        </div>
-
-        {active ? (
-          <span className="rounded-full bg-primary px-2 py-1 text-[10px] font-black uppercase tracking-wider text-on-primary">
-            Activo
-          </span>
-        ) : null}
-      </div>
-
-      <p className="mt-4 text-sm font-bold text-on-surface-variant">
-        {label}
-      </p>
-
-      <p className="mt-2 text-3xl font-black text-on-surface">
+      <Icon className="h-4 w-4" />
+      {label}
+      <span
+        className={`rounded-full px-2 py-0.5 text-xs font-black ${
+          active
+            ? "bg-on-primary/20 text-on-primary"
+            : "bg-surface-container-high text-on-surface-variant"
+        }`}
+      >
         {formatNumber(value, 0)}
-      </p>
+      </span>
     </Link>
   );
 }

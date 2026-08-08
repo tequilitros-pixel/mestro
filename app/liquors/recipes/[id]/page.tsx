@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import RecipeIngredientsEditor from "@/components/liquors/RecipeIngredientsEditor";
 import RecipeStepsEditor from "../../RecipeStepsEditor";
+import PageTabs from "@/components/ui/PageTabs";
+import { BookIcon, ListChecksIcon, GearIcon } from "@/components/ui/icons";
 
 type Props = {
   params: Promise<{
@@ -179,68 +181,98 @@ export default async function LiquorRecipeDetailPage({
           </span>
         </div>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric
-            label="Volumen base"
-            value={
-              recipe.targetLiters !== null
-                ? `${formatNumber(recipe.targetLiters)} L`
-                : "Sin definir"
-            }
-          />
-
-          <Metric
-            label="Alcohol objetivo"
-            value={
-              recipe.targetAlcohol !== null
-                ? `${formatNumber(recipe.targetAlcohol)}%`
-                : "Sin definir"
-            }
-          />
-
-          <Metric
-            label="Ingredientes"
-            value={String(recipe.ingredients.length)}
-          />
-
-          <Metric
-            label="Pasos"
-            value={String(recipe.steps.length)}
-          />
-        </div>
-
-        {(recipe.instructions || recipe.notes) && (
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
-            {recipe.instructions && (
-              <InformationCard
-                title="Instrucciones generales"
-                value={recipe.instructions}
-              />
-            )}
-
-            {recipe.notes && (
-              <InformationCard
-                title="Notas de la receta"
-                value={recipe.notes}
-              />
-            )}
-          </div>
-        )}
       </header>
 
       <div className="mt-8">
-        <RecipeIngredientsEditor
-          recipeId={recipe.id}
-          ingredients={recipe.ingredients}
-          rawMaterials={rawMaterials}
-        />
-      </div>
+        <PageTabs
+          tabs={[
+            {
+              key: "receta",
+              label: "Receta actual",
+              icon: <BookIcon className="h-4 w-4" />,
+              content: (
+                <div className="space-y-6">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <Metric
+                      label="Volumen base"
+                      value={
+                        recipe.targetLiters !== null
+                          ? `${formatNumber(recipe.targetLiters)} L`
+                          : "Sin definir"
+                      }
+                    />
 
-      <div className="mt-8">
-        <RecipeStepsEditor
-          recipeId={recipe.id}
-          steps={stepsForEditor}
-          ingredients={ingredientsForSteps}
+                    <Metric
+                      label="Alcohol objetivo"
+                      value={
+                        recipe.targetAlcohol !== null
+                          ? `${formatNumber(recipe.targetAlcohol)}%`
+                          : "Sin definir"
+                      }
+                    />
+
+                    <Metric
+                      label="Ingredientes"
+                      value={String(recipe.ingredients.length)}
+                    />
+
+                    <Metric
+                      label="Pasos"
+                      value={String(recipe.steps.length)}
+                    />
+                  </div>
+
+                  {(recipe.instructions || recipe.notes) && (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {recipe.instructions && (
+                        <InformationCard
+                          title="Instrucciones generales"
+                          value={recipe.instructions}
+                        />
+                      )}
+
+                      {recipe.notes && (
+                        <InformationCard
+                          title="Notas de la receta"
+                          value={recipe.notes}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {!recipe.instructions && !recipe.notes && (
+                    <p className="text-sm text-on-surface-variant">
+                      Esta receta no tiene instrucciones generales ni notas todavía.
+                    </p>
+                  )}
+                </div>
+              ),
+            },
+            {
+              key: "ingredientes",
+              label: "Ingredientes",
+              icon: <ListChecksIcon className="h-4 w-4" />,
+              content: (
+                <RecipeIngredientsEditor
+                  recipeId={recipe.id}
+                  ingredients={recipe.ingredients}
+                  rawMaterials={rawMaterials}
+                />
+              ),
+            },
+            {
+              key: "proceso",
+              label: "Proceso",
+              icon: <GearIcon className="h-4 w-4" />,
+              content: (
+                <RecipeStepsEditor
+                  recipeId={recipe.id}
+                  steps={stepsForEditor}
+                  ingredients={ingredientsForSteps}
+                />
+              ),
+            },
+          ]}
         />
       </div>
     </main>

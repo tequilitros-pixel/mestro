@@ -11,12 +11,16 @@ import { advanceLotStage } from "@/lib/lotStage";
 
 import CookingCharts from "@/components/CookingCharts";
 import FinishCookingModal from "@/components/FinishCookingModal";
+import PageTabs from "@/components/ui/PageTabs";
 import {
   FlameIcon,
   ArrowUpIcon,
   ArrowDownIcon,
   PauseIcon,
   ClipboardIcon,
+  HomeIcon,
+  ChartLineIcon,
+  BookIcon,
   type IconProps,
 } from "@/components/ui/icons";
 import type { ComponentType } from "react";
@@ -433,35 +437,9 @@ export default async function CookingDetailPage({
     redirect(`/cooking/${id}`);
   }
 
-  return (
-    <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
-      <div className="mx-auto max-w-6xl">
-       
-
-        <header className="mt-8">
-          <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
-            MAESTRO
-          </p>
-
-          <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold sm:text-4xl">
-                Cocción {cooking.lot.code}
-              </h1>
-
-              <p className="mt-2 text-sm text-on-surface-variant">
-                Horno {cooking.equipment.name} · Inicio{" "}
-                {formatDateTime(cooking.startedAt)}
-              </p>
-            </div>
-
-            <CookingStatusBadge
-              status={cookingHealth}
-            />
-          </div>
-        </header>
-
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  const homeTabContent = (
+    <>
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Kpi
             title="Horno"
             value={cooking.equipment.name}
@@ -779,9 +757,13 @@ export default async function CookingDetailPage({
             eventsCount={cooking.events.length}
           />
         )}
+    </>
+  );
 
+  const registrarTabContent = (
+    <>
         {!hasFinished && (
-          <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
+          <section className="rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
             <div className="mb-6">
               <h2 className="text-2xl font-bold">
                 Acciones de cocción
@@ -951,10 +933,28 @@ export default async function CookingDetailPage({
             )}
           </section>
         )}
+            {hasFinished && (
+          <section className="rounded-2xl border border-outline-variant bg-surface-container p-8 text-center">
+            <h2 className="text-xl font-bold text-on-surface">
+              Esta etapa ya está cerrada
+            </h2>
 
-        <CookingCharts events={cooking.events} />
+            <p className="mx-auto mt-2 max-w-md text-sm text-on-surface-variant">
+              Ya no se pueden registrar más datos. Consulta lo capturado en las
+              pestañas Home, Gráficas y Bitácora.
+            </p>
+          </section>
+        )}
+    </>
+  );
 
-        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
+  const graficasTabContent = (
+    <CookingCharts events={cooking.events} />
+  );
+
+  const bitacoraTabContent = (
+    <>
+        <section className="rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
               Bitácora de cocción
@@ -1091,6 +1091,65 @@ export default async function CookingDetailPage({
             </div>
           )}
         </section>
+    </>
+  );
+
+  const tabs = [
+    {
+      key: "home",
+      label: "Home",
+      icon: <HomeIcon className="h-4 w-4" />,
+      content: homeTabContent,
+    },
+    {
+      key: "registrar",
+      label: "Registrar datos",
+      icon: <ClipboardIcon className="h-4 w-4" />,
+      content: registrarTabContent,
+    },
+    {
+      key: "graficas",
+      label: "Gráficas",
+      icon: <ChartLineIcon className="h-4 w-4" />,
+      content: graficasTabContent,
+    },
+    {
+      key: "bitacora",
+      label: "Bitácora",
+      icon: <BookIcon className="h-4 w-4" />,
+      content: bitacoraTabContent,
+    },
+  ];
+
+  return (
+    <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
+      <div className="mx-auto max-w-6xl">
+        <header className="mt-8">
+          <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
+            MAESTRO
+          </p>
+
+          <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold sm:text-4xl">
+                Cocción {cooking.lot.code}
+              </h1>
+
+              <p className="mt-2 text-sm text-on-surface-variant">
+                Horno {cooking.equipment.name} · Inicio{" "}
+                {formatDateTime(cooking.startedAt)}
+              </p>
+            </div>
+
+            <CookingStatusBadge
+              status={cookingHealth}
+            />
+          </div>
+        </header>
+
+        <div className="mt-8">
+          <PageTabs tabs={tabs} />
+        </div>
       </div>
     </main>
   );

@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { PrinterIcon } from "@/components/ui/icons";
+import {
+  PrinterIcon,
+  ClipboardIcon,
+  HomeIcon,
+  ChartLineIcon,
+  BookIcon,
+} from "@/components/ui/icons";
+import PageTabs from "@/components/ui/PageTabs";
 import FinishDistillationModal from "@/components/FinishDistillationModal";
 import DistillationTimeline from "@/components/DistillationTimeline";
 import DistillationCharts from "@/components/DistillationCharts";
@@ -10,10 +17,12 @@ import {
   DistillationStatus,
   EquipmentStatus,
   LotStage,
+  RawMaterialMovementType,
 } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { randomUUID } from "crypto";
 import { advanceLotStage } from "@/lib/lotStage";
+import { applyMovement } from "@/app/actions/rawMaterials";
 import {
   getCurrentAlcohol,
   getCurrentTemperature,
@@ -55,6 +64,7 @@ export default async function DistillationDetailPage({
 
   const distillationEquipmentId = distillation.equipmentId;
   const distillationLotId = distillation.lotId;
+  const distillationLotCode = distillation.lot.code;
   const distillationType = distillation.type;
 
   const hasFinished =
@@ -462,13 +472,41 @@ export default async function DistillationDetailPage({
       redirect(`/distillation/${id}`);
     }
 
-    await prisma.lot.update({
-      where: { id: distillationLotId },
-      data: {
-        finishedAt: new Date(),
-        totalLitersObtained: totalLiters,
-        qrToken: lot.qrToken ?? randomUUID(),
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.lot.update({
+        where: { id: distillationLotId },
+        data: {
+          finishedAt: new Date(),
+          totalLitersObtained: totalLiters,
+          qrToken: lot.qrToken ?? randomUUID(),
+        },
+      });
+
+      /*
+       * El destilado terminado entra al almacén de materia prima, al
+       * material marcado como receptor de lotes (típicamente "Tequila
+       * blanco a granel"). Queda registrado de qué lote vino, así que
+       * el stock es a granel pero con historial rastreable.
+       *
+       * Si nadie ha marcado un material receptor, el lote se cierra
+       * igual: no se bloquea la producción por una configuración
+       * pendiente, pero tampoco se inventa el destino.
+       */
+      const target = await tx.rawMaterial.findFirst({
+        where: { receivesLotOutput: true, active: true },
+        select: { id: true },
+      });
+
+      if (target) {
+        await applyMovement(tx, {
+          rawMaterialId: target.id,
+          type: RawMaterialMovementType.PRODUCCION,
+          amount: totalLiters,
+          lotId: distillationLotId,
+          createdById: user.id,
+          notes: `Destilado obtenido del lote ${distillationLotCode}.`,
+        });
+      }
     });
 
     redirect(`/distillation/${id}`);
@@ -481,11 +519,500 @@ export default async function DistillationDetailPage({
     isFinalStep &&
     distillation.lot.stage === LotStage.TERMINADO;
 
+  const homeTabContent = (
+    <>
+      <section className="rounded-2xl border border-outline-variant bg-surface-container p-6 sm:p-8">
+        <p className="font-mono text-sm uppercase tracking-[0.4em] text-outline">
+          MAESTRO INTELIGENTE
+        </p>
+
+        <h2
+          className={`mt-3 text-2xl font-bold sm:text-3xl ${advice.color}`}
+        >
+          {hasFinished
+            ? "Proceso de destilación terminado"
+            : advice.title}
+        </h2>
+
+        <p className="mt-2 text-on-surface-variant">
+          {hasFinished
+            ? "La destilación quedó cerrada y su expediente permanece disponible para consulta."
+            : advice.message}
+        </p>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-3">
+          <Mini
+            title="Alcohol actual"
+            value={
+              lastAlcohol !== null &&
+              lastAlcohol !== undefined
+                ? `${formatNumber(
+                    lastAlcohol
+                  )} %`
+                : "-"
+            }
+          />
+
+          <Mini
+            title="Alcohol corregido"
+            value={
+              lastAlcoholCorrected !== null &&
+              lastAlcoholCorrected !==
+                undefined
+                ? `${formatNumber(
+                    lastAlcoholCorrected
+                  )} %`
+                : "-"
+            }
+          />
+
+          <Mini
+            title="Temperatura"
+            value={
+              lastTemperature !== null &&
+              lastTemperature !== undefined
+                ? `${formatNumber(
+                    lastTemperature
+                  )} °C`
+                : "-"
+            }
+          />
+        </div>
+      </section>
+
+      <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card
+          title="Alambique"
+          value={distillation.equipment.name}
+          detail="Equipo asignado"
+        />
+
+        <Card
+          title="Tipo"
+          value={formatDistillationType(
+            distillation.type
+          )}
+          detail="Etapa de destilación"
+        />
+
+        <Card
+          title="Cargado"
+          value={`${formatNumber(
+            distillation.loadedLiters
+          )} L`}
+          detail="Volumen inicial"
+        />
+
+        <Card
+          title="Estado"
+          value={formatStatus(
+            distillation.status
+          )}
+          detail={
+            hasFinished
+              ? "Proceso cerrado"
+              : processStatus
+          }
+          highlight={!hasFinished}
+        />
+      </section>
+
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card
+          title="Temp. alambique"
+          value={
+            lastTemperature !== null &&
+            lastTemperature !== undefined
+              ? `${formatNumber(
+                  lastTemperature
+                )} °C`
+              : "-"
+          }
+        />
+
+        <Card
+          title="Temp. salida"
+          value={
+            lastOutputTemperature !== null
+              ? `${formatNumber(
+                  lastOutputTemperature
+                )} °C`
+              : "-"
+          }
+        />
+
+        <Card
+          title="Alcohol leído"
+          value={
+            lastAlcohol !== null &&
+            lastAlcohol !== undefined
+              ? `${formatNumber(
+                  lastAlcohol
+                )} %`
+              : "-"
+          }
+        />
+
+        <Card
+          title="Alcohol corregido"
+          value={
+            lastAlcoholCorrected !== null &&
+            lastAlcoholCorrected !==
+              undefined
+              ? `${formatNumber(
+                  lastAlcoholCorrected
+                )} %`
+              : "-"
+          }
+          highlight
+        />
+      </section>
+
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card
+          title="Litros acumulados"
+          value={`${formatNumber(
+            totalLiters
+          )} L`}
+        />
+
+        <Card
+          title="Alcohol absoluto"
+          value={
+            absoluteAlcohol !== null
+              ? `${formatNumber(
+                  absoluteAlcohol
+                )} LAA`
+              : "-"
+          }
+        />
+
+        <Card
+          title="Rendimiento"
+          value={`${formatNumber(
+            distillationYield
+          )} %`}
+        />
+
+        <Card
+          title="Eventos"
+          value={distillation.events.length}
+        />
+
+        <Card
+          title="Cabezas"
+          value={`${formatNumber(
+            headsLiters
+          )} L`}
+        />
+
+        <Card
+          title="Corazón"
+          value={`${formatNumber(
+            heartLiters
+          )} L`}
+          highlight
+        />
+
+        <Card
+          title="Colas"
+          value={`${formatNumber(
+            tailLiters
+          )} L`}
+        />
+
+        <Card
+          title="Alcohol inicial"
+          value={
+            distillation.initialAlcohol !==
+            null
+              ? `${formatNumber(
+                  distillation.initialAlcohol
+                )} %`
+              : "-"
+          }
+        />
+      </section>
+
+      {hasFinished && (
+        <DistillationClosureAct
+          closureCode={
+            distillation.closureCode
+          }
+          lotCode={distillation.lot.code}
+          equipmentName={
+            distillation.equipment.name
+          }
+          type={distillation.type}
+          loadedLiters={
+            distillation.loadedLiters
+          }
+          initialAlcohol={
+            distillation.initialAlcohol
+          }
+          finalLiters={
+            distillation.finalLiters
+          }
+          finalAlcohol={
+            distillation.finalAlcohol
+          }
+          finalHeadsLiters={
+            distillation.finalHeadsLiters
+          }
+          finalHeartLiters={
+            distillation.finalHeartLiters
+          }
+          finalTailsLiters={
+            distillation.finalTailsLiters
+          }
+          finalNotes={
+            distillation.finalNotes
+          }
+          startedAt={
+            distillation.startedAt
+          }
+          finishedAt={
+            distillation.finishedAt
+          }
+          finishedByName={
+            distillation.finishedBy?.name
+          }
+          eventsCount={
+            distillation.events.length
+          }
+        />
+      )}
+    </>
+  );
+
+  const registrarTabContent = (
+    <>
+      {lotReadyToFinish && (
+        <FinishLotSection
+          lotId={distillation.lot.id}
+          lotCode={distillation.lot.code}
+          totalLitersObtained={
+            distillation.lot.totalLitersObtained
+          }
+          qrToken={distillation.lot.qrToken}
+          finishedAt={distillation.lot.finishedAt}
+          onConfirm={finishLot}
+        />
+      )}
+
+      {!hasFinished && (
+        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8 first:mt-0">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold">
+              Acciones de destilación
+            </h2>
+
+            <p className="mt-2 text-sm text-on-surface-variant">
+              Registra las lecturas y los cambios
+              de corte conforme avanza el proceso.
+            </p>
+          </div>
+
+          <form
+            action={addEvent}
+            className="rounded-2xl border border-outline-variant bg-surface-container-high p-5 sm:p-6"
+          >
+            <p className="mb-4 text-xl font-bold">
+              Registro de destilación
+            </p>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label>
+                <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
+                  Tipo de registro
+                </span>
+
+                <select
+                  name="type"
+                  required
+                  className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+                >
+                  <option value="">
+                    Selecciona una acción
+                  </option>
+
+                  <option value="INICIO_CALENTAMIENTO">
+                    Inicio de calentamiento
+                  </option>
+
+                  <option value="TEMPERATURA">
+                    Temperatura
+                  </option>
+
+                  <option value="ALCOHOL">
+                    Alcohol
+                  </option>
+
+                  <option value="LITROS">
+                    Registrar litros
+                  </option>
+
+                  <option value="CORTE_CABEZAS">
+                    Corte de cabezas
+                  </option>
+
+                  <option value="INICIO_CORAZON">
+                    Inicio de corazón
+                  </option>
+
+                  <option value="FIN_CORAZON">
+                    Fin de corazón
+                  </option>
+
+                  <option value="INICIO_COLAS">
+                    Inicio de colas
+                  </option>
+
+                  <option value="OBSERVACION">
+                    Observación
+                  </option>
+                </select>
+              </label>
+
+              <NumberField
+                name="temperature"
+                label="Temperatura del alambique"
+                placeholder="Ej. 92"
+                suffix="°C"
+                step="0.01"
+                min="0"
+              />
+
+              <NumberField
+                name="outputTemperature"
+                label="Temperatura de salida"
+                placeholder="Ej. 20"
+                suffix="°C"
+                step="0.01"
+                min="0"
+              />
+
+              <NumberField
+                name="alcohol"
+                label="Alcohol leído"
+                placeholder="Ej. 55"
+                suffix="%"
+                step="0.01"
+                min="0"
+                max="100"
+              />
+
+              <NumberField
+                name="alcoholCorrected"
+                label="Alcohol corregido"
+                placeholder="Ej. 54.7"
+                suffix="%"
+                step="0.01"
+                min="0"
+                max="100"
+              />
+
+              <NumberField
+                name="liters"
+                label="Litros obtenidos"
+                placeholder="Ej. 40"
+                suffix="L"
+                step="0.01"
+                min="0"
+              />
+
+              <label className="md:col-span-2">
+                <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
+                  Observaciones
+                </span>
+
+                <textarea
+                  name="notes"
+                  rows={3}
+                  placeholder="Describe el comportamiento, aroma, flujo, corte realizado o cualquier detalle importante."
+                  className="w-full resize-none rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+                />
+              </label>
+            </div>
+
+            <button
+              type="submit"
+              className="mt-5 w-full rounded-xl bg-primary py-3 font-bold text-on-primary transition hover:opacity-90"
+            >
+              Guardar registro
+            </button>
+          </form>
+
+          <div className="mt-6 border-t border-outline-variant pt-6">
+            <p className="mb-3 text-sm text-on-surface-variant">
+              Finaliza únicamente después de
+              confirmar el volumen y alcohol
+              oficiales.
+            </p>
+
+            <FinishDistillationModal
+              onConfirm={finishDistillation}
+            />
+          </div>
+        </section>
+      )}
+            {hasFinished && (
+          <section className="rounded-2xl border border-outline-variant bg-surface-container p-8 text-center">
+            <h2 className="text-xl font-bold text-on-surface">
+              Esta etapa ya está cerrada
+            </h2>
+
+            <p className="mx-auto mt-2 max-w-md text-sm text-on-surface-variant">
+              Ya no se pueden registrar más datos. Consulta lo capturado en las
+              pestañas Home, Gráficas y Bitácora.
+            </p>
+          </section>
+        )}
+    </>
+  );
+
+  const graficasTabContent = (
+    <DistillationCharts
+      events={distillation.events}
+    />
+  );
+
+  const bitacoraTabContent = (
+    <DistillationTimeline
+      events={distillation.events}
+    />
+  );
+
+  const tabs = [
+    {
+      key: "home",
+      label: "Home",
+      icon: <HomeIcon className="h-4 w-4" />,
+      content: homeTabContent,
+    },
+    {
+      key: "registrar",
+      label: "Registrar datos",
+      icon: <ClipboardIcon className="h-4 w-4" />,
+      content: registrarTabContent,
+    },
+    {
+      key: "graficas",
+      label: "Gráficas",
+      icon: <ChartLineIcon className="h-4 w-4" />,
+      content: graficasTabContent,
+    },
+    {
+      key: "bitacora",
+      label: "Bitácora",
+      icon: <BookIcon className="h-4 w-4" />,
+      content: bitacoraTabContent,
+    },
+  ];
+
   return (
     <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
       <div className="mx-auto max-w-6xl">
-    
-
         <header className="mt-8">
           <p className="font-mono text-sm uppercase tracking-[0.4em] text-outline">
             MAESTRO
@@ -517,446 +1044,9 @@ export default async function DistillationDetailPage({
           </div>
         </header>
 
-        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-6 sm:p-8">
-          <p className="font-mono text-sm uppercase tracking-[0.4em] text-outline">
-            MAESTRO INTELIGENTE
-          </p>
-
-          <h2
-            className={`mt-3 text-2xl font-bold sm:text-3xl ${advice.color}`}
-          >
-            {hasFinished
-              ? "Proceso de destilación terminado"
-              : advice.title}
-          </h2>
-
-          <p className="mt-2 text-on-surface-variant">
-            {hasFinished
-              ? "La destilación quedó cerrada y su expediente permanece disponible para consulta."
-              : advice.message}
-          </p>
-
-          <div className="mt-5 grid gap-4 sm:grid-cols-3">
-            <Mini
-              title="Alcohol actual"
-              value={
-                lastAlcohol !== null &&
-                lastAlcohol !== undefined
-                  ? `${formatNumber(
-                      lastAlcohol
-                    )} %`
-                  : "-"
-              }
-            />
-
-            <Mini
-              title="Alcohol corregido"
-              value={
-                lastAlcoholCorrected !== null &&
-                lastAlcoholCorrected !==
-                  undefined
-                  ? `${formatNumber(
-                      lastAlcoholCorrected
-                    )} %`
-                  : "-"
-              }
-            />
-
-            <Mini
-              title="Temperatura"
-              value={
-                lastTemperature !== null &&
-                lastTemperature !== undefined
-                  ? `${formatNumber(
-                      lastTemperature
-                    )} °C`
-                  : "-"
-              }
-            />
-          </div>
-        </section>
-
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card
-            title="Alambique"
-            value={distillation.equipment.name}
-            detail="Equipo asignado"
-          />
-
-          <Card
-            title="Tipo"
-            value={formatDistillationType(
-              distillation.type
-            )}
-            detail="Etapa de destilación"
-          />
-
-          <Card
-            title="Cargado"
-            value={`${formatNumber(
-              distillation.loadedLiters
-            )} L`}
-            detail="Volumen inicial"
-          />
-
-          <Card
-            title="Estado"
-            value={formatStatus(
-              distillation.status
-            )}
-            detail={
-              hasFinished
-                ? "Proceso cerrado"
-                : processStatus
-            }
-            highlight={!hasFinished}
-          />
-        </section>
-
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card
-            title="Temp. alambique"
-            value={
-              lastTemperature !== null &&
-              lastTemperature !== undefined
-                ? `${formatNumber(
-                    lastTemperature
-                  )} °C`
-                : "-"
-            }
-          />
-
-          <Card
-            title="Temp. salida"
-            value={
-              lastOutputTemperature !== null
-                ? `${formatNumber(
-                    lastOutputTemperature
-                  )} °C`
-                : "-"
-            }
-          />
-
-          <Card
-            title="Alcohol leído"
-            value={
-              lastAlcohol !== null &&
-              lastAlcohol !== undefined
-                ? `${formatNumber(
-                    lastAlcohol
-                  )} %`
-                : "-"
-            }
-          />
-
-          <Card
-            title="Alcohol corregido"
-            value={
-              lastAlcoholCorrected !== null &&
-              lastAlcoholCorrected !==
-                undefined
-                ? `${formatNumber(
-                    lastAlcoholCorrected
-                  )} %`
-                : "-"
-            }
-            highlight
-          />
-        </section>
-
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card
-            title="Litros acumulados"
-            value={`${formatNumber(
-              totalLiters
-            )} L`}
-          />
-
-          <Card
-            title="Alcohol absoluto"
-            value={
-              absoluteAlcohol !== null
-                ? `${formatNumber(
-                    absoluteAlcohol
-                  )} LAA`
-                : "-"
-            }
-          />
-
-          <Card
-            title="Rendimiento"
-            value={`${formatNumber(
-              distillationYield
-            )} %`}
-          />
-
-          <Card
-            title="Eventos"
-            value={distillation.events.length}
-          />
-
-          <Card
-            title="Cabezas"
-            value={`${formatNumber(
-              headsLiters
-            )} L`}
-          />
-
-          <Card
-            title="Corazón"
-            value={`${formatNumber(
-              heartLiters
-            )} L`}
-            highlight
-          />
-
-          <Card
-            title="Colas"
-            value={`${formatNumber(
-              tailLiters
-            )} L`}
-          />
-
-          <Card
-            title="Alcohol inicial"
-            value={
-              distillation.initialAlcohol !==
-              null
-                ? `${formatNumber(
-                    distillation.initialAlcohol
-                  )} %`
-                : "-"
-            }
-          />
-        </section>
-
-        {hasFinished && (
-          <DistillationClosureAct
-            closureCode={
-              distillation.closureCode
-            }
-            lotCode={distillation.lot.code}
-            equipmentName={
-              distillation.equipment.name
-            }
-            type={distillation.type}
-            loadedLiters={
-              distillation.loadedLiters
-            }
-            initialAlcohol={
-              distillation.initialAlcohol
-            }
-            finalLiters={
-              distillation.finalLiters
-            }
-            finalAlcohol={
-              distillation.finalAlcohol
-            }
-            finalHeadsLiters={
-              distillation.finalHeadsLiters
-            }
-            finalHeartLiters={
-              distillation.finalHeartLiters
-            }
-            finalTailsLiters={
-              distillation.finalTailsLiters
-            }
-            finalNotes={
-              distillation.finalNotes
-            }
-            startedAt={
-              distillation.startedAt
-            }
-            finishedAt={
-              distillation.finishedAt
-            }
-            finishedByName={
-              distillation.finishedBy?.name
-            }
-            eventsCount={
-              distillation.events.length
-            }
-          />
-        )}
-
-        {lotReadyToFinish && (
-          <FinishLotSection
-            lotId={distillation.lot.id}
-            lotCode={distillation.lot.code}
-            totalLitersObtained={
-              distillation.lot.totalLitersObtained
-            }
-            qrToken={distillation.lot.qrToken}
-            finishedAt={distillation.lot.finishedAt}
-            onConfirm={finishLot}
-          />
-        )}
-
-        {!hasFinished && (
-          <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold">
-                Acciones de destilación
-              </h2>
-
-              <p className="mt-2 text-sm text-on-surface-variant">
-                Registra las lecturas y los cambios
-                de corte conforme avanza el proceso.
-              </p>
-            </div>
-
-            <form
-              action={addEvent}
-              className="rounded-2xl border border-outline-variant bg-surface-container-high p-5 sm:p-6"
-            >
-              <p className="mb-4 text-xl font-bold">
-                Registro de destilación
-              </p>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <label>
-                  <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
-                    Tipo de registro
-                  </span>
-
-                  <select
-                    name="type"
-                    required
-                    className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
-                  >
-                    <option value="">
-                      Selecciona una acción
-                    </option>
-
-                    <option value="INICIO_CALENTAMIENTO">
-                      Inicio de calentamiento
-                    </option>
-
-                    <option value="TEMPERATURA">
-                      Temperatura
-                    </option>
-
-                    <option value="ALCOHOL">
-                      Alcohol
-                    </option>
-
-                    <option value="LITROS">
-                      Registrar litros
-                    </option>
-
-                    <option value="CORTE_CABEZAS">
-                      Corte de cabezas
-                    </option>
-
-                    <option value="INICIO_CORAZON">
-                      Inicio de corazón
-                    </option>
-
-                    <option value="FIN_CORAZON">
-                      Fin de corazón
-                    </option>
-
-                    <option value="INICIO_COLAS">
-                      Inicio de colas
-                    </option>
-
-                    <option value="OBSERVACION">
-                      Observación
-                    </option>
-                  </select>
-                </label>
-
-                <NumberField
-                  name="temperature"
-                  label="Temperatura del alambique"
-                  placeholder="Ej. 92"
-                  suffix="°C"
-                  step="0.01"
-                  min="0"
-                />
-
-                <NumberField
-                  name="outputTemperature"
-                  label="Temperatura de salida"
-                  placeholder="Ej. 20"
-                  suffix="°C"
-                  step="0.01"
-                  min="0"
-                />
-
-                <NumberField
-                  name="alcohol"
-                  label="Alcohol leído"
-                  placeholder="Ej. 55"
-                  suffix="%"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                />
-
-                <NumberField
-                  name="alcoholCorrected"
-                  label="Alcohol corregido"
-                  placeholder="Ej. 54.7"
-                  suffix="%"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                />
-
-                <NumberField
-                  name="liters"
-                  label="Litros obtenidos"
-                  placeholder="Ej. 40"
-                  suffix="L"
-                  step="0.01"
-                  min="0"
-                />
-
-                <label className="md:col-span-2">
-                  <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
-                    Observaciones
-                  </span>
-
-                  <textarea
-                    name="notes"
-                    rows={3}
-                    placeholder="Describe el comportamiento, aroma, flujo, corte realizado o cualquier detalle importante."
-                    className="w-full resize-none rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
-                  />
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                className="mt-5 w-full rounded-xl bg-primary py-3 font-bold text-on-primary transition hover:opacity-90"
-              >
-                Guardar registro
-              </button>
-            </form>
-
-            <div className="mt-6 border-t border-outline-variant pt-6">
-              <p className="mb-3 text-sm text-on-surface-variant">
-                Finaliza únicamente después de
-                confirmar el volumen y alcohol
-                oficiales.
-              </p>
-
-              <FinishDistillationModal
-                onConfirm={finishDistillation}
-              />
-            </div>
-          </section>
-        )}
-
-        {/* Las gráficas quedan antes de la bitácora */}
-        <DistillationCharts
-          events={distillation.events}
-        />
-
-        <DistillationTimeline
-          events={distillation.events}
-        />
+        <div className="mt-8">
+          <PageTabs tabs={tabs} />
+        </div>
       </div>
     </main>
   );

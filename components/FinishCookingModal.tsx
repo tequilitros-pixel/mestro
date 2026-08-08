@@ -327,9 +327,21 @@ function Field({
     <label>
       <span className="mb-2 block text-sm font-semibold text-on-surface-variant">
         {label}
+        {required && (
+          <span className="ml-1 text-error" aria-hidden="true">
+            *
+          </span>
+        )}
       </span>
 
       <div className="relative">
+        {/*
+          `peer` + `user-invalid` marcan el campo en rojo y muestran el
+          aviso SOLO después de que el usuario intenta enviar, no al
+          abrir el formulario. Antes, un campo obligatorio vacío hacía
+          que el botón de cerrar no respondiera sin ninguna explicación
+          visible.
+        */}
         <input
           name={name}
           type="number"
@@ -338,7 +350,7 @@ function Field({
           step={step}
           min={min}
           required={required}
-          className={`w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary ${
+          className={`peer w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary user-invalid:border-error ${
             suffix ? "pr-14" : ""
           }`}
         />
@@ -346,6 +358,12 @@ function Field({
         {suffix && (
           <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-outline">
             {suffix}
+          </span>
+        )}
+
+        {required && (
+          <span className="mt-1 hidden text-xs font-semibold text-error peer-user-invalid:block">
+            Este dato es obligatorio para cerrar.
           </span>
         )}
       </div>

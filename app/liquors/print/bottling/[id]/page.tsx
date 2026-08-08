@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import BottleLabel from "@/components/liquors/BottleLabel";
 import { prisma } from "@/lib/prisma";
+import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
 
 import PrintButton from "./PrintButton";
 
@@ -27,6 +28,10 @@ export default async function BottlingLabelsPage({
           product: true,
         },
       },
+
+      // El tequila blanco se embotella directo del granel: no hay lote
+      // de elaboración, el origen impreso es la materia prima.
+      rawMaterial: true,
       bottles: {
         orderBy: {
           serialNumber: "asc",
@@ -40,7 +45,7 @@ export default async function BottlingLabelsPage({
   }
 
   const batch = bottling.batch;
-  const product = batch.product;
+  const origin = resolveBottleOrigin(bottling);
 
   const totalBottles = Math.max(
     bottling.producedBottles,
@@ -48,11 +53,14 @@ export default async function BottlingLabelsPage({
     1
   );
 
-  const alcohol =
-    batch.finalAlcohol ??
-    product.defaultAlcohol ??
-    batch.initialAlcohol ??
-    null;
+  // El granel no trae graduación registrada, así que la etiqueta la
+  // omite en lugar de inventar un valor.
+  const alcohol = batch
+    ? batch.finalAlcohol ??
+      batch.product.defaultAlcohol ??
+      batch.initialAlcohol ??
+      null
+    : null;
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 print:bg-white print:p-0">
@@ -65,14 +73,14 @@ export default async function BottlingLabelsPage({
               </p>
 
               <h1 className="mt-1 text-3xl font-black text-on-surface">
-                {product.name}
+                {origin.productName}
               </h1>
 
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-on-surface-variant">
                 <span>
-                  Lote:{" "}
+                  {origin.fromBulk ? origin.sourceLabel : "Lote"}:{" "}
                   <strong className="text-on-surface">
-                    {batch.code}
+                    {origin.sourceCode}
                   </strong>
                 </span>
 
@@ -142,11 +150,11 @@ export default async function BottlingLabelsPage({
               >
                 <BottleLabel
                   bottle={{
-                    productName: product.name,
-                    productIcon: product.icon,
+                    productName: origin.productName,
+                    productIcon: origin.productIcon,
                     bottleSizeMl: bottling.bottleSizeMl,
                     bottleCode: bottle.code,
-                    batchCode: batch.code,
+                    batchCode: origin.sourceCode,
                     serialNumber: bottle.serialNumber,
                     totalBottles,
                     alcohol,

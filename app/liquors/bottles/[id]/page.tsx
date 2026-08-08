@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LiquorBottleStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
 import { TagIcon, QrIcon } from "@/components/ui/icons";
 
 type Props = {
@@ -78,6 +79,17 @@ export default async function LiquorBottleDetailPage({
               },
             },
           },
+
+          // El tequila blanco sale del proceso de agave y se embotella
+          // directo del granel: no hay lote de elaboración ni receta.
+          rawMaterial: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              description: true,
+            },
+          },
         },
       },
 
@@ -102,17 +114,19 @@ export default async function LiquorBottleDetailPage({
   }
 
   const batch = bottle.bottling.batch;
-  const product = batch.product;
-  const recipe = batch.recipe;
+  const origin = resolveBottleOrigin(bottle.bottling);
 
-  const alcohol =
-    batch.finalAlcohol ??
-    batch.initialAlcohol ??
-    recipe.targetAlcohol ??
-    product.defaultAlcohol;
+  const alcohol = origin.alcohol;
 
   const expirationDate =
-    bottle.expirationDate ?? batch.expirationDate;
+    bottle.expirationDate ?? origin.expirationDate;
+
+  // Solo las botellas que vienen de una elaboración pertenecen a un
+  // producto del catálogo; las de granel se regresan al inventario
+  // general porque no tienen slug de producto.
+  const backToBottlesHref = batch
+    ? `/liquors/inventory/${batch.product.slug}?size=${bottle.bottling.bottleSizeMl}`
+    : "/liquors/inventory";
 
   const statusStyle = getStatusStyle(bottle.status);
 
@@ -120,7 +134,7 @@ export default async function LiquorBottleDetailPage({
     <section className="mx-auto max-w-6xl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link
-          href={`/liquors/inventory/${product.slug}?size=${bottle.bottling.bottleSizeMl}`}
+          href={backToBottlesHref}
           className="inline-flex items-center gap-2 text-sm font-bold text-on-surface-variant transition hover:text-on-surface"
         >
           ← Volver a las botellas
@@ -139,7 +153,7 @@ export default async function LiquorBottleDetailPage({
           <div className="flex flex-col gap-7 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex items-start gap-5">
               <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl border border-outline-variant bg-surface-container-high text-5xl">
-                {product.icon ?? "🍾"}
+                {origin.productIcon ?? "🍾"}
               </div>
 
               <div>
@@ -152,7 +166,7 @@ export default async function LiquorBottleDetailPage({
                 </h1>
 
                 <p className="mt-3 text-xl font-bold text-on-surface-variant">
-                  {product.name}
+                  {origin.productName}
                 </p>
 
                 <p className="mt-2 text-sm text-on-surface-variant">
@@ -194,9 +208,11 @@ export default async function LiquorBottleDetailPage({
         />
 
         <Kpi
-          title="Lote"
-          value={batch.code}
-          detail="Lote de producción"
+          title={origin.fromBulk ? "Origen" : "Lote"}
+          value={origin.sourceCode}
+          detail={
+            origin.fromBulk ? origin.sourceLabel : "Lote de producción"
+          }
         />
 
         <Kpi
@@ -219,17 +235,23 @@ export default async function LiquorBottleDetailPage({
           <div className="mt-7 grid gap-4 sm:grid-cols-2">
             <DetailCard
               label="Producto"
-              value={product.name}
+              value={origin.productName}
             />
 
+            {/* El granel no se elabora con receta, así que no hay
+                versión que mostrar. */}
             <DetailCard
               label="Receta"
-              value={`${recipe.name} · Versión ${recipe.version}`}
+              value={
+                batch
+                  ? `${batch.recipe.name} · Versión ${batch.recipe.version}`
+                  : "—"
+              }
             />
 
             <DetailCard
-              label="Código de lote"
-              value={batch.code}
+              label={origin.fromBulk ? "Código de origen" : "Código de lote"}
+              value={origin.sourceCode}
             />
 
             <DetailCard
@@ -239,7 +261,7 @@ export default async function LiquorBottleDetailPage({
 
             <DetailCard
               label="Fecha de elaboración"
-              value={formatDate(batch.productionDate)}
+              value={formatDate(origin.productionDate)}
             />
 
             <DetailCard

@@ -20,6 +20,14 @@ export async function createLiquorBatchAction(formData: FormData) {
   const recipeId = String(formData.get("recipeId") ?? "").trim();
   const requestedLiters = Number(formData.get("requestedLiters"));
 
+  /*
+   * Lote de agave de origen. Llega cuando la elaboración se inicia
+   * desde un lote terminado ("Enviar a elaboración"); queda vacío
+   * cuando se elabora un producto que no viene de un lote propio,
+   * como la sangría o los preparados.
+   */
+  const lotId = String(formData.get("lotId") ?? "").trim() || null;
+
   if (!productId || !recipeId) {
     throw new Error("Falta identificar el producto o la receta.");
   }
@@ -68,6 +76,25 @@ export async function createLiquorBatchAction(formData: FormData) {
     );
   }
 
+  // Solo se acepta un lote que realmente exista y ya esté terminado:
+  // un lote a medio proceso todavía no tiene destilado disponible.
+  if (lotId) {
+    const lot = await prisma.lot.findUnique({
+      where: { id: lotId },
+      select: { totalLitersObtained: true },
+    });
+
+    if (!lot) {
+      throw new Error("El lote de origen ya no existe.");
+    }
+
+    if (lot.totalLitersObtained === null) {
+      throw new Error(
+        "El lote de origen todavía no está cerrado. Cierra el lote antes de enviarlo a elaboración.",
+      );
+    }
+  }
+
   const calculatedRecipe = scaleRecipe(
     {
       targetLiters: recipe.targetLiters,
@@ -114,6 +141,7 @@ export async function createLiquorBatchAction(formData: FormData) {
 
             productId: recipe.productId,
             recipeId: recipe.id,
+            lotId,
 
             status: "EN_ELABORACION",
 

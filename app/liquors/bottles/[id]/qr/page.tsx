@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
 import { TagIcon } from "@/components/ui/icons";
 
 type Props = {
@@ -51,6 +52,16 @@ export default async function LiquorBottleQrPage({ params }: Props) {
               },
             },
           },
+
+          // El tequila blanco no tiene lote de elaboración: se
+          // embotella directo de la existencia a granel.
+          rawMaterial: {
+            select: {
+              code: true,
+              name: true,
+              description: true,
+            },
+          },
         },
       },
     },
@@ -60,17 +71,12 @@ export default async function LiquorBottleQrPage({ params }: Props) {
     notFound();
   }
 
-  const batch = bottle.bottling.batch;
-  const product = batch.product;
+  const origin = resolveBottleOrigin(bottle.bottling);
 
-  const alcohol =
-    batch.finalAlcohol ??
-    batch.initialAlcohol ??
-    batch.recipe.targetAlcohol ??
-    product.defaultAlcohol;
+  const alcohol = origin.alcohol;
 
   const expirationDate =
-    bottle.expirationDate ?? batch.expirationDate;
+    bottle.expirationDate ?? origin.expirationDate;
 
   const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/q/${bottle.qrToken}`;
 
@@ -113,11 +119,11 @@ export default async function LiquorBottleQrPage({ params }: Props) {
               </p>
 
               <h1 className="mt-3 text-4xl font-black text-on-surface sm:text-5xl">
-                {product.icon ?? "🍾"} {bottle.code}
+                {origin.productIcon ?? "🍾"} {bottle.code}
               </h1>
 
               <p className="mt-3 text-2xl font-black text-on-surface">
-                {product.name}
+                {origin.productName}
               </p>
 
               <div className="mt-7 grid gap-4 sm:grid-cols-2">
@@ -138,8 +144,8 @@ export default async function LiquorBottleQrPage({ params }: Props) {
                 />
 
                 <InfoCard
-                  label="Lote"
-                  value={batch.code}
+                  label={origin.fromBulk ? "Origen" : "Lote"}
+                  value={origin.sourceCode}
                 />
 
                 <InfoCard

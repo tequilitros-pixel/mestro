@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import BottleLabel from "@/components/liquors/BottleLabel";
 import { prisma } from "@/lib/prisma";
+import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
 
 import PrintButton from "./PrintButton";
 
@@ -27,6 +28,10 @@ export default async function BottleLabelPage({ params }: Props) {
               product: true,
             },
           },
+
+          // El tequila blanco se embotella del granel: sin lote de
+          // elaboración, la etiqueta se arma con la materia prima.
+          rawMaterial: true,
           _count: {
             select: {
               bottles: true,
@@ -43,7 +48,7 @@ export default async function BottleLabelPage({ params }: Props) {
 
   const bottling = bottle.bottling;
   const batch = bottling.batch;
-  const product = batch.product;
+  const origin = resolveBottleOrigin(bottling);
 
   const totalBottles = Math.max(
     bottling.producedBottles,
@@ -52,11 +57,14 @@ export default async function BottleLabelPage({ params }: Props) {
     1
   );
 
-  const alcohol =
-    batch.finalAlcohol ??
-    product.defaultAlcohol ??
-    batch.initialAlcohol ??
-    null;
+  // El granel no lleva graduación registrada; se omite en vez de
+  // imprimir un valor inventado.
+  const alcohol = batch
+    ? batch.finalAlcohol ??
+      batch.product.defaultAlcohol ??
+      batch.initialAlcohol ??
+      null
+    : null;
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 print:min-h-0 print:bg-white print:p-0">
@@ -79,11 +87,11 @@ export default async function BottleLabelPage({ params }: Props) {
             </p>
 
             <h1 className="mt-1 text-2xl font-black text-neutral-950">
-              {product.name}
+              {origin.productName}
             </h1>
 
             <p className="mt-1 text-neutral-600">
-              {batch.code} · Botella{" "}
+              {origin.sourceCode} · Botella{" "}
               {bottle.serialNumber.toString().padStart(3, "0")} de{" "}
               {totalBottles.toString().padStart(3, "0")}
             </p>
@@ -92,11 +100,11 @@ export default async function BottleLabelPage({ params }: Props) {
           <div className="flex justify-center print:block">
             <BottleLabel
               bottle={{
-                productName: product.name,
-                productIcon: product.icon,
+                productName: origin.productName,
+                productIcon: origin.productIcon,
                 bottleSizeMl: bottling.bottleSizeMl,
                 bottleCode: bottle.code,
-                batchCode: batch.code,
+                batchCode: origin.sourceCode,
                 serialNumber: bottle.serialNumber,
                 totalBottles,
                 alcohol,

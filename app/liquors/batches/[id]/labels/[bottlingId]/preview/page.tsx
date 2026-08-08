@@ -94,6 +94,14 @@ export default async function LiquorLabelsPreviewPage({
     notFound();
   }
 
+  // La consulta filtra por `batchId`, así que los embotellados de
+  // granel (sin lote de elaboración) nunca llegan a esta pantalla.
+  const batch = bottling.batch;
+
+  if (!batch) {
+    notFound();
+  }
+
   const totalBottles = bottling.bottles.length;
 
   if (end > totalBottles) {
@@ -103,8 +111,8 @@ export default async function LiquorLabelsPreviewPage({
   const selectedBottles = bottling.bottles.slice(start - 1, end);
 
   const alcohol =
-    bottling.batch.initialAlcohol ??
-    bottling.batch.recipe.targetAlcohol ??
+    batch.initialAlcohol ??
+    batch.recipe.targetAlcohol ??
     null;
 
   return (
@@ -127,12 +135,12 @@ export default async function LiquorLabelsPreviewPage({
         </h1>
 
         <p className="mt-4 text-xl font-bold text-on-surface-variant">
-          {bottling.batch.product.icon ?? "🍹"}{" "}
-          {bottling.batch.product.name}
+          {batch.product.icon ?? "🍹"}{" "}
+          {batch.product.name}
         </p>
 
         <p className="mt-2 font-mono text-sm font-bold text-on-surface-variant">
-          Lote {bottling.batch.code}
+          Lote {batch.code}
         </p>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -194,11 +202,11 @@ export default async function LiquorLabelsPreviewPage({
               <BottleLabel
                 key={bottle.id}
                 bottle={{
-                  productName: bottling.batch.product.name,
-                  productIcon: bottling.batch.product.icon,
+                  productName: batch.product.name,
+                  productIcon: batch.product.icon,
                   bottleSizeMl: bottling.bottleSizeMl,
                   bottleCode: bottle.code,
-                  batchCode: bottling.batch.code,
+                  batchCode: batch.code,
                   serialNumber: bottle.serialNumber,
                   totalBottles,
                   alcohol,

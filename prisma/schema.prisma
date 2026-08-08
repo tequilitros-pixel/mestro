@@ -57,6 +57,10 @@ model User {
   posProductsCreated   PosProduct[]  @relation("PosProductCreatedBy")
   posSalesSold         PosSale[]     @relation("PosSaleSoldBy")
   posSalesCancelled    PosSale[]     @relation("PosSaleCancelledBy")
+
+  overtimeRecords         OvertimeRecord[] @relation("OvertimeWorker")
+  overtimeRecordsReviewed OvertimeRecord[] @relation("OvertimeReviewedBy")
+  rawMaterialMovements    RawMaterialMovement[] @relation("RawMaterialMovementBy")
 }
 
 model Equipment {
@@ -97,6 +101,8 @@ model Lot {
   owner               User           @relation(fields: [ownerId], references: [id])
   expenses            LotExpense[]
   millings            Milling[]
+  liquorBatches       LiquorBatch[]
+  rawMaterialEntries  RawMaterialMovement[]
 }
 
 model Cooking {
@@ -368,10 +374,98 @@ model RawMaterial {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Marca el material que recibe automáticamente el destilado de los
+  /// lotes de agave al cerrarlos. Solo uno debe tenerlo en true.
+  receivesLotOutput Boolean @default(false)
+
+  /*
+   * Configuración de embotellado.
+   *
+   * El tequila blanco NO es un licor que se elabore con receta: sale
+   * del proceso de agave y solo se embotella o se traspasa. Por eso
+   * los datos de etiquetado viven aquí y no en LiquorProduct, para
+   * mantenerlo fuera del catálogo de licores.
+   */
+  /// Habilita embotellar directamente desde esta existencia a granel.
+  bottleable Boolean @default(false)
+  /// Prefijo de los folios de botella (ej. "TQB").
+  bottlePrefix String?
+  /// Vida útil en días que se imprime y se usa para las alertas.
+  defaultShelfLifeDays Int?
+  yellowAlertDays      Int?
+  redAlertDays         Int?
+  showExpirationOnLabel Boolean @default(true)
+
+  /// Producto de inventario equivalente, para abonar el stock de
+  /// sucursal al traspasar o al embotellar.
+  inventoryProductId String?
+  inventoryProduct   InventoryProduct? @relation("RawMaterialInventoryLink", fields: [inventoryProductId], references: [id])
+
   recipeIngredients LiquorRecipeIngredient[]
+  movements         RawMaterialMovement[]
+  bottlings         LiquorBottling[]
 
   @@index([active])
   @@index([category])
+}
+
+/// *
+///  * Movimientos de materia prima del almacén de producción.
+///  *
+///  * `RawMaterial.currentStock` es el acumulado de estos movimientos:
+///  * las entradas van en positivo (compra, producción de un lote,
+///  * devolución) y las salidas en negativo (consumo de receta, merma,
+///  * traspaso a sucursal). Nunca se edita el stock a mano — siempre se
+///  * registra un movimiento, para que exista rastro de por qué cambió.
+model RawMaterialMovement {
+  id             String @id @default(cuid())
+  rawMaterialId  String
+
+  type     RawMaterialMovementType
+  /// Positiva en entradas, negativa en salidas.
+  quantity Float
+  /// Costo unitario de la entrada; alimenta el costo promedio.
+  unitCost Float?
+
+  /// Lote de agave que originó el movimiento (entradas de producción).
+  lotId String?
+  /// Elaboración de licor que consumió el material.
+  liquorBatchId String?
+  /// Sucursal destino cuando el movimiento es un traspaso.
+  branchId String?
+
+  notes       String?
+  createdById String?
+
+  createdAt DateTime @default(now())
+
+  rawMaterial RawMaterial  @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  lot         Lot?         @relation(fields: [lotId], references: [id])
+  liquorBatch LiquorBatch? @relation(fields: [liquorBatchId], references: [id])
+  branch      Branch?      @relation(fields: [branchId], references: [id])
+  createdBy   User?        @relation("RawMaterialMovementBy", fields: [createdById], references: [id])
+
+  @@index([rawMaterialId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([lotId])
+  @@index([liquorBatchId])
+  @@index([branchId])
+}
+
+enum RawMaterialMovementType {
+  /// Entrada por compra a proveedor.
+  COMPRA
+  /// Entrada por destilado propio al cerrar un lote de agave.
+  PRODUCCION
+  /// Salida al agregar el ingrediente durante una elaboración.
+  CONSUMO_RECETA
+  /// Corrección manual de existencia (positiva o negativa).
+  AJUSTE
+  /// Salida por pérdida, derrame o producto no utilizable.
+  MERMA
+  /// Salida por envío a una sucursal.
+  TRASPASO_SUCURSAL
 }
 
 model LiquorProduct {
@@ -543,6 +637,14 @@ model LiquorBatch {
   pauseReason          String?
   pausedAt             DateTime?
   pausedById           String?
+
+  /// Lote de agave (proceso cocción→destilación) del que salió el
+  /// destilado que alimenta esta elaboración. Opcional porque hay
+  /// licores que no vienen de un lote propio (sangría, preparados).
+  /// Es lo que permite responder "¿de qué lote salió esta botella?".
+  lotId                String?
+  lot                  Lot?                    @relation(fields: [lotId], references: [id])
+
   createdBy            User                    @relation("LiquorBatchCreatedBy", fields: [createdById], references: [id])
   finishedBy           User?                   @relation("LiquorBatchFinishedBy", fields: [finishedById], references: [id])
   pausedBy             User?                   @relation("LiquorBatchPausedBy", fields: [pausedById], references: [id])
@@ -552,6 +654,7 @@ model LiquorBatch {
   executionIngredients LiquorBatchIngredient[]
   steps                LiquorBatchStep[]
   bottlings            LiquorBottling[]
+  rawMaterialMovements RawMaterialMovement[]
 
   @@index([productId])
   @@index([recipeId])
@@ -560,6 +663,7 @@ model LiquorBatch {
   @@index([productionDate])
   @@index([createdById])
   @@index([finishedById])
+  @@index([lotId])
 }
 
 /// *
@@ -660,7 +764,14 @@ model LiquorBatchStep {
 model LiquorBottling {
   id              String               @id @default(cuid())
   code            String               @unique
-  batchId         String
+
+  /// Elaboración de licor de origen. Opcional porque el tequila
+  /// blanco se embotella directo desde la existencia a granel, sin
+  /// pasar por una receta.
+  batchId         String?
+  /// Materia prima a granel de origen (tequila del proceso).
+  rawMaterialId   String?
+
   status          LiquorBottlingStatus @default(PLANEADO)
   bottleSizeMl    Int
   plannedBottles  Int?
@@ -678,11 +789,13 @@ model LiquorBottling {
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
   bottles         LiquorBottle[]
-  batch           LiquorBatch          @relation(fields: [batchId], references: [id])
+  batch           LiquorBatch?         @relation(fields: [batchId], references: [id])
+  rawMaterial     RawMaterial?         @relation(fields: [rawMaterialId], references: [id])
   createdBy       User                 @relation("LiquorBottlingCreatedBy", fields: [createdById], references: [id])
   finishedBy      User?                @relation("LiquorBottlingFinishedBy", fields: [finishedById], references: [id])
 
   @@index([batchId])
+  @@index([rawMaterialId])
   @@index([status])
   @@index([createdById])
   @@index([finishedById])
@@ -804,6 +917,8 @@ model Branch {
   scheduleTemplates   BranchScheduleTemplate[]
   geofenceAlerts      GeofenceAlert[]
   posSales            PosSale[]
+  overtimeRecords     OvertimeRecord[]
+  rawMaterialTransfers RawMaterialMovement[]
 
   @@index([active])
   @@index([geofenceId])
@@ -1329,6 +1444,7 @@ model InventoryProduct {
   equipmentKitItems EquipmentKitItem[]
   posIngredientOf   PosVariantIngredient[]
   liquorProduct     LiquorProduct?
+  rawMaterialLinks  RawMaterial[]          @relation("RawMaterialInventoryLink")
 
   @@index([name])
   @@index([category])
@@ -1670,6 +1786,82 @@ model BranchScheduleTemplate {
 
   @@unique([branchId, dayOfWeek])
   @@index([branchId])
+}
+
+/// *
+///  * Tiempo extra.
+///  *
+///  * El sistema DETECTA solo las horas extra comparando lo checado
+///  * (TimeClockEntry) contra el umbral semanal configurado, pero NO las
+///  * cuenta como costo hasta que un administrador las aprueba. Por eso
+///  * cada registro nace en estado PENDIENTE.
+///  *
+///  * Se guarda un registro por persona + sucursal + semana. Los montos
+///  * (`amount`) y la tarifa (`hourlyRate`) se congelan al momento de
+///  * aprobar, para que un cambio posterior de sueldo no altere una
+///  * nómina ya autorizada.
+model OvertimeRecord {
+  id       String   @id @default(cuid())
+  userId   String
+  branchId String
+  /// Lunes de la semana a la que corresponde el tiempo extra.
+  weekStart DateTime
+
+  /// Horas trabajadas en la semana por encima del umbral configurado.
+  overtimeHours Decimal @db.Decimal(10, 2)
+  /// Horas pagadas al primer multiplicador (por ley, las primeras 9).
+  doubleHours   Decimal @db.Decimal(10, 2) @default(0)
+  /// Horas pagadas al segundo multiplicador (a partir de la 10a).
+  tripleHours   Decimal @db.Decimal(10, 2) @default(0)
+
+  /// Tarifa base por hora usada en el cálculo (se congela al aprobar).
+  hourlyRate Decimal? @db.Decimal(10, 2)
+  /// Importe total del tiempo extra (se congela al aprobar).
+  amount     Decimal? @db.Decimal(12, 2)
+
+  status OvertimeStatus @default(PENDIENTE)
+
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNotes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User   @relation("OvertimeWorker", fields: [userId], references: [id], onDelete: Cascade)
+  branch     Branch @relation(fields: [branchId], references: [id])
+  reviewedBy User?  @relation("OvertimeReviewedBy", fields: [reviewedById], references: [id])
+
+  @@unique([userId, branchId, weekStart])
+  @@index([weekStart])
+  @@index([status])
+  @@index([userId])
+  @@index([branchId])
+}
+
+enum OvertimeStatus {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
+/// *
+///  * Ajustes de nómina configurables por el administrador. Solo existe
+///  * una fila (id fijo "default"): son parámetros globales del negocio,
+///  * no por sucursal.
+model PayrollSettings {
+  id String @id @default("default")
+
+  /// Horas semanales a partir de las cuales cuenta como tiempo extra.
+  weeklyHourThreshold Decimal @db.Decimal(5, 2) @default(48)
+  /// Horas extra por semana que se pagan al primer multiplicador.
+  firstTierHours      Decimal @db.Decimal(5, 2) @default(9)
+  /// Multiplicador de las primeras horas extra (por ley, 2x).
+  firstTierMultiplier Decimal @db.Decimal(5, 2) @default(2)
+  /// Multiplicador de las horas extra restantes (por ley, 3x).
+  secondTierMultiplier Decimal @db.Decimal(5, 2) @default(3)
+
+  updatedAt DateTime @updatedAt
 }
 
 /*

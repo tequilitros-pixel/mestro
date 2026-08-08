@@ -88,6 +88,14 @@ export default async function LiquorLabelsPrintPage({
     notFound();
   }
 
+  // La consulta filtra por `batchId`, así que los embotellados de
+  // granel (sin lote de elaboración) nunca llegan a esta pantalla.
+  const batch = bottling.batch;
+
+  if (!batch) {
+    notFound();
+  }
+
   const totalBottles = bottling.bottles.length;
 
   if (end > totalBottles) {
@@ -97,8 +105,8 @@ export default async function LiquorLabelsPrintPage({
   const selectedBottles = bottling.bottles.slice(start - 1, end);
 
   const alcohol =
-    bottling.batch.initialAlcohol ??
-    bottling.batch.recipe.targetAlcohol ??
+    batch.initialAlcohol ??
+    batch.recipe.targetAlcohol ??
     null;
 
   return (
@@ -120,11 +128,11 @@ export default async function LiquorLabelsPrintPage({
             <BottleLabel
               key={bottle.id}
               bottle={{
-                productName: bottling.batch.product.name,
-                productIcon: bottling.batch.product.icon,
+                productName: batch.product.name,
+                productIcon: batch.product.icon,
                 bottleSizeMl: bottling.bottleSizeMl,
                 bottleCode: bottle.code,
-                batchCode: bottling.batch.code,
+                batchCode: batch.code,
                 serialNumber: bottle.serialNumber,
                 totalBottles,
                 alcohol,

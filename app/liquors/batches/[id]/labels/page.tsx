@@ -58,6 +58,14 @@ export default async function LiquorLabelPrintCenterPage({
     notFound();
   }
 
+  // Esta pantalla cuelga de un lote (la consulta filtra por `batchId`),
+  // así que los embotellados de granel nunca llegan aquí.
+  const batch = bottling.batch;
+
+  if (!batch) {
+    notFound();
+  }
+
   const totalBottles = bottling.bottles.length;
 
   return (
@@ -83,14 +91,14 @@ export default async function LiquorLabelPrintCenterPage({
               </h1>
 
               <p className="mt-4 text-xl font-bold text-on-surface-variant">
-                {bottling.batch.product.icon ?? "🍹"}{" "}
-                {bottling.batch.product.name}
+                {batch.product.icon ?? "🍹"}{" "}
+                {batch.product.name}
               </p>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <InfoBadge
                   label="Lote"
-                  value={bottling.batch.code}
+                  value={batch.code}
                 />
 
                 <InfoBadge
@@ -125,7 +133,7 @@ export default async function LiquorLabelPrintCenterPage({
       </header>
 
       <LiquorLabelPrintCenter
-        batchId={bottling.batch.id}
+        batchId={batch.id}
         bottlingId={bottling.id}
         totalBottles={totalBottles}
       />

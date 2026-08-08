@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { EquipmentStatus, LotStage } from "@prisma/client";
+import { LotStage } from "@prisma/client";
 import { advanceLotStage } from "@/lib/lotStage";
+import { findAvailableEquipment, reserveEquipment } from "@/lib/equipmentAvailability";
 
 export default async function NewMillingPage() {
   const lots = await prisma.lot.findMany({
@@ -25,17 +26,7 @@ export default async function NewMillingPage() {
     },
   });
 
-  const equipments = await prisma.equipment.findMany({
-    where: {
-      type: {
-        in: ["DESGARRADORA", "PRENSA"],
-      },
-      active: true,
-    },
-    orderBy: {
-      name: "asc",
-    },
-  });
+  const equipments = await findAvailableEquipment(["DESGARRADORA", "PRENSA"]);
 
   async function createMilling(formData: FormData) {
     "use server";
@@ -43,6 +34,12 @@ export default async function NewMillingPage() {
     const lotId = formData.get("lotId") as string;
     const equipmentId = formData.get("equipmentId") as string;
     const cookedKg = Number(formData.get("cookedKg"));
+
+    const reserved = await reserveEquipment(prisma, equipmentId, cookedKg);
+
+    if (!reserved) {
+      redirect("/milling/new?error=equipo-ocupado");
+    }
 
     const milling = await prisma.milling.create({
       data: {
@@ -52,17 +49,49 @@ export default async function NewMillingPage() {
       },
     });
 
-    await prisma.equipment.update({
-      where: { id: equipmentId },
-      data: {
-        status: EquipmentStatus.OPERANDO,
-        currentLoad: cookedKg,
-      },
-    });
-
     await advanceLotStage(prisma, lotId, LotStage.MOLIENDA);
 
     redirect(`/milling/${milling.id}`);
+  }
+
+  const blockers: string[] = [];
+
+  if (lots.length === 0) {
+    blockers.push(
+      "No hay lotes con una cocción terminada. Cierra primero la cocción del lote que quieres moler.",
+    );
+  }
+
+  if (equipments.length === 0) {
+    blockers.push(
+      "Todos los molinos y prensas están ocupados o fuera de servicio. Libera uno para poder continuar.",
+    );
+  }
+
+  if (blockers.length > 0) {
+    return (
+      <main className="min-h-screen bg-background p-10 text-on-surface">
+        <div className="mx-auto max-w-3xl">
+          <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
+            MAESTRO
+          </p>
+
+          <h1 className="mt-2 mb-8 text-4xl font-bold">Nueva molienda</h1>
+
+          <div className="space-y-3 rounded-2xl border border-secondary/30 bg-secondary/10 p-8">
+            <h2 className="text-xl font-bold text-secondary">
+              Todavía no se puede iniciar una molienda
+            </h2>
+
+            {blockers.map((blocker) => (
+              <p key={blocker} className="text-sm text-on-surface-variant">
+                {blocker}
+              </p>
+            ))}
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
