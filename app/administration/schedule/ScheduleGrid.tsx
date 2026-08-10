@@ -21,10 +21,14 @@ import {
   PlusIcon,
   AlertIcon,
   ClipboardIcon,
+  BookIcon,
 } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/Toast";
 import { fallbackBranchColor } from "@/lib/branchColors";
 import ShiftModal from "./ShiftModal";
+import SaveAsTemplateModal from "./SaveAsTemplateModal";
+import UseTemplateModal, { type TemplateSummary } from "./UseTemplateModal";
+import ApplyTemplateModal from "./ApplyTemplateModal";
 
 type Employee = { id: string; name: string; hourlyRate: number | null };
 type BranchLite = { id: string; name: string; color: string | null };
@@ -356,6 +360,12 @@ export default function ScheduleGrid() {
   const [publishing, setPublishing] = useState(false);
   const [mobileDayIndex, setMobileDayIndex] = useState(0);
   const [copying, setCopying] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [showUseTemplate, setShowUseTemplate] = useState(false);
+  const [applyingTemplate, setApplyingTemplate] = useState<{
+    template: TemplateSummary;
+    employees: { id: string; name: string }[];
+  } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -625,6 +635,15 @@ export default function ScheduleGrid() {
             </button>
 
             <button
+              onClick={() => setShowSaveTemplate(true)}
+              disabled={data.shifts.length === 0}
+              className="inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold text-on-surface-variant transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] hover:border-primary/40 hover:text-primary disabled:opacity-40 disabled:hover:scale-100"
+            >
+              <BookIcon className="h-4 w-4" />
+              Guardar como plantilla
+            </button>
+
+            <button
               onClick={handlePublishToggle}
               disabled={publishing}
               className={`rounded-xl px-4 py-2.5 text-sm font-bold transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60 disabled:hover:scale-100 ${
@@ -650,6 +669,33 @@ export default function ScheduleGrid() {
       )}
 
       {alerts.length > 0 && <AlertsPanel alerts={alerts} />}
+
+      {!loading && data && data.shifts.length === 0 && (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-outline-variant bg-surface-container p-8 text-center">
+          <p className="font-semibold text-on-surface">Esta semana todavía no tiene turnos.</p>
+          <p className="text-sm text-on-surface-variant">
+            Empieza desde cero con el botón &quot;+&quot; de cada celda, copia la semana anterior, o
+            usa una plantilla guardada.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2 pt-2">
+            <button
+              onClick={handleCopyPrevious}
+              disabled={copying}
+              className="inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-primary disabled:opacity-60"
+            >
+              <ClipboardIcon className="h-4 w-4" />
+              {copying ? "Copiando..." : "Copiar semana anterior"}
+            </button>
+            <button
+              onClick={() => setShowUseTemplate(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-on-primary transition hover:opacity-90"
+            >
+              <BookIcon className="h-4 w-4" />
+              Usar plantilla
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-center text-on-surface-variant">Cargando...</p>
@@ -844,6 +890,39 @@ export default function ScheduleGrid() {
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null);
+            load();
+          }}
+        />
+      )}
+
+      {showSaveTemplate && data && (
+        <SaveAsTemplateModal
+          weekStart={weekStart}
+          branches={data.branches}
+          onClose={() => setShowSaveTemplate(false)}
+          onSaved={() => setShowSaveTemplate(false)}
+        />
+      )}
+
+      {showUseTemplate && (
+        <UseTemplateModal
+          onClose={() => setShowUseTemplate(false)}
+          onPick={(template, templateEmployees) => {
+            setShowUseTemplate(false);
+            setApplyingTemplate({ template, employees: templateEmployees });
+          }}
+        />
+      )}
+
+      {applyingTemplate && (
+        <ApplyTemplateModal
+          templateId={applyingTemplate.template.id}
+          templateName={applyingTemplate.template.name}
+          employees={applyingTemplate.employees}
+          defaultWeekStart={weekStart}
+          onClose={() => setApplyingTemplate(null)}
+          onApplied={() => {
+            setApplyingTemplate(null);
             load();
           }}
         />

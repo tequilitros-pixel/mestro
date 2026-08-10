@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarIcon, GridIcon, ToolboxIcon } from "@/components/ui/icons";
+import { CalendarIcon, GridIcon, ToolboxIcon, BookIcon } from "@/components/ui/icons";
 import ScheduleGrid from "./ScheduleGrid";
 import TemplatesEditor from "./TemplatesEditor";
+import TemplatesManager from "./TemplatesManager";
 
-type Tab = "horario" | "plantillas";
+type Tab = "horario" | "plantillas" | "estandar";
 
 const TABS: { key: Tab; label: string; icon: typeof CalendarIcon }[] = [
   { key: "horario", label: "Horario", icon: GridIcon },
-  { key: "plantillas", label: "Plantillas", icon: ToolboxIcon },
+  { key: "plantillas", label: "Plantillas", icon: BookIcon },
+  { key: "estandar", label: "Horario estándar", icon: ToolboxIcon },
 ];
 
 export default function ScheduleTabs() {
@@ -17,7 +19,7 @@ export default function ScheduleTabs() {
 
   return (
     <div className="space-y-6">
-      <div className="inline-flex gap-1 rounded-2xl border border-outline-variant bg-surface-container p-1.5">
+      <div className="inline-flex flex-wrap gap-1 rounded-2xl border border-outline-variant bg-surface-container p-1.5">
         {TABS.map((t) => {
           const Icon = t.icon;
 
@@ -39,7 +41,8 @@ export default function ScheduleTabs() {
       </div>
 
       {tab === "horario" && <ScheduleGrid />}
-      {tab === "plantillas" && <TemplatesEditor />}
+      {tab === "plantillas" && <TemplatesManager />}
+      {tab === "estandar" && <TemplatesEditor />}
     </div>
   );
 }

@@ -25,7 +25,7 @@ import {
  * mostrando como visibles (ver getMyScheduleForWeeks), para no
  * esconderle de golpe a nadie algo que ya podía ver.
  */
-async function ensureWeekStartsAsDraftIfEmpty(
+export async function ensureWeekStartsAsDraftIfEmpty(
   tx: Prisma.TransactionClient,
   dateStr: string,
 ) {
