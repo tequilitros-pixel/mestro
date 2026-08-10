@@ -6,9 +6,11 @@ import {
   toggleNotificationRuleAction,
   deleteNotificationRuleAction,
 } from "@/app/actions/notificationRules";
+import { useToast } from "@/components/ui/Toast";
 
 export default function RuleActions({ id, active }: { id: string; active: boolean }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [saving, setSaving] = useState(false);
 
   async function handleToggle() {
@@ -16,6 +18,7 @@ export default function RuleActions({ id, active }: { id: string; active: boolea
     await toggleNotificationRuleAction(id, !active);
     setSaving(false);
     router.refresh();
+    showToast(active ? "Regla desactivada." : "Regla activada.");
   }
 
   async function handleDelete() {
@@ -24,6 +27,7 @@ export default function RuleActions({ id, active }: { id: string; active: boolea
     await deleteNotificationRuleAction(id);
     setSaving(false);
     router.refresh();
+    showToast("Regla eliminada correctamente.");
   }
 
   return (

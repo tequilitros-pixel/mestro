@@ -22,7 +22,7 @@ export async function getPersonnel() {
 }
 
 export async function getPersonnelById(userId: string) {
-  return prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -32,9 +32,16 @@ export async function getPersonnelById(userId: string) {
       role: true,
       active: true,
       hourlyRate: true,
+      pinHash: true,
       branches: { include: { branch: { select: { id: true, name: true } } } },
     },
   });
+
+  if (!user) return null;
+
+  // El hash del PIN nunca debe llegar al cliente — solo si tiene uno.
+  const { pinHash, ...rest } = user;
+  return { ...rest, hasPin: pinHash !== null };
 }
 
 export async function getBranchesForAssignment() {
@@ -160,9 +167,33 @@ export async function updateHourlyRate(userId: string, hourlyRate: number | null
     return { error: "La tarifa no puede ser negativa" };
   }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { hourlyRate },
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { hourlyRate },
+    });
+
+    // Cierra la tarifa por hora vigente (si había) y abre una nueva,
+    // para que la nómina de semanas pasadas siga usando lo que se
+    // pagaba entonces aunque el sueldo cambie hoy.
+    await tx.salaryRate.updateMany({
+      where: { userId, scheme: "HORA", effectiveTo: null },
+      data: { effectiveTo: now },
+    });
+
+    if (hourlyRate !== null) {
+      await tx.salaryRate.create({
+        data: {
+          userId,
+          scheme: "HORA",
+          amount: hourlyRate,
+          effectiveFrom: now,
+          createdById: currentUser.id,
+        },
+      });
+    }
   });
 
   revalidatePath("/administration/personnel");

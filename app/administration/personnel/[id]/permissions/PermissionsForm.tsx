@@ -7,6 +7,7 @@ import {
 } from "@/app/actions/permissions";
 import { PERMISSION_GROUPS } from "@/lib/permission-modules";
 import { CrownIcon } from "@/components/ui/icons";
+import { useToast } from "@/components/ui/Toast";
 
 export default function PermissionsForm({
   userId,
@@ -21,6 +22,7 @@ export default function PermissionsForm({
 }) {
   const [granted, setGranted] = useState<Set<string>>(new Set(initialKeys));
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const isAdmin = userRole === "ADMIN";
 
@@ -40,8 +42,21 @@ export default function PermissionsForm({
       return next;
     });
 
-    await setModulePermissionAction(userId, key, willGrant);
+    const result = await setModulePermissionAction(userId, key, willGrant);
     setSavingKey(null);
+
+    if (!result.success) {
+      setGranted((prev) => {
+        const next = new Set(prev);
+        if (willGrant) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      showToast(result.error ?? "No se pudo guardar el permiso.", "error");
+      return;
+    }
+
+    showToast(willGrant ? "Permiso concedido correctamente." : "Permiso quitado correctamente.");
   }
 
   async function toggleGroup(keys: string[], willGrant: boolean) {
@@ -53,8 +68,20 @@ export default function PermissionsForm({
       return next;
     });
 
-    await setGroupPermissionAction(userId, keys, willGrant);
+    const result = await setGroupPermissionAction(userId, keys, willGrant);
     setSavingKey(null);
+
+    if (!result.success) {
+      setGranted((prev) => {
+        const next = new Set(prev);
+        keys.forEach((k) => (willGrant ? next.delete(k) : next.add(k)));
+        return next;
+      });
+      showToast(result.error ?? "No se pudo guardar el permiso.", "error");
+      return;
+    }
+
+    showToast(willGrant ? "Permisos concedidos correctamente." : "Permisos quitados correctamente.");
   }
 
   if (isAdmin) {

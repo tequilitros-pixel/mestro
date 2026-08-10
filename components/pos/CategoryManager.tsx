@@ -19,6 +19,7 @@ import {
   ChevronRightIcon,
 } from "@/components/ui/icons";
 import { getProductVisual } from "@/lib/pos/productVisual";
+import { useToast } from "@/components/ui/Toast";
 
 type ProductRow = {
   id: string;
@@ -46,6 +47,7 @@ export default function CategoryManager({
   categories: CategoryRow[];
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -76,6 +78,7 @@ export default function CategoryManager({
       }
       setName("");
       router.refresh();
+      showToast("Categoría creada correctamente.");
     });
   }
 
@@ -84,6 +87,7 @@ export default function CategoryManager({
     await toggleCategoryActiveAction(id, active);
     setBusyId(null);
     router.refresh();
+    showToast(active ? "Categoría activada." : "Categoría desactivada.");
   }
 
   async function handleDelete(id: string) {
@@ -96,6 +100,7 @@ export default function CategoryManager({
       return;
     }
     router.refresh();
+    showToast("Categoría eliminada correctamente.");
   }
 
   function startEditing(cat: CategoryRow) {
@@ -118,6 +123,7 @@ export default function CategoryManager({
     }
     setEditingId(null);
     router.refresh();
+    showToast("Categoría renombrada correctamente.");
   }
 
   async function handleMoveProduct(productId: string, categoryId: string) {
@@ -129,6 +135,7 @@ export default function CategoryManager({
       return;
     }
     router.refresh();
+    showToast("Producto movido de categoría correctamente.");
   }
 
   return (

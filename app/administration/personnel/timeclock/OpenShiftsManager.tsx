@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { closeShiftManuallyAction } from "@/app/actions/timeclock";
+import { useToast } from "@/components/ui/Toast";
 
 type OpenShift = {
   id: string;
@@ -27,6 +28,7 @@ export default function OpenShiftsManager({
   const [clockOutValue, setClockOutValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   function startClosing(shift: OpenShift) {
     setEditingId(shift.id);
@@ -49,6 +51,7 @@ export default function OpenShiftsManager({
 
     setShifts((prev) => prev.filter((s) => s.id !== shiftId));
     setEditingId(null);
+    showToast("Turno cerrado correctamente.");
   }
 
   if (shifts.length === 0) {

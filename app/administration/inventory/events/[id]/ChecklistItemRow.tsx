@@ -8,6 +8,7 @@ import {
   removeEventItemAction,
 } from "../actions";
 import { CheckIcon } from "@/components/ui/icons";
+import { useToast } from "@/components/ui/Toast";
 
 type Item = {
   id: string;
@@ -32,6 +33,7 @@ export default function ChecklistItemRow({
   phase: "salida" | "regreso";
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -56,6 +58,7 @@ export default function ChecklistItemRow({
     setSaving(false);
     setEditing(false);
     router.refresh();
+    showToast(phase === "salida" ? "Salida registrada correctamente." : "Regreso registrado correctamente.");
   }
 
   async function handleRemove() {
@@ -63,6 +66,7 @@ export default function ChecklistItemRow({
     await removeEventItemAction(item.id, eventId);
     setSaving(false);
     router.refresh();
+    showToast("Elemento quitado correctamente.");
   }
 
   return (

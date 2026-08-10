@@ -3,6 +3,7 @@
 import { useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import { updatePersonnel, updateHourlyRate } from "@/app/actions/personnel";
+import { setEmployeePinAction, clearEmployeePinAction } from "@/app/actions/kiosk";
 import {
   ROLE_LABELS,
   ROLES_CON_SUCURSAL,
@@ -14,6 +15,7 @@ import {
   UsersIcon,
   LockIcon,
   DollarIcon,
+  GridIcon,
   type IconProps,
 } from "@/components/ui/icons";
 
@@ -31,6 +33,7 @@ interface UserData {
   email: string | null;
   role: UserRole;
   hourlyRate: number | null;
+  hasPin: boolean;
   branches: { branch: Branch }[];
 }
 
@@ -57,6 +60,10 @@ export default function EditPersonnelForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [hasPin, setHasPin] = useState(user.hasPin);
+  const [newPin, setNewPin] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinMessage, setPinMessage] = useState<string | null>(null);
 
   function toggleBranch(branchId: string) {
     setBranchIds((prev) =>
@@ -82,6 +89,47 @@ export default function EditPersonnelForm({
     }
 
     setRateMessage("Tarifa guardada.");
+    router.refresh();
+  }
+
+  async function handleSetPin() {
+    setPinMessage(null);
+
+    if (!/^\d{4}$/.test(newPin)) {
+      setPinMessage("El PIN debe ser de exactamente 4 dígitos.");
+      return;
+    }
+
+    setPinBusy(true);
+    const result = await setEmployeePinAction(user.id, newPin);
+    setPinBusy(false);
+
+    if (result?.error) {
+      setPinMessage(result.error);
+      return;
+    }
+
+    setHasPin(true);
+    setNewPin("");
+    setPinMessage("PIN guardado.");
+    router.refresh();
+  }
+
+  async function handleClearPin() {
+    if (!confirm("¿Quitar el PIN? Ya no podrá usar el checador de kiosco.")) return;
+
+    setPinBusy(true);
+    setPinMessage(null);
+    const result = await clearEmployeePinAction(user.id);
+    setPinBusy(false);
+
+    if (result?.error) {
+      setPinMessage(result.error);
+      return;
+    }
+
+    setHasPin(false);
+    setPinMessage("PIN eliminado.");
     router.refresh();
   }
 
@@ -269,6 +317,58 @@ export default function EditPersonnelForm({
         {rateMessage && (
           <p className="text-xs text-on-surface-variant">{rateMessage}</p>
         )}
+      </section>
+
+      <section className="space-y-4 rounded-2xl border border-outline-variant bg-surface-container p-6">
+        <SectionHeader icon={GridIcon} title="Checador de kiosco" />
+
+        <p className="text-sm text-on-surface-variant">
+          PIN de 4 dígitos para checar entrada/salida en un dispositivo compartido de la
+          sucursal, sin usar su contraseña.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${
+              hasPin
+                ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
+                : "bg-surface-container-high text-on-surface-variant"
+            }`}
+          >
+            {hasPin ? "PIN configurado" : "Sin PIN"}
+          </span>
+
+          {hasPin && (
+            <button
+              onClick={handleClearPin}
+              disabled={pinBusy}
+              className="rounded-xl border border-error/40 px-3 py-1.5 text-xs font-bold text-error transition hover:bg-error/10 disabled:opacity-60"
+            >
+              Quitar PIN
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={4}
+            placeholder="0000"
+            value={newPin}
+            onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            className="w-28 rounded-xl border border-outline-variant bg-background px-4 py-3 text-center text-sm tracking-[0.3em] text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+          />
+          <button
+            onClick={handleSetPin}
+            disabled={pinBusy}
+            className="rounded-xl border border-outline-variant px-4 py-3 text-sm font-semibold text-on-surface transition hover:border-primary hover:text-primary disabled:opacity-60"
+          >
+            {pinBusy ? "Guardando..." : hasPin ? "Cambiar PIN" : "Asignar PIN"}
+          </button>
+        </div>
+
+        {pinMessage && <p className="text-xs text-on-surface-variant">{pinMessage}</p>}
       </section>
     </div>
   );

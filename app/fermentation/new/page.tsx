@@ -124,7 +124,7 @@ export default async function NewFermentationPage() {
 
     await advanceLotStage(prisma, source.lotId, LotStage.FERMENTACION);
 
-    redirect("/fermentation");
+    redirect("/fermentation?created=1");
   }
 
   return (

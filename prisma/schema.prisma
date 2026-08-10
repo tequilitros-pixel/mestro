@@ -12,6 +12,10 @@ model User {
   username                  String                 @unique
   email                     String?                @unique
   password                  String
+  /// PIN de 4 dígitos (hasheado) para el checador compartido (kiosco):
+  /// permite identificarse en una tablet/teléfono común de la sucursal
+  /// sin escribir la contraseña completa. Null = no puede usar kiosco.
+  pinHash                   String?
   failedLoginAttempts       Int                    @default(0)
   lockedUntil               DateTime?
   role                      UserRole
@@ -44,8 +48,13 @@ model User {
   hourlyRate                Decimal?               @db.Decimal(10, 2)
   timeClockEntries          TimeClockEntry[]       @relation("TimeClockEntries")
   timeClockEntriesClosed    TimeClockEntry[]       @relation("TimeClockClosedBy")
+  timeClockEditRequests     TimeClockEditRequest[] @relation("TimeClockEditRequestedBy")
+  timeClockEditReviews      TimeClockEditRequest[] @relation("TimeClockEditReviewedBy")
   scheduledShifts           ScheduledShift[]       @relation("ScheduledShifts")
+  scheduleWeeksPublished    ScheduleWeek[]         @relation("ScheduleWeekPublishedBy")
   geofenceAlerts            GeofenceAlert[]
+  salaryRates               SalaryRate[]           @relation("SalaryRateOwner")
+  salaryRatesCreated        SalaryRate[]           @relation("SalaryRateCreatedBy")
 
   millingsFinished   Milling[]           @relation("MillingFinishedBy")
   millingDischarges  MillingDischarge[]
@@ -61,6 +70,17 @@ model User {
   overtimeRecords         OvertimeRecord[] @relation("OvertimeWorker")
   overtimeRecordsReviewed OvertimeRecord[] @relation("OvertimeReviewedBy")
   rawMaterialMovements    RawMaterialMovement[] @relation("RawMaterialMovementBy")
+
+  payrollAdjustments        PayrollAdjustment[] @relation("PayrollAdjustmentOwner")
+  payrollAdjustmentsCreated PayrollAdjustment[] @relation("PayrollAdjustmentCreatedBy")
+
+  payrollPeriodsSubmitted PayrollPeriod[] @relation("PayrollPeriodSubmittedBy")
+  payrollPeriodsApproved  PayrollPeriod[] @relation("PayrollPeriodApprovedBy")
+  payrollPeriodsPaid      PayrollPeriod[] @relation("PayrollPeriodPaidBy")
+  payrollEntries          PayrollEntry[]  @relation("PayrollEntryOwner")
+
+  payrollIncidentJustifications   PayrollIncidentJustification[] @relation("PayrollIncidentJustificationOwner")
+  payrollIncidentJustificationsBy PayrollIncidentJustification[] @relation("PayrollIncidentJustificationBy")
 }
 
 model Equipment {
@@ -893,6 +913,9 @@ model Branch {
   code             String           @unique
   address          String?
   active           Boolean          @default(true)
+  /// Color (hex) para identificar la sucursal en la cuadrícula de
+  /// Horario. Si no tiene, la UI le asigna uno por defecto.
+  color            String?
   /*
    * Geocerca del checador: si la sucursal tiene una geozona asignada,
    * el checador exige que el empleado esté dentro de ese radio (en
@@ -919,6 +942,7 @@ model Branch {
   posSales            PosSale[]
   overtimeRecords     OvertimeRecord[]
   rawMaterialTransfers RawMaterialMovement[]
+  payrollSettings     PayrollSettings?
 
   @@index([active])
   @@index([geofenceId])
@@ -1735,33 +1759,179 @@ model TimeClockEntry {
   notes               String?
   createdAt           DateTime  @default(now())
 
+  /// De dónde salió el registro: CHECADOR = el empleado checó él mismo
+  /// (o se editó/cerró desde ese flujo); MANUAL = un admin/gerente lo
+  /// creó directamente (p. ej. alguien olvidó checar por completo).
+  source TimeClockSource @default(CHECADOR)
+
+  /// Turno programado con el que coincide esta checada, si se pudo
+  /// emparejar automáticamente al checar entrada. Permite comparar
+  /// PROGRAMADO vs REAL con precisión aunque la persona tenga más de
+  /// un turno el mismo día. Puede quedar nulo (checó sin turno
+  /// programado, o el emparejamiento automático no encontró uno).
+  scheduledShiftId String?
+
   user             User            @relation("TimeClockEntries", fields: [userId], references: [id])
   branch           Branch          @relation(fields: [branchId], references: [id])
   closedManuallyBy User?           @relation("TimeClockClosedBy", fields: [closedManuallyById], references: [id])
+  scheduledShift   ScheduledShift? @relation(fields: [scheduledShiftId], references: [id], onDelete: SetNull)
   geofenceAlerts   GeofenceAlert[]
+  editRequests     TimeClockEditRequest[]
 
   @@index([userId])
   @@index([branchId])
   @@index([clockIn])
+  @@index([scheduledShiftId])
+}
+
+enum TimeClockSource {
+  CHECADOR
+  MANUAL
+}
+
+/*
+ * Solicitud del empleado para corregir las horas de un turno ya
+ * cerrado en el checador. No se aplica de inmediato: queda
+ * pendiente hasta que un administrador la aprueba o la rechaza
+ * (checador > turnos abiertos > solicitudes de edición).
+ */
+model TimeClockEditRequest {
+  id       String @id @default(cuid())
+  timeClockId String
+  userId   String
+
+  /// Horas originales del turno al momento de crear la solicitud
+  /// (para poder mostrar "antes / después" aunque el turno cambie).
+  originalClockIn  DateTime
+  originalClockOut DateTime?
+
+  requestedClockIn  DateTime
+  requestedClockOut DateTime
+  reason            String?
+
+  status TimeClockEditStatus @default(PENDIENTE)
+
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNotes  String?
+
+  createdAt DateTime @default(now())
+
+  timeClock TimeClockEntry @relation(fields: [timeClockId], references: [id], onDelete: Cascade)
+  user      User           @relation("TimeClockEditRequestedBy", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User?         @relation("TimeClockEditReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([timeClockId])
+  @@index([userId])
+  @@index([status])
+}
+
+enum TimeClockEditStatus {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
 }
 
 model ScheduledShift {
-  id        String   @id @default(cuid())
-  userId    String
-  branchId  String
-  date      DateTime
-  startTime String
-  endTime   String
+  id     String     @id @default(cuid())
+  userId String
+  /// Nulo cuando type = DESCANSO (día libre, no tiene sucursal).
+  branchId String?
+  date     DateTime
+
+  /// TURNO = turno normal de trabajo. DESCANSO = día libre, sin
+  /// sucursal ni horas.
+  type ShiftType @default(TURNO)
+
+  /// Nulos cuando type = DESCANSO.
+  startTime String?
+  endTime   String?
+
+  /// Puesto/función de este turno (texto libre), ej. "Bartender".
+  position String?
+
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user   User   @relation("ScheduledShifts", fields: [userId], references: [id], onDelete: Cascade)
-  branch Branch @relation(fields: [branchId], references: [id])
+  user   User    @relation("ScheduledShifts", fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id])
+  timeClockEntries TimeClockEntry[]
 
   @@index([userId])
   @@index([branchId])
   @@index([date])
+}
+
+enum ShiftType {
+  TURNO
+  DESCANSO
+}
+
+/*
+ * Historial de sueldo por empleado. Cambiar el sueldo hoy crea un
+ * registro nuevo con `effectiveFrom` desde hoy; los anteriores se
+ * cierran con `effectiveTo`. Así, calcular la nómina de una semana
+ * pasada usa la tarifa que estaba vigente ENTONCES, no la actual.
+ *
+ * `User.hourlyRate` se mantiene como caché de la tarifa HORA vigente
+ * (lo sigue usando el checador y el dashboard de nómina actual) y se
+ * sincroniza automáticamente cada vez que se registra una tarifa
+ * nueva de tipo HORA.
+ */
+model SalaryRate {
+  id     String           @id @default(cuid())
+  userId String
+  scheme SalarySchemeType @default(HORA)
+
+  /// Monto según el esquema: tarifa por hora, sueldo diario o sueldo
+  /// semanal — la unidad la da `scheme`, no hay tres campos sueltos.
+  amount Decimal @db.Decimal(10, 2)
+
+  effectiveFrom DateTime
+  /// Nulo = es la tarifa vigente actualmente.
+  effectiveTo   DateTime?
+
+  createdById String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  user      User  @relation("SalaryRateOwner", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("SalaryRateCreatedBy", fields: [createdById], references: [id])
+
+  @@index([userId, effectiveFrom])
+}
+
+enum SalarySchemeType {
+  HORA
+  DIA
+  SEMANA
+}
+
+/*
+ * Estado de publicación del horario semanal (una fila por semana,
+ * global para toda la empresa). Mientras está en DRAFT, solo los
+ * administradores lo ven en la cuadrícula de Horario. Al publicarlo,
+ * los empleados empiezan a verlo en su calendario (/timeclock/calendar).
+ */
+model ScheduleWeek {
+  id       String             @id @default(cuid())
+  weekStart DateTime          @unique
+  status    ScheduleWeekStatus @default(DRAFT)
+
+  publishedAt   DateTime?
+  publishedById String?
+  publishedBy   User?     @relation("ScheduleWeekPublishedBy", fields: [publishedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+enum ScheduleWeekStatus {
+  DRAFT
+  PUBLISHED
 }
 
 /*
@@ -1845,12 +2015,141 @@ enum OvertimeStatus {
   RECHAZADO
 }
 
+/// Bonos y deducciones manuales de nómina (propinas repartidas,
+/// préstamos, faltas de caja, premios, etc). Se capturan por semana
+/// y se suman/restan al pago estimado de esa semana.
+model PayrollAdjustment {
+  id     String @id @default(cuid())
+  userId String
+  /// Lunes de la semana a la que corresponde el ajuste (mismo grano
+  /// que OvertimeRecord.weekStart).
+  weekStart DateTime
+
+  type    PayrollAdjustmentType
+  concept String
+  amount  Decimal @db.Decimal(10, 2)
+  notes   String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+
+  user      User @relation("PayrollAdjustmentOwner", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User @relation("PayrollAdjustmentCreatedBy", fields: [createdById], references: [id])
+
+  @@index([userId, weekStart])
+  @@index([weekStart])
+}
+
+enum PayrollAdjustmentType {
+  BONO
+  DEDUCCION
+}
+
 /// *
-///  * Ajustes de nómina configurables por el administrador. Solo existe
-///  * una fila (id fijo "default"): son parámetros globales del negocio,
-///  * no por sucursal.
+///  * "El horario programa, el reloj checador demuestra y la nómina
+///  * paga." Mientras un periodo está en BORRADOR (o no existe fila
+///  * todavía — se crea perezosamente, igual que ScheduleWeek), la
+///  * tabla y el expediente de Nómina se calculan EN VIVO desde
+///  * TimeClockEntry/ScheduledShift/PayrollAdjustment. Al enviarlo a
+///  * revisión, esos números se congelan en PayrollEntry: aunque
+///  * después alguien corrija una checada vieja, la nómina ya
+///  * decidida no cambia sola.
+model PayrollPeriod {
+  id        String   @id @default(cuid())
+  /// Lunes de la semana (mismo grano que OvertimeRecord/PayrollAdjustment).
+  weekStart DateTime @unique
+  weekEnd   DateTime
+
+  status PayrollPeriodStatus @default(BORRADOR)
+
+  submittedById String?
+  submittedAt   DateTime?
+  approvedById  String?
+  approvedAt    DateTime?
+  paidById      String?
+  paidAt        DateTime?
+  rejectedNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submittedBy User? @relation("PayrollPeriodSubmittedBy", fields: [submittedById], references: [id])
+  approvedBy  User? @relation("PayrollPeriodApprovedBy", fields: [approvedById], references: [id])
+  paidBy      User? @relation("PayrollPeriodPaidBy", fields: [paidById], references: [id])
+  entries     PayrollEntry[]
+
+  @@index([status])
+}
+
+enum PayrollPeriodStatus {
+  BORRADOR
+  REVISION
+  APROBADA
+  PAGADA
+}
+
+/// Snapshot congelado del pago de un empleado dentro de un periodo ya
+/// enviado a revisión. `hoursByDay` y `daysSnapshot` guardan la misma
+/// forma que devuelven en vivo `getPayrollWeekTable` /
+/// `getEmployeePayrollDetail`, para que abrir una semana ya cerrada
+/// no dependa de que los datos de origen sigan intactos.
+model PayrollEntry {
+  id       String @id @default(cuid())
+  periodId String
+  userId   String
+
+  hourlyRate       Decimal? @db.Decimal(10, 2)
+  regularHours     Decimal  @db.Decimal(10, 2)
+  overtimeHours    Decimal  @db.Decimal(10, 2)
+  totalHours       Decimal  @db.Decimal(10, 2)
+  basePay          Decimal  @db.Decimal(12, 2)
+  overtimePay      Decimal  @db.Decimal(12, 2)
+  adjustmentsTotal Decimal  @db.Decimal(12, 2) @default(0)
+  totalPay         Decimal  @db.Decimal(12, 2)
+
+  hoursByDay   Json
+  daysSnapshot Json
+  adjustmentsSnapshot Json @default("[]")
+
+  createdAt DateTime @default(now())
+
+  period PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  user   User          @relation("PayrollEntryOwner", fields: [userId], references: [id])
+
+  @@unique([periodId, userId])
+  @@index([userId])
+}
+
+/// Justificación de una incidencia del expediente (llegada tarde,
+/// turno no trabajado, etc.) para un día específico. Es independiente
+/// de si la semana ya se congeló en PayrollEntry o no: justificar es
+/// una nota de documentación, no cambia el pago.
+model PayrollIncidentJustification {
+  id     String   @id @default(cuid())
+  userId String
+  /// Día calendario (medianoche UTC, mismo formato que ScheduledShift.date).
+  date   DateTime
+  notes  String?
+
+  justifiedById String
+  justifiedAt   DateTime @default(now())
+
+  user        User @relation("PayrollIncidentJustificationOwner", fields: [userId], references: [id], onDelete: Cascade)
+  justifiedBy User @relation("PayrollIncidentJustificationBy", fields: [justifiedById], references: [id])
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+/// *
+///  * Ajustes de nómina configurables por el administrador. La fila
+///  * global (id fijo "default", branchId null) aplica a cualquier
+///  * sucursal sin una fila propia. Una sucursal puede tener su propio
+///  * override (branchId único) si su tiempo extra se calcula distinto
+///  * (ej. un turno de bar 24h vs. oficina).
 model PayrollSettings {
-  id String @id @default("default")
+  id       String  @id @default(cuid())
+  branchId String? @unique
 
   /// Horas semanales a partir de las cuales cuenta como tiempo extra.
   weeklyHourThreshold Decimal @db.Decimal(5, 2) @default(48)
@@ -1862,6 +2161,8 @@ model PayrollSettings {
   secondTierMultiplier Decimal @db.Decimal(5, 2) @default(3)
 
   updatedAt DateTime @updatedAt
+
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
 }
 
 /*

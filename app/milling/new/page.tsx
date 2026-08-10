@@ -51,7 +51,7 @@ export default async function NewMillingPage() {
 
     await advanceLotStage(prisma, lotId, LotStage.MOLIENDA);
 
-    redirect(`/milling/${milling.id}`);
+    redirect(`/milling/${milling.id}?created=1`);
   }
 
   const blockers: string[] = [];

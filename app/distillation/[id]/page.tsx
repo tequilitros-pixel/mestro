@@ -9,6 +9,7 @@ import {
   BookIcon,
 } from "@/components/ui/icons";
 import PageTabs from "@/components/ui/PageTabs";
+import SuccessToast from "@/components/ui/SuccessToast";
 import FinishDistillationModal from "@/components/FinishDistillationModal";
 import DistillationTimeline from "@/components/DistillationTimeline";
 import DistillationCharts from "@/components/DistillationCharts";
@@ -36,6 +37,7 @@ import {
   getDistillationStatus,
 } from "@/lib/services/distillation";
 import { getMasterAdvice } from "@/lib/services/maestroDistillation";
+import { Suspense } from "react";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -274,7 +276,7 @@ export default async function DistillationDetailPage({
       },
     });
 
-    redirect(`/distillation/${id}`);
+    redirect(`/distillation/${id}?saved=1`);
   }
 
   async function finishDistillation(
@@ -435,7 +437,7 @@ export default async function DistillationDetailPage({
       redirect(`/distillation/${id}`);
     }
 
-    redirect(`/distillation/${id}`);
+    redirect(`/distillation/${id}?finished=1`);
   }
 
   async function finishLot(formData: FormData) {
@@ -509,7 +511,7 @@ export default async function DistillationDetailPage({
       }
     });
 
-    redirect(`/distillation/${id}`);
+    redirect(`/distillation/${id}?lotFinished=1`);
   }
 
   const isFinalStep = distillationType === "RECTIFICACION";
@@ -1012,6 +1014,17 @@ export default async function DistillationDetailPage({
 
   return (
     <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
+      <Suspense fallback={null}>
+        <SuccessToast
+          params={{
+            created: "Destilación iniciada exitosamente",
+            saved: "Datos guardados exitosamente",
+            finished: "Destilación cerrada exitosamente",
+            lotFinished: "Lote cerrado exitosamente",
+          }}
+        />
+      </Suspense>
+
       <div className="mx-auto max-w-6xl">
         <header className="mt-8">
           <p className="font-mono text-sm uppercase tracking-[0.4em] text-outline">

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { addCustomEventItemAction, type ActionResult } from "../actions";
+import { useToast } from "@/components/ui/Toast";
 
 type Product = { id: string; name: string; unit: string };
 
@@ -16,6 +17,7 @@ export default function AddCustomItemForm({
 }) {
   const [result, setResult] = useState<ActionResult | null>(null);
   const [saving, setSaving] = useState(false);
+  const { showToast } = useToast();
 
   async function handleSubmit(formData: FormData) {
     setSaving(true);
@@ -31,6 +33,7 @@ export default function AddCustomItemForm({
         `add-custom-item-${title}`,
       ) as HTMLFormElement | null;
       form?.reset();
+      showToast(`${title} agregado correctamente.`);
     }
   }
 

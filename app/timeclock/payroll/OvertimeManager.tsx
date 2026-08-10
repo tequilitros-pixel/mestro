@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
-import { AlertIcon, CheckIcon, XIcon, GearIcon } from "@/components/ui/icons";
+import { AlertIcon, CheckIcon, XIcon, GearIcon, TrashIcon } from "@/components/ui/icons";
 import {
   getOvertimeForRange,
   syncOvertimeForRange,
@@ -10,9 +10,14 @@ import {
   approveAllPendingOvertimeAction,
   getPayrollSettings,
   updatePayrollSettingsAction,
+  getBranchPayrollOverrides,
+  deleteBranchPayrollOverrideAction,
   type OvertimeRow,
   type PayrollSettingsValues,
 } from "@/app/actions/overtime";
+import { getBranchesForAssignment } from "@/app/actions/personnel";
+
+const GLOBAL_SCOPE = "__global__";
 
 const money = (value: number) =>
   new Intl.NumberFormat("es-MX", {
@@ -49,6 +54,9 @@ export default function OvertimeManager({
   const [settings, setSettings] = useState<PayrollSettingsValues | null>(null);
   const [draftSettings, setDraftSettings] = useState<PayrollSettingsValues | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  const [overrideBranchIds, setOverrideBranchIds] = useState<Set<string>>(new Set());
+  const [settingsScope, setSettingsScope] = useState<string>(GLOBAL_SCOPE);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -61,8 +69,15 @@ export default function OvertimeManager({
     // Se detecta el tiempo extra del rango antes de listarlo, para que
     // aparezcan las semanas nuevas sin que el admin haga nada.
     syncOvertimeForRange(from, to)
-      .then(() => Promise.all([getOvertimeForRange(from, to), getPayrollSettings()]))
-      .then(([result, currentSettings]) => {
+      .then(() =>
+        Promise.all([
+          getOvertimeForRange(from, to),
+          getPayrollSettings(),
+          getBranchesForAssignment(),
+          getBranchPayrollOverrides(),
+        ]),
+      )
+      .then(([result, currentSettings, branchList, overrides]) => {
         if (cancelled) return;
 
         if ("error" in result) {
@@ -75,6 +90,8 @@ export default function OvertimeManager({
 
         setSettings(currentSettings);
         setDraftSettings(currentSettings);
+        setBranches(branchList);
+        setOverrideBranchIds(new Set(overrides.map((o) => o.branchId)));
         setLoading(false);
       });
 
@@ -82,6 +99,13 @@ export default function OvertimeManager({
       cancelled = true;
     };
   }, [from, to, reloadKey]);
+
+  async function handleScopeChange(scope: string) {
+    setSettingsScope(scope);
+    const branchId = scope === GLOBAL_SCOPE ? undefined : scope;
+    const scoped = await getPayrollSettings(branchId);
+    setDraftSettings(scoped);
+  }
 
   function reload() {
     setReloadKey((k) => k + 1);
@@ -137,7 +161,8 @@ export default function OvertimeManager({
     setMessage(null);
     setError(null);
 
-    const result = await updatePayrollSettingsAction(draftSettings);
+    const branchId = settingsScope === GLOBAL_SCOPE ? undefined : settingsScope;
+    const result = await updatePayrollSettingsAction(draftSettings, branchId);
 
     setBusyId(null);
 
@@ -146,7 +171,35 @@ export default function OvertimeManager({
       return;
     }
 
-    setSettings(draftSettings);
+    if (settingsScope === GLOBAL_SCOPE) setSettings(draftSettings);
+    if (branchId) setOverrideBranchIds((prev) => new Set(prev).add(branchId));
+    setMessage(result.message);
+    reload();
+  }
+
+  async function handleRemoveOverride() {
+    if (settingsScope === GLOBAL_SCOPE) return;
+    if (!confirm("¿Quitar el override de esta sucursal? Volverá a usar los ajustes globales.")) return;
+
+    setBusyId("settings");
+    setMessage(null);
+    setError(null);
+
+    const result = await deleteBranchPayrollOverrideAction(settingsScope);
+
+    setBusyId(null);
+
+    if (!result.success) {
+      setError(result.error);
+      return;
+    }
+
+    setOverrideBranchIds((prev) => {
+      const next = new Set(prev);
+      next.delete(settingsScope);
+      return next;
+    });
+    setDraftSettings(settings);
     setMessage(result.message);
     reload();
   }
@@ -241,6 +294,45 @@ export default function OvertimeManager({
         <Card>
           <CardLabel>Cómo se calcula el tiempo extra</CardLabel>
 
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => handleScopeChange(GLOBAL_SCOPE)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
+                settingsScope === GLOBAL_SCOPE
+                  ? "bg-primary text-on-primary"
+                  : "border border-outline-variant text-on-surface-variant hover:bg-surface-container-high"
+              }`}
+            >
+              Global
+            </button>
+            {branches.map((branch) => (
+              <button
+                key={branch.id}
+                onClick={() => handleScopeChange(branch.id)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
+                  settingsScope === branch.id
+                    ? "bg-primary text-on-primary"
+                    : "border border-outline-variant text-on-surface-variant hover:bg-surface-container-high"
+                }`}
+              >
+                {branch.name}
+                {overrideBranchIds.has(branch.id) && (
+                  <span className="ml-1.5 rounded-full bg-secondary/20 px-1.5 py-0.5 text-[9px] text-secondary">
+                    override
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <p className="mt-2 text-xs text-on-surface-variant">
+            {settingsScope === GLOBAL_SCOPE
+              ? "Aplica a cualquier sucursal sin ajustes propios."
+              : overrideBranchIds.has(settingsScope)
+                ? "Esta sucursal tiene sus propios ajustes."
+                : "Esta sucursal todavía usa los ajustes globales — guardar aquí crea un override solo para ella."}
+          </p>
+
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <label className="space-y-2">
               <span className="text-xs font-semibold text-on-surface-variant">
@@ -326,13 +418,26 @@ export default function OvertimeManager({
             registros pendientes, no los ya aprobados.
           </p>
 
-          <button
-            onClick={handleSaveSettings}
-            disabled={busyId !== null}
-            className="mt-4 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-on-primary transition hover:opacity-90 disabled:opacity-50"
-          >
-            {busyId === "settings" ? "Guardando..." : "Guardar ajustes"}
-          </button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={handleSaveSettings}
+              disabled={busyId !== null}
+              className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-on-primary transition hover:opacity-90 disabled:opacity-50"
+            >
+              {busyId === "settings" ? "Guardando..." : "Guardar ajustes"}
+            </button>
+
+            {settingsScope !== GLOBAL_SCOPE && overrideBranchIds.has(settingsScope) && (
+              <button
+                onClick={handleRemoveOverride}
+                disabled={busyId !== null}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-error/40 px-4 py-2.5 text-sm font-bold text-error transition hover:bg-error/10 disabled:opacity-50"
+              >
+                <TrashIcon className="h-4 w-4" />
+                Quitar override
+              </button>
+            )}
+          </div>
         </Card>
       )}
 

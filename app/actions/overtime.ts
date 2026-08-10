@@ -67,30 +67,75 @@ function overtimeReady() {
   return Boolean(client.overtimeRecord) && Boolean(client.payrollSettings);
 }
 
-export async function getPayrollSettings(): Promise<PayrollSettingsValues> {
+function mapSettingsRow(row: {
+  weeklyHourThreshold: unknown;
+  firstTierHours: unknown;
+  firstTierMultiplier: unknown;
+  secondTierMultiplier: unknown;
+}): PayrollSettingsValues {
+  return {
+    weeklyHourThreshold: Number(row.weeklyHourThreshold),
+    firstTierHours: Number(row.firstTierHours),
+    firstTierMultiplier: Number(row.firstTierMultiplier),
+    secondTierMultiplier: Number(row.secondTierMultiplier),
+  };
+}
+
+/**
+ * Ajustes de tiempo extra vigentes. Si se pasa `branchId` y esa
+ * sucursal tiene su propio override, se usa ese; si no, cae al global
+ * ("default"). Sin `branchId`, siempre regresa el global.
+ */
+export async function getPayrollSettings(branchId?: string | null): Promise<PayrollSettingsValues> {
   if (!overtimeReady()) return DEFAULT_SETTINGS;
 
   try {
+    if (branchId) {
+      const branchSettings = await prisma.payrollSettings.findUnique({ where: { branchId } });
+      if (branchSettings) return mapSettingsRow(branchSettings);
+    }
+
     const settings = await prisma.payrollSettings.findUnique({
       where: { id: "default" },
     });
 
     if (!settings) return DEFAULT_SETTINGS;
 
-    return {
-      weeklyHourThreshold: Number(settings.weeklyHourThreshold),
-      firstTierHours: Number(settings.firstTierHours),
-      firstTierMultiplier: Number(settings.firstTierMultiplier),
-      secondTierMultiplier: Number(settings.secondTierMultiplier),
-    };
+    return mapSettingsRow(settings);
   } catch (error) {
     console.error("Ajustes de nómina no disponibles:", error);
     return DEFAULT_SETTINGS;
   }
 }
 
+/**
+ * Ajustes de todas las sucursales que tienen override propio, para
+ * mostrarlos en el panel de configuración (cuáles ya se desviaron del
+ * global y cuáles siguen heredando).
+ */
+export async function getBranchPayrollOverrides(): Promise<
+  { branchId: string; branchName: string; settings: PayrollSettingsValues }[]
+> {
+  if (!overtimeReady()) return [];
+
+  try {
+    const rows = await prisma.payrollSettings.findMany({
+      where: { branchId: { not: null } },
+      include: { branch: { select: { name: true } } },
+    });
+
+    return rows
+      .filter((r): r is typeof r & { branchId: string; branch: { name: string } } => r.branchId !== null && r.branch !== null)
+      .map((r) => ({ branchId: r.branchId, branchName: r.branch.name, settings: mapSettingsRow(r) }));
+  } catch (error) {
+    console.error("Overrides de nómina no disponibles:", error);
+    return [];
+  }
+}
+
 export async function updatePayrollSettingsAction(
   values: PayrollSettingsValues,
+  branchId?: string | null,
 ): Promise<ActionResult> {
   const auth = await requireAdmin();
   if (auth.error !== undefined) return { success: false, error: auth.error };
@@ -112,22 +157,36 @@ export async function updatePayrollSettingsAction(
   }
 
   try {
-    await prisma.payrollSettings.upsert({
-      where: { id: "default" },
-      update: {
-        weeklyHourThreshold,
-        firstTierHours,
-        firstTierMultiplier,
-        secondTierMultiplier,
-      },
-      create: {
-        id: "default",
-        weeklyHourThreshold,
-        firstTierHours,
-        firstTierMultiplier,
-        secondTierMultiplier,
-      },
-    });
+    if (branchId) {
+      await prisma.payrollSettings.upsert({
+        where: { branchId },
+        update: { weeklyHourThreshold, firstTierHours, firstTierMultiplier, secondTierMultiplier },
+        create: {
+          branchId,
+          weeklyHourThreshold,
+          firstTierHours,
+          firstTierMultiplier,
+          secondTierMultiplier,
+        },
+      });
+    } else {
+      await prisma.payrollSettings.upsert({
+        where: { id: "default" },
+        update: {
+          weeklyHourThreshold,
+          firstTierHours,
+          firstTierMultiplier,
+          secondTierMultiplier,
+        },
+        create: {
+          id: "default",
+          weeklyHourThreshold,
+          firstTierHours,
+          firstTierMultiplier,
+          secondTierMultiplier,
+        },
+      });
+    }
 
     revalidatePath("/timeclock/payroll");
 
@@ -135,6 +194,22 @@ export async function updatePayrollSettingsAction(
   } catch (error) {
     console.error("Error updating payroll settings:", error);
     return { success: false, error: "No fue posible guardar los ajustes." };
+  }
+}
+
+/** Elimina el override de una sucursal para que vuelva a heredar el global. */
+export async function deleteBranchPayrollOverrideAction(branchId: string): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (auth.error !== undefined) return { success: false, error: auth.error };
+  if (!overtimeReady()) return { success: false, error: MIGRATION_PENDING };
+
+  try {
+    await prisma.payrollSettings.deleteMany({ where: { branchId } });
+    revalidatePath("/timeclock/payroll");
+    return { success: true, message: "La sucursal vuelve a usar los ajustes globales." };
+  } catch (error) {
+    console.error("Error deleting branch payroll override:", error);
+    return { success: false, error: "No fue posible quitar el override." };
   }
 }
 
@@ -156,13 +231,15 @@ export type OvertimeRow = {
   reviewedAt: string | null;
 };
 
-function splitTiers(overtimeHours: number, settings: PayrollSettingsValues) {
+/// Exportadas para que Nómina (app/actions/payroll.ts) pueda estimar
+/// horas extra con la misma regla configurada, sin duplicar la lógica.
+export function splitTiers(overtimeHours: number, settings: PayrollSettingsValues) {
   const doubleHours = Math.min(overtimeHours, settings.firstTierHours);
   const tripleHours = Math.max(overtimeHours - settings.firstTierHours, 0);
   return { doubleHours, tripleHours };
 }
 
-function computeAmount(
+export function computeAmount(
   doubleHours: number,
   tripleHours: number,
   hourlyRate: number | null,
@@ -182,6 +259,21 @@ function computeAmount(
  * que siguen pendientes. Los ya aprobados o rechazados NO se tocan —
  * una decisión tomada no se sobrescribe sola.
  */
+/**
+ * Resuelve (y cachea) los ajustes de tiempo extra de cada sucursal
+ * usada en un lote, para no repetir la consulta por cada registro.
+ */
+function branchSettingsResolver() {
+  const cache = new Map<string, PayrollSettingsValues>();
+  return async (branchId: string) => {
+    const cached = cache.get(branchId);
+    if (cached) return cached;
+    const settings = await getPayrollSettings(branchId);
+    cache.set(branchId, settings);
+    return settings;
+  };
+}
+
 export async function syncOvertimeForRange(
   from: string,
   to: string,
@@ -190,7 +282,7 @@ export async function syncOvertimeForRange(
   if (auth.error !== undefined) return { error: auth.error };
   if (!overtimeReady()) return { error: MIGRATION_PENDING };
 
-  const settings = await getPayrollSettings();
+  const resolveSettings = branchSettingsResolver();
 
   // Se analiza por semanas completas (lunes a domingo) porque el
   // umbral de tiempo extra es semanal.
@@ -265,6 +357,7 @@ export async function syncOvertimeForRange(
   let updated = 0;
 
   for (const acc of byWeek.values()) {
+    const settings = await resolveSettings(acc.branchId);
     const overtimeHours = acc.hours - settings.weeklyHourThreshold;
     const key = `${acc.userId}-${acc.branchId}-${acc.weekStart}`;
     const record = existingByKey.get(key);
@@ -339,38 +432,41 @@ export async function getOvertimeForRange(
     orderBy: [{ weekStart: "desc" }, { overtimeHours: "desc" }],
   });
 
-  const settings = await getPayrollSettings();
+  const resolveSettings = branchSettingsResolver();
 
-  const rows: OvertimeRow[] = records.map((record) => {
-    const overtimeHours = Number(record.overtimeHours);
-    const doubleHours = Number(record.doubleHours);
-    const tripleHours = Number(record.tripleHours);
-    const hourlyRate =
-      record.hourlyRate !== null ? Number(record.hourlyRate) : null;
+  const rows: OvertimeRow[] = await Promise.all(
+    records.map(async (record) => {
+      const settings = await resolveSettings(record.branchId);
+      const overtimeHours = Number(record.overtimeHours);
+      const doubleHours = Number(record.doubleHours);
+      const tripleHours = Number(record.tripleHours);
+      const hourlyRate =
+        record.hourlyRate !== null ? Number(record.hourlyRate) : null;
 
-    return {
-      id: record.id,
-      userId: record.userId,
-      userName: record.user.name,
-      branchId: record.branchId,
-      branchName: record.branch.name,
-      weekStart: formatDateOnly(record.weekStart),
-      workedHours: settings.weeklyHourThreshold + overtimeHours,
-      overtimeHours,
-      doubleHours,
-      tripleHours,
-      hourlyRate,
-      // Si ya se aprobó, se muestra el importe congelado. Si sigue
-      // pendiente, se muestra el estimado con la tarifa actual.
-      amount:
-        record.amount !== null
-          ? Number(record.amount)
-          : computeAmount(doubleHours, tripleHours, hourlyRate, settings),
-      status: record.status,
-      reviewedByName: record.reviewedBy?.name ?? null,
-      reviewedAt: record.reviewedAt?.toISOString() ?? null,
-    };
-  });
+      return {
+        id: record.id,
+        userId: record.userId,
+        userName: record.user.name,
+        branchId: record.branchId,
+        branchName: record.branch.name,
+        weekStart: formatDateOnly(record.weekStart),
+        workedHours: settings.weeklyHourThreshold + overtimeHours,
+        overtimeHours,
+        doubleHours,
+        tripleHours,
+        hourlyRate,
+        // Si ya se aprobó, se muestra el importe congelado. Si sigue
+        // pendiente, se muestra el estimado con la tarifa actual.
+        amount:
+          record.amount !== null
+            ? Number(record.amount)
+            : computeAmount(doubleHours, tripleHours, hourlyRate, settings),
+        status: record.status,
+        reviewedByName: record.reviewedBy?.name ?? null,
+        reviewedAt: record.reviewedAt?.toISOString() ?? null,
+      };
+    }),
+  );
 
   return { success: true, rows };
 }
@@ -394,7 +490,7 @@ export async function reviewOvertimeAction(
       return { success: false, error: "El registro ya no existe." };
     }
 
-    const settings = await getPayrollSettings();
+    const settings = await getPayrollSettings(record.branchId);
 
     const hourlyRate =
       record.user.hourlyRate !== null ? Number(record.user.hourlyRate) : null;
@@ -460,7 +556,7 @@ export async function approveAllPendingOvertimeAction(
       include: { user: { select: { hourlyRate: true } } },
     });
 
-    const settings = await getPayrollSettings();
+    const resolveSettings = branchSettingsResolver();
 
     let approved = 0;
     let skipped = 0;
@@ -475,6 +571,8 @@ export async function approveAllPendingOvertimeAction(
         skipped += 1;
         continue;
       }
+
+      const settings = await resolveSettings(record.branchId);
 
       await prisma.overtimeRecord.update({
         where: { id: record.id },

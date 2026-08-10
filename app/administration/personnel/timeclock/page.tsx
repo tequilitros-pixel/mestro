@@ -2,14 +2,17 @@ import Link from "next/link";
 import {
   getOpenShiftsForAdmin,
   getRecentGeofenceAlerts,
+  getPendingTimeClockEditRequests,
 } from "@/app/actions/timeclock";
 import { ChevronLeftIcon } from "@/components/ui/icons";
 import OpenShiftsManager from "./OpenShiftsManager";
+import EditRequestsManager from "./EditRequestsManager";
 
 export default async function OpenShiftsPage() {
-  const [openShifts, geofenceAlerts] = await Promise.all([
+  const [openShifts, geofenceAlerts, editRequests] = await Promise.all([
     getOpenShiftsForAdmin(),
     getRecentGeofenceAlerts(),
+    getPendingTimeClockEditRequests(),
   ]);
 
   const serialized = openShifts.map((entry: Awaited<ReturnType<typeof getOpenShiftsForAdmin>>[number]) => ({
@@ -18,6 +21,19 @@ export default async function OpenShiftsPage() {
     user: entry.user,
     branch: entry.branch,
   }));
+
+  const serializedEditRequests = editRequests.map(
+    (r: Awaited<ReturnType<typeof getPendingTimeClockEditRequests>>[number]) => ({
+      id: r.id,
+      reason: r.reason,
+      originalClockIn: r.originalClockIn.toISOString(),
+      originalClockOut: r.originalClockOut ? r.originalClockOut.toISOString() : null,
+      requestedClockIn: r.requestedClockIn.toISOString(),
+      requestedClockOut: r.requestedClockOut.toISOString(),
+      user: r.user,
+      timeClock: { branch: r.timeClock.branch },
+    }),
+  );
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
@@ -40,6 +56,20 @@ export default async function OpenShiftsPage() {
         </div>
 
         <OpenShiftsManager initialShifts={serialized} />
+
+        <div>
+          <h2 className="text-xl font-bold text-on-surface">
+            Solicitudes de corrección
+          </h2>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Empleados que pidieron corregir las horas de un turno ya
+            cerrado. No se aplica nada hasta que apruebes.
+          </p>
+
+          <div className="mt-4">
+            <EditRequestsManager initialRequests={serializedEditRequests} />
+          </div>
+        </div>
 
         <div>
           <h2 className="text-xl font-bold text-on-surface">

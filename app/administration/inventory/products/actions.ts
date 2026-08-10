@@ -288,21 +288,22 @@ export async function deleteInventoryProductAction(
   productId: string,
 ): Promise<{ success: true } | { success: false; error: string }> {
   try {
-    const [packageUses, eventUses, kitUses, countUses, entryUses] = await Promise.all([
+    const [packageUses, eventUses, kitUses, countUses, entryUses, posRecipeUses] = await Promise.all([
       prisma.eventPackageItem.count({ where: { productId } }),
       prisma.serviceEventItem.count({ where: { productId } }),
       prisma.equipmentKitItem.count({ where: { productId } }),
       prisma.inventoryCountItem.count({ where: { productId } }),
       prisma.inventoryEntry.count({ where: { productId } }),
+      prisma.posVariantIngredient.count({ where: { inventoryProductId: productId } }),
     ]);
 
-    const totalUses = packageUses + eventUses + kitUses + countUses + entryUses;
+    const totalUses = packageUses + eventUses + kitUses + countUses + entryUses + posRecipeUses;
 
     if (totalUses > 0) {
       return {
         success: false,
         error:
-          "Este producto ya se usó en paquetes, eventos, kits o movimientos. No se puede eliminar sin perder ese historial — mejor desactívalo.",
+          "Este producto ya se usó en paquetes, eventos, kits, movimientos o recetas del POS. No se puede eliminar sin perder ese historial — mejor desactívalo.",
       };
     }
 

@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { closeInventoryCountAction, type ActionResult } from "../actions";
+import { useToast } from "@/components/ui/Toast";
 
 export default function CloseCountButton({ countId }: { countId: string }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [result, setResult] = useState<ActionResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -18,6 +20,7 @@ export default function CloseCountButton({ countId }: { countId: string }) {
 
     if (response.success) {
       router.refresh();
+      showToast("Conteo cerrado correctamente.");
     }
   }
 

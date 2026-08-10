@@ -13,6 +13,7 @@ const BRANCH_SELECT = {
   code: true,
   address: true,
   active: true,
+  color: true,
   geofenceId: true,
   geofence: { select: { id: true, name: true, radius: true } },
 } satisfies Prisma.BranchSelect;
@@ -73,6 +74,30 @@ export async function updateBranchAddressAction(
   });
 
   revalidatePath(GEOFENCES_PATH);
+  return { success: true };
+}
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+/** Color de identificación de la sucursal en la cuadrícula de Horario. */
+export async function updateBranchColorAction(
+  branchId: string,
+  color: string | null,
+): Promise<ActionResult> {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "No tienes permiso" };
+
+  if (color !== null && !HEX_COLOR.test(color)) {
+    return { error: "El color debe ser un hexadecimal válido (#RRGGBB)." };
+  }
+
+  await prisma.branch.update({
+    where: { id: branchId },
+    data: { color },
+  });
+
+  revalidatePath(GEOFENCES_PATH);
+  revalidatePath("/administration/schedule");
   return { success: true };
 }
 

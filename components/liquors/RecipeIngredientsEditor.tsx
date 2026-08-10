@@ -18,6 +18,7 @@ import {
   TrashIcon,
   XIcon,
 } from "@/components/ui/icons";
+import { useToast } from "@/components/ui/Toast";
 
 type RecipeIngredient = {
   id: string;
@@ -320,6 +321,7 @@ function IngredientFormModal({
   rawMaterials: RawMaterialOption[];
   onClose: () => void;
 }) {
+  const { showToast } = useToast();
   const [state, formAction] = useActionState(
     saveLiquorRecipeIngredientAction,
     initialLiquorRecipeIngredientState
@@ -345,7 +347,9 @@ function IngredientFormModal({
   useEffect(() => {
     if (state.success) {
       onClose();
+      showToast(ingredient ? "Ingrediente actualizado correctamente." : "Ingrediente agregado correctamente.");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.success, onClose]);
 
   function handleRawMaterialChange(

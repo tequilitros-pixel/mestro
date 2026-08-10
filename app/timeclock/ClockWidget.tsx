@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   getMyOpenShift,
   getMyBranches,
+  getNearbyBranches,
   clockInAction,
   clockOutAction,
   getMyTimeClockSummary,
@@ -89,6 +90,9 @@ export default function ClockWidget() {
   const [clockInValue, setClockInValue] = useState("");
   const [clockOutValue, setClockOutValue] = useState("");
 
+  const [detectedIds, setDetectedIds] = useState<Set<string>>(new Set());
+  const [nearbyChecked, setNearbyChecked] = useState(false);
+
   const lastAlertRef = useRef(0);
 
   async function load() {
@@ -108,6 +112,65 @@ export default function ClockWidget() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, []);
+
+  // Además de las sucursales asignadas o con turno programado, detecta
+  // en segundo plano si el empleado está físicamente dentro de la
+  // geozona de otra sucursal activa (p. ej. cubriendo Vélez sin tenerla
+  // asignada) y se la ofrece para checar entrada. Es silencioso: si no
+  // hay permiso de ubicación o falla, simplemente no agrega nada.
+  useEffect(() => {
+    if (loading || openShift) return;
+    if (!("geolocation" in navigator)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setNearbyChecked(true);
+      return;
+    }
+
+    let cancelled = false;
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        if (cancelled) return;
+
+        const nearby = await getNearbyBranches({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+
+        if (cancelled) return;
+
+        if (nearby.length > 0) {
+          setBranches((prev) => {
+            const byId = new Map(prev.map((b) => [b.id, b]));
+            for (const b of nearby) {
+              if (!byId.has(b.id)) byId.set(b.id, b as Branch);
+            }
+            return Array.from(byId.values());
+          });
+
+          setDetectedIds((prev) => {
+            const next = new Set(prev);
+            for (const b of nearby) next.add(b.id);
+            return next;
+          });
+
+          setSelectedBranch((prev) => prev || nearby[0].id);
+        }
+
+        setNearbyChecked(true);
+      },
+      () => {
+        // La detección por geozona es un plus, no un requisito: si el
+        // navegador no da permiso o falla, seguimos con lo asignado.
+        if (!cancelled) setNearbyChecked(true);
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, openShift]);
 
   // Mientras haya un turno abierto, refresca cada minuto para que
   // las horas y el dinero ganado del día avancen solos.
@@ -265,11 +328,21 @@ export default function ClockWidget() {
     );
   }
 
+  if (branches.length === 0 && !openShift && !nearbyChecked) {
+    return (
+      <div className="rounded-2xl border border-outline-variant bg-surface-container p-6 text-center text-on-surface-variant">
+        Buscando sucursales cercanas...
+      </div>
+    );
+  }
+
   if (branches.length === 0) {
     return (
       <div className="rounded-2xl border border-secondary/40 bg-secondary/10 p-6 text-center text-secondary">
-        No tienes ninguna sucursal asignada. Pídele a un administrador que te
-        asigne una en Personal.
+        No tienes ninguna sucursal asignada ni turno programado para hoy, y no
+        detectamos que estés dentro del área de alguna sucursal. Pídele a un
+        administrador que te asigne una en Personal, o acércate a la
+        sucursal donde vas a trabajar.
       </div>
     );
   }
@@ -347,9 +420,17 @@ export default function ClockWidget() {
             {branches.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
+                {detectedIds.has(b.id) ? " (detectada por tu ubicación)" : ""}
               </option>
             ))}
           </select>
+
+          {selectedBranch && detectedIds.has(selectedBranch) && (
+            <p className="text-xs text-on-surface-variant">
+              No tienes esta sucursal asignada, pero detectamos que estás en
+              su área. Puedes checar entrada aquí.
+            </p>
+          )}
 
           <button
             onClick={handleClockIn}

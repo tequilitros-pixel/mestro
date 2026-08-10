@@ -8,6 +8,7 @@ import {
   type ActionResult,
 } from "@/app/actions/notificationRules";
 import { ROLE_LABELS, type PersonnelRole } from "@/lib/personnelRoles";
+import { useToast } from "@/components/ui/Toast";
 
 const TRIGGER_TYPE_LABELS: Record<string, string> = {
   STOCK_BAJO: "Stock bajo en sucursales",
@@ -48,6 +49,7 @@ export default function NotificationRuleForm({
   initialValues?: InitialValues;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const isEditing = !!initialValues;
 
   const [result, setResult] = useState<ActionResult | null>(null);
@@ -66,6 +68,7 @@ export default function NotificationRuleForm({
     setResult(response);
 
     if (response.success) {
+      showToast(isEditing ? "Regla actualizada correctamente." : "Regla creada correctamente.");
       router.push("/administration/personnel/notifications");
     }
   }

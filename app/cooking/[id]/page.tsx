@@ -12,6 +12,7 @@ import { advanceLotStage } from "@/lib/lotStage";
 import CookingCharts from "@/components/CookingCharts";
 import FinishCookingModal from "@/components/FinishCookingModal";
 import PageTabs from "@/components/ui/PageTabs";
+import SuccessToast from "@/components/ui/SuccessToast";
 import {
   FlameIcon,
   ArrowUpIcon,
@@ -23,7 +24,7 @@ import {
   BookIcon,
   type IconProps,
 } from "@/components/ui/icons";
-import type { ComponentType } from "react";
+import { Suspense, type ComponentType } from "react";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -219,7 +220,7 @@ export default async function CookingDetailPage({
       },
     });
 
-    redirect(`/cooking/${id}`);
+    redirect(`/cooking/${id}?saved=1`);
   }
 
   async function addTemperatureEvent(
@@ -294,7 +295,7 @@ export default async function CookingDetailPage({
       },
     });
 
-    redirect(`/cooking/${id}`);
+    redirect(`/cooking/${id}?saved=1`);
   }
 
   async function finishCooking(
@@ -434,7 +435,7 @@ export default async function CookingDetailPage({
       redirect(`/cooking/${id}`);
     }
 
-    redirect(`/cooking/${id}`);
+    redirect(`/cooking/${id}?finished=1`);
   }
 
   const homeTabContent = (
@@ -1123,6 +1124,16 @@ export default async function CookingDetailPage({
 
   return (
     <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
+      <Suspense fallback={null}>
+        <SuccessToast
+          params={{
+            created: "Cocción iniciada exitosamente",
+            saved: "Datos guardados exitosamente",
+            finished: "Cocción cerrada exitosamente",
+          }}
+        />
+      </Suspense>
+
       <div className="mx-auto max-w-6xl">
         <header className="mt-8">
           <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">

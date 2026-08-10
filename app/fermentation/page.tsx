@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
-
+import SuccessToast from "@/components/ui/SuccessToast";
 
 export default async function FermentationPage() {
   const fermentations = await prisma.fermentation.findMany({
@@ -13,9 +14,11 @@ export default async function FermentationPage() {
 
   return (
     <main className="min-h-screen bg-background p-10 text-on-surface">
-      <div className="mx-auto max-w-6xl">
-      
+      <Suspense fallback={null}>
+        <SuccessToast params={{ created: "Fermentación iniciada exitosamente" }} />
+      </Suspense>
 
+      <div className="mx-auto max-w-6xl">
         <div className="flex items-center justify-between">
           <div>
             <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">

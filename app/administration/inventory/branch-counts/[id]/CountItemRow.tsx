@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateCountItemQuantityAction } from "../actions";
 import { CheckIcon } from "@/components/ui/icons";
+import { useToast } from "@/components/ui/Toast";
 
 type Item = {
   id: string;
@@ -26,6 +27,7 @@ export default function CountItemRow({
   editable: boolean;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [quantity, setQuantity] = useState(item.quantityCounted);
   const [saving, setSaving] = useState(false);
 
@@ -34,6 +36,7 @@ export default function CountItemRow({
     await updateCountItemQuantityAction(item.id, countId, quantity);
     setSaving(false);
     router.refresh();
+    showToast("Cantidad guardada correctamente.");
   }
 
   return (

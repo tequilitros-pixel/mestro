@@ -31,6 +31,7 @@ import {
   PlusIcon,
   XIcon,
 } from "@/components/ui/icons";
+import { useToast } from "@/components/ui/Toast";
 
 type User = { id: string; name: string };
 type Branch = { id: string; name: string };
@@ -80,6 +81,7 @@ function formatWeekRange(weekStart: string) {
 }
 
 export default function ScheduleBuilder() {
+  const { showToast } = useToast();
   const [weekStart, setWeekStart] = useState(getMostRecentMonday());
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -176,11 +178,13 @@ export default function ScheduleBuilder() {
 
     setTimeTouched(false);
     await load();
+    showToast("Turno agregado correctamente.");
   }
 
   async function handleDelete(shiftId: string) {
     await deleteScheduledShiftAction(shiftId);
     await load();
+    showToast("Turno quitado correctamente.");
   }
 
   async function handleCopyPrevious() {
@@ -197,6 +201,7 @@ export default function ScheduleBuilder() {
     }
 
     await load();
+    showToast("Semana anterior copiada correctamente.");
   }
 
   const shiftsByDay: Record<number, Shift[]> = {};

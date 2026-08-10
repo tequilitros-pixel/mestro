@@ -53,7 +53,7 @@ export default async function NewCookingPage() {
 
     await advanceLotStage(prisma, lotId, LotStage.COCCION);
 
-    redirect(`/cooking/${cooking.id}`);
+    redirect(`/cooking/${cooking.id}?created=1`);
   }
 
   const blockers: string[] = [];

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   updateBranchAddressAction,
+  updateBranchColorAction,
   assignGeofenceToBranchAction,
   createGeofenceAction,
   deleteGeofenceAction,
@@ -10,6 +11,8 @@ import {
 import { Card, CardLabel } from "@/components/ui/Card";
 import { MapPinIcon, TrashIcon, PlusIcon, XIcon, SearchIcon } from "@/components/ui/icons";
 import LocationPicker from "@/components/LocationPicker";
+import { useToast } from "@/components/ui/Toast";
+import { BRANCH_COLOR_PALETTE, fallbackBranchColor } from "@/lib/branchColors";
 
 type Branch = {
   id: string;
@@ -17,6 +20,7 @@ type Branch = {
   code: string;
   address: string | null;
   active: boolean;
+  color: string | null;
   geofenceId: string | null;
   geofence: { id: string; name: string; radius: number } | null;
 };
@@ -82,6 +86,7 @@ export default function GeofencesManager({
               onGeofenceAssigned={(geofenceId, geofence) =>
                 applyBranchPatch(branch.id, { geofenceId, geofence })
               }
+              onColorSaved={(color) => applyBranchPatch(branch.id, { color })}
             />
           ))}
         </div>
@@ -142,6 +147,7 @@ function BranchCard({
   geofences,
   onAddressSaved,
   onGeofenceAssigned,
+  onColorSaved,
 }: {
   branch: Branch;
   geofences: Geofence[];
@@ -150,12 +156,30 @@ function BranchCard({
     geofenceId: string | null,
     geofence: { id: string; name: string; radius: number } | null,
   ) => void;
+  onColorSaved: (color: string | null) => void;
 }) {
   const [editingAddress, setEditingAddress] = useState(false);
   const [address, setAddress] = useState(branch.address ?? "");
   const [savingAddress, setSavingAddress] = useState(false);
   const [savingAssignment, setSavingAssignment] = useState(false);
+  const [savingColor, setSavingColor] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
+
+  async function handleSetColor(color: string | null) {
+    setSavingColor(true);
+    setError(null);
+    const result = await updateBranchColorAction(branch.id, color);
+    setSavingColor(false);
+
+    if (!("success" in result)) {
+      setError(result.error);
+      return;
+    }
+
+    onColorSaved(color);
+    showToast(color ? "Color de sucursal guardado." : "Color quitado, se usará uno automático.");
+  }
 
   async function handleSaveAddress() {
     setSavingAddress(true);
@@ -170,6 +194,7 @@ function BranchCard({
 
     onAddressSaved(address.trim() === "" ? null : address.trim());
     setEditingAddress(false);
+    showToast("Dirección guardada correctamente.");
   }
 
   async function handleAssign(geofenceId: string) {
@@ -191,6 +216,9 @@ function BranchCard({
       geofenceId === "" ? null : geofenceId,
       geofence ? { id: geofence.id, name: geofence.name, radius: geofence.radius } : null,
     );
+    showToast(
+      geofenceId === "" ? "Geozona quitada de la sucursal." : "Geozona asignada correctamente.",
+    );
   }
 
   return (
@@ -198,7 +226,13 @@ function BranchCard({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <CardLabel>{branch.code}</CardLabel>
-          <p className="text-lg font-bold text-on-surface">{branch.name}</p>
+          <div className="flex items-center gap-2">
+            <span
+              className="h-3.5 w-3.5 shrink-0 rounded-full border border-outline-variant/50"
+              style={{ backgroundColor: branch.color ?? fallbackBranchColor(branch.id) }}
+            />
+            <p className="text-lg font-bold text-on-surface">{branch.name}</p>
+          </div>
 
           {!editingAddress ? (
             <div className="mt-1 flex items-center gap-2">
@@ -238,6 +272,42 @@ function BranchCard({
               </button>
             </div>
           )}
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-on-surface-variant">Color en Horario</span>
+
+            {BRANCH_COLOR_PALETTE.map((c) => (
+              <button
+                key={c}
+                onClick={() => handleSetColor(c)}
+                disabled={savingColor}
+                aria-label={`Usar color ${c}`}
+                className={`h-6 w-6 shrink-0 rounded-full border-2 transition disabled:opacity-60 ${
+                  branch.color === c ? "border-on-surface" : "border-transparent"
+                }`}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+
+            <input
+              type="color"
+              value={branch.color ?? fallbackBranchColor(branch.id)}
+              onChange={(e) => handleSetColor(e.target.value)}
+              disabled={savingColor}
+              aria-label="Color personalizado"
+              className="h-6 w-8 shrink-0 cursor-pointer rounded border border-outline-variant bg-transparent p-0 disabled:opacity-60"
+            />
+
+            {branch.color && (
+              <button
+                onClick={() => handleSetColor(null)}
+                disabled={savingColor}
+                className="text-xs text-on-surface-variant hover:text-error disabled:opacity-60"
+              >
+                Quitar
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="w-full max-w-[220px] shrink-0 sm:w-auto">
@@ -277,6 +347,7 @@ function GeofenceRow({
 }) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   async function handleDelete() {
     if (
@@ -298,6 +369,7 @@ function GeofenceRow({
     }
 
     onDeleted();
+    showToast("Geozona eliminada correctamente.");
   }
 
   return (
@@ -354,6 +426,7 @@ function NewGeofenceForm({
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   async function handleUseMyLocation() {
     setError(null);
@@ -438,6 +511,7 @@ function NewGeofenceForm({
     setRadius("150");
     setSearchNotice(null);
     setOpen(false);
+    showToast("Geozona creada correctamente.");
   }
 
   if (!open) {

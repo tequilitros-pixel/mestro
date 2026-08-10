@@ -24,6 +24,7 @@ import {
 } from "./PayrollCharts";
 import PayrollReport from "./PayrollReport";
 import OvertimeManager from "./OvertimeManager";
+import PayrollWeekView from "./PayrollWeekView";
 
 const RANGE_OPTIONS = [
   { key: "7", label: "7 días" },
@@ -685,6 +686,13 @@ export default function PayrollDashboard() {
               />
             </div>
           ),
+        },
+
+        {
+          key: "nomina",
+          label: "Nómina semanal",
+          icon: <ClockIcon className="h-4 w-4" />,
+          content: <PayrollWeekView />,
         },
 
         {

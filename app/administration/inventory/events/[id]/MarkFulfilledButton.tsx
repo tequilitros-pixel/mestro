@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { markRecountFulfilledAction } from "../actions";
 import { CheckIcon } from "@/components/ui/icons";
+import { useToast } from "@/components/ui/Toast";
 
 export default function MarkFulfilledButton({
   recountId,
@@ -13,6 +14,7 @@ export default function MarkFulfilledButton({
   eventId: string;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [saving, setSaving] = useState(false);
 
   async function handleClick() {
@@ -20,6 +22,7 @@ export default function MarkFulfilledButton({
     await markRecountFulfilledAction(recountId, eventId);
     setSaving(false);
     router.refresh();
+    showToast("Reconteo marcado como surtido.");
   }
 
   return (

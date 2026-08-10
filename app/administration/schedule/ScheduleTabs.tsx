@@ -1,19 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarIcon, ToolboxIcon } from "@/components/ui/icons";
+import { CalendarIcon, GridIcon, ToolboxIcon } from "@/components/ui/icons";
+import ScheduleGrid from "./ScheduleGrid";
 import ScheduleBuilder from "./ScheduleBuilder";
 import TemplatesEditor from "./TemplatesEditor";
 
-type Tab = "turnos" | "plantillas";
+type Tab = "horario" | "turnos" | "plantillas";
 
 const TABS: { key: Tab; label: string; icon: typeof CalendarIcon }[] = [
-  { key: "turnos", label: "Turnos", icon: CalendarIcon },
+  { key: "horario", label: "Horario", icon: GridIcon },
+  { key: "turnos", label: "Turnos (anterior)", icon: CalendarIcon },
   { key: "plantillas", label: "Plantillas", icon: ToolboxIcon },
 ];
 
 export default function ScheduleTabs() {
-  const [tab, setTab] = useState<Tab>("turnos");
+  const [tab, setTab] = useState<Tab>("horario");
 
   return (
     <div className="space-y-6">
@@ -38,7 +40,9 @@ export default function ScheduleTabs() {
         })}
       </div>
 
-      {tab === "turnos" ? <ScheduleBuilder /> : <TemplatesEditor />}
+      {tab === "horario" && <ScheduleGrid />}
+      {tab === "turnos" && <ScheduleBuilder />}
+      {tab === "plantillas" && <TemplatesEditor />}
     </div>
   );
 }

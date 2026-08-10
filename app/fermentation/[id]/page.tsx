@@ -6,12 +6,14 @@ import { FermentationStatus, LotStage } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
 import PageTabs from "@/components/ui/PageTabs";
+import SuccessToast from "@/components/ui/SuccessToast";
 import {
   ClipboardIcon,
   HomeIcon,
   ChartLineIcon,
   BookIcon,
 } from "@/components/ui/icons";
+import { Suspense } from "react";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -116,7 +118,7 @@ export default async function FermentationDetailPage({ params }: Props) {
       },
     });
 
-    redirect(`/fermentation/${id}`);
+    redirect(`/fermentation/${id}?saved=1`);
   }
 
   async function finishFermentation(formData: FormData) {
@@ -216,7 +218,7 @@ export default async function FermentationDetailPage({ params }: Props) {
       LotStage.DESTILACION
     );
 
-    redirect(`/fermentation/${id}`);
+    redirect(`/fermentation/${id}?finished=1`);
   }
 
   const currentBrix =
@@ -936,6 +938,15 @@ export default async function FermentationDetailPage({ params }: Props) {
 
   return (
     <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
+      <Suspense fallback={null}>
+        <SuccessToast
+          params={{
+            saved: "Datos guardados exitosamente",
+            finished: "Fermentación cerrada exitosamente",
+          }}
+        />
+      </Suspense>
+
       <div className="mx-auto max-w-6xl">
         <header className="mt-8">
           <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">

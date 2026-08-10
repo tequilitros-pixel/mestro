@@ -23,6 +23,7 @@ import {
   FactoryIcon,
   XIcon,
 } from "@/components/ui/icons";
+import { useToast } from "@/components/ui/Toast";
 
 type StepType =
   | "PREPARATION"
@@ -169,6 +170,7 @@ export default function RecipeStepsEditor({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formValues, setFormValues] =
     useState<StepFormValues>(EMPTY_FORM);
+  const { showToast } = useToast();
 
   const [state, formAction, isPending] = useActionState(
     saveLiquorRecipeStepAction,
@@ -183,14 +185,18 @@ export default function RecipeStepsEditor({
   useEffect(() => {
   if (!state.success) return;
 
+  const wasEditing = Boolean(formValues.stepId);
+
   const timeoutId = window.setTimeout(() => {
     setIsModalOpen(false);
     setFormValues(EMPTY_FORM);
+    showToast(wasEditing ? "Paso actualizado correctamente." : "Paso agregado correctamente.");
   }, 0);
 
   return () => {
     window.clearTimeout(timeoutId);
   };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [state]);
 
   function openCreateModal(type: StepType = "INGREDIENT") {

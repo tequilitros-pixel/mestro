@@ -8,6 +8,7 @@ import {
 } from "@/app/actions/schedule";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 import { ToolboxIcon, TrashIcon } from "@/components/ui/icons";
+import { useToast } from "@/components/ui/Toast";
 
 type Branch = { id: string; name: string };
 type Template = {
@@ -29,6 +30,7 @@ const DAY_LABELS = [
 ];
 
 export default function TemplatesEditor() {
+  const { showToast } = useToast();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,6 +128,7 @@ export default function TemplatesEditor() {
     });
 
     await load();
+    showToast("Plantilla guardada correctamente.");
   }
 
   async function handleClear(dayOfWeek: number) {
@@ -154,6 +157,7 @@ export default function TemplatesEditor() {
     });
 
     await load();
+    showToast("Plantilla eliminada correctamente.");
   }
 
   const activeBranchName = branches.find((b) => b.id === activeBranch)?.name;

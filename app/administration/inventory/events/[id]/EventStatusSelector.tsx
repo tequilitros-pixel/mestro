@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ServiceEventStatus } from "@prisma/client";
 import { updateEventStatusAction } from "../actions";
+import { useToast } from "@/components/ui/Toast";
 
 const statusLabels: Record<ServiceEventStatus, string> = {
   DRAFT: "Borrador",
@@ -23,6 +24,7 @@ export default function EventStatusSelector({
   currentStatus: ServiceEventStatus;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [status, setStatus] = useState(currentStatus);
   const [isPending, startTransition] = useTransition();
 
@@ -31,6 +33,7 @@ export default function EventStatusSelector({
     startTransition(async () => {
       await updateEventStatusAction(eventId, newStatus);
       router.refresh();
+      showToast(`Estado actualizado a "${statusLabels[newStatus]}".`);
     });
   }
 

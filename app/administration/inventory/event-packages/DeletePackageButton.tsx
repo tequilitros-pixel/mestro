@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { deleteEventPackageAction } from "./actions";
+import { useToast } from "@/components/ui/Toast";
 
 export default function DeletePackageButton({ packageId }: { packageId: string }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +22,7 @@ export default function DeletePackageButton({ packageId }: { packageId: string }
 
     if (response.success) {
       router.refresh();
+      showToast("Paquete eliminado correctamente.");
     } else {
       setError(response.error);
       setDeleting(false);

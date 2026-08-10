@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getUserModuleKeys } from "@/app/actions/permissions";
 
 import AppShell from "@/components/layout/AppShell";
+import { ToastProvider } from "@/components/ui/Toast";
 
 /*
  * Tipografía del nuevo sistema de diseño (definido en Stitch).
@@ -66,16 +67,18 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-background text-on-surface">
-        {user ? (
-          <AppShell
-            user={{ name: user.name, role: user.role }}
-            moduleKeys={moduleKeys}
-          >
-            {children}
-          </AppShell>
-        ) : (
-          children
-        )}
+        <ToastProvider>
+          {user ? (
+            <AppShell
+              user={{ name: user.name, role: user.role }}
+              moduleKeys={moduleKeys}
+            >
+              {children}
+            </AppShell>
+          ) : (
+            children
+          )}
+        </ToastProvider>
       </body>
     </html>
   );

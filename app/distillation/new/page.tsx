@@ -127,7 +127,7 @@ export default async function NewDistillationPage() {
         : LotStage.DESTILACION
     );
 
-    redirect(`/distillation/${distillation.id}`);
+    redirect(`/distillation/${distillation.id}?created=1`);
   }
 
   const blockers: string[] = [];

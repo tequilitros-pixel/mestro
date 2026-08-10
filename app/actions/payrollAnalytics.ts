@@ -205,8 +205,10 @@ export async function getPayrollAnalytics(
       where: { clockIn: { gte: start, lt: end }, clockOut: null },
     }),
 
+    // DESCANSO (día libre) no tiene sucursal ni horas: no cuenta como
+    // turno programado para comparar contra lo trabajado.
     prisma.scheduledShift.findMany({
-      where: { date: { gte: start, lt: end } },
+      where: { date: { gte: start, lt: end }, type: "TURNO" },
       select: {
         userId: true,
         branchId: true,
@@ -375,6 +377,10 @@ export async function getPayrollAnalytics(
   let totalMissedShifts = 0;
 
   for (const shift of scheduled) {
+    // Defensivo: la consulta ya filtra type TURNO, pero branchId y las
+    // horas son opcionales a nivel de schema (por DESCANSO).
+    if (!shift.branchId || !shift.startTime || !shift.endTime || !shift.branch) continue;
+
     const hours = scheduledHoursOf(shift.startTime, shift.endTime);
     totalScheduledHours += hours;
 

@@ -40,7 +40,11 @@
       "Bash(node --env-file=.env scripts/setup-mojito-and-links.mjs)",
       "Bash(node --env-file=.env scripts/_tmp_seed_notification_rules.mjs)",
       "Bash(lsof -i :3000 -sTCP:LISTEN -t)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 10 http://localhost:3000/administration/personnel/notifications)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 10 http://localhost:3000/administration/personnel/notifications)",
+      "Bash(timeout 60 grep -rl \"form?.reset\\(\\)\\\\|formRef.current?.reset\\(\\)\\\\|\\\\.reset\\(\\);\" /Users/joseadansanchez/Documents/maestro/app --include=\"*.tsx\")",
+      "Bash(jobs -l)",
+      "Bash(time grep -rl \"reset\\(\\)\" /Users/joseadansanchez/Documents/maestro/app/administration/personnel --include=\"*.tsx\")",
+      "Bash(time grep -rl \"reset\\(\\)\" /Users/joseadansanchez/Documents/maestro/app --include=\"*.tsx\")"
     ]
   }
 }

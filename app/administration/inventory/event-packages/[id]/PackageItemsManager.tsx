@@ -9,6 +9,7 @@ import {
   type ActionResult,
 } from "../actions";
 import { PRODUCT_CATEGORIES } from "../../products/categories";
+import { useToast } from "@/components/ui/Toast";
 
 type Product = {
   id: string;
@@ -43,6 +44,7 @@ export default function PackageItemsManager({
   items: PackageItem[];
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("Todos");
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -73,6 +75,7 @@ export default function PackageItemsManager({
     }
     setError(null);
     router.refresh();
+    showToast("Cambios guardados correctamente.");
   }
 
   async function handleAdd(productId: string, quantity: string) {
@@ -96,6 +99,7 @@ export default function PackageItemsManager({
     setSavingId(null);
     setError(null);
     router.refresh();
+    showToast("Elemento quitado correctamente.");
   }
 
   async function handleUpdate(

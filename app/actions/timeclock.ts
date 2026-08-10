@@ -11,7 +11,7 @@ import {
 } from "@/lib/dateOnly";
 import { distanceMeters, hasGeofence } from "@/lib/geo";
 
-const BRANCH_LOCATION_SELECT = {
+export const BRANCH_LOCATION_SELECT = {
   id: true,
   name: true,
   geofence: {
@@ -19,7 +19,7 @@ const BRANCH_LOCATION_SELECT = {
   },
 } as const;
 
-type Coords = { latitude: number; longitude: number };
+export type Coords = { latitude: number; longitude: number };
 
 /**
  * Si la sucursal tiene geozona asignada, exige coordenadas del
@@ -27,7 +27,7 @@ type Coords = { latitude: number; longitude: number };
  * Devuelve `null` si todo está bien (o si la sucursal no tiene
  * geozona), o un mensaje de error listo para mostrar.
  */
-function checkGeofence(
+export function checkGeofence(
   branch: {
     geofence: { latitude: number; longitude: number; radius: number } | null;
   },
@@ -58,6 +58,48 @@ function checkGeofence(
   return { distance };
 }
 
+/**
+ * Busca el turno programado (ScheduledShift tipo TURNO) de hoy para
+ * este empleado en esta sucursal, para vincularlo con la checada que
+ * está por crearse. Permite comparar PROGRAMADO vs REAL en Nómina sin
+ * pedirle al empleado que elija turno a mano.
+ *
+ * Si hay más de un turno programado hoy en esa sucursal (turno
+ * partido), evita reusar uno que ya quedó ligado a otra checada y
+ * toma el que empieza más temprano de los que sigan libres.
+ */
+export async function matchTodaysScheduledShift(
+  userId: string,
+  branchId: string,
+): Promise<string | null> {
+  const todayStr = todayDateOnly();
+  const todayStart = parseDateOnly(todayStr);
+  const todayEnd = parseDateOnly(addDaysToDateOnly(todayStr, 1));
+
+  const candidates = await prisma.scheduledShift.findMany({
+    where: {
+      userId,
+      branchId,
+      type: "TURNO",
+      date: { gte: todayStart, lt: todayEnd },
+    },
+    select: { id: true, startTime: true },
+    orderBy: { startTime: "asc" },
+  });
+
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0].id;
+
+  const alreadyLinked = await prisma.timeClockEntry.findMany({
+    where: { scheduledShiftId: { in: candidates.map((c) => c.id) } },
+    select: { scheduledShiftId: true },
+  });
+  const linkedIds = new Set(alreadyLinked.map((e) => e.scheduledShiftId));
+
+  const available = candidates.filter((c) => !linkedIds.has(c.id));
+  return (available[0] ?? candidates[0]).id;
+}
+
 export async function getMyOpenShift() {
   const user = await getCurrentUser();
   if (!user) return null;
@@ -72,12 +114,62 @@ export async function getMyBranches() {
   const user = await getCurrentUser();
   if (!user) return [];
 
-  const branches = await prisma.userBranch.findMany({
-    where: { userId: user.id },
-    include: { branch: { select: BRANCH_LOCATION_SELECT } },
+  const todayStr = todayDateOnly();
+  const todayStart = parseDateOnly(todayStr);
+  const todayEnd = parseDateOnly(addDaysToDateOnly(todayStr, 1));
+
+  // Un empleado puede checar en una sucursal por dos motivos: la tiene
+  // asignada de forma permanente (UserBranch), o tiene un turno
+  // programado ahí para hoy (ScheduledShift). Si solo tiene el turno
+  // programado, también debe poder checar entrada sin que un admin
+  // tenga que darle de alta la sucursal aparte.
+  const [assigned, scheduledToday] = await Promise.all([
+    prisma.userBranch.findMany({
+      where: { userId: user.id },
+      include: { branch: { select: BRANCH_LOCATION_SELECT } },
+    }),
+    // DESCANSO (día libre) no tiene sucursal: no aplica para checar entrada.
+    prisma.scheduledShift.findMany({
+      where: { userId: user.id, date: { gte: todayStart, lt: todayEnd }, type: "TURNO" },
+      include: { branch: { select: BRANCH_LOCATION_SELECT } },
+    }),
+  ]);
+
+  const byId = new Map<string, (typeof assigned)[number]["branch"]>();
+  for (const a of assigned) byId.set(a.branch.id, a.branch);
+  for (const s of scheduledToday) {
+    if (s.branch) byId.set(s.branch.id, s.branch);
+  }
+
+  return Array.from(byId.values());
+}
+
+/**
+ * Sucursales activas con geozona cuyo radio incluye la posición dada.
+ * Permite ofrecer la opción de checar entrada por estar físicamente
+ * en el área de una sucursal, aunque el empleado no la tenga asignada
+ * ni tenga un turno programado ahí (p. ej. cubrir una sucursal distinta
+ * a la suya).
+ */
+export async function getNearbyBranches(coords: Coords) {
+  const user = await getCurrentUser();
+  if (!user) return [];
+
+  const branches = await prisma.branch.findMany({
+    where: { active: true, geofenceId: { not: null } },
+    select: BRANCH_LOCATION_SELECT,
   });
 
-  return branches.map((b) => b.branch);
+  return branches.filter((branch) => {
+    if (!hasGeofence(branch)) return false;
+    const distance = distanceMeters(
+      branch.geofence.latitude,
+      branch.geofence.longitude,
+      coords.latitude,
+      coords.longitude
+    );
+    return distance <= branch.geofence.radius;
+  });
 }
 
 export async function clockInAction(branchId: string, coords?: Coords) {
@@ -108,11 +200,14 @@ export async function clockInAction(branchId: string, coords?: Coords) {
     return { error: geofenceResult.error };
   }
 
+  const scheduledShiftId = await matchTodaysScheduledShift(user.id, branchId);
+
   const entry = await prisma.timeClockEntry.create({
     data: {
       userId: user.id,
       branchId,
       clockIn: new Date(),
+      scheduledShiftId,
     },
   });
 
@@ -171,6 +266,168 @@ export async function clockOutAction(
   });
 
   revalidatePath("/timeclock");
+
+  return { success: true };
+}
+
+/**
+ * Turnos cerrados más recientes del empleado, con su solicitud de
+ * edición más reciente (si tiene una) para poder mostrar el estatus
+ * en el checador.
+ */
+export async function getMyRecentClosedShifts(limit = 10) {
+  const user = await getCurrentUser();
+  if (!user) return [];
+
+  return prisma.timeClockEntry.findMany({
+    where: { userId: user.id, clockOut: { not: null } },
+    include: {
+      branch: { select: { id: true, name: true } },
+      editRequests: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+    orderBy: { clockIn: "desc" },
+    take: limit,
+  });
+}
+
+/**
+ * El empleado pide corregir las horas de un turno que ya cerró (por
+ * ejemplo, olvidó checar salida a tiempo). No modifica el turno de
+ * inmediato: crea una solicitud pendiente que un administrador debe
+ * aprobar o rechazar desde Personal > Checador.
+ */
+export async function requestTimeClockEditAction(
+  entryId: string,
+  newClockIn: string,
+  newClockOut: string,
+  reason?: string,
+) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { error: "No autorizado" };
+  }
+
+  const entry = await prisma.timeClockEntry.findUnique({
+    where: { id: entryId },
+  });
+
+  if (!entry || entry.userId !== user.id) {
+    return { error: "Turno no encontrado" };
+  }
+
+  if (!entry.clockOut) {
+    return { error: "Este turno sigue abierto. Ciérralo desde el checador antes de corregirlo." };
+  }
+
+  const existingPending = await prisma.timeClockEditRequest.findFirst({
+    where: { timeClockId: entryId, status: "PENDIENTE" },
+  });
+
+  if (existingPending) {
+    return { error: "Ya hay una solicitud pendiente de aprobación para este turno." };
+  }
+
+  const requestedClockIn = new Date(newClockIn);
+  const requestedClockOut = new Date(newClockOut);
+
+  if (Number.isNaN(requestedClockIn.getTime()) || Number.isNaN(requestedClockOut.getTime())) {
+    return { error: "Las horas no son válidas" };
+  }
+
+  if (requestedClockOut <= requestedClockIn) {
+    return { error: "La hora de salida debe ser después de la entrada" };
+  }
+
+  await prisma.timeClockEditRequest.create({
+    data: {
+      timeClockId: entry.id,
+      userId: user.id,
+      originalClockIn: entry.clockIn,
+      originalClockOut: entry.clockOut,
+      requestedClockIn,
+      requestedClockOut,
+      reason: reason?.trim() || null,
+    },
+  });
+
+  revalidatePath("/timeclock");
+  revalidatePath("/administration/personnel/timeclock");
+
+  return { success: true };
+}
+
+/**
+ * Solicitudes de edición pendientes de revisión, para el panel del
+ * administrador en Personal > Checador.
+ */
+export async function getPendingTimeClockEditRequests() {
+  const admin = await getCurrentUser();
+  if (!admin || admin.role !== "ADMIN") return [];
+
+  return prisma.timeClockEditRequest.findMany({
+    where: { status: "PENDIENTE" },
+    include: {
+      user: { select: { id: true, name: true } },
+      timeClock: { include: { branch: { select: { id: true, name: true } } } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+/**
+ * El administrador aprueba o rechaza una solicitud de edición. Al
+ * aprobar, se aplican las horas corregidas al turno original.
+ */
+export async function reviewTimeClockEditRequestAction(
+  requestId: string,
+  approve: boolean,
+  reviewNotes?: string,
+) {
+  const admin = await getCurrentUser();
+  if (!admin || admin.role !== "ADMIN") {
+    return { error: "No tienes permiso" };
+  }
+
+  const request = await prisma.timeClockEditRequest.findUnique({
+    where: { id: requestId },
+  });
+
+  if (!request) {
+    return { error: "Solicitud no encontrada" };
+  }
+
+  if (request.status !== "PENDIENTE") {
+    return { error: "Esta solicitud ya fue revisada" };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.timeClockEditRequest.update({
+      where: { id: requestId },
+      data: {
+        status: approve ? "APROBADO" : "RECHAZADO",
+        reviewedById: admin.id,
+        reviewedAt: new Date(),
+        reviewNotes: reviewNotes?.trim() || null,
+      },
+    });
+
+    if (approve) {
+      await tx.timeClockEntry.update({
+        where: { id: request.timeClockId },
+        data: {
+          clockIn: request.requestedClockIn,
+          clockOut: request.requestedClockOut,
+          confirmedByEmployee: false,
+        },
+      });
+    }
+  });
+
+  revalidatePath("/timeclock");
+  revalidatePath("/administration/personnel/timeclock");
 
   return { success: true };
 }
@@ -299,6 +556,76 @@ export async function closeShiftManuallyAction(
 
   return { success: true };
 }
+
+/**
+ * Un admin/gerente registra una checada completa (entrada y salida)
+ * que nunca se hizo desde el checador — por ejemplo, alguien trabajó
+ * pero se le olvidó checar por completo ese día. Se marca con
+ * `source: MANUAL` para distinguirla de las que sí pasaron por el
+ * checador, y queda ligada al turno programado si coincide.
+ */
+export async function createManualTimeClockEntryAction(input: {
+  userId: string;
+  branchId: string;
+  clockIn: string;
+  clockOut: string;
+  notes?: string;
+}) {
+  const admin = await getCurrentUser();
+  if (!admin || admin.role !== "ADMIN") {
+    return { error: "No tienes permiso" };
+  }
+
+  if (!input.userId || !input.branchId || !input.clockIn || !input.clockOut) {
+    return { error: "Faltan datos de la checada" };
+  }
+
+  const clockIn = new Date(input.clockIn);
+  const clockOut = new Date(input.clockOut);
+
+  if (Number.isNaN(clockIn.getTime()) || Number.isNaN(clockOut.getTime())) {
+    return { error: "Las horas no son válidas" };
+  }
+
+  if (clockOut <= clockIn) {
+    return { error: "La hora de salida debe ser después de la entrada" };
+  }
+
+  const scheduledShiftId = await prisma.scheduledShift
+    .findFirst({
+      where: {
+        userId: input.userId,
+        branchId: input.branchId,
+        type: "TURNO",
+        date: {
+          gte: new Date(clockIn.toISOString().slice(0, 10) + "T00:00:00.000Z"),
+          lt: new Date(clockIn.toISOString().slice(0, 10) + "T23:59:59.999Z"),
+        },
+      },
+      select: { id: true },
+    })
+    .then((s) => s?.id ?? null);
+
+  await prisma.timeClockEntry.create({
+    data: {
+      userId: input.userId,
+      branchId: input.branchId,
+      clockIn,
+      clockOut,
+      confirmedByEmployee: false,
+      closedManuallyById: admin.id,
+      source: "MANUAL",
+      scheduledShiftId,
+      notes: input.notes?.trim() || null,
+    },
+  });
+
+  revalidatePath("/administration/personnel/timeclock");
+  revalidatePath("/timeclock/payroll");
+
+  return { success: true };
+}
+
 export async function getWeeklyPayrollReport(weekStart: string, branchId?: string) {
   const currentUser = await getCurrentUser();
 
