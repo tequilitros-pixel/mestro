@@ -5,6 +5,7 @@ import {
   getScheduleGridForWeek,
   publishWeekAction,
   unpublishWeekAction,
+  copyPreviousWeekAction,
 } from "@/app/actions/schedule";
 import {
   addDaysToDateOnly,
@@ -14,7 +15,13 @@ import {
   todayDateOnly,
 } from "@/lib/dateOnly";
 import { getInitials } from "@/lib/personnelRoles";
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, AlertIcon } from "@/components/ui/icons";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PlusIcon,
+  AlertIcon,
+  ClipboardIcon,
+} from "@/components/ui/icons";
 import { useToast } from "@/components/ui/Toast";
 import { fallbackBranchColor } from "@/lib/branchColors";
 import ShiftModal from "./ShiftModal";
@@ -120,9 +127,9 @@ function ShiftBlock({ shift, onClick }: { shift: Shift; onClick: () => void }) {
     return (
       <button
         onClick={onClick}
-        className="w-full rounded-lg border border-dashed border-outline-variant bg-surface-container-highest px-2 py-2 text-center text-[10px] font-black uppercase tracking-widest text-on-surface-variant transition hover:border-outline"
+        className="w-full rounded-xl bg-[#3a3a3d] px-2.5 py-2.5 text-center transition duration-150 ease-out hover:scale-[1.02] hover:brightness-110 active:scale-[0.98]"
       >
-        Descanso
+        <p className="text-[11px] font-black uppercase tracking-widest text-white/90">Descanso</p>
       </button>
     );
   }
@@ -132,19 +139,19 @@ function ShiftBlock({ shift, onClick }: { shift: Shift; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-lg border px-2 py-1.5 text-left transition hover:brightness-95"
-      style={{ backgroundColor: `${color}1f`, borderColor: `${color}55` }}
+      className="w-full rounded-xl px-2.5 py-2 text-left transition duration-150 ease-out hover:scale-[1.02] hover:brightness-110 active:scale-[0.98]"
+      style={{ backgroundColor: color, border: "1px solid rgba(255,255,255,0.25)" }}
     >
-      <p className="text-xs font-bold" style={{ color }}>
+      <p className="text-xs font-black leading-tight text-white">
         {shift.startTime ? formatTime12(shift.startTime) : "—"}
         {" – "}
         {shift.endTime ? formatTime12(shift.endTime) : "—"}
       </p>
-      <p className="truncate text-[11px] font-medium text-on-surface-variant">
+      <p className="truncate text-[11px] font-semibold leading-tight text-white/90">
         {shift.branch?.name ?? "Sin sucursal"}
       </p>
       {shift.position && (
-        <p className="truncate text-[10px] text-on-surface-variant/80">{shift.position}</p>
+        <p className="truncate text-[10px] leading-tight text-white/75">{shift.position}</p>
       )}
     </button>
   );
@@ -348,6 +355,7 @@ export default function ScheduleGrid() {
   const [modal, setModal] = useState<ModalState | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [mobileDayIndex, setMobileDayIndex] = useState(0);
+  const [copying, setCopying] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -380,6 +388,23 @@ export default function ScheduleGrid() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMobileDayIndex(idx >= 0 ? idx : 0);
   }, [weekStart]);
+
+  async function handleCopyPrevious() {
+    setCopying(true);
+    setError(null);
+
+    const result = await copyPreviousWeekAction(weekStart);
+
+    setCopying(false);
+
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+
+    showToast("Semana anterior copiada correctamente.");
+    load();
+  }
 
   async function handlePublishToggle() {
     if (!data) return;
@@ -589,6 +614,15 @@ export default function ScheduleGrid() {
             >
               {data.status === "PUBLISHED" ? "Publicado" : "Borrador"}
             </span>
+
+            <button
+              onClick={handleCopyPrevious}
+              disabled={copying}
+              className="inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold text-on-surface-variant transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] hover:border-primary/40 hover:text-primary disabled:opacity-60 disabled:hover:scale-100"
+            >
+              <ClipboardIcon className="h-4 w-4" />
+              {copying ? "Copiando..." : "Copiar semana anterior"}
+            </button>
 
             <button
               onClick={handlePublishToggle}

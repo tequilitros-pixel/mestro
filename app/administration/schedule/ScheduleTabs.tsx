@@ -3,14 +3,12 @@
 import { useState } from "react";
 import { CalendarIcon, GridIcon, ToolboxIcon } from "@/components/ui/icons";
 import ScheduleGrid from "./ScheduleGrid";
-import ScheduleBuilder from "./ScheduleBuilder";
 import TemplatesEditor from "./TemplatesEditor";
 
-type Tab = "horario" | "turnos" | "plantillas";
+type Tab = "horario" | "plantillas";
 
 const TABS: { key: Tab; label: string; icon: typeof CalendarIcon }[] = [
   { key: "horario", label: "Horario", icon: GridIcon },
-  { key: "turnos", label: "Turnos (anterior)", icon: CalendarIcon },
   { key: "plantillas", label: "Plantillas", icon: ToolboxIcon },
 ];
 
@@ -41,7 +39,6 @@ export default function ScheduleTabs() {
       </div>
 
       {tab === "horario" && <ScheduleGrid />}
-      {tab === "turnos" && <ScheduleBuilder />}
       {tab === "plantillas" && <TemplatesEditor />}
     </div>
   );
