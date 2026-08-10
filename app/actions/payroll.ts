@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { getPayrollSettings, splitTiers, computeAmount } from "@/app/actions/overtime";
+import { getPayrollSettings } from "@/app/actions/overtime";
+import { splitTiers, computeAmount } from "@/lib/overtimeCalc";
 import {
   addDaysToDateOnly,
   formatDateOnly,

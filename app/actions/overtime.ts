@@ -9,6 +9,7 @@ import {
   formatDateOnly,
   mondayOfWeek,
 } from "@/lib/dateOnly";
+import { splitTiers, computeAmount, type PayrollSettingsValues } from "@/lib/overtimeCalc";
 
 /**
  * Tiempo extra.
@@ -26,12 +27,9 @@ export type ActionResult =
   | { success: true; message: string }
   | { success: false; error: string };
 
-export type PayrollSettingsValues = {
-  weeklyHourThreshold: number;
-  firstTierHours: number;
-  firstTierMultiplier: number;
-  secondTierMultiplier: number;
-};
+// Re-exportado (solo tipo, se borra al compilar) para no romper a
+// quien ya importaba PayrollSettingsValues desde aquí.
+export type { PayrollSettingsValues };
 
 const DEFAULT_SETTINGS: PayrollSettingsValues = {
   weeklyHourThreshold: 48,
@@ -230,28 +228,6 @@ export type OvertimeRow = {
   reviewedByName: string | null;
   reviewedAt: string | null;
 };
-
-/// Exportadas para que Nómina (app/actions/payroll.ts) pueda estimar
-/// horas extra con la misma regla configurada, sin duplicar la lógica.
-export function splitTiers(overtimeHours: number, settings: PayrollSettingsValues) {
-  const doubleHours = Math.min(overtimeHours, settings.firstTierHours);
-  const tripleHours = Math.max(overtimeHours - settings.firstTierHours, 0);
-  return { doubleHours, tripleHours };
-}
-
-export function computeAmount(
-  doubleHours: number,
-  tripleHours: number,
-  hourlyRate: number | null,
-  settings: PayrollSettingsValues,
-) {
-  if (hourlyRate === null) return null;
-
-  return (
-    doubleHours * hourlyRate * settings.firstTierMultiplier +
-    tripleHours * hourlyRate * settings.secondTierMultiplier
-  );
-}
 
 /**
  * Detecta el tiempo extra de un rango de fechas y lo sincroniza con la
