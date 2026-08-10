@@ -16,7 +16,9 @@ export default async function CalendarPage() {
     startTime: shift.startTime,
     endTime: shift.endTime,
     notes: shift.notes,
+    position: shift.position,
     branch: shift.branch,
+    event: shift.event,
   }));
 
   const serializedOpenShift = openShift

@@ -67,6 +67,7 @@ export async function getScheduleGridForWeek(weekStart: string) {
       include: {
         user: { select: { id: true, name: true } },
         branch: { select: { id: true, name: true, color: true } },
+        event: { select: { id: true, name: true, location: true } },
       },
       orderBy: [{ date: "asc" }, { startTime: "asc" }],
     }),
@@ -620,6 +621,9 @@ export async function getMyScheduleForWeeks(weeksAhead: number = 3) {
       },
       include: {
         branch: { select: { id: true, name: true } },
+        event: {
+          select: { id: true, name: true, description: true, location: true, instructions: true },
+        },
       },
       orderBy: { date: "asc" },
     }),
@@ -633,8 +637,12 @@ export async function getMyScheduleForWeeks(weeksAhead: number = 3) {
     weeks.map((w) => [formatDateOnly(w.weekStart), w.status]),
   );
 
+  // Un turno normal necesita sucursal; un turno de evento puede no
+  // tener sucursal responsable y aun así debe verse (la info viene
+  // del evento).
   const visible = shifts.filter((s) => {
-    if (!s.branch || !s.startTime || !s.endTime) return false;
+    if (!s.startTime || !s.endTime) return false;
+    if (!s.branch && !s.event) return false;
     const monday = mondayOfWeek(formatDateOnly(s.date));
     const status = weekStatus.get(monday);
     return status !== "DRAFT";
@@ -648,7 +656,9 @@ export async function getMyScheduleForWeeks(weeksAhead: number = 3) {
       startTime: s.startTime as string,
       endTime: s.endTime as string,
       notes: s.notes,
-      branch: s.branch as { id: string; name: string },
+      position: s.position,
+      branch: s.branch as { id: string; name: string } | null,
+      event: s.event,
     })),
   };
 }

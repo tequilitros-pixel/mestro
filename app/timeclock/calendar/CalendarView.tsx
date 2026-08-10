@@ -2,7 +2,15 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CalendarIcon, ClockIcon } from "@/components/ui/icons";
+import { CalendarIcon, ClockIcon, PartyIcon, MapPinIcon } from "@/components/ui/icons";
+
+type ScheduleEventInfo = {
+  id: string;
+  name: string;
+  description: string | null;
+  location: string | null;
+  instructions: string | null;
+};
 
 type Shift = {
   id: string;
@@ -10,7 +18,9 @@ type Shift = {
   startTime: string;
   endTime: string;
   notes: string | null;
-  branch: { id: string; name: string };
+  position: string | null;
+  branch: { id: string; name: string } | null;
+  event: ScheduleEventInfo | null;
 };
 
 type OpenShift = {
@@ -165,6 +175,7 @@ export default function CalendarView({ shifts, openShift }: CalendarViewProps) {
                 const isActive =
                   isTodayShift &&
                   openShift !== null &&
+                  shift.branch !== null &&
                   openShift.branch.id === shift.branch.id;
                 const isPast = selectedKey < todayKey;
 
@@ -185,10 +196,20 @@ export default function CalendarView({ shifts, openShift }: CalendarViewProps) {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-semibold text-on-surface">{shift.branch.name}</p>
+                        {shift.event ? (
+                          <p className="flex items-center gap-1.5 font-semibold text-on-surface">
+                            <PartyIcon className="h-4 w-4 text-primary" />
+                            {shift.event.name}
+                          </p>
+                        ) : (
+                          <p className="font-semibold text-on-surface">{shift.branch?.name}</p>
+                        )}
                         <p className="mt-1 font-mono text-sm text-on-surface-variant">
                           {shift.startTime} — {shift.endTime}
                         </p>
+                        {shift.position && (
+                          <p className="mt-0.5 text-xs text-on-surface-variant">{shift.position}</p>
+                        )}
                       </div>
 
                       <span
@@ -201,6 +222,26 @@ export default function CalendarView({ shifts, openShift }: CalendarViewProps) {
                     {isActive && (
                       <div className="mt-3 h-1 overflow-hidden rounded-full bg-surface-container-high">
                         <div className="h-full w-3/4 bg-tertiary-fixed-dim" />
+                      </div>
+                    )}
+
+                    {shift.event?.location && (
+                      <p className="mt-3 flex items-center gap-1.5 text-sm text-on-surface-variant">
+                        <MapPinIcon className="h-3.5 w-3.5 shrink-0" />
+                        {shift.event.location}
+                      </p>
+                    )}
+
+                    {shift.event?.description && (
+                      <p className="mt-2 text-sm text-on-surface-variant">{shift.event.description}</p>
+                    )}
+
+                    {shift.event?.instructions && (
+                      <div className="mt-3 rounded-xl bg-surface-container-high p-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
+                          Instrucciones
+                        </p>
+                        <p className="mt-1 text-sm text-on-surface">{shift.event.instructions}</p>
                       </div>
                     )}
 

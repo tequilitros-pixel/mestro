@@ -22,6 +22,8 @@ import {
   AlertIcon,
   ClipboardIcon,
   BookIcon,
+  PartyIcon,
+  MapPinIcon,
 } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/Toast";
 import { fallbackBranchColor } from "@/lib/branchColors";
@@ -29,6 +31,7 @@ import ShiftModal from "./ShiftModal";
 import SaveAsTemplateModal from "./SaveAsTemplateModal";
 import UseTemplateModal, { type TemplateSummary } from "./UseTemplateModal";
 import ApplyTemplateModal from "./ApplyTemplateModal";
+import EventModal from "./EventModal";
 
 type Employee = { id: string; name: string; hourlyRate: number | null };
 type BranchLite = { id: string; name: string; color: string | null };
@@ -45,6 +48,7 @@ type Shift = {
   notes: string | null;
   user: { id: string; name: string };
   branch: BranchLite | null;
+  event: { id: string; name: string; location: string | null } | null;
 };
 type GridData = {
   weekStart: string | Date;
@@ -138,7 +142,8 @@ function ShiftBlock({ shift, onClick }: { shift: Shift; onClick: () => void }) {
     );
   }
 
-  const color = shift.branch?.color || fallbackBranchColor(shift.branchId ?? shift.id);
+  const color =
+    shift.branch?.color || fallbackBranchColor(shift.event?.id ?? shift.branchId ?? shift.id);
 
   return (
     <button
@@ -151,9 +156,24 @@ function ShiftBlock({ shift, onClick }: { shift: Shift; onClick: () => void }) {
         {" – "}
         {shift.endTime ? formatTime12(shift.endTime) : "—"}
       </p>
-      <p className="truncate text-[11px] font-semibold leading-tight text-white/90">
-        {shift.branch?.name ?? "Sin sucursal"}
-      </p>
+      {shift.event ? (
+        <>
+          <p className="flex items-center gap-1 truncate text-[11px] font-semibold leading-tight text-white/90">
+            <PartyIcon className="h-3 w-3 shrink-0" />
+            {shift.event.name}
+          </p>
+          {shift.event.location && (
+            <p className="flex items-center gap-1 truncate text-[10px] leading-tight text-white/75">
+              <MapPinIcon className="h-2.5 w-2.5 shrink-0" />
+              {shift.event.location}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="truncate text-[11px] font-semibold leading-tight text-white/90">
+          {shift.branch?.name ?? "Sin sucursal"}
+        </p>
+      )}
       {shift.position && (
         <p className="truncate text-[10px] leading-tight text-white/75">{shift.position}</p>
       )}
@@ -366,6 +386,17 @@ export default function ScheduleGrid() {
     template: TemplateSummary;
     employees: { id: string; name: string }[];
   } | null>(null);
+  const [eventModal, setEventModal] = useState<
+    { mode: "create"; date: string } | { mode: "edit"; eventId: string } | null
+  >(null);
+
+  function handleShiftClick(shift: Shift) {
+    if (shift.event) {
+      setEventModal({ mode: "edit", eventId: shift.event.id });
+    } else {
+      setModal({ mode: "edit", shift });
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -644,6 +675,14 @@ export default function ScheduleGrid() {
             </button>
 
             <button
+              onClick={() => setEventModal({ mode: "create", date: todayStr })}
+              className="inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold text-on-surface-variant transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] hover:border-primary/40 hover:text-primary"
+            >
+              <PartyIcon className="h-4 w-4" />
+              Nuevo evento
+            </button>
+
+            <button
               onClick={handlePublishToggle}
               disabled={publishing}
               className={`rounded-xl px-4 py-2.5 text-sm font-bold transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60 disabled:hover:scale-100 ${
@@ -712,7 +751,7 @@ export default function ScheduleGrid() {
               overtimeEmployeeIds={overtimeEmployeeIds}
               shiftsByCell={shiftsByCell}
               alertCellKeys={alertCellKeys}
-              onShiftClick={(shift) => setModal({ mode: "edit", shift })}
+              onShiftClick={handleShiftClick}
               onAddClick={(userId, date) => setModal({ mode: "create", userId, date })}
             />
           </div>
@@ -806,7 +845,7 @@ export default function ScheduleGrid() {
                             <ShiftBlock
                               key={s.id}
                               shift={s}
-                              onClick={() => setModal({ mode: "edit", shift: s })}
+                              onClick={() => handleShiftClick(s)}
                             />
                           ))}
 
@@ -923,6 +962,20 @@ export default function ScheduleGrid() {
           onClose={() => setApplyingTemplate(null)}
           onApplied={() => {
             setApplyingTemplate(null);
+            load();
+          }}
+        />
+      )}
+
+      {eventModal && data && (
+        <EventModal
+          eventId={eventModal.mode === "edit" ? eventModal.eventId : undefined}
+          defaultDate={eventModal.mode === "create" ? eventModal.date : todayStr}
+          employees={data.employees}
+          branches={data.branches}
+          onClose={() => setEventModal(null)}
+          onSaved={() => {
+            setEventModal(null);
             load();
           }}
         />
