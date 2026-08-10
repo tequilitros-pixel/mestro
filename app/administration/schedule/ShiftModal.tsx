@@ -5,10 +5,12 @@ import {
   upsertScheduledShiftAction,
   deleteScheduledShiftAction,
   duplicateShiftAction,
+  multiDuplicateShiftAction,
+  moveScheduledShiftAction,
 } from "@/app/actions/schedule";
 import { addDaysToDateOnly, weekdayOfDateOnly } from "@/lib/dateOnly";
 import { useToast } from "@/components/ui/Toast";
-import { TrashIcon, ClipboardIcon } from "@/components/ui/icons";
+import { TrashIcon, ClipboardIcon, UsersIcon, ArrowRightIcon } from "@/components/ui/icons";
 
 type Employee = { id: string; name: string };
 type BranchLite = { id: string; name: string; color: string | null };
@@ -73,6 +75,35 @@ export default function ShiftModal({
   const [duplicateDates, setDuplicateDates] = useState<Set<string>>(new Set());
   const [duplicateNextWeek, setDuplicateNextWeek] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+
+  const [showMulti, setShowMulti] = useState(false);
+  const [multiEmployeeIds, setMultiEmployeeIds] = useState<Set<string>>(new Set());
+  const [multiDates, setMultiDates] = useState<Set<string>>(new Set());
+  const [multiNextWeek, setMultiNextWeek] = useState(false);
+  const [multiDuplicating, setMultiDuplicating] = useState(false);
+
+  const [showMove, setShowMove] = useState(false);
+  const [moveUserId, setMoveUserId] = useState(initial.userId);
+  const [moveDate, setMoveDate] = useState(initial.date);
+  const [moving, setMoving] = useState(false);
+
+  function toggleDuplicatePanel() {
+    setShowDuplicate((v) => !v);
+    setShowMulti(false);
+    setShowMove(false);
+  }
+
+  function toggleMultiPanel() {
+    setShowMulti((v) => !v);
+    setShowDuplicate(false);
+    setShowMove(false);
+  }
+
+  function toggleMovePanel() {
+    setShowMove((v) => !v);
+    setShowDuplicate(false);
+    setShowMulti(false);
+  }
 
   // Autocompleta horas desde la plantilla de la sucursal para ese día,
   // mientras el usuario no las haya tocado a mano.
@@ -183,6 +214,91 @@ export default function ShiftModal({
     }
 
     showToast(`Turno duplicado a ${result.count ?? targets.size} día(s).`);
+    onSaved();
+  }
+
+  function toggleMultiEmployee(id: string) {
+    setMultiEmployeeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleMultiDate(d: string) {
+    setMultiDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(d)) next.delete(d);
+      else next.add(d);
+      return next;
+    });
+  }
+
+  async function handleMultiDuplicate() {
+    if (!initial.id) return;
+
+    if (multiEmployeeIds.size === 0 || multiDates.size === 0) {
+      setError("Selecciona al menos un empleado y un día destino.");
+      return;
+    }
+
+    const dates = new Set(multiDates);
+    if (multiNextWeek) {
+      for (const d of multiDates) dates.add(addDaysToDateOnly(d, 7));
+    }
+
+    const targets: { userId: string; date: string }[] = [];
+    for (const employeeId of multiEmployeeIds) {
+      for (const d of dates) {
+        targets.push({ userId: employeeId, date: d });
+      }
+    }
+
+    setMultiDuplicating(true);
+    setError(null);
+
+    const result = await multiDuplicateShiftAction(initial.id, targets);
+
+    setMultiDuplicating(false);
+
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+
+    showToast(
+      result.skipped
+        ? `${result.created} turno(s) creados, ${result.skipped} ya existían y se saltaron.`
+        : `${result.created} turno(s) creados.`,
+    );
+    onSaved();
+  }
+
+  async function handleMove() {
+    if (!initial.id) return;
+
+    if (moveUserId === initial.userId && moveDate === initial.date) {
+      setError("Cambia el empleado y/o la fecha para mover el turno.");
+      return;
+    }
+
+    setMoving(true);
+    setError(null);
+
+    const result = await moveScheduledShiftAction(initial.id, {
+      userId: moveUserId !== initial.userId ? moveUserId : undefined,
+      date: moveDate !== initial.date ? moveDate : undefined,
+    });
+
+    setMoving(false);
+
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+
+    showToast("Turno movido correctamente.");
     onSaved();
   }
 
@@ -360,14 +476,34 @@ export default function ShiftModal({
                 Cancelar
               </button>
 
-              {isEditing && type === "TURNO" && (
-                <button
-                  onClick={() => setShowDuplicate((v) => !v)}
-                  className="ml-auto inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-3 text-sm font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-on-surface"
-                >
-                  <ClipboardIcon className="h-4 w-4" />
-                  Duplicar
-                </button>
+              {isEditing && (
+                <div className="ml-auto flex flex-wrap gap-2">
+                  {type === "TURNO" && (
+                    <button
+                      onClick={toggleDuplicatePanel}
+                      className="inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-3 text-sm font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-on-surface"
+                    >
+                      <ClipboardIcon className="h-4 w-4" />
+                      Duplicar
+                    </button>
+                  )}
+
+                  <button
+                    onClick={toggleMultiPanel}
+                    className="inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-3 text-sm font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-on-surface"
+                  >
+                    <UsersIcon className="h-4 w-4" />
+                    Multi duplicado
+                  </button>
+
+                  <button
+                    onClick={toggleMovePanel}
+                    className="inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-3 text-sm font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-on-surface"
+                  >
+                    <ArrowRightIcon className="h-4 w-4" />
+                    Mover
+                  </button>
+                </div>
               )}
             </div>
 
@@ -415,6 +551,130 @@ export default function ShiftModal({
                   className="w-full rounded-xl bg-secondary/15 py-3 text-sm font-bold text-secondary transition duration-150 ease-out hover:opacity-90 hover:scale-[1.02] active:scale-[0.97] disabled:opacity-60"
                 >
                   {duplicating ? "Duplicando..." : "Confirmar duplicado"}
+                </button>
+              </div>
+            )}
+
+            {isEditing && showMulti && (
+              <div className="space-y-4 rounded-2xl border border-outline-variant bg-background p-5">
+                <p className="text-sm font-semibold text-on-surface">
+                  Crear este mismo turno para varios empleados y días:
+                </p>
+
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
+                    Empleados
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {employees.map((emp) => {
+                      const selected = multiEmployeeIds.has(emp.id);
+                      return (
+                        <button
+                          key={emp.id}
+                          type="button"
+                          onClick={() => toggleMultiEmployee(emp.id)}
+                          className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                            selected
+                              ? "border-primary/40 bg-primary/10 text-primary"
+                              : "border-outline-variant text-on-surface-variant hover:border-primary/40"
+                          }`}
+                        >
+                          {emp.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
+                    Días
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {weekDates.map((d, i) => {
+                      const selected = multiDates.has(d);
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => toggleMultiDate(d)}
+                          className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                            selected
+                              ? "border-primary/40 bg-primary/10 text-primary"
+                              : "border-outline-variant text-on-surface-variant hover:border-primary/40"
+                          }`}
+                        >
+                          {DAY_LABELS[i]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+                  <input
+                    type="checkbox"
+                    checked={multiNextWeek}
+                    onChange={(e) => setMultiNextWeek(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  También los mismos días de la próxima semana
+                </label>
+
+                <button
+                  onClick={handleMultiDuplicate}
+                  disabled={multiDuplicating}
+                  className="w-full rounded-xl bg-secondary/15 py-3 text-sm font-bold text-secondary transition duration-150 ease-out hover:opacity-90 hover:scale-[1.02] active:scale-[0.97] disabled:opacity-60"
+                >
+                  {multiDuplicating ? "Creando..." : "Confirmar multi duplicado"}
+                </button>
+              </div>
+            )}
+
+            {isEditing && showMove && (
+              <div className="space-y-4 rounded-2xl border border-outline-variant bg-background p-5">
+                <p className="text-sm font-semibold text-on-surface">
+                  Mover este turno a otro empleado y/o fecha:
+                </p>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block space-y-2">
+                    <span className="text-sm font-semibold text-on-surface-variant">Empleado</span>
+                    <select
+                      value={moveUserId}
+                      onChange={(e) => setMoveUserId(e.target.value)}
+                      className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+                    >
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-semibold text-on-surface-variant">Fecha</span>
+                    <input
+                      type="date"
+                      value={moveDate}
+                      onChange={(e) => setMoveDate(e.target.value)}
+                      className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+                    />
+                  </label>
+                </div>
+
+                <p className="text-xs text-on-surface-variant">
+                  Si el turno ya tiene un fichaje (checada) registrado, no se podrá mover — habría
+                  que editarlo o eliminarlo en su lugar.
+                </p>
+
+                <button
+                  onClick={handleMove}
+                  disabled={moving}
+                  className="w-full rounded-xl bg-secondary/15 py-3 text-sm font-bold text-secondary transition duration-150 ease-out hover:opacity-90 hover:scale-[1.02] active:scale-[0.97] disabled:opacity-60"
+                >
+                  {moving ? "Moviendo..." : "Confirmar movimiento"}
                 </button>
               </div>
             )}

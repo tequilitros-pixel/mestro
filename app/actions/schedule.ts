@@ -211,6 +211,200 @@ export async function duplicateShiftAction(shiftId: string, targetDates: string[
   return { success: true, count: dates.length };
 }
 
+type ShiftIdentityCheck = {
+  userId: string;
+  date: string;
+  type: "TURNO" | "DESCANSO";
+  branchId: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  excludeId?: string;
+};
+
+/**
+ * Busca si ya existe un turno idéntico (mismo empleado, fecha,
+ * sucursal y horario) para evitar duplicados accidentales al mover,
+ * duplicar o hacer multi-duplicado.
+ */
+async function findIdenticalShift(check: ShiftIdentityCheck) {
+  return prisma.scheduledShift.findFirst({
+    where: {
+      userId: check.userId,
+      date: parseDateOnly(check.date),
+      type: check.type,
+      branchId: check.branchId,
+      startTime: check.startTime,
+      endTime: check.endTime,
+      ...(check.excludeId ? { id: { not: check.excludeId } } : {}),
+    },
+    select: { id: true },
+  });
+}
+
+/**
+ * Mueve un turno a otro empleado y/o fecha SIN borrarlo y volverlo a
+ * crear (conserva sucursal, horario, puesto, notas y el mismo id).
+ *
+ * Si el turno ya tiene un fichaje (checada) vinculado, se bloquea: la
+ * checada quedaría "apuntando" a un empleado/fecha que ya no
+ * corresponde a lo que realmente se trabajó. En ese caso hay que
+ * editar o eliminar el turno en vez de moverlo.
+ */
+export async function moveScheduledShiftAction(
+  shiftId: string,
+  input: { userId?: string; date?: string },
+) {
+  const admin = await getCurrentUser();
+  if (!admin || admin.role !== "ADMIN") {
+    return { error: "No tienes permiso" };
+  }
+
+  if (!input.userId && !input.date) {
+    return { error: "Indica un empleado y/o una fecha nuevos." };
+  }
+
+  const source = await prisma.scheduledShift.findUnique({
+    where: { id: shiftId },
+    include: { timeClockEntries: { select: { id: true }, take: 1 } },
+  });
+
+  if (!source) return { error: "Turno no encontrado" };
+
+  if (source.timeClockEntries.length > 0) {
+    return {
+      error:
+        "Este turno ya tiene un fichaje (checada) registrado — no se puede mover. Edítalo o elimínalo si necesitas corregirlo.",
+    };
+  }
+
+  const newUserId = input.userId || source.userId;
+  const newDateStr = input.date || formatDateOnly(source.date);
+  const sourceDateStr = formatDateOnly(source.date);
+
+  if (newUserId === source.userId && newDateStr === sourceDateStr) {
+    return { error: "El turno ya está en ese empleado y fecha." };
+  }
+
+  const duplicate = await findIdenticalShift({
+    userId: newUserId,
+    date: newDateStr,
+    type: source.type,
+    branchId: source.branchId,
+    startTime: source.startTime,
+    endTime: source.endTime,
+    excludeId: source.id,
+  });
+
+  if (duplicate) {
+    return { error: "Ya existe un turno idéntico en ese empleado y fecha." };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await ensureWeekStartsAsDraftIfEmpty(tx, newDateStr);
+    await tx.scheduledShift.update({
+      where: { id: shiftId },
+      data: { userId: newUserId, date: parseDateOnly(newDateStr) },
+    });
+  });
+
+  revalidatePath("/administration/schedule");
+  revalidatePath("/timeclock/calendar");
+
+  return { success: true };
+}
+
+/**
+ * Multi-duplicado: crea el mismo turno (sucursal, horario, puesto,
+ * notas) para varias combinaciones de empleado + día a la vez. A
+ * diferencia de duplicateShiftAction (mismo empleado, varios días),
+ * aquí cada destino puede tener un empleado distinto.
+ *
+ * Salta silenciosamente los destinos donde ya existe un turno
+ * idéntico (o que coinciden con el turno origen), para no crear
+ * duplicados accidentales; el conteo de saltados se informa al final.
+ */
+export async function multiDuplicateShiftAction(
+  shiftId: string,
+  targets: { userId: string; date: string }[],
+) {
+  const admin = await getCurrentUser();
+  if (!admin || admin.role !== "ADMIN") {
+    return { error: "No tienes permiso" };
+  }
+
+  const seen = new Set<string>();
+  const cleanTargets = targets.filter((t) => {
+    if (!t.userId || !t.date) return false;
+    const key = `${t.userId}|${t.date}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  if (cleanTargets.length === 0) {
+    return { error: "Selecciona al menos un empleado y día destino." };
+  }
+
+  const source = await prisma.scheduledShift.findUnique({ where: { id: shiftId } });
+  if (!source) return { error: "Turno no encontrado" };
+
+  const sourceDateStr = formatDateOnly(source.date);
+  const toCreate: { userId: string; date: string }[] = [];
+  let skipped = 0;
+
+  for (const target of cleanTargets) {
+    if (target.userId === source.userId && target.date === sourceDateStr) {
+      skipped += 1;
+      continue;
+    }
+
+    const duplicate = await findIdenticalShift({
+      userId: target.userId,
+      date: target.date,
+      type: source.type,
+      branchId: source.branchId,
+      startTime: source.startTime,
+      endTime: source.endTime,
+    });
+
+    if (duplicate) {
+      skipped += 1;
+      continue;
+    }
+
+    toCreate.push(target);
+  }
+
+  if (toCreate.length === 0) {
+    return { error: "No se creó ningún turno nuevo: ya existían todos los destinos seleccionados." };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const uniqueDates = Array.from(new Set(toCreate.map((t) => t.date)));
+    for (const dateStr of uniqueDates) {
+      await ensureWeekStartsAsDraftIfEmpty(tx, dateStr);
+    }
+
+    await tx.scheduledShift.createMany({
+      data: toCreate.map((t) => ({
+        userId: t.userId,
+        branchId: source.branchId,
+        date: parseDateOnly(t.date),
+        type: source.type,
+        startTime: source.startTime,
+        endTime: source.endTime,
+        position: source.position,
+        notes: source.notes,
+      })),
+    });
+  });
+
+  revalidatePath("/administration/schedule");
+  revalidatePath("/timeclock/calendar");
+
+  return { success: true, created: toCreate.length, skipped };
+}
+
 /** Marca la semana como oficial: los empleados pueden verla. */
 export async function publishWeekAction(weekStart: string) {
   const admin = await getCurrentUser();
