@@ -9,7 +9,7 @@ import {
   formatDateOnly,
   mondayOfWeek,
 } from "@/lib/dateOnly";
-import { splitTiers, computeAmount, type PayrollSettingsValues } from "@/lib/overtimeCalc";
+import { splitTiers, computeAmount } from "@/lib/overtimeCalc";
 
 /**
  * Tiempo extra.
@@ -27,9 +27,18 @@ export type ActionResult =
   | { success: true; message: string }
   | { success: false; error: string };
 
-// Re-exportado (solo tipo, se borra al compilar) para no romper a
-// quien ya importaba PayrollSettingsValues desde aquí.
-export type { PayrollSettingsValues };
+// Declarado aquí directamente (mismo shape que lib/overtimeCalc.ts) en vez
+// de re-exportarlo con `export type { X }`: ese patrón de re-export hace
+// que el bundler de Server Actions de Turbopack intente generar una
+// referencia runtime para el tipo y el build falla ("Export ... doesn't
+// exist"). Al declararlo aquí como tipo propio, TypeScript lo une
+// estructuralmente con el de overtimeCalc.ts sin necesidad de re-export.
+export type PayrollSettingsValues = {
+  weeklyHourThreshold: number;
+  firstTierHours: number;
+  firstTierMultiplier: number;
+  secondTierMultiplier: number;
+};
 
 const DEFAULT_SETTINGS: PayrollSettingsValues = {
   weeklyHourThreshold: 48,
