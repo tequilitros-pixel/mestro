@@ -81,6 +81,10 @@ model User {
 
   payrollIncidentJustifications   PayrollIncidentJustification[] @relation("PayrollIncidentJustificationOwner")
   payrollIncidentJustificationsBy PayrollIncidentJustification[] @relation("PayrollIncidentJustificationBy")
+
+  scheduleTemplatesCreated ScheduleTemplate[]      @relation("ScheduleTemplateCreatedBy")
+  scheduleTemplateShifts   ScheduleTemplateShift[] @relation("ScheduleTemplateShiftOwner")
+  scheduleEventsCreated    ScheduleEvent[]         @relation("ScheduleEventCreatedBy")
 }
 
 model Equipment {
@@ -943,6 +947,9 @@ model Branch {
   overtimeRecords     OvertimeRecord[]
   rawMaterialTransfers RawMaterialMovement[]
   payrollSettings     PayrollSettings?
+  scheduleWeekTemplates ScheduleTemplate[]
+  scheduleTemplateShifts ScheduleTemplateShift[]
+  scheduleEvents        ScheduleEvent[]
 
   @@index([active])
   @@index([geofenceId])
@@ -1851,16 +1858,25 @@ model ScheduledShift {
   position String?
 
   notes     String?
+
+  /// Si este turno es la asignación de un empleado a un evento puntual
+  /// (boda, XV años, feria, etc.), apunta al ScheduleEvent que trae el
+  /// nombre/descripción/ubicación/instrucciones compartidos por todos
+  /// los empleados asignados. Nulo = turno normal, sin evento.
+  eventId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user   User    @relation("ScheduledShifts", fields: [userId], references: [id], onDelete: Cascade)
   branch Branch? @relation(fields: [branchId], references: [id])
+  event  ScheduleEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
   timeClockEntries TimeClockEntry[]
 
   @@index([userId])
   @@index([branchId])
   @@index([date])
+  @@index([eventId])
 }
 
 enum ShiftType {
@@ -1955,6 +1971,112 @@ model BranchScheduleTemplate {
   branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@unique([branchId, dayOfWeek])
+  @@index([branchId])
+}
+
+/*
+ * Plantilla de SEMANA completa y reutilizable (distinta de
+ * BranchScheduleTemplate, que solo es el horario estándar por día).
+ *
+ * Guarda una "foto" de lunes a domingo: qué empleado trabaja qué día,
+ * en qué sucursal, con qué horario y puesto. Es independiente de la
+ * semana real de la que se creó — modificar esa semana después NO
+ * cambia la plantilla, porque ScheduleTemplateShift no tiene relación
+ * de vuelta a ScheduledShift, solo copia sus valores.
+ */
+model ScheduleTemplate {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  /// Sucursal principal de la plantilla, solo informativo/filtro (los
+  /// turnos dentro de la plantilla pueden tener su propia sucursal).
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  createdById String?
+  createdBy   User?   @relation("ScheduleTemplateCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shifts ScheduleTemplateShift[]
+
+  @@index([branchId])
+}
+
+/// Un turno dentro de una ScheduleTemplate. `dayOfWeek` es relativo
+/// (0 = lunes ... 6 = domingo, igual que BranchScheduleTemplate) en
+/// vez de una fecha absoluta, para poder aplicarse a cualquier semana.
+model ScheduleTemplateShift {
+  id         String @id @default(cuid())
+  templateId String
+
+  dayOfWeek Int
+
+  /// Nulo = "sin asignar todavía"; se puede completar al aplicar la
+  /// plantilla (sustitución de empleados) o quedar pendiente.
+  userId String?
+
+  branchId String?
+  type     ShiftType @default(TURNO)
+
+  startTime String?
+  endTime   String?
+  position  String?
+  notes     String?
+
+  template ScheduleTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  user     User?            @relation("ScheduleTemplateShiftOwner", fields: [userId], references: [id], onDelete: SetNull)
+  branch   Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@index([templateId])
+  @@index([userId])
+  @@index([branchId])
+}
+
+/*
+ * Evento puntual (boda, XV años, feria, servicio de barra, etc.): un
+ * trabajo real en una fecha determinada, distinto de una plantilla
+ * reutilizable. La info (nombre, descripción, ubicación, instrucciones)
+ * vive UNA sola vez aquí; cada empleado asignado tiene su propio
+ * ScheduledShift (con este id en `eventId`), así que el checador y la
+ * nómina siguen viendo turnos normales sin ningún cambio.
+ *
+ * Un evento nunca se convierte automáticamente en plantilla — eso
+ * requiere la acción explícita "Guardar como plantilla" sobre la
+ * semana, que además ignora los turnos que tengan eventId.
+ */
+model ScheduleEvent {
+  id          String @id @default(cuid())
+  name        String
+  description String?
+
+  date      DateTime
+  startTime String
+  endTime   String
+
+  location String?
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  position String?
+
+  /// Instrucciones para el personal (visibles también al empleado).
+  instructions String?
+  /// Notas internas, solo para administración.
+  internalNotes String?
+
+  createdById String?
+  createdBy   User?   @relation("ScheduleEventCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shifts ScheduledShift[]
+
+  @@index([date])
   @@index([branchId])
 }
 
