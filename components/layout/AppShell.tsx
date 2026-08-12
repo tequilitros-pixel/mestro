@@ -4,6 +4,8 @@ import BackButton from "@/components/layout/BackButton";
 import MainNavigation from "@/components/layout/MainNavigation";
 import ModuleNavigation from "@/components/layout/ModuleNavigation";
 import AppFooter from "@/components/layout/AppFooter";
+import { OfflineProvider } from "@/components/offline/OfflineProvider";
+import SyncStatus from "@/components/offline/SyncStatus";
 
 type AppShellUser = {
   name: string;
@@ -22,11 +24,15 @@ export default function AppShell({
   children,
 }: AppShellProps) {
   return (
+    <OfflineProvider>
     <div className="flex min-h-screen flex-col bg-background text-on-surface">
       <header className="no-print sticky top-0 z-50 border-b border-outline-variant bg-surface/95 shadow-xl backdrop-blur">
         <div className="mx-auto w-full max-w-7xl">
           <div className="px-4 pt-2 sm:px-6">
-            <BackButton />
+            <div className="flex items-center justify-between gap-3">
+              <BackButton />
+              <SyncStatus />
+            </div>
           </div>
 
           <AppHeader user={user} />
@@ -45,5 +51,6 @@ export default function AppShell({
         <AppFooter />
       </div>
     </div>
+    </OfflineProvider>
   );
 }

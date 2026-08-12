@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CalendarIcon, GridIcon, ToolboxIcon, BookIcon } from "@/components/ui/icons";
+import { AppIconBadge } from "@/components/ui/AppIcon";
 import ScheduleGrid from "./ScheduleGrid";
 import TemplatesEditor from "./TemplatesEditor";
 import TemplatesManager from "./TemplatesManager";
@@ -33,7 +34,9 @@ export default function ScheduleTabs() {
                   : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
               }`}
             >
-              <Icon className="h-4 w-4" />
+              <AppIconBadge>
+                <Icon className="h-full w-full" />
+              </AppIconBadge>
               {t.label}
             </button>
           );

@@ -86,14 +86,21 @@ export async function POST(
   }
 
   const body = await request.json();
-  const { type, amount, notes } = body;
+  const { type, amount, notes, clientOperationId, clientCreatedAt } = body;
 
-  if (!TIPOS_VALIDOS.includes(type) || typeof amount !== "number") {
+  if (clientOperationId) {
+    const existing = await prisma.cashInflow.findUnique({ where: { id: clientOperationId } });
+    if (existing) return NextResponse.json({ entrada: existing, totalInflows: await recalcularTotalEntradas(cashCutId) });
+  }
+
+  if (!TIPOS_VALIDOS.includes(type) || typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json({ error: "type inválido o amount faltante" }, { status: 400 });
   }
 
+  const occurredAt = clientCreatedAt ? new Date(clientCreatedAt) : null;
+  if (occurredAt && Number.isNaN(occurredAt.getTime())) return NextResponse.json({ error: "Fecha de entrada inválida" }, { status: 400 });
   const entrada = await prisma.cashInflow.create({
-    data: { cashCutId, type, amount, notes },
+    data: { ...(clientOperationId ? { id: clientOperationId } : {}), cashCutId, type, amount, notes, ...(occurredAt ? { occurredAt, createdAt: occurredAt } : {}) },
   });
 
   const totalInflows = await recalcularTotalEntradas(cashCutId);

@@ -13,6 +13,7 @@ import {
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 import { ClockIcon, DollarIcon, LoginIcon, LogoutIcon } from "@/components/ui/icons";
 import { distanceMeters, hasGeofence, type BranchLocation } from "@/lib/geo";
+import { enqueueOperation } from "@/lib/offline/queue";
 
 type Branch = BranchLocation & { id: string; name: string };
 type OpenShift = {
@@ -97,15 +98,25 @@ export default function ClockWidget() {
 
   async function load() {
     setLoading(true);
-    const [shift, myBranches, summaryResult] = await Promise.all([
-      getMyOpenShift(),
-      getMyBranches(),
-      getMyTimeClockSummary(),
-    ]);
-    setOpenShift(shift as OpenShift | null);
-    setBranches(myBranches);
-    if (myBranches.length > 0) setSelectedBranch(myBranches[0].id);
-    if ("success" in summaryResult) setSummary(summaryResult as Summary);
+    try {
+      const [shift, myBranches, summaryResult] = await Promise.all([
+        getMyOpenShift(),
+        getMyBranches(),
+        getMyTimeClockSummary(),
+      ]);
+      setOpenShift(shift as OpenShift | null);
+      setBranches(myBranches);
+      localStorage.setItem("maestro:timeclock-branches", JSON.stringify(myBranches));
+      if (shift) localStorage.setItem("maestro:timeclock-open-shift", JSON.stringify(shift));
+      else localStorage.removeItem("maestro:timeclock-open-shift");
+      if (myBranches.length > 0) setSelectedBranch(myBranches[0].id);
+      if ("success" in summaryResult) setSummary(summaryResult as Summary);
+    } catch {
+      const cachedBranches = localStorage.getItem("maestro:timeclock-branches");
+      const cachedShift = localStorage.getItem("maestro:timeclock-open-shift");
+      if (cachedBranches) setBranches(JSON.parse(cachedBranches) as Branch[]);
+      if (cachedShift) setOpenShift(JSON.parse(cachedShift) as OpenShift);
+    }
     setLoading(false);
   }
   useEffect(() => {
@@ -178,7 +189,7 @@ export default function ClockWidget() {
     if (!openShift) return;
 
     const interval = setInterval(() => {
-      load();
+      if (navigator.onLine) load();
     }, 60_000);
 
     return () => clearInterval(interval);
@@ -266,6 +277,18 @@ export default function ClockWidget() {
     }
 
     setSaving(true);
+    if (!navigator.onLine) {
+      const id = crypto.randomUUID();
+      const clockIn = new Date();
+      await enqueueOperation({ id, kind: "timeclock.clock-in", createdAt: clockIn.toISOString(), payload: { branchId: selectedBranch, clockIn: clockIn.toISOString(), coords } });
+      if (branch) {
+        const localShift = { id, clockIn, branch };
+        setOpenShift(localShift);
+        localStorage.setItem("maestro:timeclock-open-shift", JSON.stringify(localShift));
+      }
+      setSaving(false);
+      return;
+    }
     const result = await clockInAction(selectedBranch, coords);
     setSaving(false);
 
@@ -308,6 +331,15 @@ export default function ClockWidget() {
     }
 
     setSaving(true);
+    if (!navigator.onLine) {
+      const clockOut = new Date(clockOutValue);
+      await enqueueOperation({ id: crypto.randomUUID(), kind: "timeclock.clock-out", createdAt: new Date().toISOString(), payload: { entryId: openShift.id, clockOut: clockOut.toISOString(), coords } });
+      setOpenShift(null);
+      localStorage.removeItem("maestro:timeclock-open-shift");
+      setConfirming(false);
+      setSaving(false);
+      return;
+    }
     const result = await clockOutAction(openShift.id, clockInValue, clockOutValue, coords);
     setSaving(false);
 

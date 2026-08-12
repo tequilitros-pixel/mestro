@@ -11,6 +11,7 @@ import {
 import { notFound, redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
 import PageTabs from "@/components/ui/PageTabs";
+import OfflineOperationForm from "@/components/offline/OfflineOperationForm";
 import SuccessToast from "@/components/ui/SuccessToast";
 import {
   ClipboardIcon,
@@ -650,8 +651,11 @@ export default async function MillingDetailPage({
               </p>
             </div>
 
-            <form
-              action={addDischarge}
+            <OfflineOperationForm
+              kind="milling.discharge.create"
+              entityField="millingId"
+              entityId={id}
+              fallbackAction={addDischarge}
               className="grid gap-4 md:grid-cols-2"
             >
               <label>
@@ -735,7 +739,7 @@ export default async function MillingDetailPage({
               >
                 Guardar descarga
               </button>
-            </form>
+            </OfflineOperationForm>
 
             <div className="mt-6 border-t border-outline-variant pt-6">
               <p className="mb-3 text-sm text-on-surface-variant">

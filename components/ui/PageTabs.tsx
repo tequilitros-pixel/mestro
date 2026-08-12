@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { AppIconBadge } from "@/components/ui/AppIcon";
 
 /**
  * `icon` es un elemento JSX ya renderizado (`<HomeIcon className="h-4 w-4" />`),
@@ -38,7 +39,7 @@ export default function PageTabs({
                 : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
             }`}
           >
-            {t.icon}
+            {t.icon && <AppIconBadge>{t.icon}</AppIconBadge>}
             {t.label}
           </button>
         ))}

@@ -36,10 +36,6 @@ export async function POST(
   }
 
 
-  if (cashCut.status !== "ABIERTO") {
-    return NextResponse.json({ error: "Este corte ya está cerrado" }, { status: 403 });
-  }
-
   const body = await request.json();
   const {
     cashCounted,
@@ -50,7 +46,14 @@ export async function POST(
     totalCostOfGoods,
     cashCountedDenominations,
     nextFundDenominations,
+    clientOperationId,
+    clientCreatedAt,
   } = body;
+
+  if (cashCut.status !== "ABIERTO") {
+    if (clientOperationId) return NextResponse.json({ cashCut, duplicate: true });
+    return NextResponse.json({ error: "Este corte ya está cerrado" }, { status: 403 });
+  }
 
   if (typeof cashCounted !== "number" || typeof nextFund !== "number") {
     return NextResponse.json(
@@ -58,6 +61,8 @@ export async function POST(
       { status: 400 }
     );
   }
+  const closedAt = clientCreatedAt ? new Date(clientCreatedAt) : new Date();
+  if (Number.isNaN(closedAt.getTime())) return NextResponse.json({ error: "Fecha de cierre inválida" }, { status: 400 });
 
   function toDenominationRows(
     context: "CIERRE" | "SIGUIENTE_TURNO",
@@ -128,7 +133,7 @@ export async function POST(
       totalCostOfGoods: totalCostOfGoods ?? null,
       netProfit,
       status: "CERRADO",
-      closedAt: new Date(),
+      closedAt,
       updatedById: user.id,
       auditEntries: {
         create: {

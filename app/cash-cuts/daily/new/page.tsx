@@ -7,6 +7,7 @@ import { Card, CardLabel } from "@/components/ui/Card";
 import DenominationCounter, {
   type DenominationCount,
 } from "@/components/cash-cuts/DenominationCounter";
+import { enqueueOperation } from "@/lib/offline/queue";
 
 interface Branch {
   id: string;
@@ -46,10 +47,15 @@ export default function NuevoCortePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const cachedBranches = localStorage.getItem("maestro:cash-cut-branches");
+    if (cachedBranches) {
+      window.setTimeout(() => setBranches(JSON.parse(cachedBranches)), 0);
+    }
     fetch("/api/branches")
       .then((res) => res.json())
       .then((data) => {
         setBranches(data);
+        localStorage.setItem("maestro:cash-cut-branches", JSON.stringify(data));
         if (data.length === 1) setBranchId(data[0].id);
       });
 
@@ -69,16 +75,39 @@ export default function NuevoCortePage() {
     }
 
     setLoading(true);
+    const payload = {
+      branchId,
+      date,
+      startingFund: Number(startingFund),
+      startingFundDenominations: startingFundBreakdown,
+      eventId: eventId || undefined,
+    };
+    if (!navigator.onLine) {
+      if (eventId) {
+        setError("La apertura vinculada a un evento requiere conexión para validar inventario.");
+        setLoading(false);
+        return;
+      }
+      const id = crypto.randomUUID();
+      const branch = branches.find((item) => item.id === branchId)!;
+      await enqueueOperation({ id, kind: "cash-cut.open", payload, createdAt: new Date().toISOString() });
+      localStorage.setItem(`maestro:cash-cut:${id}`, JSON.stringify({
+        id,
+        code: `CC-${branch.code}-PENDIENTE`,
+        status: "ABIERTO",
+        branch: { id: branch.id, name: branch.name },
+        salesByMethod: [], outflows: [], inflows: [], evidences: [], denominations: [],
+        cashCounted: null, cashExpected: null, difference: null, envelopeAmount: null,
+        envelopeNumber: null, nextFund: null, event: null,
+      }));
+      localStorage.setItem(`maestro:open-cash-cut:${branchId}`, id);
+      router.push(`/cash-cuts/daily/${id}`);
+      return;
+    }
     const res = await fetch("/api/cash-cuts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        branchId,
-        date,
-        startingFund: Number(startingFund),
-        startingFundDenominations: startingFundBreakdown,
-        eventId: eventId || undefined,
-      }),
+      body: JSON.stringify(payload),
     });
 
     setLoading(false);

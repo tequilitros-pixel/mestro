@@ -9,6 +9,7 @@ import {
   BookIcon,
 } from "@/components/ui/icons";
 import PageTabs from "@/components/ui/PageTabs";
+import OfflineOperationForm from "@/components/offline/OfflineOperationForm";
 import SuccessToast from "@/components/ui/SuccessToast";
 import FinishDistillationModal from "@/components/FinishDistillationModal";
 import DistillationTimeline from "@/components/DistillationTimeline";
@@ -816,8 +817,11 @@ export default async function DistillationDetailPage({
             </p>
           </div>
 
-          <form
-            action={addEvent}
+          <OfflineOperationForm
+            kind="distillation.event.create"
+            entityField="distillationId"
+            entityId={id}
+            fallbackAction={addEvent}
             className="rounded-2xl border border-outline-variant bg-surface-container-high p-5 sm:p-6"
           >
             <p className="mb-4 text-xl font-bold">
@@ -944,7 +948,7 @@ export default async function DistillationDetailPage({
             >
               Guardar registro
             </button>
-          </form>
+          </OfflineOperationForm>
 
           <div className="mt-6 border-t border-outline-variant pt-6">
             <p className="mb-3 text-sm text-on-surface-variant">

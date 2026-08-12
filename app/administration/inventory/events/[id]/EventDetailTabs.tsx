@@ -8,6 +8,7 @@ import {
   RefreshIcon,
   ListChecksIcon,
 } from "@/components/ui/icons";
+import { AppIconBadge } from "@/components/ui/AppIcon";
 
 type TabKey = "datos" | "salida" | "regreso" | "reconteo";
 
@@ -59,7 +60,9 @@ export default function EventDetailTabs({
                     : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
                 }`}
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                <AppIconBadge>
+                  <Icon className="h-full w-full" />
+                </AppIconBadge>
                 {t.label}
                 {!!t.badge && (
                   <span

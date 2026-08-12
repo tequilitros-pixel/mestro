@@ -12,6 +12,7 @@ import { advanceLotStage } from "@/lib/lotStage";
 import CookingCharts from "@/components/CookingCharts";
 import FinishCookingModal from "@/components/FinishCookingModal";
 import PageTabs from "@/components/ui/PageTabs";
+import OfflineCookingForm from "@/components/offline/OfflineCookingForm";
 import SuccessToast from "@/components/ui/SuccessToast";
 import {
   FlameIcon,
@@ -789,7 +790,7 @@ export default async function CookingDetailPage({
             </div>
 
             {!hasStartedVapor ? (
-              <form action={addSimpleEvent}>
+              <OfflineCookingForm cookingId={id} fallbackAction={addSimpleEvent}>
                 <input
                   type="hidden"
                   name="type"
@@ -802,13 +803,19 @@ export default async function CookingDetailPage({
                   <FlameIcon className="h-5 w-5" />
                   Iniciar vapor
                 </button>
-              </form>
+              </OfflineCookingForm>
             ) : (
               <div className="space-y-8">
-                <form
-                  action={addTemperatureEvent}
+                <OfflineCookingForm
+                  cookingId={id}
+                  fallbackAction={addTemperatureEvent}
                   className="rounded-2xl border border-outline-variant bg-surface-container-high p-5 sm:p-6"
                 >
+                  <input
+                    type="hidden"
+                    name="type"
+                    value={CookingEventType.TEMPERATURA}
+                  />
                   <h3 className="mb-4 text-xl font-bold">
                     Registrar temperaturas
                   </h3>
@@ -851,11 +858,12 @@ export default async function CookingDetailPage({
                   <button className="mt-4 w-full rounded-xl bg-primary px-6 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]">
                     Guardar temperaturas
                   </button>
-                </form>
+                </OfflineCookingForm>
 
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   <SimpleActionForm
                     action={addSimpleEvent}
+                    cookingId={id}
                     type={
                       CookingEventType.AUMENTAR_VAPOR
                     }
@@ -865,6 +873,7 @@ export default async function CookingDetailPage({
 
                   <SimpleActionForm
                     action={addSimpleEvent}
+                    cookingId={id}
                     type={
                       CookingEventType.BAJAR_VAPOR
                     }
@@ -874,6 +883,7 @@ export default async function CookingDetailPage({
 
                   <SimpleActionForm
                     action={addSimpleEvent}
+                    cookingId={id}
                     type={
                       CookingEventType.SUSPENDER_VAPOR
                     }
@@ -883,6 +893,7 @@ export default async function CookingDetailPage({
 
                   <HoneyActionForm
                     action={addSimpleEvent}
+                    cookingId={id}
                     type={
                       CookingEventType.MIELES_AMARGAS
                     }
@@ -892,6 +903,7 @@ export default async function CookingDetailPage({
 
                   <HoneyActionForm
                     action={addSimpleEvent}
+                    cookingId={id}
                     type={
                       CookingEventType.MIELES_DULCES
                     }
@@ -901,6 +913,7 @@ export default async function CookingDetailPage({
 
                   <SimpleActionForm
                     action={addSimpleEvent}
+                    cookingId={id}
                     type={
                       CookingEventType.OBSERVACION
                     }
@@ -1523,20 +1536,23 @@ function CookingStatusBadge({
 
 function SimpleActionForm({
   action,
+  cookingId,
   type,
   icon: Icon,
   label,
   notesRequired = false,
 }: {
   action: (formData: FormData) => Promise<void>;
+  cookingId: string;
   type: CookingEventType;
   icon: ComponentType<IconProps>;
   label: string;
   notesRequired?: boolean;
 }) {
   return (
-    <form
-      action={action}
+    <OfflineCookingForm
+      cookingId={cookingId}
+      fallbackAction={action}
       className="rounded-2xl border border-outline-variant bg-surface-container-high p-4"
     >
       <input
@@ -1560,17 +1576,19 @@ function SimpleActionForm({
         <Icon className="h-4 w-4" />
         {label}
       </button>
-    </form>
+    </OfflineCookingForm>
   );
 }
 
 function HoneyActionForm({
   action,
+  cookingId,
   type,
   icon: Icon,
   label,
 }: {
   action: (formData: FormData) => Promise<void>;
+  cookingId: string;
   type:
     | typeof CookingEventType.MIELES_AMARGAS
     | typeof CookingEventType.MIELES_DULCES;
@@ -1578,8 +1596,9 @@ function HoneyActionForm({
   label: string;
 }) {
   return (
-    <form
-      action={action}
+    <OfflineCookingForm
+      cookingId={cookingId}
+      fallbackAction={action}
       className="rounded-2xl border border-outline-variant bg-surface-container-high p-4"
     >
       <input
@@ -1631,7 +1650,7 @@ function HoneyActionForm({
         <Icon className="h-4 w-4" />
         {label}
       </button>
-    </form>
+    </OfflineCookingForm>
   );
 }
 

@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { IconProps } from "@/components/ui/icons";
 
 export type AppIconVariant =
@@ -14,14 +14,14 @@ export type AppIconVariant =
 type AppIconSize = "sm" | "md" | "lg";
 
 const VARIANT_CLASSES: Record<AppIconVariant, string> = {
-  blue: "from-blue-500 to-blue-600 shadow-blue-950/30",
-  blueDeep: "from-blue-700 to-indigo-800 shadow-blue-950/40",
-  cyan: "from-sky-500 to-cyan-600 shadow-cyan-950/30",
-  purple: "from-violet-500 to-purple-700 shadow-purple-950/30",
-  green: "from-emerald-500 to-green-700 shadow-emerald-950/30",
-  orange: "from-orange-500 to-orange-700 shadow-orange-950/30",
-  amber: "from-amber-500 to-orange-600 shadow-amber-950/30",
-  slate: "from-slate-500 to-slate-700 shadow-black/30",
+  blue: "from-blue-600 to-blue-800 shadow-blue-950/35",
+  blueDeep: "from-blue-600 to-blue-800 shadow-blue-950/35",
+  cyan: "from-blue-600 to-blue-800 shadow-blue-950/35",
+  purple: "from-blue-600 to-blue-800 shadow-blue-950/35",
+  green: "from-blue-600 to-blue-800 shadow-blue-950/35",
+  orange: "from-blue-600 to-blue-800 shadow-blue-950/35",
+  amber: "from-blue-600 to-blue-800 shadow-blue-950/35",
+  slate: "from-blue-600 to-blue-800 shadow-blue-950/35",
 };
 
 const SIZE_CLASSES: Record<AppIconSize, { container: string; icon: string }> = {
@@ -29,6 +29,27 @@ const SIZE_CLASSES: Record<AppIconSize, { container: string; icon: string }> = {
   md: { container: "h-8 w-8 rounded-[10px]", icon: "h-[18px] w-[18px]" },
   lg: { container: "h-10 w-10 rounded-xl", icon: "h-5 w-5" },
 };
+
+export function AppIconBadge({
+  children,
+  size = "sm",
+  className = "",
+}: {
+  children: ReactNode;
+  size?: AppIconSize;
+  className?: string;
+}) {
+  const sizeClasses = SIZE_CLASSES[size];
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-flex shrink-0 items-center justify-center bg-gradient-to-br from-blue-600 to-blue-800 text-white shadow-sm shadow-blue-950/35 ring-1 ring-white/10 ${sizeClasses.container} ${className}`}
+    >
+      <span className={sizeClasses.icon}>{children}</span>
+    </span>
+  );
+}
 
 export default function AppIcon({
   icon: Icon,
@@ -41,14 +62,9 @@ export default function AppIcon({
   size?: AppIconSize;
   className?: string;
 }) {
-  const sizeClasses = SIZE_CLASSES[size];
-
   return (
-    <span
-      aria-hidden="true"
-      className={`inline-flex shrink-0 items-center justify-center bg-gradient-to-br text-white shadow-sm ring-1 ring-white/10 ${VARIANT_CLASSES[variant]} ${sizeClasses.container} ${className}`}
-    >
-      <Icon className={sizeClasses.icon} />
-    </span>
+    <AppIconBadge size={size} className={`${VARIANT_CLASSES[variant]} ${className}`}>
+      <Icon className="h-full w-full" />
+    </AppIconBadge>
   );
 }

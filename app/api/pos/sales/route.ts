@@ -116,6 +116,8 @@ export async function POST(request: NextRequest) {
     employeeBuyerId,
     payments,
     authorization,
+    clientOperationId,
+    clientCreatedAt,
   }: {
     branchId?: string;
     items?: CartItemInput[];
@@ -125,7 +127,14 @@ export async function POST(request: NextRequest) {
     employeeBuyerId?: string;
     payments?: { method: string; amount: number }[];
     authorization?: { managerId?: string; pin?: string };
+    clientOperationId?: string;
+    clientCreatedAt?: string;
   } = body;
+
+  if (clientOperationId) {
+    const existing = await prisma.posSale.findUnique({ where: { id: clientOperationId }, include: { items: true, payments: true, branch: true } });
+    if (existing) return NextResponse.json(existing);
+  }
 
   if (!branchId) {
     return NextResponse.json({ error: "Selecciona la sucursal." }, { status: 400 });
@@ -453,11 +462,18 @@ export async function POST(request: NextRequest) {
     where: { branchId, createdAt: { gte: dayStart } },
   });
 
-  const code = `POS-${branch.code}-${dayStart.toISOString().slice(0, 10).replace(/-/g, "")}-${String(todayCount + 1).padStart(3, "0")}`;
+  const code = clientOperationId
+    ? `POS-${branch.code}-${clientOperationId.replace(/-/g, "").slice(0, 12).toUpperCase()}`
+    : `POS-${branch.code}-${dayStart.toISOString().slice(0, 10).replace(/-/g, "")}-${String(todayCount + 1).padStart(3, "0")}`;
+  const saleCreatedAt = clientCreatedAt ? new Date(clientCreatedAt) : new Date();
+  if (Number.isNaN(saleCreatedAt.getTime())) {
+    return NextResponse.json({ error: "La fecha de la venta no es válida." }, { status: 400 });
+  }
 
   const sale = await prisma.$transaction(async (tx) => {
     const createdSale = await tx.posSale.create({
       data: {
+        ...(clientOperationId ? { id: clientOperationId } : {}),
         code,
         branchId,
         cashCutId: openCashCut.id,
@@ -471,6 +487,7 @@ export async function POST(request: NextRequest) {
         authorizedById: authorizedByManager?.id ?? null,
         authorizedAt: authorizedByManager ? new Date() : null,
         total,
+        createdAt: saleCreatedAt,
         items: {
           create: resolvedItems.map((item) => ({
             variantId: item.variantId,

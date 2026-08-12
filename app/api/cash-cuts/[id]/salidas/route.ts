@@ -85,15 +85,22 @@ export async function POST(
   }
 
   const body = await request.json();
-  const { concept, category, amount, authorizedById, notes, receiptPhotoUrl } = body;
+  const { concept, category, amount, authorizedById, notes, receiptPhotoUrl, clientOperationId, clientCreatedAt } = body;
 
-  if (!concept || !category || typeof amount !== "number") {
+  if (clientOperationId) {
+    const existing = await prisma.cashOutflow.findUnique({ where: { id: clientOperationId } });
+    if (existing) return NextResponse.json({ salida: existing, totalOutflows: await recalcularTotalSalidas(cashCutId) });
+  }
+
+  if (!concept || !category || typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json(
       { error: "Faltan datos: concept, category, amount" },
       { status: 400 }
     );
   }
 
+  const occurredAt = clientCreatedAt ? new Date(clientCreatedAt) : null;
+  if (occurredAt && Number.isNaN(occurredAt.getTime())) return NextResponse.json({ error: "Fecha de salida inválida" }, { status: 400 });
   const salida = await prisma.cashOutflow.create({
     data: {
       cashCutId,
@@ -103,6 +110,8 @@ export async function POST(
       authorizedById: authorizedById ?? null,
       notes,
       receiptPhotoUrl,
+      ...(clientOperationId ? { id: clientOperationId } : {}),
+      ...(occurredAt ? { occurredAt, createdAt: occurredAt } : {}),
     },
   });
 

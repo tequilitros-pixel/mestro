@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/icons";
 import { getProductVisual } from "@/lib/pos/productVisual";
 import { useToast } from "@/components/ui/Toast";
+import { enqueueOperation } from "@/lib/offline/queue";
+import { syncOfflineQueue } from "@/lib/offline/sync";
 
 type Variant = {
   id: string;
@@ -161,10 +163,29 @@ export default function PosSellClient({
   const [employeeDiscountPercent, setEmployeeDiscountPercent] = useState(50);
   const [discountLimitPercent, setDiscountLimitPercent] = useState<number | null>(null);
   const [managers, setManagers] = useState<Employee[]>([]);
+  const [localOpenBranches, setLocalOpenBranches] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
 
   useEffect(() => {
     let cancelled = false;
+    window.setTimeout(() => {
+      const open = new Set(branchOptions.filter((branch) => localStorage.getItem(`maestro:open-cash-cut:${branch.id}`)).map((branch) => branch.id));
+      if (!cancelled) setLocalOpenBranches(open);
+    }, 0);
+    const cachedCatalog = localStorage.getItem("maestro:pos-catalog");
+    if (cachedCatalog) {
+      window.setTimeout(() => {
+        try {
+          const data = JSON.parse(cachedCatalog) as Category[];
+          if (!cancelled) {
+            setCategories(data);
+            setActiveCategoryId(data[0]?.id ?? null);
+          }
+        } catch {
+          localStorage.removeItem("maestro:pos-catalog");
+        }
+      }, 0);
+    }
 
     fetch("/api/pos/products")
       .then((r) => {
@@ -175,10 +196,11 @@ export default function PosSellClient({
         if (cancelled) return;
         setCategories(data);
         setActiveCategoryId(data[0]?.id ?? null);
+        localStorage.setItem("maestro:pos-catalog", JSON.stringify(data));
       })
       .catch((err) => {
         if (cancelled) return;
-        setLoadError(err.message ?? "Error al cargar el catálogo.");
+        if (!cachedCatalog) setLoadError(err.message ?? "Error al cargar el catálogo.");
       });
 
     fetch("/api/pos/employees")
@@ -204,10 +226,10 @@ export default function PosSellClient({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [branchOptions]);
 
   const branch = branchOptions.find((b) => b.id === branchId) ?? null;
-  const hasOpenCut = Boolean(branch?.openCashCutId);
+  const hasOpenCut = Boolean(branch?.openCashCutId) || localOpenBranches.has(branchId);
 
   const activeCategory = categories?.find((c) => c.id === activeCategoryId) ?? null;
 
@@ -1235,38 +1257,47 @@ function PaymentModal({
     setSubmitting(true);
     setError(null);
 
+    const salePayload = {
+      branchId,
+      discountAmount,
+      discountReasonCode,
+      discountReason: discountReasonNote,
+      employeeBuyerId: employeeBuyerId || undefined,
+      ...(needsAuthorization ? { authorization: { managerId: authManagerId, pin: authPin } } : {}),
+      items: cart.map((line) =>
+        line.isCustom
+          ? { isCustom: true, description: line.description, amount: line.amount }
+          : {
+              variantId: line.variantId,
+              quantity: line.quantity,
+              ...(line.discount ? { discount: { ...line.discount } } : {}),
+            },
+      ),
+      payments: isFree ? [] : rows.map((r) => ({ method: r.method, amount: Number(r.amount) })),
+    };
+
+    if (!navigator.onLine) {
+      if (needsAuthorization) {
+        setError("Las ventas que requieren autorización de gerente necesitan conexión.");
+        setSubmitting(false);
+        return;
+      }
+      await enqueueOperation({
+        id: crypto.randomUUID(),
+        kind: "pos.sale.create",
+        payload: salePayload,
+        createdAt: new Date().toISOString(),
+      });
+      onSuccess();
+      setSubmitting(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/pos/sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          branchId,
-          discountAmount,
-          discountReasonCode,
-          discountReason: discountReasonNote,
-          employeeBuyerId: employeeBuyerId || undefined,
-          ...(needsAuthorization ? { authorization: { managerId: authManagerId, pin: authPin } } : {}),
-          items: cart.map((line) =>
-            line.isCustom
-              ? { isCustom: true, description: line.description, amount: line.amount }
-              : {
-                  variantId: line.variantId,
-                  quantity: line.quantity,
-                  ...(line.discount
-                    ? {
-                        discount: {
-                          kind: line.discount.kind,
-                          type: line.discount.type,
-                          value: line.discount.value,
-                          reason: line.discount.reason,
-                          reasonNote: line.discount.reasonNote,
-                        },
-                      }
-                    : {}),
-                },
-          ),
-          payments: isFree ? [] : rows.map((r) => ({ method: r.method, amount: Number(r.amount) })),
-        }),
+        body: JSON.stringify(salePayload),
       });
 
       const data = await res.json();
@@ -1279,7 +1310,13 @@ function PaymentModal({
 
       onSuccess();
     } catch {
-      setError("No fue posible completar el cobro. Revisa tu conexión.");
+      if (needsAuthorization) {
+        setError("No fue posible verificar la autorización. Revisa tu conexión.");
+      } else {
+        await enqueueOperation({ id: crypto.randomUUID(), kind: "pos.sale.create", payload: salePayload, createdAt: new Date().toISOString() });
+        await syncOfflineQueue();
+        onSuccess();
+      }
       setSubmitting(false);
     }
   }

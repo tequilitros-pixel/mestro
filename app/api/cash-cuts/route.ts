@@ -65,7 +65,14 @@ export async function POST(request: Request) {
     responsibleId,
     startingFundDenominations,
     eventId,
+    clientOperationId,
+    clientCreatedAt,
   } = body;
+
+  if (clientOperationId) {
+    const existing = await prisma.cashCut.findUnique({ where: { id: clientOperationId } });
+    if (existing) return NextResponse.json(existing);
+  }
 
   if (!branchId || !date || startingFund === undefined) {
     return NextResponse.json({ error: "Faltan datos: branchId, date, startingFund" }, { status: 400 });
@@ -116,11 +123,16 @@ export async function POST(request: Request) {
   const dayCount = await prisma.cashCut.count({
     where: { branchId, date: new Date(date) },
   });
-  const code = `CC-${branch.code}-${date}-${String(dayCount + 1).padStart(2, "0")}`;
+  const code = clientOperationId
+    ? `CC-${branch.code}-${clientOperationId.replace(/-/g, "").slice(0, 10).toUpperCase()}`
+    : `CC-${branch.code}-${date}-${String(dayCount + 1).padStart(2, "0")}`;
+  const openedAt = clientCreatedAt ? new Date(clientCreatedAt) : new Date();
+  if (Number.isNaN(openedAt.getTime())) return NextResponse.json({ error: "Fecha de apertura inválida" }, { status: 400 });
 
   const cashCut = await prisma.$transaction(async (tx) => {
     const created = await tx.cashCut.create({
       data: {
+        ...(clientOperationId ? { id: clientOperationId } : {}),
         code,
         branchId,
         date: new Date(date),
@@ -128,6 +140,8 @@ export async function POST(request: Request) {
         responsibleId: responsibleId ?? user.id,
         createdById: user.id,
         status: "ABIERTO",
+        openedAt,
+        createdAt: openedAt,
         eventId: event?.id,
         auditEntries: {
           create: {

@@ -13,6 +13,10 @@ import {
   ChevronRightIcon,
 } from "@/components/ui/icons";
  import { useEffect, useState, useCallback, startTransition } from "react";
+import { enqueueOperation } from "@/lib/offline/queue";
+
+function localCutKey(id: string) { return `maestro:cash-cut:${id}`; }
+function saveLocalCut(cut: CashCut) { localStorage.setItem(localCutKey(cut.id), JSON.stringify(cut)); }
 
 type Step = "ventas" | "salidas" | "entradas" | "evidencias" | "cierre";
 type CashCutStatus = "ABIERTO" | "CERRADO" | "AUDITADO";
@@ -272,24 +276,27 @@ const load = useCallback(async () => {
 
     if (!res.ok) {
       const errData = await res.json().catch(() => null);
+      const cached = localStorage.getItem(localCutKey(id));
       startTransition(() => {
-        setCashCut(null);
-        setLoadError(errData?.error ?? `No se pudo cargar el corte (código ${res.status}).`);
+        setCashCut(cached ? JSON.parse(cached) as CashCut : null);
+        setLoadError(cached ? null : (errData?.error ?? `No se pudo cargar el corte (código ${res.status}).`));
         setLoading(false);
       });
       return;
     }
 
     const data = await res.json();
+    saveLocalCut(data);
     startTransition(() => {
       setCashCut(data);
       setLoadError(null);
       setLoading(false);
     });
   } catch {
+    const cached = localStorage.getItem(localCutKey(id));
     startTransition(() => {
-      setCashCut(null);
-      setLoadError("No se pudo conectar con el servidor.");
+      setCashCut(cached ? JSON.parse(cached) as CashCut : null);
+      setLoadError(cached ? null : "No se pudo conectar con el servidor.");
       setLoading(false);
     });
   }
@@ -411,6 +418,13 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
     e.preventDefault();
     if (!concept || !category || !amount) return;
     setSaving(true);
+    if (!navigator.onLine) {
+      const id = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+      await enqueueOperation({ id, kind: "cash-cut.outflow.create", createdAt, payload: { cashCutId, concept, category, amount: Number(amount) } });
+      saveLocalCut({ ...cashCut, outflows: [...cashCut.outflows, { id, concept, category, amount: Number(amount) }] });
+      setConcept(""); setAmount(""); setSaving(false); onSaved(); return;
+    }
     await fetch(`/api/cash-cuts/${cashCutId}/salidas`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -506,6 +520,13 @@ function EntradasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
     e.preventDefault();
     if (!amount) return;
     setSaving(true);
+    if (!navigator.onLine) {
+      const id = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+      await enqueueOperation({ id, kind: "cash-cut.inflow.create", createdAt, payload: { cashCutId, type, amount: Number(amount) } });
+      saveLocalCut({ ...cashCut, inflows: [...cashCut.inflows, { id, type, amount: Number(amount) }] });
+      setAmount(""); setSaving(false); onSaved(); return;
+    }
     await fetch(`/api/cash-cuts/${cashCutId}/entradas`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -725,7 +746,7 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
     (sum, s) => sum + s.amount,
     0
   );
-  const canClose = totalVentas > 0;
+  const canClose = totalVentas > 0 || (typeof navigator !== "undefined" && !navigator.onLine);
 
   async function handleClose() {
     setError(null);
@@ -740,17 +761,27 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
       return;
     }
     setSaving(true);
+    const closePayload = {
+      cashCutId,
+      cashCounted: Number(cashCounted),
+      envelopeAmount: envelopeAmount ? Number(envelopeAmount) : undefined,
+      envelopeNumber: envelopeNumber || undefined,
+      nextFund: Number(nextFund),
+      cashCountedDenominations: cashCountedBreakdown,
+      nextFundDenominations: nextFundBreakdown,
+    };
+    if (!navigator.onLine) {
+      const createdAt = new Date().toISOString();
+      await enqueueOperation({ id: crypto.randomUUID(), kind: "cash-cut.close", createdAt, payload: closePayload });
+      saveLocalCut({ ...cashCut, status: "CERRADO", cashCounted: Number(cashCounted), envelopeAmount: envelopeAmount ? Number(envelopeAmount) : null, envelopeNumber: envelopeNumber || null, nextFund: Number(nextFund) });
+      localStorage.removeItem(`maestro:open-cash-cut:${cashCut.branch.id}`);
+      setResult({ assignmentWarning: "Cierre guardado en el dispositivo y pendiente de sincronización." });
+      setSaving(false); onSaved(); return;
+    }
     const res = await fetch(`/api/cash-cuts/${cashCutId}/cerrar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cashCounted: Number(cashCounted),
-        envelopeAmount: envelopeAmount ? Number(envelopeAmount) : undefined,
-        envelopeNumber: envelopeNumber || undefined,
-        nextFund: Number(nextFund),
-        cashCountedDenominations: cashCountedBreakdown,
-        nextFundDenominations: nextFundBreakdown,
-      }),
+      body: JSON.stringify(closePayload),
     });
     setSaving(false);
 
