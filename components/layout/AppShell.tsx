@@ -37,9 +37,9 @@ export default function AppShell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="app-content">
         {children}
-      </main>
+      </div>
 
       <div className="no-print mx-auto w-full max-w-7xl">
         <AppFooter />

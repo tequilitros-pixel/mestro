@@ -8,6 +8,7 @@
 :root {
   --background: #0a0a0a;
   --foreground: #f2f2f3;
+  --focus-ring: #ffb68e;
 }
 
 @theme inline {
@@ -104,6 +105,78 @@ body {
 }
 
 /*
+ * El shell solo organiza la aplicación; cada pantalla conserva la
+ * responsabilidad de declarar su propio <main>. Las rutas antiguas que
+ * aún no tienen contenedor de página reciben aquí un ancho y espaciado
+ * seguros. Si la pantalla ya trae un <main>, evitamos duplicar ambos.
+ */
+.app-content {
+  width: 100%;
+  max-width: 80rem;
+  flex: 1 1 0%;
+  margin-inline: auto;
+  padding: 1.5rem 1rem;
+}
+
+.app-content:has(> main) {
+  max-width: none;
+  padding: 0;
+}
+
+@media (min-width: 40rem) {
+  .app-content {
+    padding-inline: 1.5rem;
+  }
+
+  .app-content:has(> main) {
+    padding-inline: 0;
+  }
+}
+
+@media (min-width: 64rem) {
+  .app-content {
+    padding-inline: 2rem;
+  }
+
+  .app-content:has(> main) {
+    padding-inline: 0;
+  }
+}
+
+/*
+ * Foco de teclado compartido por toda la aplicación. Se aplica solo
+ * con :focus-visible para no añadir el anillo al hacer clic o tocar,
+ * y prevalece sobre los `outline-none` usados por formularios antiguos.
+ */
+:where(
+  a[href],
+  button,
+  input,
+  select,
+  textarea,
+  summary,
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+/* Conserva un indicador reconocible en modos de alto contraste. */
+@media (forced-colors: active) {
+  :where(
+    a[href],
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible {
+    outline-color: Highlight;
+  }
+}
+
+/*
  * Movimiento respetuoso: si el usuario desactivó las animaciones
  * en su sistema, todas las transiciones/animaciones de la app se
  * vuelven instantáneas (sin romper el estado final).
@@ -136,26 +209,6 @@ body {
   border-radius: inherit;
   background: linear-gradient(to bottom, rgb(255 255 255 / 0.05), transparent 45%);
   pointer-events: none;
-}
-
-/*
- * Iconos Material Symbols (usados por las pantallas nuevas
- * diseñadas en Stitch). Uso: <span class="material-symbols-outlined">home</span>
- */
-.material-symbols-outlined {
-  font-family: "Material Symbols Outlined";
-  font-weight: normal;
-  font-style: normal;
-  font-size: 24px;
-  line-height: 1;
-  letter-spacing: normal;
-  text-transform: none;
-  display: inline-block;
-  white-space: nowrap;
-  word-wrap: normal;
-  direction: ltr;
-  -webkit-font-feature-settings: "liga";
-  -webkit-font-smoothing: antialiased;
 }
 
 /* =========================================================

@@ -94,8 +94,8 @@ export function getYield(
   producedLiters: number
 ) {
   return calculateDistillationYield(
-    loadedLiters,
-    producedLiters
+    producedLiters,
+    loadedLiters
   );
 }
 export function getDistillationStatus(events: DistillationEvent[]) {

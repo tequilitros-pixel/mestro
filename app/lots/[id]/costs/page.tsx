@@ -13,6 +13,10 @@ export default async function LotCostsPage({ params }: Props) {
     where: { id },
     include: {
       expenses: { orderBy: { createdAt: "desc" } },
+      cookings: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
+      millings: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
+      fermentations: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
+      distillations: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
     },
   });
 
@@ -60,7 +64,16 @@ export default async function LotCostsPage({ params }: Props) {
         <h1 className="mt-3 text-4xl font-bold">
           Costos del lote {lot.code}
         </h1>
-        <LotMenu id={lot.id} />
+        <LotMenu
+          id={lot.id}
+          isFinished={isFinished}
+          processIds={{
+            cooking: lot.cookings[0]?.id,
+            milling: lot.millings[0]?.id,
+            fermentation: lot.fermentations[0]?.id,
+            distillation: lot.distillations[0]?.id,
+          }}
+        />
 
         <section className="mt-8 grid gap-4 md:grid-cols-3">
           <Card title="Costo total" value={`$${totalCost.toLocaleString()}`} />

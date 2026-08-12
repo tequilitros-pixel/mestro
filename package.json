@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "prisma generate && next build",
+    "dev": "next dev --webpack",
+    "build": "prisma generate && next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --import tsx --test tests/**/*.test.ts",
     "sync:liquor-recipes": "tsx scripts/sync-liquor-recipes.ts",
     "sync:liquor-steps": "tsx scripts/sync-liquor-steps.ts",
     "seed:pos-tequilitros": "tsx scripts/seed-pos-tequilitros.ts",

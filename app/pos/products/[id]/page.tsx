@@ -61,6 +61,7 @@ export default async function EditPosProductPage({
             id: v.id,
             name: v.name,
             price: v.price,
+            employeePrice: v.employeePrice,
             ingredients: v.ingredients.map((i) => ({
               inventoryProductId: i.inventoryProductId,
               quantity: Number(i.quantity),

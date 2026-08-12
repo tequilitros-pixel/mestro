@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import type { AppIconVariant } from "@/components/ui/AppIcon";
 import {
   type IconProps,
   HomeIcon,
@@ -54,6 +55,7 @@ export type MainModule = {
   label: string;
   shortLabel: string;
   icon: ComponentType<IconProps>;
+  iconVariant: AppIconVariant;
   module: AppModule;
 };
 
@@ -61,6 +63,7 @@ export type SubMenuItem = {
   href: string;
   label: string;
   icon: ComponentType<IconProps>;
+  iconVariant?: AppIconVariant;
   operatorAllowed?: boolean;
   /**
    * Agrupa visualmente los tabs de un submenú bajo un encabezado
@@ -83,6 +86,7 @@ export const MAIN_MODULES: MainModule[] = [
     label: "Inicio",
     shortLabel: "Inicio",
     icon: HomeIcon,
+    iconVariant: "blue",
     module: "home",
   },
   {
@@ -90,6 +94,7 @@ export const MAIN_MODULES: MainModule[] = [
     label: "Proceso de Producción",
     shortLabel: "Producción",
     icon: FactoryIcon,
+    iconVariant: "blueDeep",
     module: "production",
   },
   {
@@ -97,6 +102,7 @@ export const MAIN_MODULES: MainModule[] = [
     label: "Elaboración de Licores",
     shortLabel: "Licores",
     icon: MartiniIcon,
+    iconVariant: "purple",
     module: "liquors",
   },
   {
@@ -104,6 +110,7 @@ export const MAIN_MODULES: MainModule[] = [
     label: "Cortes de Caja",
     shortLabel: "Cortes",
     icon: WalletIcon,
+    iconVariant: "green",
     module: "cash-cuts",
   },
   {
@@ -111,6 +118,7 @@ export const MAIN_MODULES: MainModule[] = [
     label: "Inventario",
     shortLabel: "Inventario",
     icon: PackageIcon,
+    iconVariant: "orange",
     module: "administration",
   },
   {
@@ -118,6 +126,7 @@ export const MAIN_MODULES: MainModule[] = [
     label: "Punto de Venta",
     shortLabel: "Ventas",
     icon: CashRegisterIcon,
+    iconVariant: "cyan",
     module: "pos",
   },
   {
@@ -125,6 +134,7 @@ export const MAIN_MODULES: MainModule[] = [
     label: "Horario",
     shortLabel: "Horario",
     icon: ClockIcon,
+    iconVariant: "blue",
     module: "timeclock",
   },
   {
@@ -132,6 +142,7 @@ export const MAIN_MODULES: MainModule[] = [
     label: "Personal",
     shortLabel: "Personal",
     icon: UsersIcon,
+    iconVariant: "purple",
     module: "personnel",
   },
 ];
@@ -145,45 +156,53 @@ export const SUBMENUS: Record<
       href: "/plant",
       label: "Planta",
       icon: FactoryIcon,
+      iconVariant: "slate",
     },
     {
       href: "/lots",
       label: "Lotes",
       icon: PackageIcon,
+      iconVariant: "purple",
     },
     {
       href: "/cooking",
       label: "Cocción",
       icon: FlameIcon,
+      iconVariant: "orange",
       operatorAllowed: true,
     },
     {
       href: "/milling",
       label: "Molienda",
       icon: GearIcon,
+      iconVariant: "blue",
       operatorAllowed: true,
     },
     {
       href: "/fermentation",
       label: "Fermentación",
       icon: FlaskIcon,
+      iconVariant: "green",
       operatorAllowed: true,
     },
     {
       href: "/distillation",
       label: "Destilación",
       icon: GlassWaterIcon,
+      iconVariant: "purple",
       operatorAllowed: true,
     },
     {
       href: "/costs",
       label: "Costos",
       icon: CoinsIcon,
+      iconVariant: "green",
     },
     {
       href: "/control-room",
       label: "Sala",
       icon: BrainIcon,
+      iconVariant: "cyan",
     },
   ],
 
@@ -192,46 +211,55 @@ export const SUBMENUS: Record<
       href: "/liquors",
       label: "Inicio",
       icon: HomeIcon,
+      iconVariant: "blue",
     },
     {
       href: "/liquors/recipes",
       label: "Recetas",
       icon: BookIcon,
+      iconVariant: "purple",
     },
     {
       href: "/liquors/raw-materials",
       label: "Materia prima",
       icon: FlaskIcon,
+      iconVariant: "green",
     },
     {
       href: "/liquors/batches",
       label: "Lotes",
       icon: TagIcon,
+      iconVariant: "purple",
     },
     {
       href: "/liquors/production",
       label: "Producción",
       icon: MartiniIcon,
+      iconVariant: "purple",
     },
     {
       href: "/liquors/bottling",
       label: "Embotellado",
       icon: BottleIcon,
+      iconVariant: "cyan",
     },
     {
       href: "/liquors/inventory",
       label: "Inventario",
       icon: PackageIcon,
+      iconVariant: "orange",
     },
     {
       href: "/liquors/qr",
       label: "QR",
       icon: QrIcon,
+      iconVariant: "slate",
     },
     {
       href: "/liquors/expiration",
       label: "Caducidad",
       icon: CalendarIcon,
+      iconVariant: "amber",
     },
   ],
 
@@ -240,16 +268,19 @@ export const SUBMENUS: Record<
       href: "/cash-cuts",
       label: "Inicio",
       icon: HomeIcon,
+      iconVariant: "blue",
     },
     {
       href: "/cash-cuts/branches",
       label: "Sucursales",
       icon: StoreIcon,
+      iconVariant: "orange",
     },
     {
       href: "/cash-cuts/dashboard",
       label: "Control",
       icon: ChartLineIcon,
+      iconVariant: "green",
       children: [
         {
           href: "/cash-cuts/dashboard",
@@ -290,21 +321,25 @@ export const SUBMENUS: Record<
       href: "/pos",
       label: "Vender",
       icon: CashRegisterIcon,
+      iconVariant: "cyan",
     },
     {
       href: "/pos/sales",
       label: "Ventas",
       icon: ChartLineIcon,
+      iconVariant: "green",
     },
     {
       href: "/pos/categories",
       label: "Categorías",
       icon: GridIcon,
+      iconVariant: "purple",
     },
     {
       href: "/pos/products",
       label: "Productos",
       icon: PackageIcon,
+      iconVariant: "orange",
     },
   ],
 
@@ -313,16 +348,19 @@ export const SUBMENUS: Record<
       href: "/administration",
       label: "Inicio",
       icon: HomeIcon,
+      iconVariant: "blue",
     },
     {
       href: "/administration/inventory/products",
       label: "Productos",
       icon: PackageIcon,
+      iconVariant: "orange",
     },
     {
       href: "/administration/inventory/eventos",
       label: "Inventario de eventos",
       icon: PartyIcon,
+      iconVariant: "purple",
       children: [
         {
           href: "/administration/inventory/eventos",
@@ -350,6 +388,7 @@ export const SUBMENUS: Record<
       href: "/administration/inventory/sucursales",
       label: "Inventario de sucursales",
       icon: StoreIcon,
+      iconVariant: "orange",
       children: [
         {
           href: "/administration/inventory/sucursales",
@@ -385,28 +424,33 @@ export const SUBMENUS: Record<
       href: "/timeclock",
       label: "Checador",
       icon: ClockIcon,
+      iconVariant: "blue",
       operatorAllowed: true,
     },
     {
       href: "/timeclock/calendar",
       label: "Calendario",
       icon: CalendarIcon,
+      iconVariant: "amber",
       operatorAllowed: true,
     },
     {
       href: "/administration/schedule",
       label: "Programar horarios",
       icon: CalendarIcon,
+      iconVariant: "purple",
     },
     {
       href: "/timeclock/payroll",
       label: "Nómina",
       icon: DollarIcon,
+      iconVariant: "green",
     },
     {
       href: "/timeclock/geofences",
       label: "Geozona",
       icon: MapPinIcon,
+      iconVariant: "cyan",
     },
   ],
 
@@ -415,16 +459,19 @@ export const SUBMENUS: Record<
       href: "/administration/personnel",
       label: "Personal",
       icon: UsersIcon,
+      iconVariant: "purple",
     },
     {
       href: "/administration/personnel/timeclock",
       label: "Turnos abiertos",
       icon: ClockIcon,
+      iconVariant: "blue",
     },
     {
       href: "/administration/personnel/notifications",
       label: "Notificaciones",
       icon: BellIcon,
+      iconVariant: "amber",
     },
   ],
 };

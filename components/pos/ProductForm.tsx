@@ -29,6 +29,7 @@ type VariantRow = {
   key: string;
   name: string;
   price: string;
+  employeePrice: string;
   ingredients: IngredientRow[];
 };
 
@@ -41,6 +42,7 @@ type InitialProduct = {
     id: string;
     name: string;
     price: number;
+    employeePrice: number | null;
     ingredients: { inventoryProductId: string; quantity: number }[];
   }[];
 };
@@ -52,7 +54,7 @@ function nextKey() {
 }
 
 function emptyVariant(): VariantRow {
-  return { key: nextKey(), name: "Único", price: "0", ingredients: [] };
+  return { key: nextKey(), name: "Único", price: "0", employeePrice: "", ingredients: [] };
 }
 
 export default function ProductForm({
@@ -76,6 +78,7 @@ export default function ProductForm({
           key: nextKey(),
           name: v.name,
           price: String(v.price),
+          employeePrice: v.employeePrice === null ? "" : String(v.employeePrice),
           ingredients: v.ingredients.map((i) => ({
             key: nextKey(),
             inventoryProductId: i.inventoryProductId,
@@ -195,6 +198,7 @@ export default function ProductForm({
     const payload = variants.map((v) => ({
       name: v.name.trim(),
       price: Number(v.price),
+      employeePrice: v.employeePrice.trim() === "" ? null : Number(v.employeePrice),
       ingredients: v.ingredients
         .filter((i) => i.inventoryProductId)
         .map((i) => ({ inventoryProductId: i.inventoryProductId, quantity: Number(i.quantity) })),
@@ -384,6 +388,20 @@ export default function ProductForm({
                   step="0.01"
                   value={variant.price}
                   onChange={(e) => updateVariant(variant.key, { price: e.target.value })}
+                  className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-2.5 text-sm text-on-surface outline-none transition focus:border-primary"
+                />
+              </div>
+              <div className="w-36">
+                <label className="mb-1 block text-xs font-semibold text-on-surface-variant">
+                  Precio empleado
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="50% automático"
+                  value={variant.employeePrice}
+                  onChange={(e) => updateVariant(variant.key, { employeePrice: e.target.value })}
                   className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-2.5 text-sm text-on-surface outline-none transition focus:border-primary"
                 />
               </div>

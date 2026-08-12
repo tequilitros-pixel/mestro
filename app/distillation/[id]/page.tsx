@@ -13,6 +13,7 @@ import SuccessToast from "@/components/ui/SuccessToast";
 import FinishDistillationModal from "@/components/FinishDistillationModal";
 import DistillationTimeline from "@/components/DistillationTimeline";
 import DistillationCharts from "@/components/DistillationCharts";
+import BottleQrCode from "@/components/liquors/BottleQrCode";
 import {
   DistillationEventType,
   DistillationStatus,
@@ -1334,10 +1335,6 @@ function FinishLotSection({
       process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
     }/q/lote/${qrToken}`;
 
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(
-      publicUrl
-    )}`;
-
     return (
       <section className="mt-8 overflow-hidden rounded-3xl border border-tertiary-fixed-dim/30 bg-surface-container">
         <header className="border-b border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 p-6 sm:p-8">
@@ -1360,9 +1357,10 @@ function FinishLotSection({
 
         <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
           <div className="rounded-3xl bg-white p-6">
-            <img
-              src={qrImageUrl}
-              alt={`Código QR del lote ${lotCode}`}
+            <BottleQrCode
+              value={publicUrl}
+              size={320}
+              title={`Código QR del lote ${lotCode}`}
               className="mx-auto aspect-square w-full max-w-[320px]"
             />
           </div>
@@ -1380,12 +1378,12 @@ function FinishLotSection({
 
             <div className="mt-4 flex flex-wrap gap-3">
               <a
-                href={qrImageUrl}
+                href={publicUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="rounded-2xl bg-primary px-5 py-3 text-center font-black text-on-primary transition hover:opacity-90"
               >
-                Ver QR completo
+                Abrir trazabilidad
               </a>
 
               <Link

@@ -19,37 +19,13 @@ import {
   BookIcon,
 } from "@/components/ui/icons";
 import { Suspense } from "react";
+import {
+  weightedAverage,
+} from "@/lib/milling/millingMetrics";
 
 type Props = {
   params: Promise<{ id: string }>;
 };
-
-type DischargeForAverage = {
-  litersRecovered: number;
-  brix: number;
-  ph: number;
-  temperature: number;
-};
-
-function weightedAverage(
-  items: DischargeForAverage[],
-  getValue: (item: DischargeForAverage) => number
-) {
-  const totalLiters = items.reduce(
-    (sum, item) => sum + item.litersRecovered,
-    0
-  );
-
-  if (totalLiters <= 0) return null;
-
-  return (
-    items.reduce(
-      (sum, item) =>
-        sum + item.litersRecovered * getValue(item),
-      0
-    ) / totalLiters
-  );
-}
 
 export default async function MillingDetailPage({
   params,

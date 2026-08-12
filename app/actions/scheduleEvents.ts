@@ -235,3 +235,98 @@ export async function getScheduleEventDetail(eventId: string) {
     },
   };
 }
+
+/** Horas entre dos "HH:MM", tolerante a turnos que cruzan medianoche. */
+function hoursBetween(startTime: string, endTime: string) {
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  if (![sh, sm, eh, em].every(Number.isFinite)) return 0;
+
+  let minutes = eh * 60 + em - (sh * 60 + sm);
+  if (minutes < 0) minutes += 24 * 60;
+  return minutes / 60;
+}
+
+function workedHours(entry: { clockIn: Date; clockOut: Date | null }) {
+  if (!entry.clockOut) return 0;
+  return (entry.clockOut.getTime() - entry.clockIn.getTime()) / (1000 * 60 * 60);
+}
+
+/**
+ * Costo de mano de obra del evento: por cada empleado asignado, junta
+ * las horas programadas (del turno) contra las horas REALES checadas
+ * (TimeClockEntry.scheduledShiftId → ese turno), usando la tarifa por
+ * hora vigente del empleado. Es un estimado simple con la tarifa
+ * actual, no una integración con el motor de nómina — sirve para ver
+ * de un vistazo cuánto costó el evento, no para pagarlo.
+ */
+export async function getScheduleEventCost(eventId: string) {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "No tienes permiso" };
+
+  const event = await prisma.scheduleEvent.findUnique({
+    where: { id: eventId },
+    include: {
+      shifts: {
+        include: {
+          user: { select: { id: true, name: true, hourlyRate: true } },
+          timeClockEntries: { select: { clockIn: true, clockOut: true } },
+        },
+      },
+    },
+  });
+
+  if (!event) return { error: "Evento no encontrado" };
+
+  let totalPlannedHours = 0;
+  let totalWorkedHours = 0;
+  let totalCost = 0;
+  let missingRateCount = 0;
+  let hasOpenShift = false;
+
+  const employees = event.shifts.map((shift) => {
+    const plannedHours =
+      shift.startTime && shift.endTime ? hoursBetween(shift.startTime, shift.endTime) : 0;
+
+    let employeeWorkedHours = 0;
+    for (const entry of shift.timeClockEntries) {
+      if (!entry.clockOut) {
+        hasOpenShift = true;
+        continue;
+      }
+      employeeWorkedHours += workedHours(entry);
+    }
+
+    const hourlyRate = shift.user.hourlyRate !== null ? Number(shift.user.hourlyRate) : null;
+    const cost = hourlyRate !== null ? employeeWorkedHours * hourlyRate : null;
+
+    totalPlannedHours += plannedHours;
+    totalWorkedHours += employeeWorkedHours;
+    if (cost !== null) totalCost += cost;
+    else missingRateCount += 1;
+
+    return {
+      id: shift.user.id,
+      name: shift.user.name,
+      plannedHours,
+      workedHours: employeeWorkedHours,
+      hourlyRate,
+      cost,
+    };
+  });
+
+  employees.sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    success: true,
+    employees,
+    totals: {
+      employeeCount: employees.length,
+      plannedHours: totalPlannedHours,
+      workedHours: totalWorkedHours,
+      cost: totalCost,
+      missingRateCount,
+      hasOpenShift,
+    },
+  };
+}

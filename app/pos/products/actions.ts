@@ -16,6 +16,7 @@ type VariantInput = {
   id?: string;
   name: string;
   price: number;
+  employeePrice: number | null;
   ingredients: IngredientInput[];
 };
 
@@ -30,6 +31,10 @@ function parseVariants(raw: string | null): VariantInput[] | null {
       id: typeof v.id === "string" ? v.id : undefined,
       name: typeof v.name === "string" ? v.name.trim() : "",
       price: Number(v.price),
+      employeePrice:
+        v.employeePrice === null || v.employeePrice === undefined || v.employeePrice === ""
+          ? null
+          : Number(v.employeePrice),
       ingredients: Array.isArray(v.ingredients)
         ? v.ingredients
             .filter(
@@ -59,6 +64,12 @@ function validateVariants(variants: VariantInput[]): string | null {
     }
     if (!(variant.price >= 0) || !Number.isFinite(variant.price)) {
       return `El precio de "${variant.name}" no es válido.`;
+    }
+    if (
+      variant.employeePrice !== null &&
+      (!(variant.employeePrice >= 0) || !Number.isFinite(variant.employeePrice))
+    ) {
+      return `El precio de empleado de "${variant.name}" no es válido.`;
     }
     for (const ingredient of variant.ingredients) {
       if (!(ingredient.quantity > 0)) {
@@ -130,6 +141,7 @@ export async function createProductAction(
             productId: product.id,
             name: variant.name,
             price: variant.price,
+            employeePrice: variant.employeePrice,
             position: index,
             ingredients: {
               create: variant.ingredients.map((ingredient) => ({
@@ -202,6 +214,7 @@ export async function updateProductAction(
             productId,
             name: variant.name,
             price: variant.price,
+            employeePrice: variant.employeePrice,
             position: index,
             ingredients: {
               create: variant.ingredients.map((ingredient) => ({

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
 import { TagIcon } from "@/components/ui/icons";
+import BottleQrCode from "@/components/liquors/BottleQrCode";
 
 type Props = {
   params: Promise<{
@@ -80,10 +81,6 @@ export default async function LiquorBottleQrPage({ params }: Props) {
 
   const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/q/${bottle.qrToken}`;
 
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(
-    publicUrl
-  )}`;
-
   return (
     <section className="mx-auto max-w-5xl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -106,9 +103,10 @@ export default async function LiquorBottleQrPage({ params }: Props) {
         <div className="p-6 sm:p-10">
           <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
             <div className="rounded-3xl bg-white p-6">
-              <img
-                src={qrImageUrl}
-                alt={`Código QR de ${bottle.code}`}
+              <BottleQrCode
+                value={publicUrl}
+                size={420}
+                title={`Código QR de ${bottle.code}`}
                 className="mx-auto aspect-square w-full max-w-[420px]"
               />
             </div>
@@ -176,12 +174,12 @@ export default async function LiquorBottleQrPage({ params }: Props) {
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                <a
-  href={qrImageUrl}
+  href={publicUrl}
   target="_blank"
   rel="noreferrer"
   className="flex-1 rounded-2xl bg-primary px-5 py-4 text-center font-black text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
 >
-  Ver QR completo
+  Abrir trazabilidad
 </a>
 
 

@@ -29,6 +29,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
+error.txt
+
+# local databases and backups
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
 
 # env files (can opt-in for committing if needed)
 .env*
@@ -59,3 +67,5 @@ next-env.d.ts
 /android/captures
 /android/app/src/main/assets/public
 /android/app/src/main/assets/capacitor.config.json
+.claude/settings.local.json
+_pgtest_tmp.mjs

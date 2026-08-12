@@ -10,6 +10,7 @@ import {
   type SubMenuItem,
 } from "./navigation";
 import { ChevronRightIcon } from "@/components/ui/icons";
+import AppIcon from "@/components/ui/AppIcon";
 
 export default function ModuleNavigation({
   role,
@@ -83,11 +84,15 @@ export default function ModuleNavigation({
                       aria-current={isActive ? "page" : undefined}
                       className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] ${
                         isActive
-                          ? "bg-primary/10 text-on-surface ring-1 ring-primary/15"
+                          ? "bg-primary text-on-primary"
                           : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
                       }`}
                     >
-                      <Icon className="h-4 w-4 shrink-0" />
+                      <AppIcon
+                        icon={Icon}
+                        variant={item.iconVariant ?? "slate"}
+                        size="sm"
+                      />
                       {item.label}
                       {item.children && (
                         <ChevronRightIcon
@@ -123,11 +128,15 @@ export default function ModuleNavigation({
                   aria-current={isActive ? "page" : undefined}
                   className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] ${
                     isActive
-                      ? "bg-primary/10 text-on-surface ring-1 ring-primary/15"
+                      ? "bg-primary text-on-primary"
                       : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
                   }`}
                 >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <AppIcon
+                    icon={Icon}
+                    variant={child.iconVariant ?? activeParent.iconVariant ?? "slate"}
+                    size="sm"
+                  />
                   {child.label}
                 </Link>
               );

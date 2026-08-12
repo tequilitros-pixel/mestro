@@ -1,11 +1,24 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import "./globals.css";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserModuleKeys } from "@/app/actions/permissions";
 
 import AppShell from "@/components/layout/AppShell";
 import { ToastProvider } from "@/components/ui/Toast";
+
+const OPERATOR_ALLOWED_PATHS = [
+  "/cooking",
+  "/milling",
+  "/fermentation",
+  "/distillation",
+];
+
+function matchesPath(pathname: string, path: string) {
+  return pathname === path || pathname.startsWith(`${path}/`);
+}
 
 /*
  * Tipografía del nuevo sistema de diseño (definido en Stitch).
@@ -39,10 +52,27 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   /*
-   * Esta función solo consulta al usuario.
-   * El middleware es el único responsable de proteger las rutas.
+   * El proxy (proxy.ts) solo confirma que exista la cookie de sesión
+   * y no toca la base de datos (ver comentario en ese archivo). La
+   * verificación real de usuario activo y restricción de rutas por
+   * rol se hace aquí, que sí es un Server Component normal.
    */
   const user = await getCurrentUser();
+
+  if (user) {
+    if (!user.active) {
+      redirect("/login");
+    }
+
+    const pathname = (await headers()).get("x-pathname") ?? "";
+    const isAllowedForOperator = OPERATOR_ALLOWED_PATHS.some((path) =>
+      matchesPath(pathname, path),
+    );
+
+    if (user.role === "OPERATOR" && pathname && !isAllowedForOperator) {
+      redirect("/cooking");
+    }
+  }
 
   /*
    * Los permisos por módulo (tabla ModulePermission) solo aplican
@@ -60,12 +90,6 @@ export default async function RootLayout({
       lang="es"
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <head>
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
-        />
-      </head>
       <body className="min-h-screen bg-background text-on-surface">
         <ToastProvider>
           {user ? (

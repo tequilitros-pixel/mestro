@@ -21,7 +21,6 @@ import {
   CheckIcon,
   ClipboardIcon,
   FactoryIcon,
-  XIcon,
 } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/Toast";
 

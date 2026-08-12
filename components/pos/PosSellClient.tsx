@@ -14,13 +14,17 @@ import {
   ReceiptIcon,
 } from "@/components/ui/icons";
 import { getProductVisual } from "@/lib/pos/productVisual";
+import { useToast } from "@/components/ui/Toast";
 
 type Variant = {
   id: string;
   name: string;
   price: number;
   active: boolean;
+  employeePrice: number | null;
 };
+
+type Employee = { id: string; name: string };
 
 type Product = {
   id: string;
@@ -43,6 +47,14 @@ type BranchOption = {
   openCashCutId: string | null;
 };
 
+type LineDiscount = {
+  kind: "DESCUENTO_NORMAL" | "CORTESIA";
+  type: "PERCENT" | "AMOUNT";
+  value: number;
+  reason: string;
+  reasonNote: string;
+};
+
 type CartLine =
   | {
       key: string;
@@ -51,7 +63,9 @@ type CartLine =
       productName: string;
       variantName: string;
       unitPrice: number;
+      employeePrice: number | null;
       quantity: number;
+      discount: LineDiscount | null;
     }
   | {
       key: string;
@@ -59,6 +73,48 @@ type CartLine =
       description: string;
       amount: number;
     };
+
+const REASON_OPTIONS: { value: string; label: string }[] = [
+  { value: "CLIENTE_FRECUENTE", label: "Cliente frecuente" },
+  { value: "PROMOCION", label: "Promoción" },
+  { value: "COMPENSACION", label: "Compensación" },
+  { value: "CONVENIO", label: "Convenio" },
+  { value: "AUTORIZACION_GERENTE", label: "Autorización gerente" },
+  { value: "CUMPLEANOS", label: "Cumpleaños" },
+  { value: "EVENTO", label: "Evento" },
+  { value: "INVITADO", label: "Invitado" },
+  { value: "OTRO", label: "Otro" },
+];
+
+const QUICK_PERCENTS = [5, 10, 15, 20];
+
+function effectiveUnitPrice(unitPrice: number, discount: LineDiscount | null): number {
+  if (!discount) return unitPrice;
+  if (discount.kind === "CORTESIA") return 0;
+  const raw =
+    discount.type === "PERCENT"
+      ? unitPrice * (1 - discount.value / 100)
+      : unitPrice - discount.value;
+  return Math.max(0, Math.round(raw * 100) / 100);
+}
+
+function employeePriceFor(line: CartLine & { isCustom: false }, employeeDiscountPercent: number) {
+  const raw = line.employeePrice ?? line.unitPrice * (1 - employeeDiscountPercent / 100);
+  return Math.max(0, Math.round(raw * 100) / 100);
+}
+
+// El precio de empleado y un descuento manual nunca se combinan: si
+// el cajero ya puso un descuento a esa línea, se respeta ese y no se
+// vuelve a aplicar el beneficio de empleado encima.
+function lineUnitPrice(
+  line: CartLine & { isCustom: false },
+  employeeMode: boolean,
+  employeeDiscountPercent: number,
+): number {
+  if (line.discount) return effectiveUnitPrice(line.unitPrice, line.discount);
+  if (employeeMode) return employeePriceFor(line, employeeDiscountPercent);
+  return line.unitPrice;
+}
 
 const PAYMENT_METHODS: { value: string; label: string }[] = [
   { value: "EFECTIVO", label: "Efectivo" },
@@ -93,7 +149,19 @@ export default function PosSellClient({
   const [showPayment, setShowPayment] = useState(false);
   const [showDiscount, setShowDiscount] = useState(false);
   const [discountAmount, setDiscountAmount] = useState(0);
-  const [discountReason, setDiscountReason] = useState("");
+  const [discountReasonCode, setDiscountReasonCode] = useState("");
+  const [discountReasonNote, setDiscountReasonNote] = useState("");
+  const [itemDiscountKey, setItemDiscountKey] = useState<string | null>(null);
+  const [itemDiscountInitialKind, setItemDiscountInitialKind] = useState<
+    "DESCUENTO_NORMAL" | "CORTESIA"
+  >("DESCUENTO_NORMAL");
+  const [employeeMode, setEmployeeMode] = useState(false);
+  const [employeeBuyerId, setEmployeeBuyerId] = useState("");
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employeeDiscountPercent, setEmployeeDiscountPercent] = useState(50);
+  const [discountLimitPercent, setDiscountLimitPercent] = useState<number | null>(null);
+  const [managers, setManagers] = useState<Employee[]>([]);
+  const { showToast } = useToast();
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +181,26 @@ export default function PosSellClient({
         setLoadError(err.message ?? "Error al cargar el catálogo.");
       });
 
+    fetch("/api/pos/employees")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(
+        (
+          data: {
+            employees: Employee[];
+            employeeDiscountPercent: number;
+            discountLimitPercent: number | null;
+            managers: Employee[];
+          } | null,
+        ) => {
+          if (cancelled || !data) return;
+          setEmployees(data.employees);
+          setEmployeeDiscountPercent(data.employeeDiscountPercent);
+          setDiscountLimitPercent(data.discountLimitPercent);
+          setManagers(data.managers);
+        },
+      )
+      .catch(() => {});
+
     return () => {
       cancelled = true;
     };
@@ -127,14 +215,37 @@ export default function PosSellClient({
     () =>
       cart.reduce(
         (sum, line) =>
-          sum + (line.isCustom ? line.amount : line.unitPrice * line.quantity),
+          sum +
+          (line.isCustom
+            ? line.amount
+            : lineUnitPrice(line, employeeMode, employeeDiscountPercent) * line.quantity),
         0,
       ),
-    [cart],
+    [cart, employeeMode, employeeDiscountPercent],
   );
 
   const clampedDiscount = Math.min(Math.max(discountAmount, 0), subtotal);
   const total = subtotal - clampedDiscount;
+
+  // Refleja del lado del cliente el mismo cálculo que hace el
+  // servidor, solo para decidir si mostrar de una vez el campo de
+  // autorización — el servidor sigue siendo quien valida de verdad.
+  const needsAuthorization = useMemo(() => {
+    if (discountLimitPercent === null) return false;
+
+    const itemOverLimit = cart.some((line) => {
+      if (line.isCustom || !line.discount) return false;
+      const finalPrice = effectiveUnitPrice(line.unitPrice, line.discount);
+      if (line.unitPrice <= 0) return false;
+      const pct = ((line.unitPrice - finalPrice) / line.unitPrice) * 100;
+      return pct > discountLimitPercent;
+    });
+
+    const salePct = subtotal > 0 ? (clampedDiscount / subtotal) * 100 : 0;
+    const saleOverLimit = clampedDiscount > 0 && salePct > discountLimitPercent;
+
+    return itemOverLimit || saleOverLimit;
+  }, [cart, discountLimitPercent, subtotal, clampedDiscount]);
 
   function addVariant(product: Product, variant: Variant) {
     setCart((prev) => {
@@ -156,10 +267,18 @@ export default function PosSellClient({
           productName: product.name,
           variantName: variant.name,
           unitPrice: variant.price,
+          employeePrice: variant.employeePrice,
           quantity: 1,
+          discount: null,
         },
       ];
     });
+  }
+
+  function setLineDiscount(key: string, discount: LineDiscount | null) {
+    setCart((prev) =>
+      prev.map((l) => (l.key === key && !l.isCustom ? { ...l, discount } : l)),
+    );
   }
 
   function handleProductClick(product: Product) {
@@ -199,7 +318,10 @@ export default function PosSellClient({
   function resetSale() {
     setCart([]);
     setDiscountAmount(0);
-    setDiscountReason("");
+    setDiscountReasonCode("");
+    setDiscountReasonNote("");
+    setEmployeeMode(false);
+    setEmployeeBuyerId("");
   }
 
   return (
@@ -231,6 +353,15 @@ export default function PosSellClient({
               >
                 <GearIcon className="h-4 w-4" />
                 Catálogo
+              </Link>
+            )}
+
+            {canManageCatalog && (
+              <Link
+                href="/pos/settings"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+              >
+                Configuración
               </Link>
             )}
 
@@ -374,6 +505,36 @@ export default function PosSellClient({
           )}
         </div>
 
+        <div className="space-y-2 border-b border-outline-variant p-4">
+          <label className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+            <input
+              type="checkbox"
+              checked={employeeMode}
+              onChange={(e) => {
+                setEmployeeMode(e.target.checked);
+                if (!e.target.checked) setEmployeeBuyerId("");
+              }}
+              className="h-4 w-4"
+            />
+            Venta a empleado
+          </label>
+
+          {employeeMode && (
+            <select
+              value={employeeBuyerId}
+              onChange={(e) => setEmployeeBuyerId(e.target.value)}
+              className="w-full rounded-xl border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface outline-none focus:border-primary"
+            >
+              <option value="">Selecciona un empleado</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
         <div className="flex-1 overflow-y-auto p-4">
           {cart.length === 0 && (
             <p className="text-center text-sm text-on-surface-variant">
@@ -382,55 +543,119 @@ export default function PosSellClient({
           )}
 
           <div className="space-y-2">
-            {cart.map((line) => (
-              <div
-                key={line.key}
-                className="flex items-center justify-between gap-2 rounded-xl border border-outline-variant bg-surface-container/60 p-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-on-surface">
-                    {line.isCustom ? line.description : line.productName}
-                  </p>
-                  {!line.isCustom && line.variantName !== "Único" && (
-                    <p className="text-xs text-on-surface-variant">
-                      {line.variantName}
-                    </p>
-                  )}
-                  <p className="text-xs text-on-surface-variant">
-                    {line.isCustom
-                      ? formatCurrency(line.amount)
-                      : `${formatCurrency(line.unitPrice)} c/u`}
-                  </p>
-                </div>
+            {cart.map((line) => {
+              const finalUnitPrice = !line.isCustom
+                ? lineUnitPrice(line, employeeMode, employeeDiscountPercent)
+                : null;
+              const hasEmployeeBenefit =
+                !line.isCustom && !line.discount && employeeMode && finalUnitPrice !== line.unitPrice;
 
-                {line.isCustom ? (
-                  <button
-                    onClick={() => removeLine(line.key)}
-                    className="shrink-0 rounded-lg p-2 text-on-surface-variant transition hover:bg-error/10 hover:text-error"
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </button>
-                ) : (
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <button
-                      onClick={() => changeQuantity(line.key, -1)}
-                      className="h-7 w-7 rounded-lg border border-outline-variant text-sm font-bold text-on-surface transition hover:border-primary"
-                    >
-                      −
-                    </button>
-                    <span className="w-5 text-center text-sm font-semibold text-on-surface">
-                      {line.quantity}
-                    </span>
-                    <button
-                      onClick={() => changeQuantity(line.key, 1)}
-                      className="h-7 w-7 rounded-lg border border-outline-variant text-sm font-bold text-on-surface transition hover:border-primary"
-                    >
-                      +
-                    </button>
+              return (
+                <div
+                  key={line.key}
+                  className="rounded-xl border border-outline-variant bg-surface-container/60 p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-on-surface">
+                        {line.isCustom ? line.description : line.productName}
+                      </p>
+                      {!line.isCustom && line.variantName !== "Único" && (
+                        <p className="text-xs text-on-surface-variant">
+                          {line.variantName}
+                        </p>
+                      )}
+                      {line.isCustom ? (
+                        <p className="text-xs text-on-surface-variant">
+                          {formatCurrency(line.amount)}
+                        </p>
+                      ) : line.discount?.kind === "CORTESIA" ? (
+                        <p className="text-xs">
+                          <span className="text-on-surface-variant line-through">
+                            {formatCurrency(line.unitPrice)}
+                          </span>{" "}
+                          <span className="rounded-full bg-secondary/15 px-2 py-0.5 font-bold text-secondary">
+                            CORTESÍA
+                          </span>
+                        </p>
+                      ) : line.discount || hasEmployeeBenefit ? (
+                        <p className="text-xs">
+                          <span className="text-on-surface-variant line-through">
+                            {formatCurrency(line.unitPrice)}
+                          </span>{" "}
+                          <span className="font-semibold text-tertiary-fixed-dim">
+                            {formatCurrency(finalUnitPrice!)} c/u
+                          </span>
+                          {hasEmployeeBenefit && !line.discount && (
+                            <span className="ml-1 text-on-surface-variant">(empleado)</span>
+                          )}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-on-surface-variant">
+                          {formatCurrency(line.unitPrice)} c/u
+                        </p>
+                      )}
+                    </div>
+
+                    {line.isCustom ? (
+                      <button
+                        onClick={() => removeLine(line.key)}
+                        className="shrink-0 rounded-lg p-2 text-on-surface-variant transition hover:bg-error/10 hover:text-error"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    ) : (
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          onClick={() => changeQuantity(line.key, -1)}
+                          className="h-7 w-7 rounded-lg border border-outline-variant text-sm font-bold text-on-surface transition hover:border-primary"
+                        >
+                          −
+                        </button>
+                        <span className="w-5 text-center text-sm font-semibold text-on-surface">
+                          {line.quantity}
+                        </span>
+                        <button
+                          onClick={() => changeQuantity(line.key, 1)}
+                          className="h-7 w-7 rounded-lg border border-outline-variant text-sm font-bold text-on-surface transition hover:border-primary"
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+
+                  {!line.isCustom && (
+                    <div className="mt-1.5 flex items-center gap-3">
+                      <button
+                        onClick={() => {
+                          setItemDiscountInitialKind("DESCUENTO_NORMAL");
+                          setItemDiscountKey(line.key);
+                        }}
+                        className="text-xs font-semibold text-primary hover:underline"
+                      >
+                        {line.discount?.kind === "CORTESIA"
+                          ? "Editar cortesía"
+                          : line.discount
+                            ? "Editar descuento"
+                            : "Aplicar descuento"}
+                      </button>
+                      {!line.discount && (
+                        <button
+                          onClick={() => {
+                            setItemDiscountInitialKind("CORTESIA");
+                            setItemDiscountKey(line.key);
+                          }}
+                          className="text-xs font-semibold text-secondary hover:underline"
+                        >
+                          Marcar como cortesía
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -462,12 +687,17 @@ export default function PosSellClient({
           </div>
 
           <button
-            disabled={cart.length === 0 || !hasOpenCut}
+            disabled={cart.length === 0 || !hasOpenCut || (employeeMode && !employeeBuyerId)}
             onClick={() => setShowPayment(true)}
             className="w-full rounded-xl bg-primary py-3 text-sm font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Cobrar {cart.length > 0 ? formatCurrency(total) : ""}
           </button>
+          {employeeMode && !employeeBuyerId && (
+            <p className="text-center text-xs text-secondary">
+              Selecciona qué empleado está comprando.
+            </p>
+          )}
         </div>
       </div>
 
@@ -493,15 +723,40 @@ export default function PosSellClient({
         <DiscountModal
           subtotal={subtotal}
           initialAmount={discountAmount}
-          initialReason={discountReason}
-          onApply={(amount, reason) => {
+          initialReasonCode={discountReasonCode}
+          initialReasonNote={discountReasonNote}
+          onApply={(amount, reasonCode, reasonNote) => {
             setDiscountAmount(amount);
-            setDiscountReason(reason);
+            setDiscountReasonCode(reasonCode);
+            setDiscountReasonNote(reasonNote);
             setShowDiscount(false);
           }}
           onClose={() => setShowDiscount(false)}
         />
       )}
+
+      {itemDiscountKey &&
+        (() => {
+          const line = cart.find((l) => l.key === itemDiscountKey);
+          if (!line || line.isCustom) return null;
+          return (
+            <ItemDiscountModal
+              productLabel={
+                line.variantName !== "Único"
+                  ? `${line.productName} (${line.variantName})`
+                  : line.productName
+              }
+              unitPrice={line.unitPrice}
+              initialDiscount={line.discount}
+              initialKind={itemDiscountInitialKind}
+              onApply={(discount) => {
+                setLineDiscount(itemDiscountKey, discount);
+                setItemDiscountKey(null);
+              }}
+              onClose={() => setItemDiscountKey(null)}
+            />
+          );
+        })()}
 
       {showPayment && branch && (
         <PaymentModal
@@ -509,11 +764,16 @@ export default function PosSellClient({
           branchId={branch.id}
           cart={cart}
           discountAmount={clampedDiscount}
-          discountReason={discountReason}
+          discountReasonCode={discountReasonCode}
+          discountReasonNote={discountReasonNote}
+          employeeBuyerId={employeeMode ? employeeBuyerId : ""}
+          needsAuthorization={needsAuthorization}
+          managers={managers}
           onClose={() => setShowPayment(false)}
           onSuccess={() => {
             setShowPayment(false);
             resetSale();
+            showToast("Venta registrada correctamente.");
           }}
         />
       )}
@@ -616,21 +876,72 @@ function CustomChargeModal({
   );
 }
 
+function ReasonFields({
+  reasonCode,
+  setReasonCode,
+  reasonNote,
+  setReasonNote,
+}: {
+  reasonCode: string;
+  setReasonCode: (v: string) => void;
+  reasonNote: string;
+  setReasonNote: (v: string) => void;
+}) {
+  return (
+    <>
+      <div>
+        <label className="mb-1 block text-xs font-semibold text-on-surface-variant">
+          Motivo
+        </label>
+        <select
+          value={reasonCode}
+          onChange={(e) => setReasonCode(e.target.value)}
+          className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+        >
+          <option value="">Selecciona un motivo</option>
+          {REASON_OPTIONS.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-semibold text-on-surface-variant">
+          {reasonCode === "OTRO" ? "Escribe el motivo" : "Descripción (opcional)"}
+        </label>
+        <input
+          value={reasonNote}
+          onChange={(e) => setReasonNote(e.target.value)}
+          className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+        />
+      </div>
+    </>
+  );
+}
+
 function DiscountModal({
   subtotal,
   initialAmount,
-  initialReason,
+  initialReasonCode,
+  initialReasonNote,
   onApply,
   onClose,
 }: {
   subtotal: number;
   initialAmount: number;
-  initialReason: string;
-  onApply: (amount: number, reason: string) => void;
+  initialReasonCode: string;
+  initialReasonNote: string;
+  onApply: (amount: number, reasonCode: string, reasonNote: string) => void;
   onClose: () => void;
 }) {
   const [amount, setAmount] = useState(initialAmount || 0);
-  const [reason, setReason] = useState(initialReason);
+  const [reasonCode, setReasonCode] = useState(initialReasonCode);
+  const [reasonNote, setReasonNote] = useState(initialReasonNote);
+
+  const canApply =
+    amount > 0 ? Boolean(reasonCode) && (reasonCode !== "OTRO" || reasonNote.trim().length > 0) : true;
 
   return (
     <ModalShell title="Descuento" onClose={onClose}>
@@ -653,27 +964,211 @@ function DiscountModal({
           </p>
         </div>
 
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-on-surface-variant">
-            Motivo (opcional)
-          </label>
-          <input
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
-          />
+        <div className="flex flex-wrap gap-2">
+          {QUICK_PERCENTS.map((pct) => (
+            <button
+              key={pct}
+              onClick={() => setAmount(Math.round(subtotal * (pct / 100) * 100) / 100)}
+              className="rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface transition hover:border-primary"
+            >
+              {pct}%
+            </button>
+          ))}
         </div>
+
+        {amount > 0 && (
+          <ReasonFields
+            reasonCode={reasonCode}
+            setReasonCode={setReasonCode}
+            reasonNote={reasonNote}
+            setReasonNote={setReasonNote}
+          />
+        )}
 
         <div className="flex gap-2">
           <button
-            onClick={() => onApply(0, "")}
+            onClick={() => onApply(0, "", "")}
             className="flex-1 rounded-xl border border-outline-variant py-3 text-sm font-semibold text-on-surface-variant transition hover:border-error hover:text-error"
           >
             Quitar
           </button>
           <button
-            onClick={() => onApply(Math.min(Math.max(amount, 0), subtotal), reason)}
-            className="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-on-primary transition"
+            disabled={!canApply}
+            onClick={() =>
+              onApply(Math.min(Math.max(amount, 0), subtotal), reasonCode, reasonNote)
+            }
+            className="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-on-primary transition disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Aplicar
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+function ItemDiscountModal({
+  productLabel,
+  unitPrice,
+  initialDiscount,
+  initialKind,
+  onApply,
+  onClose,
+}: {
+  productLabel: string;
+  unitPrice: number;
+  initialDiscount: LineDiscount | null;
+  initialKind: "DESCUENTO_NORMAL" | "CORTESIA";
+  onApply: (discount: LineDiscount | null) => void;
+  onClose: () => void;
+}) {
+  const [kind, setKind] = useState<"DESCUENTO_NORMAL" | "CORTESIA">(
+    initialDiscount?.kind ?? initialKind,
+  );
+  const [type, setType] = useState<"PERCENT" | "AMOUNT">(initialDiscount?.type ?? "PERCENT");
+  const [value, setValue] = useState(initialDiscount?.value ?? 0);
+  const [reasonCode, setReasonCode] = useState(initialDiscount?.reason ?? "");
+  const [reasonNote, setReasonNote] = useState(initialDiscount?.reasonNote ?? "");
+
+  const isCortesia = kind === "CORTESIA";
+  const finalPrice = isCortesia
+    ? 0
+    : effectiveUnitPrice(
+        unitPrice,
+        value > 0 ? { kind, type, value, reason: reasonCode, reasonNote } : null,
+      );
+
+  const canApply = isCortesia
+    ? Boolean(reasonCode) && (reasonCode !== "OTRO" || reasonNote.trim().length > 0)
+    : value > 0
+      ? Boolean(reasonCode) && (reasonCode !== "OTRO" || reasonNote.trim().length > 0)
+      : true;
+
+  return (
+    <ModalShell title={`${isCortesia ? "Cortesía" : "Descuento"} — ${productLabel}`} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="rounded-xl bg-surface-container-high p-3 text-center">
+          <p className="text-xs text-on-surface-variant">Precio original</p>
+          <p className="text-lg font-bold text-on-surface">{formatCurrency(unitPrice)}</p>
+          {(isCortesia || value > 0) && (
+            <p className="mt-1 text-sm font-semibold text-tertiary-fixed-dim">
+              Precio final: {formatCurrency(finalPrice)}
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => setKind("DESCUENTO_NORMAL")}
+            className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition ${
+              kind === "DESCUENTO_NORMAL"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-outline-variant text-on-surface-variant"
+            }`}
+          >
+            Descuento
+          </button>
+          <button
+            onClick={() => setKind("CORTESIA")}
+            className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition ${
+              kind === "CORTESIA"
+                ? "border-secondary bg-secondary/10 text-secondary"
+                : "border-outline-variant text-on-surface-variant"
+            }`}
+          >
+            Cortesía
+          </button>
+        </div>
+
+        {isCortesia ? (
+          <p className="rounded-xl border border-secondary/30 bg-secondary/10 p-3 text-xs text-on-surface-variant">
+            El producto se entrega sin costo. El inventario se descuenta igual que cualquier
+            venta — solo cambia que no se cobra.
+          </p>
+        ) : (
+          <>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setType("PERCENT")}
+                className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition ${
+                  type === "PERCENT"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-outline-variant text-on-surface-variant"
+                }`}
+              >
+                Porcentaje
+              </button>
+              <button
+                onClick={() => setType("AMOUNT")}
+                className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition ${
+                  type === "AMOUNT"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-outline-variant text-on-surface-variant"
+                }`}
+              >
+                Cantidad fija
+              </button>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-on-surface-variant">
+                {type === "PERCENT" ? "Porcentaje de descuento" : "Monto de descuento"}
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={type === "PERCENT" ? 100 : unitPrice}
+                step="0.01"
+                value={value}
+                onChange={(e) => setValue(Number(e.target.value))}
+                className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+              />
+            </div>
+
+            {type === "PERCENT" && (
+              <div className="flex flex-wrap gap-2">
+                {QUICK_PERCENTS.map((pct) => (
+                  <button
+                    key={pct}
+                    onClick={() => setValue(pct)}
+                    className="rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface transition hover:border-primary"
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {(isCortesia || value > 0) && (
+          <ReasonFields
+            reasonCode={reasonCode}
+            setReasonCode={setReasonCode}
+            reasonNote={reasonNote}
+            setReasonNote={setReasonNote}
+          />
+        )}
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => onApply(null)}
+            className="flex-1 rounded-xl border border-outline-variant py-3 text-sm font-semibold text-on-surface-variant transition hover:border-error hover:text-error"
+          >
+            Quitar
+          </button>
+          <button
+            disabled={!canApply}
+            onClick={() =>
+              onApply(
+                isCortesia
+                  ? { kind: "CORTESIA", type: "PERCENT", value: 100, reason: reasonCode, reasonNote }
+                  : value > 0
+                    ? { kind: "DESCUENTO_NORMAL", type, value, reason: reasonCode, reasonNote }
+                    : null,
+              )
+            }
+            className="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-on-primary transition disabled:cursor-not-allowed disabled:opacity-40"
           >
             Aplicar
           </button>
@@ -688,7 +1183,11 @@ function PaymentModal({
   branchId,
   cart,
   discountAmount,
-  discountReason,
+  discountReasonCode,
+  discountReasonNote,
+  employeeBuyerId,
+  needsAuthorization,
+  managers,
   onClose,
   onSuccess,
 }: {
@@ -696,15 +1195,23 @@ function PaymentModal({
   branchId: string;
   cart: CartLine[];
   discountAmount: number;
-  discountReason: string;
+  discountReasonCode: string;
+  discountReasonNote: string;
+  employeeBuyerId: string;
+  needsAuthorization: boolean;
+  managers: Employee[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [rows, setRows] = useState<{ method: string; amount: number }[]>([
-    { method: "EFECTIVO", amount: total },
-  ]);
+  const isFree = total <= 0;
+  const [rows, setRows] = useState<{ method: string; amount: number }[]>(
+    isFree ? [] : [{ method: "EFECTIVO", amount: total }],
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authManagerId, setAuthManagerId] = useState("");
+  const [authPin, setAuthPin] = useState("");
+  const authReady = !needsAuthorization || (Boolean(authManagerId) && authPin.length === 4);
 
   const paid = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
   const remaining = Math.round((total - paid) * 100) / 100;
@@ -735,13 +1242,30 @@ function PaymentModal({
         body: JSON.stringify({
           branchId,
           discountAmount,
-          discountReason,
+          discountReasonCode,
+          discountReason: discountReasonNote,
+          employeeBuyerId: employeeBuyerId || undefined,
+          ...(needsAuthorization ? { authorization: { managerId: authManagerId, pin: authPin } } : {}),
           items: cart.map((line) =>
             line.isCustom
               ? { isCustom: true, description: line.description, amount: line.amount }
-              : { variantId: line.variantId, quantity: line.quantity },
+              : {
+                  variantId: line.variantId,
+                  quantity: line.quantity,
+                  ...(line.discount
+                    ? {
+                        discount: {
+                          kind: line.discount.kind,
+                          type: line.discount.type,
+                          value: line.discount.value,
+                          reason: line.discount.reason,
+                          reasonNote: line.discount.reasonNote,
+                        },
+                      }
+                    : {}),
+                },
           ),
-          payments: rows.map((r) => ({ method: r.method, amount: Number(r.amount) })),
+          payments: isFree ? [] : rows.map((r) => ({ method: r.method, amount: Number(r.amount) })),
         }),
       });
 
@@ -767,58 +1291,96 @@ function PaymentModal({
           {formatCurrency(total)}
         </p>
 
-        <div className="space-y-2">
-          {rows.map((row, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <select
-                value={row.method}
-                onChange={(e) => updateRow(index, { method: e.target.value })}
-                className="flex-1 rounded-xl border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface outline-none focus:border-primary"
-              >
-                {PAYMENT_METHODS.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={row.amount}
-                onChange={(e) => updateRow(index, { amount: Number(e.target.value) })}
-                className="w-28 rounded-xl border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface outline-none focus:border-primary"
-              />
-              {rows.length > 1 && (
-                <button
-                  onClick={() => removeRow(index)}
-                  className="rounded-lg p-2 text-on-surface-variant transition hover:bg-error/10 hover:text-error"
-                >
-                  <XIcon className="h-4 w-4" />
-                </button>
-              )}
+        {needsAuthorization && (
+          <div className="space-y-3 rounded-xl border border-secondary/40 bg-secondary/10 p-3">
+            <p className="text-xs font-semibold text-secondary">
+              Este descuento/cortesía supera tu límite. Un gerente o administrador debe
+              autorizarlo con su PIN en este dispositivo.
+            </p>
+            <select
+              value={authManagerId}
+              onChange={(e) => setAuthManagerId(e.target.value)}
+              className="w-full rounded-xl border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface outline-none focus:border-primary"
+            >
+              <option value="">Selecciona quién autoriza</option>
+              {managers.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="PIN de 4 dígitos"
+              value={authPin}
+              onChange={(e) => setAuthPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              className="w-full rounded-xl border border-outline-variant bg-surface-container px-3 py-2.5 text-center text-sm tracking-[0.5em] text-on-surface outline-none focus:border-primary"
+            />
+          </div>
+        )}
+
+        {isFree ? (
+          <p className="rounded-xl border border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 p-3 text-center text-sm font-semibold text-tertiary-fixed-dim">
+            Sin cobro — el descuento cubre el total de la venta.
+          </p>
+        ) : (
+          <>
+            <div className="space-y-2">
+              {rows.map((row, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <select
+                    value={row.method}
+                    onChange={(e) => updateRow(index, { method: e.target.value })}
+                    className="flex-1 rounded-xl border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface outline-none focus:border-primary"
+                  >
+                    {PAYMENT_METHODS.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={row.amount}
+                    onChange={(e) => updateRow(index, { amount: Number(e.target.value) })}
+                    className="w-28 rounded-xl border border-outline-variant bg-surface-container px-3 py-2.5 text-sm text-on-surface outline-none focus:border-primary"
+                  />
+                  {rows.length > 1 && (
+                    <button
+                      onClick={() => removeRow(index)}
+                      className="rounded-lg p-2 text-on-surface-variant transition hover:bg-error/10 hover:text-error"
+                    >
+                      <XIcon className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        <button
-          onClick={addRow}
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-outline-variant py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
-        >
-          <PlusIcon className="h-3.5 w-3.5" />
-          Dividir pago
-        </button>
+            <button
+              onClick={addRow}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-outline-variant py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              Dividir pago
+            </button>
 
-        <div
-          className={`flex items-center justify-between rounded-xl p-3 text-sm font-semibold ${
-            Math.abs(remaining) < 0.01
-              ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
-              : "bg-secondary/10 text-secondary"
-          }`}
-        >
-          <span>{Math.abs(remaining) < 0.01 ? "Pago completo" : "Falta por cubrir"}</span>
-          <span>{formatCurrency(Math.max(remaining, 0))}</span>
-        </div>
+            <div
+              className={`flex items-center justify-between rounded-xl p-3 text-sm font-semibold ${
+                Math.abs(remaining) < 0.01
+                  ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
+                  : "bg-secondary/10 text-secondary"
+              }`}
+            >
+              <span>{Math.abs(remaining) < 0.01 ? "Pago completo" : "Falta por cubrir"}</span>
+              <span>{formatCurrency(Math.max(remaining, 0))}</span>
+            </div>
+          </>
+        )}
 
         {error && (
           <p className="rounded-xl border border-error/30 bg-error/10 p-3 text-sm text-error">
@@ -827,7 +1389,7 @@ function PaymentModal({
         )}
 
         <button
-          disabled={Math.abs(remaining) >= 0.01 || submitting}
+          disabled={(!isFree && Math.abs(remaining) >= 0.01) || submitting || !authReady}
           onClick={submit}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-on-primary transition disabled:cursor-not-allowed disabled:opacity-40"
         >

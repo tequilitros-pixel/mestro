@@ -107,7 +107,16 @@ export default async function LotDetailPage({ params }: Props) {
           )}
         </div>
 
-        <LotMenu id={lot.id} isFinished={isFinished} />
+        <LotMenu
+          id={lot.id}
+          isFinished={isFinished}
+          processIds={{
+            cooking: lastCooking?.id,
+            milling: lastMilling?.id,
+            fermentation: lastFermentation?.id,
+            distillation: lastDistillation?.id,
+          }}
+        />
 
         {isFinished && (
           <div className="mt-8">

@@ -6,12 +6,40 @@ import {
   updateScheduleEventAction,
   deleteScheduleEventAction,
   getScheduleEventDetail,
+  getScheduleEventCost,
 } from "@/app/actions/scheduleEvents";
 import { useToast } from "@/components/ui/Toast";
-import { TrashIcon, PartyIcon } from "@/components/ui/icons";
+import { TrashIcon, PartyIcon, CoinsIcon } from "@/components/ui/icons";
 
 type Employee = { id: string; name: string };
 type BranchLite = { id: string; name: string; color: string | null };
+
+type EventCost = {
+  employees: {
+    id: string;
+    name: string;
+    plannedHours: number;
+    workedHours: number;
+    hourlyRate: number | null;
+    cost: number | null;
+  }[];
+  totals: {
+    employeeCount: number;
+    plannedHours: number;
+    workedHours: number;
+    cost: number;
+    missingRateCount: number;
+    hasOpenShift: boolean;
+  };
+};
+
+function formatHours(hours: number) {
+  return `${hours.toFixed(1)} h`;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
+}
 
 export default function EventModal({
   eventId,
@@ -50,11 +78,18 @@ export default function EventModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [cost, setCost] = useState<EventCost | null>(null);
+  const [showCostDetail, setShowCostDetail] = useState(false);
+
   useEffect(() => {
     if (!eventId) return;
 
     (async () => {
-      const result = await getScheduleEventDetail(eventId);
+      const [result, costResult] = await Promise.all([
+        getScheduleEventDetail(eventId),
+        getScheduleEventCost(eventId),
+      ]);
+
       if ("error" in result) {
         setError(result.error ?? "No se pudo cargar el evento.");
         setLoading(false);
@@ -73,6 +108,11 @@ export default function EventModal({
       setInstructions(ev.instructions ?? "");
       setInternalNotes(ev.internalNotes ?? "");
       setEmployeeIds(new Set(ev.employees.map((e) => e.id)));
+
+      if (!("error" in costResult)) {
+        setCost(costResult);
+      }
+
       setLoading(false);
     })();
   }, [eventId]);
@@ -315,6 +355,77 @@ export default function EventModal({
                   })}
                 </div>
               </div>
+
+              {isEditing && cost && (
+                <div className="space-y-3 rounded-2xl border border-outline-variant bg-background p-5">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+                    <CoinsIcon className="h-4 w-4" />
+                    Costo de mano de obra (estimado, con tarifa actual)
+                  </p>
+
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
+                        Empleados
+                      </p>
+                      <p className="mt-1 text-lg font-bold text-on-surface">
+                        {cost.totals.employeeCount}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
+                        Horas trabajadas
+                      </p>
+                      <p className="mt-1 text-lg font-bold text-on-surface">
+                        {formatHours(cost.totals.workedHours)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
+                        Mano de obra
+                      </p>
+                      <p className="mt-1 text-lg font-bold text-on-surface">
+                        {formatCurrency(cost.totals.cost)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {cost.totals.hasOpenShift && (
+                    <p className="text-xs text-secondary">
+                      Hay una checada abierta — el costo se actualizará cuando cierre.
+                    </p>
+                  )}
+                  {cost.totals.missingRateCount > 0 && (
+                    <p className="text-xs text-secondary">
+                      {cost.totals.missingRateCount} empleado(s) sin tarifa registrada, no se
+                      incluyen en el total.
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowCostDetail((v) => !v)}
+                    className="text-xs font-semibold text-primary hover:opacity-80"
+                  >
+                    {showCostDetail ? "Ocultar detalle por empleado" : "Ver detalle por empleado"}
+                  </button>
+
+                  {showCostDetail && (
+                    <div className="space-y-1.5 border-t border-outline-variant pt-3">
+                      {cost.employees.map((e) => (
+                        <div key={e.id} className="flex items-center justify-between text-xs">
+                          <span className="truncate text-on-surface-variant">{e.name}</span>
+                          <span className="shrink-0 text-on-surface-variant">
+                            {formatHours(e.workedHours)} de {formatHours(e.plannedHours)}
+                            {" · "}
+                            {e.cost !== null ? formatCurrency(e.cost) : "sin tarifa"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex flex-wrap gap-3 border-t border-outline-variant pt-5">
                 <button

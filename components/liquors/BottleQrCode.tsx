@@ -6,12 +6,14 @@ type BottleQrCodeProps = {
   value: string;
   size?: number;
   className?: string;
+  title?: string;
 };
 
 export default function BottleQrCode({
   value,
   size = 96,
   className = "",
+  title = "Código QR de la botella",
 }: BottleQrCodeProps) {
   if (!value || value === "undefined") {
     return (
@@ -38,7 +40,7 @@ export default function BottleQrCode({
         bgColor="#ffffff"
         fgColor="#000000"
         marginSize={2}
-        title="Código QR de la botella"
+        title={title}
         style={{ width: "100%", height: "100%" }}
       />
     </div>

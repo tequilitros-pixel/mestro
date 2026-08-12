@@ -14,14 +14,16 @@ import {
   BookIcon,
 } from "@/components/ui/icons";
 import { Suspense } from "react";
+import {
+  TARGET_BRIX,
+  evaluateFermentation,
+} from "@/lib/fermentation/fermentationMetrics";
 
 type Props = {
   params: Promise<{ id: string }>;
 };
 
 type NumericValue = number | null | undefined;
-
-const TARGET_BRIX = 2;
 
 export default async function FermentationDetailPage({ params }: Props) {
   const { id } = await params;
@@ -288,58 +290,22 @@ export default async function FermentationDetailPage({ params }: Props) {
 
   const initialBrix = Number(fermentation.initialBrix);
 
-  const progress =
-    initialBrix > TARGET_BRIX
-      ? Math.min(
-          100,
-          Math.max(
-            0,
-            ((initialBrix - currentBrix) /
-              (initialBrix - TARGET_BRIX)) *
-              100
-          )
-        )
-      : 0;
+  const {
+    progress,
+    temperatureStatus,
+    phStatus,
+    brixStatus,
+    health,
+  } = evaluateFermentation({
+    initialBrix,
+    currentBrix,
+    currentPh,
+    currentTemp,
+    isFinished,
+  });
 
-  const temperatureStatus =
-    currentTemp > 35
-      ? "ALTA"
-      : currentTemp < 25
-        ? "BAJA"
-        : "ÓPTIMA";
-
-  const phStatus =
-    currentPh > 5
-      ? "ALTO"
-      : currentPh < 3.8
-        ? "BAJO"
-        : "ÓPTIMO";
-
-  const brixStatus =
-    currentBrix <= TARGET_BRIX
-      ? "LISTA"
-      : currentBrix <= 5
-        ? "CERCA DE META"
-        : "DESCENDIENDO";
-
-  const temperatureNeedsAttention =
-    temperatureStatus !== "ÓPTIMA";
-
+  const temperatureNeedsAttention = temperatureStatus !== "ÓPTIMA";
   const phNeedsAttention = phStatus !== "ÓPTIMO";
-
-  const isReady = currentBrix <= TARGET_BRIX;
-
-  const health:
-    | "ATENCION"
-    | "LISTA"
-    | "SALUDABLE"
-    | "TERMINADA" = isFinished
-    ? "TERMINADA"
-    : temperatureNeedsAttention || phNeedsAttention
-      ? "ATENCION"
-      : isReady
-        ? "LISTA"
-        : "SALUDABLE";
 
   const maestroMessages = buildMaestroMessages({
     currentBrix,

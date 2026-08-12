@@ -62,13 +62,19 @@ model User {
   passwordResetCodes PasswordResetCode[]
   modulePermissions  ModulePermission[]
 
-  posCategoriesCreated PosCategory[] @relation("PosCategoryCreatedBy")
-  posProductsCreated   PosProduct[]  @relation("PosProductCreatedBy")
-  posSalesSold         PosSale[]     @relation("PosSaleSoldBy")
-  posSalesCancelled    PosSale[]     @relation("PosSaleCancelledBy")
+  posCategoriesCreated     PosCategory[]      @relation("PosCategoryCreatedBy")
+  posProductsCreated       PosProduct[]       @relation("PosProductCreatedBy")
+  posSalesSold             PosSale[]          @relation("PosSaleSoldBy")
+  posSalesCancelled        PosSale[]          @relation("PosSaleCancelledBy")
+  posSalesAsEmployeeBuyer  PosSale[]          @relation("PosSaleEmployeeBuyer")
+  posSalesAuthorized       PosSale[]          @relation("PosSaleAuthorizedBy")
+  posSaleItemsBeneficiary  PosSaleItem[]      @relation("PosSaleItemBeneficiary")
+  posSaleItemsAuthorized   PosSaleItem[]      @relation("PosSaleItemAuthorizedBy")
+  posDiscountLimitsUpdated PosDiscountLimit[] @relation("PosDiscountLimitUpdatedBy")
+  posSettingsUpdated       PosSettings[]      @relation("PosSettingsUpdatedBy")
 
-  overtimeRecords         OvertimeRecord[] @relation("OvertimeWorker")
-  overtimeRecordsReviewed OvertimeRecord[] @relation("OvertimeReviewedBy")
+  overtimeRecords         OvertimeRecord[]      @relation("OvertimeWorker")
+  overtimeRecordsReviewed OvertimeRecord[]      @relation("OvertimeReviewedBy")
   rawMaterialMovements    RawMaterialMovement[] @relation("RawMaterialMovementBy")
 
   payrollAdjustments        PayrollAdjustment[] @relation("PayrollAdjustmentOwner")
@@ -106,23 +112,23 @@ model Equipment {
 }
 
 model Lot {
-  id                  String         @id @default(cuid())
-  code                String         @unique
+  id                  String                @id @default(cuid())
+  code                String                @unique
   stage               LotStage
   agaveKg             Float
   art                 Float?
   startedAt           DateTime
   finishedAt          DateTime?
   totalLitersObtained Float?
-  qrToken             String?        @unique
+  qrToken             String?               @unique
   observations        String?
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
   ownerId             String
   cookings            Cooking[]
   distillations       Distillation[]
   fermentations       Fermentation[]
-  owner               User           @relation(fields: [ownerId], references: [id])
+  owner               User                  @relation(fields: [ownerId], references: [id])
   expenses            LotExpense[]
   millings            Milling[]
   liquorBatches       LiquorBatch[]
@@ -402,22 +408,21 @@ model RawMaterial {
   /// lotes de agave al cerrarlos. Solo uno debe tenerlo en true.
   receivesLotOutput Boolean @default(false)
 
-  /*
+  /**
    * Configuración de embotellado.
-   *
    * El tequila blanco NO es un licor que se elabore con receta: sale
    * del proceso de agave y solo se embotella o se traspasa. Por eso
    * los datos de etiquetado viven aquí y no en LiquorProduct, para
    * mantenerlo fuera del catálogo de licores.
    */
   /// Habilita embotellar directamente desde esta existencia a granel.
-  bottleable Boolean @default(false)
+  bottleable            Boolean @default(false)
   /// Prefijo de los folios de botella (ej. "TQB").
-  bottlePrefix String?
+  bottlePrefix          String?
   /// Vida útil en días que se imprime y se usa para las alertas.
-  defaultShelfLifeDays Int?
-  yellowAlertDays      Int?
-  redAlertDays         Int?
+  defaultShelfLifeDays  Int?
+  yellowAlertDays       Int?
+  redAlertDays          Int?
   showExpirationOnLabel Boolean @default(true)
 
   /// Producto de inventario equivalente, para abonar el stock de
@@ -442,8 +447,8 @@ model RawMaterial {
 ///  * traspaso a sucursal). Nunca se edita el stock a mano — siempre se
 ///  * registra un movimiento, para que exista rastro de por qué cambió.
 model RawMaterialMovement {
-  id             String @id @default(cuid())
-  rawMaterialId  String
+  id            String @id @default(cuid())
+  rawMaterialId String
 
   type     RawMaterialMovementType
   /// Positiva en entradas, negativa en salidas.
@@ -452,11 +457,11 @@ model RawMaterialMovement {
   unitCost Float?
 
   /// Lote de agave que originó el movimiento (entradas de producción).
-  lotId String?
+  lotId         String?
   /// Elaboración de licor que consumió el material.
   liquorBatchId String?
   /// Sucursal destino cuando el movimiento es un traspaso.
-  branchId String?
+  branchId      String?
 
   notes       String?
   createdById String?
@@ -526,7 +531,7 @@ model LiquorProduct {
   // los productos de licores tienen todavía su contraparte de
   // inventario configurada.
   inventoryProductId String?           @unique
-  inventoryProduct    InventoryProduct? @relation(fields: [inventoryProductId], references: [id])
+  inventoryProduct   InventoryProduct? @relation(fields: [inventoryProductId], references: [id])
 
   @@index([createdById])
   @@index([active])
@@ -635,39 +640,39 @@ model LiquorRecipeIngredient {
 ///  * LM-16-07-2026-002
 ///  * LC-18-07-2026-003
 model LiquorBatch {
-  id                   String                  @id @default(cuid())
-  code                 String                  @unique
-  sequence             Int                     @unique
-  productId            String
-  recipeId             String
-  status               LiquorBatchStatus       @default(PLANEADO)
-  plannedLiters        Float
-  actualLiters         Float?
-  initialAlcohol       Float?
-  finalAlcohol         Float?
-  productionDate       DateTime                @default(now())
-  expirationDate       DateTime?
-  qualityStatus        LiquorQualityStatus     @default(PENDIENTE)
-  startedAt            DateTime?
-  finishedAt           DateTime?
-  closureCode          String?                 @unique
-  observations         String?
-  finalNotes           String?
-  createdById          String
-  finishedById         String?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  pauseNotes           String?
-  pauseReason          String?
-  pausedAt             DateTime?
-  pausedById           String?
+  id             String              @id @default(cuid())
+  code           String              @unique
+  sequence       Int                 @unique
+  productId      String
+  recipeId       String
+  status         LiquorBatchStatus   @default(PLANEADO)
+  plannedLiters  Float
+  actualLiters   Float?
+  initialAlcohol Float?
+  finalAlcohol   Float?
+  productionDate DateTime            @default(now())
+  expirationDate DateTime?
+  qualityStatus  LiquorQualityStatus @default(PENDIENTE)
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  closureCode    String?             @unique
+  observations   String?
+  finalNotes     String?
+  createdById    String
+  finishedById   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  pauseNotes     String?
+  pauseReason    String?
+  pausedAt       DateTime?
+  pausedById     String?
 
   /// Lote de agave (proceso cocción→destilación) del que salió el
   /// destilado que alimenta esta elaboración. Opcional porque hay
   /// licores que no vienen de un lote propio (sangría, preparados).
   /// Es lo que permite responder "¿de qué lote salió esta botella?".
-  lotId                String?
-  lot                  Lot?                    @relation(fields: [lotId], references: [id])
+  lotId String?
+  lot   Lot?    @relation(fields: [lotId], references: [id])
 
   createdBy            User                    @relation("LiquorBatchCreatedBy", fields: [createdById], references: [id])
   finishedBy           User?                   @relation("LiquorBatchFinishedBy", fields: [finishedById], references: [id])
@@ -786,15 +791,15 @@ model LiquorBatchStep {
 }
 
 model LiquorBottling {
-  id              String               @id @default(cuid())
-  code            String               @unique
+  id   String @id @default(cuid())
+  code String @unique
 
   /// Elaboración de licor de origen. Opcional porque el tequila
   /// blanco se embotella directo desde la existencia a granel, sin
   /// pasar por una receta.
-  batchId         String?
+  batchId       String?
   /// Materia prima a granel de origen (tequila del proceso).
-  rawMaterialId   String?
+  rawMaterialId String?
 
   status          LiquorBottlingStatus @default(PLANEADO)
   bottleSizeMl    Int
@@ -920,7 +925,7 @@ model Branch {
   /// Color (hex) para identificar la sucursal en la cuadrícula de
   /// Horario. Si no tiene, la UI le asigna uno por defecto.
   color            String?
-  /*
+  /**
    * Geocerca del checador: si la sucursal tiene una geozona asignada,
    * el checador exige que el empleado esté dentro de ese radio (en
    * metros) para checar entrada o salida. Si no tiene geozona
@@ -934,28 +939,28 @@ model Branch {
   entries          InventoryEntry[]
   timeClockEntries TimeClockEntry[]
 
-  users               UserBranch[]
-  cashCuts            CashCut[]
-  liquorBottles       LiquorBottle[]
-  liquorMovementsFrom LiquorBottleMovement[] @relation("LiquorMovementFromBranch")
-  liquorMovementsTo   LiquorBottleMovement[] @relation("LiquorMovementToBranch")
-  cashSafeMovements   CashSafeMovement[]
-  scheduledShifts     ScheduledShift[]
-  scheduleTemplates   BranchScheduleTemplate[]
-  geofenceAlerts      GeofenceAlert[]
-  posSales            PosSale[]
-  overtimeRecords     OvertimeRecord[]
-  rawMaterialTransfers RawMaterialMovement[]
-  payrollSettings     PayrollSettings?
-  scheduleWeekTemplates ScheduleTemplate[]
+  users                  UserBranch[]
+  cashCuts               CashCut[]
+  liquorBottles          LiquorBottle[]
+  liquorMovementsFrom    LiquorBottleMovement[]   @relation("LiquorMovementFromBranch")
+  liquorMovementsTo      LiquorBottleMovement[]   @relation("LiquorMovementToBranch")
+  cashSafeMovements      CashSafeMovement[]
+  scheduledShifts        ScheduledShift[]
+  scheduleTemplates      BranchScheduleTemplate[]
+  geofenceAlerts         GeofenceAlert[]
+  posSales               PosSale[]
+  overtimeRecords        OvertimeRecord[]
+  rawMaterialTransfers   RawMaterialMovement[]
+  payrollSettings        PayrollSettings?
+  scheduleWeekTemplates  ScheduleTemplate[]
   scheduleTemplateShifts ScheduleTemplateShift[]
-  scheduleEvents        ScheduleEvent[]
+  scheduleEvents         ScheduleEvent[]
 
   @@index([active])
   @@index([geofenceId])
 }
 
-/*
+/**
  * Geozona: círculo (centro + radio en metros) que puede asignarse a
  * una o varias sucursales para restringir dónde se puede checar
  * entrada/salida. Se administra desde Horario > Geozona.
@@ -969,25 +974,25 @@ model Geofence {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  branches  Branch[]
+  branches Branch[]
 }
 
-/*
+/**
  * Alerta generada cuando un empleado con turno abierto se aleja
  * del radio permitido de su sucursal. Sirve como bitácora para
  * que un administrador la revise (checador > turnos abiertos).
  */
 model GeofenceAlert {
-  id           String   @id @default(cuid())
-  userId       String
-  branchId     String
-  timeClockId  String?
-  distance     Int
-  createdAt    DateTime @default(now())
+  id          String   @id @default(cuid())
+  userId      String
+  branchId    String
+  timeClockId String?
+  distance    Int
+  createdAt   DateTime @default(now())
 
-  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  branch     Branch          @relation(fields: [branchId], references: [id])
-  timeClock  TimeClockEntry? @relation(fields: [timeClockId], references: [id], onDelete: SetNull)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch    Branch          @relation(fields: [branchId], references: [id])
+  timeClock TimeClockEntry? @relation(fields: [timeClockId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([branchId])
@@ -1079,7 +1084,7 @@ enum CashCutStatus {
   AUDITADO
 }
 
-/*
+/**
  * Desglose de billetes/monedas contados en cada momento del corte
  * (apertura, cierre, fondo para el siguiente turno). Se guarda para
  * auditoría — el monto total sigue viviendo en CashCut.startingFund
@@ -1584,7 +1589,7 @@ model ServiceEventItem {
   recountEntries EventRecountItem[]
 }
 
-/*
+/**
  * Reconteo rápido durante un evento de varios días. Cada día del
  * evento se cuenta el stock que queda contra lo que salió
  * originalmente (ServiceEventItem.sentQuantity) para saber qué hay
@@ -1778,10 +1783,10 @@ model TimeClockEntry {
   /// programado, o el emparejamiento automático no encontró uno).
   scheduledShiftId String?
 
-  user             User            @relation("TimeClockEntries", fields: [userId], references: [id])
-  branch           Branch          @relation(fields: [branchId], references: [id])
-  closedManuallyBy User?           @relation("TimeClockClosedBy", fields: [closedManuallyById], references: [id])
-  scheduledShift   ScheduledShift? @relation(fields: [scheduledShiftId], references: [id], onDelete: SetNull)
+  user             User                   @relation("TimeClockEntries", fields: [userId], references: [id])
+  branch           Branch                 @relation(fields: [branchId], references: [id])
+  closedManuallyBy User?                  @relation("TimeClockClosedBy", fields: [closedManuallyById], references: [id])
+  scheduledShift   ScheduledShift?        @relation(fields: [scheduledShiftId], references: [id], onDelete: SetNull)
   geofenceAlerts   GeofenceAlert[]
   editRequests     TimeClockEditRequest[]
 
@@ -1796,16 +1801,16 @@ enum TimeClockSource {
   MANUAL
 }
 
-/*
+/**
  * Solicitud del empleado para corregir las horas de un turno ya
  * cerrado en el checador. No se aplica de inmediato: queda
  * pendiente hasta que un administrador la aprueba o la rechaza
  * (checador > turnos abiertos > solicitudes de edición).
  */
 model TimeClockEditRequest {
-  id       String @id @default(cuid())
+  id          String @id @default(cuid())
   timeClockId String
-  userId   String
+  userId      String
 
   /// Horas originales del turno al momento de crear la solicitud
   /// (para poder mostrar "antes / después" aunque el turno cambie).
@@ -1824,9 +1829,9 @@ model TimeClockEditRequest {
 
   createdAt DateTime @default(now())
 
-  timeClock TimeClockEntry @relation(fields: [timeClockId], references: [id], onDelete: Cascade)
-  user      User           @relation("TimeClockEditRequestedBy", fields: [userId], references: [id], onDelete: Cascade)
-  reviewedBy User?         @relation("TimeClockEditReviewedBy", fields: [reviewedById], references: [id])
+  timeClock  TimeClockEntry @relation(fields: [timeClockId], references: [id], onDelete: Cascade)
+  user       User           @relation("TimeClockEditRequestedBy", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User?          @relation("TimeClockEditReviewedBy", fields: [reviewedById], references: [id])
 
   @@index([timeClockId])
   @@index([userId])
@@ -1840,8 +1845,8 @@ enum TimeClockEditStatus {
 }
 
 model ScheduledShift {
-  id     String     @id @default(cuid())
-  userId String
+  id       String   @id @default(cuid())
+  userId   String
   /// Nulo cuando type = DESCANSO (día libre, no tiene sucursal).
   branchId String?
   date     DateTime
@@ -1857,7 +1862,7 @@ model ScheduledShift {
   /// Puesto/función de este turno (texto libre), ej. "Bartender".
   position String?
 
-  notes     String?
+  notes String?
 
   /// Si este turno es la asignación de un empleado a un evento puntual
   /// (boda, XV años, feria, etc.), apunta al ScheduleEvent que trae el
@@ -1868,9 +1873,9 @@ model ScheduledShift {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user   User    @relation("ScheduledShifts", fields: [userId], references: [id], onDelete: Cascade)
-  branch Branch? @relation(fields: [branchId], references: [id])
-  event  ScheduleEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  user             User             @relation("ScheduledShifts", fields: [userId], references: [id], onDelete: Cascade)
+  branch           Branch?          @relation(fields: [branchId], references: [id])
+  event            ScheduleEvent?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
   timeClockEntries TimeClockEntry[]
 
   @@index([userId])
@@ -1884,12 +1889,11 @@ enum ShiftType {
   DESCANSO
 }
 
-/*
+/**
  * Historial de sueldo por empleado. Cambiar el sueldo hoy crea un
  * registro nuevo con `effectiveFrom` desde hoy; los anteriores se
  * cierran con `effectiveTo`. Así, calcular la nómina de una semana
  * pasada usa la tarifa que estaba vigente ENTONCES, no la actual.
- *
  * `User.hourlyRate` se mantiene como caché de la tarifa HORA vigente
  * (lo sigue usando el checador y el dashboard de nómina actual) y se
  * sincroniza automáticamente cada vez que se registra una tarifa
@@ -1924,15 +1928,15 @@ enum SalarySchemeType {
   SEMANA
 }
 
-/*
+/**
  * Estado de publicación del horario semanal (una fila por semana,
  * global para toda la empresa). Mientras está en DRAFT, solo los
  * administradores lo ven en la cuadrícula de Horario. Al publicarlo,
  * los empleados empiezan a verlo en su calendario (/timeclock/calendar).
  */
 model ScheduleWeek {
-  id       String             @id @default(cuid())
-  weekStart DateTime          @unique
+  id        String             @id @default(cuid())
+  weekStart DateTime           @unique
   status    ScheduleWeekStatus @default(DRAFT)
 
   publishedAt   DateTime?
@@ -1950,9 +1954,8 @@ enum ScheduleWeekStatus {
   PUBLISHED
 }
 
-/*
+/**
  * Plantilla de horario por sucursal.
- *
  * Define el horario estándar (entrada/salida) de una sucursal
  * para cada día de la semana (0 = lunes ... 6 = domingo, igual
  * que en ScheduleBuilder). Se usa para autocompletar horas al
@@ -1974,10 +1977,9 @@ model BranchScheduleTemplate {
   @@index([branchId])
 }
 
-/*
+/**
  * Plantilla de SEMANA completa y reutilizable (distinta de
  * BranchScheduleTemplate, que solo es el horario estándar por día).
- *
  * Guarda una "foto" de lunes a domingo: qué empleado trabaja qué día,
  * en qué sucursal, con qué horario y puesto. Es independiente de la
  * semana real de la que se creó — modificar esa semana después NO
@@ -2035,20 +2037,19 @@ model ScheduleTemplateShift {
   @@index([branchId])
 }
 
-/*
+/**
  * Evento puntual (boda, XV años, feria, servicio de barra, etc.): un
  * trabajo real en una fecha determinada, distinto de una plantilla
  * reutilizable. La info (nombre, descripción, ubicación, instrucciones)
  * vive UNA sola vez aquí; cada empleado asignado tiene su propio
  * ScheduledShift (con este id en `eventId`), así que el checador y la
  * nómina siguen viendo turnos normales sin ningún cambio.
- *
  * Un evento nunca se convierte automáticamente en plantilla — eso
  * requiere la acción explícita "Guardar como plantilla" sobre la
  * semana, que además ignora los turnos que tengan eventId.
  */
 model ScheduleEvent {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
 
@@ -2064,7 +2065,7 @@ model ScheduleEvent {
   position String?
 
   /// Instrucciones para el personal (visibles también al empleado).
-  instructions String?
+  instructions  String?
   /// Notas internas, solo para administración.
   internalNotes String?
 
@@ -2093,18 +2094,18 @@ model ScheduleEvent {
 ///  * aprobar, para que un cambio posterior de sueldo no altere una
 ///  * nómina ya autorizada.
 model OvertimeRecord {
-  id       String   @id @default(cuid())
-  userId   String
-  branchId String
+  id        String   @id @default(cuid())
+  userId    String
+  branchId  String
   /// Lunes de la semana a la que corresponde el tiempo extra.
   weekStart DateTime
 
   /// Horas trabajadas en la semana por encima del umbral configurado.
   overtimeHours Decimal @db.Decimal(10, 2)
   /// Horas pagadas al primer multiplicador (por ley, las primeras 9).
-  doubleHours   Decimal @db.Decimal(10, 2) @default(0)
+  doubleHours   Decimal @default(0) @db.Decimal(10, 2)
   /// Horas pagadas al segundo multiplicador (a partir de la 10a).
-  tripleHours   Decimal @db.Decimal(10, 2) @default(0)
+  tripleHours   Decimal @default(0) @db.Decimal(10, 2)
 
   /// Tarifa base por hora usada en el cálculo (se congela al aprobar).
   hourlyRate Decimal? @db.Decimal(10, 2)
@@ -2141,15 +2142,15 @@ enum OvertimeStatus {
 /// préstamos, faltas de caja, premios, etc). Se capturan por semana
 /// y se suman/restan al pago estimado de esa semana.
 model PayrollAdjustment {
-  id     String @id @default(cuid())
-  userId String
+  id        String   @id @default(cuid())
+  userId    String
   /// Lunes de la semana a la que corresponde el ajuste (mismo grano
   /// que OvertimeRecord.weekStart).
   weekStart DateTime
 
   type    PayrollAdjustmentType
   concept String
-  amount  Decimal @db.Decimal(10, 2)
+  amount  Decimal               @db.Decimal(10, 2)
   notes   String?
 
   createdById String
@@ -2195,9 +2196,9 @@ model PayrollPeriod {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  submittedBy User? @relation("PayrollPeriodSubmittedBy", fields: [submittedById], references: [id])
-  approvedBy  User? @relation("PayrollPeriodApprovedBy", fields: [approvedById], references: [id])
-  paidBy      User? @relation("PayrollPeriodPaidBy", fields: [paidById], references: [id])
+  submittedBy User?          @relation("PayrollPeriodSubmittedBy", fields: [submittedById], references: [id])
+  approvedBy  User?          @relation("PayrollPeriodApprovedBy", fields: [approvedById], references: [id])
+  paidBy      User?          @relation("PayrollPeriodPaidBy", fields: [paidById], references: [id])
   entries     PayrollEntry[]
 
   @@index([status])
@@ -2226,11 +2227,11 @@ model PayrollEntry {
   totalHours       Decimal  @db.Decimal(10, 2)
   basePay          Decimal  @db.Decimal(12, 2)
   overtimePay      Decimal  @db.Decimal(12, 2)
-  adjustmentsTotal Decimal  @db.Decimal(12, 2) @default(0)
+  adjustmentsTotal Decimal  @default(0) @db.Decimal(12, 2)
   totalPay         Decimal  @db.Decimal(12, 2)
 
-  hoursByDay   Json
-  daysSnapshot Json
+  hoursByDay          Json
+  daysSnapshot        Json
   adjustmentsSnapshot Json @default("[]")
 
   createdAt DateTime @default(now())
@@ -2274,20 +2275,20 @@ model PayrollSettings {
   branchId String? @unique
 
   /// Horas semanales a partir de las cuales cuenta como tiempo extra.
-  weeklyHourThreshold Decimal @db.Decimal(5, 2) @default(48)
+  weeklyHourThreshold  Decimal @default(48) @db.Decimal(5, 2)
   /// Horas extra por semana que se pagan al primer multiplicador.
-  firstTierHours      Decimal @db.Decimal(5, 2) @default(9)
+  firstTierHours       Decimal @default(9) @db.Decimal(5, 2)
   /// Multiplicador de las primeras horas extra (por ley, 2x).
-  firstTierMultiplier Decimal @db.Decimal(5, 2) @default(2)
+  firstTierMultiplier  Decimal @default(2) @db.Decimal(5, 2)
   /// Multiplicador de las horas extra restantes (por ley, 3x).
-  secondTierMultiplier Decimal @db.Decimal(5, 2) @default(3)
+  secondTierMultiplier Decimal @default(3) @db.Decimal(5, 2)
 
   updatedAt DateTime @updatedAt
 
   branch Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
 }
 
-/*
+/**
  * ==========================================================
  * Punto de Venta (POS)
  * ----------------------------------------------------------
@@ -2297,7 +2298,6 @@ model PayrollSettings {
  * (PosVariantIngredient), que apunta a InventoryProduct — el
  * mismo catálogo que ya usa Administración > Inventario — así
  * que vender descuenta del mismo stock por sucursal.
- *
  * El descuento/reversión de inventario se hace creando
  * InventoryEntry con type VENTA_POS / DEVOLUCION_POS: se suman
  * igual que cualquier otra entrada en computeStockMatrix, sin
@@ -2321,7 +2321,7 @@ model PosCategory {
 }
 
 model PosProduct {
-  id         String  @id @default(cuid())
+  id         String      @id @default(cuid())
   categoryId String
   category   PosCategory @relation(fields: [categoryId], references: [id])
 
@@ -2329,6 +2329,11 @@ model PosProduct {
   icon     String?
   active   Boolean @default(true)
   position Int     @default(0)
+
+  // Marca productos sujetos a la política de límite mensual de
+  // botellas por empleado (configurable en PosSettings). No aplica
+  // a bebidas preparadas ni cobros normales.
+  isBottleItem Boolean @default(false)
 
   createdById String?
   createdBy   User?   @relation("PosProductCreatedBy", fields: [createdById], references: [id])
@@ -2349,8 +2354,13 @@ model PosProductVariant {
   // "Único" cuando el producto no maneja variantes reales.
   name     String
   price    Float
-  position Int    @default(0)
+  position Int     @default(0)
   active   Boolean @default(true)
+
+  // Precio especial de empleado. Si es null, la venta a empleado
+  // usa el descuento genérico (PosSettings.employeeDiscountPercent)
+  // sobre `price`. Nunca se combinan los dos beneficios.
+  employeePrice Float?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2381,6 +2391,32 @@ enum PosSaleStatus {
   CANCELADA
 }
 
+/**
+ * Distingue el TIPO de beneficio aplicado a una venta o línea:
+ * un descuento normal, el precio/beneficio de empleado, o una
+ * cortesía. Aunque el resultado económico pueda coincidir (p. ej.
+ * un descuento del 100% y una cortesía ambos cobran $0), nunca se
+ * tratan como lo mismo — la cortesía siempre queda identificada
+ * explícitamente para auditoría, inventario y reportes.
+ */
+enum PosDiscountKind {
+  DESCUENTO_NORMAL
+  DESCUENTO_EMPLEADO
+  CORTESIA
+}
+
+enum PosBenefitReason {
+  CLIENTE_FRECUENTE
+  PROMOCION
+  COMPENSACION
+  CONVENIO
+  AUTORIZACION_GERENTE
+  CUMPLEANOS
+  EVENTO
+  INVITADO
+  OTRO
+}
+
 model PosSale {
   id       String @id @default(cuid())
   code     String @unique
@@ -2397,6 +2433,23 @@ model PosSale {
   discountAmount Float   @default(0)
   discountReason String?
   total          Float
+
+  // Tipo/motivo estructurado del descuento aplicado a TODA la venta
+  // (independiente de los beneficios por línea en PosSaleItem).
+  discountKind       PosDiscountKind?
+  discountReasonCode PosBenefitReason?
+
+  // "Venta a empleado": el empleado beneficiado por los precios de
+  // empleado aplicados en esta venta (ver PosSaleItem.beneficiaryEmployeeId
+  // para el detalle por línea).
+  employeeBuyerId String?
+  employeeBuyer   User?   @relation("PosSaleEmployeeBuyer", fields: [employeeBuyerId], references: [id])
+
+  // Autorización en el mismo dispositivo cuando el descuento supera
+  // el límite del cajero (PosDiscountLimit).
+  authorizedById String?
+  authorizedBy   User?     @relation("PosSaleAuthorizedBy", fields: [authorizedById], references: [id])
+  authorizedAt   DateTime?
 
   status PosSaleStatus @default(COMPLETADA)
 
@@ -2415,6 +2468,8 @@ model PosSale {
   @@index([soldById])
   @@index([status])
   @@index([createdAt])
+  @@index([employeeBuyerId])
+  @@index([discountKind])
 }
 
 model PosSaleItem {
@@ -2436,8 +2491,29 @@ model PosSaleItem {
   isCustom    Boolean @default(false)
   description String?
 
+  // Beneficio aplicado a esta línea específica (descuento por
+  // producto, precio de empleado, o cortesía). Null = línea normal
+  // sin beneficio.
+  discountKind       PosDiscountKind?
+  discountReason     PosBenefitReason?
+  discountReasonNote String?
+
+  // Snapshot del precio de catálogo antes de aplicar el beneficio,
+  // para poder calcular su valor económico aunque el precio cambie
+  // después. benefitAmount = (originalUnitPrice - unitPrice) × quantity.
+  originalUnitPrice Float?
+  benefitAmount     Float?
+
+  beneficiaryEmployeeId String?
+  beneficiaryEmployee   User?   @relation("PosSaleItemBeneficiary", fields: [beneficiaryEmployeeId], references: [id])
+
+  authorizedById String?
+  authorizedBy   User?   @relation("PosSaleItemAuthorizedBy", fields: [authorizedById], references: [id])
+
   @@index([saleId])
   @@index([variantId])
+  @@index([discountKind])
+  @@index([beneficiaryEmployeeId])
 }
 
 model PosSalePayment {
@@ -2451,7 +2527,33 @@ model PosSalePayment {
   @@index([saleId])
 }
 
-/*
+// Descuento máximo (%) que puede aplicar cada rol sin necesitar
+// autorización de un superior. Si el rol no tiene fila, se asume
+// sin límite (solo debería pasar con ADMIN).
+model PosDiscountLimit {
+  id         String   @id @default(cuid())
+  role       UserRole @unique
+  maxPercent Float
+  updatedAt  DateTime @updatedAt
+
+  updatedById String?
+  updatedBy   User?   @relation("PosDiscountLimitUpdatedBy", fields: [updatedById], references: [id])
+}
+
+// Configuración global del Punto de Venta editable desde
+// Administración. Fila única (id fijo) — mismo patrón que
+// PayrollSettings.
+model PosSettings {
+  id                         String   @id @default("default")
+  employeeDiscountPercent    Float    @default(50)
+  employeeBottleMonthlyLimit Int      @default(2)
+  updatedAt                  DateTime @updatedAt
+
+  updatedById String?
+  updatedBy   User?   @relation("PosSettingsUpdatedBy", fields: [updatedById], references: [id])
+}
+
+/**
  * Reglas de notificaciones push configurables desde Personal.
  * Un solo cron (GitHub Action, cada hora) llama a
  * /api/push/check-rules, que recorre las reglas activas y solo
@@ -2468,10 +2570,10 @@ enum NotificationTriggerType {
 }
 
 model NotificationRule {
-  id          String                   @id @default(cuid())
+  id          String                  @id @default(cuid())
   name        String
   triggerType NotificationTriggerType
-  active      Boolean                  @default(true)
+  active      Boolean                 @default(true)
 
   // Destinatarios: roles que reciben esta notificación.
   recipientRoles UserRole[]

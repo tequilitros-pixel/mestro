@@ -1,8 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   reactCompiler: true,
+  // El adaptador y el pool dependen de clases CommonJS de node-postgres.
+  // Se cargan con require nativo de Node para evitar que Turbopack altere
+  // sus constructores al incluirlos en el bundle de componentes servidor.
+  serverExternalPackages: ["@prisma/adapter-pg", "pg", "pg-pool"],
   async headers() {
     return [
       {

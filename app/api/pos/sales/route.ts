@@ -1,18 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
-import { PaymentMethod } from "@prisma/client";
+import { PaymentMethod, PosBenefitReason } from "@prisma/client";
+import { getDiscountLimitsByRole, verifyManagerPin } from "@/lib/pos/discountLimits";
 
 const ROLES_QUE_PUEDEN_VENDER = ["ADMIN", "GERENTE", "ENCARGADO"];
 
+const VALID_REASONS = new Set(Object.values(PosBenefitReason));
+
+type ItemDiscountInput = {
+  kind?: "DESCUENTO_NORMAL" | "CORTESIA";
+  type: "PERCENT" | "AMOUNT";
+  value: number;
+  reason: string;
+  reasonNote?: string;
+};
+
 type CartItemInput =
-  | { variantId: string; quantity: number; isCustom?: false }
+  | {
+      variantId: string;
+      quantity: number;
+      isCustom?: false;
+      discount?: ItemDiscountInput;
+    }
   | {
       isCustom: true;
       description: string;
       amount: number;
       quantity?: number;
     };
+
+function validateReason(
+  reason: string | undefined,
+  reasonNote: string | undefined,
+): { reason: PosBenefitReason; reasonNote: string | null } | { error: string } {
+  if (!reason || !VALID_REASONS.has(reason as PosBenefitReason)) {
+    return { error: "Selecciona un motivo válido para el descuento." };
+  }
+  if (reason === "OTRO" && !reasonNote?.trim()) {
+    return { error: "Escribe el motivo cuando seleccionas \"Otro\"." };
+  }
+  return { reason: reason as PosBenefitReason, reasonNote: reasonNote?.trim() || null };
+}
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -83,17 +112,34 @@ export async function POST(request: NextRequest) {
     items,
     discountAmount: rawDiscountAmount,
     discountReason,
+    discountReasonCode,
+    employeeBuyerId,
     payments,
+    authorization,
   }: {
     branchId?: string;
     items?: CartItemInput[];
     discountAmount?: number;
     discountReason?: string;
+    discountReasonCode?: string;
+    employeeBuyerId?: string;
     payments?: { method: string; amount: number }[];
+    authorization?: { managerId?: string; pin?: string };
   } = body;
 
   if (!branchId) {
     return NextResponse.json({ error: "Selecciona la sucursal." }, { status: 400 });
+  }
+
+  let employeeBuyer: { id: string; name: string } | null = null;
+  if (employeeBuyerId) {
+    employeeBuyer = await prisma.user.findFirst({
+      where: { id: employeeBuyerId, active: true },
+      select: { id: true, name: true },
+    });
+    if (!employeeBuyer) {
+      return NextResponse.json({ error: "El empleado seleccionado no es válido." }, { status: 400 });
+    }
   }
 
   if (user.role === "GERENTE" || user.role === "ENCARGADO") {
@@ -109,10 +155,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Agrega al menos un producto o cobro." }, { status: 400 });
   }
 
-  if (!Array.isArray(payments) || payments.length === 0) {
+  if (!Array.isArray(payments)) {
     return NextResponse.json({ error: "Selecciona al menos un método de pago." }, { status: 400 });
   }
 
+  // La lista de pagos puede venir vacía solo cuando el total termina
+  // en $0 (p. ej. una venta 100% con descuento o cortesía) — se
+  // valida abajo, ya con el total real calculado.
   const validMethods = new Set(Object.values(PaymentMethod));
   for (const payment of payments) {
     if (!validMethods.has(payment.method as PaymentMethod) || !(payment.amount > 0)) {
@@ -155,6 +204,12 @@ export async function POST(request: NextRequest) {
 
   const variantsById = new Map(variants.map((v) => [v.id, v]));
 
+  let employeeDiscountPercent = 50;
+  if (employeeBuyer) {
+    const settings = await prisma.posSettings.findUnique({ where: { id: "default" } });
+    employeeDiscountPercent = settings?.employeeDiscountPercent ?? 50;
+  }
+
   type ResolvedItem = {
     variantId: string | null;
     name: string;
@@ -163,6 +218,13 @@ export async function POST(request: NextRequest) {
     lineTotal: number;
     isCustom: boolean;
     description: string | null;
+    discountKind: "DESCUENTO_NORMAL" | "DESCUENTO_EMPLEADO" | "CORTESIA" | null;
+    discountReason: PosBenefitReason | null;
+    discountReasonNote: string | null;
+    originalUnitPrice: number | null;
+    benefitAmount: number | null;
+    beneficiaryEmployeeId: string | null;
+    authorizedById: string | null;
   };
 
   const resolvedItems: ResolvedItem[] = [];
@@ -191,6 +253,13 @@ export async function POST(request: NextRequest) {
         lineTotal: amount,
         isCustom: true,
         description: item.description.trim(),
+        discountKind: null,
+        discountReason: null,
+        discountReasonNote: null,
+        originalUnitPrice: null,
+        benefitAmount: null,
+        beneficiaryEmployeeId: null,
+        authorizedById: null,
       });
       continue;
     }
@@ -210,14 +279,89 @@ export async function POST(request: NextRequest) {
         ? `${variant.product.name} (${variant.name})`
         : variant.product.name;
 
+    let unitPrice = variant.price;
+    let discountKind: "DESCUENTO_NORMAL" | "DESCUENTO_EMPLEADO" | "CORTESIA" | null = null;
+    let discountReasonValue: PosBenefitReason | null = null;
+    let discountReasonNote: string | null = null;
+    let originalUnitPrice: number | null = null;
+    let beneficiaryEmployeeId: string | null = null;
+
+    if (item.discount?.kind === "CORTESIA") {
+      // Cortesía: el producto se entrega sin costo, pero NUNCA se
+      // trata como un descuento del 100% — queda marcada con su
+      // propio tipo para auditoría, inventario y reportes. El motivo
+      // sigue siendo obligatorio.
+      const reasonResult = validateReason(item.discount.reason, item.discount.reasonNote);
+      if ("error" in reasonResult) {
+        return NextResponse.json({ error: `${reasonResult.error} (${label})` }, { status: 400 });
+      }
+
+      unitPrice = 0;
+      discountKind = "CORTESIA";
+      discountReasonValue = reasonResult.reason;
+      discountReasonNote = reasonResult.reasonNote;
+      originalUnitPrice = variant.price;
+    } else if (item.discount) {
+      const { type, value } = item.discount;
+
+      if (type === "PERCENT") {
+        if (!(value > 0) || value > 100) {
+          return NextResponse.json(
+            { error: `Porcentaje de descuento inválido para ${label}.` },
+            { status: 400 }
+          );
+        }
+        unitPrice = variant.price * (1 - value / 100);
+      } else if (type === "AMOUNT") {
+        if (!(value > 0) || value > variant.price) {
+          return NextResponse.json(
+            { error: `Monto de descuento inválido para ${label}.` },
+            { status: 400 }
+          );
+        }
+        unitPrice = variant.price - value;
+      } else {
+        return NextResponse.json({ error: `Tipo de descuento inválido para ${label}.` }, { status: 400 });
+      }
+
+      const reasonResult = validateReason(item.discount.reason, item.discount.reasonNote);
+      if ("error" in reasonResult) {
+        return NextResponse.json({ error: `${reasonResult.error} (${label})` }, { status: 400 });
+      }
+
+      unitPrice = Math.max(0, Math.round(unitPrice * 100) / 100);
+      discountKind = "DESCUENTO_NORMAL";
+      discountReasonValue = reasonResult.reason;
+      discountReasonNote = reasonResult.reasonNote;
+      originalUnitPrice = variant.price;
+    } else if (employeeBuyer) {
+      // Precio de empleado: si el producto tiene precio especial se
+      // usa ese; si no, se aplica el % genérico configurado. Nunca
+      // se combina con un descuento manual (ver el `if` de arriba).
+      const employeeUnitPrice =
+        variant.employeePrice ?? variant.price * (1 - employeeDiscountPercent / 100);
+
+      unitPrice = Math.max(0, Math.round(employeeUnitPrice * 100) / 100);
+      discountKind = "DESCUENTO_EMPLEADO";
+      originalUnitPrice = variant.price;
+      beneficiaryEmployeeId = employeeBuyer.id;
+    }
+
     resolvedItems.push({
       variantId: variant.id,
       name: label,
-      unitPrice: variant.price,
+      unitPrice,
       quantity,
-      lineTotal: variant.price * quantity,
+      lineTotal: unitPrice * quantity,
       isCustom: false,
       description: null,
+      discountKind,
+      discountReason: discountReasonValue,
+      discountReasonNote,
+      originalUnitPrice,
+      benefitAmount: originalUnitPrice !== null ? (originalUnitPrice - unitPrice) * quantity : null,
+      beneficiaryEmployeeId,
+      authorizedById: null,
     });
   }
 
@@ -227,6 +371,69 @@ export async function POST(request: NextRequest) {
     subtotal
   );
   const total = subtotal - discountAmount;
+
+  let saleDiscountReasonCode: PosBenefitReason | null = null;
+  let saleDiscountNote: string | null = null;
+
+  if (discountAmount > 0) {
+    const reasonResult = validateReason(discountReasonCode, discountReason);
+    if ("error" in reasonResult) {
+      return NextResponse.json({ error: reasonResult.error }, { status: 400 });
+    }
+    saleDiscountReasonCode = reasonResult.reason;
+    saleDiscountNote = reasonResult.reasonNote;
+  }
+
+  // Descuentos/cortesías normales (no precio de empleado, que es una
+  // política fija y no una decisión del cajero) que superan el
+  // límite configurado para su rol necesitan que un gerente/admin
+  // autorice reautenticándose en el mismo dispositivo.
+  const limitsByRole = await getDiscountLimitsByRole();
+  const userMaxPercent = limitsByRole.get(user.role) ?? null;
+
+  let authorizedByManager: { id: string; name: string } | null = null;
+
+  if (userMaxPercent !== null) {
+    const itemsOverLimit = resolvedItems.filter((item) => {
+      if (item.discountKind !== "DESCUENTO_NORMAL" && item.discountKind !== "CORTESIA") return false;
+      if (item.originalUnitPrice === null || item.originalUnitPrice === 0) return false;
+      const pct = ((item.originalUnitPrice - item.unitPrice) / item.originalUnitPrice) * 100;
+      return pct > userMaxPercent;
+    });
+
+    const saleDiscountPct = subtotal > 0 ? (discountAmount / subtotal) * 100 : 0;
+    const saleOverLimit = discountAmount > 0 && saleDiscountPct > userMaxPercent;
+
+    if (itemsOverLimit.length > 0 || saleOverLimit) {
+      if (!authorization?.managerId || !authorization?.pin) {
+        return NextResponse.json(
+          {
+            error: `Este descuento supera tu límite de ${userMaxPercent}%. Pide a un gerente o administrador que lo autorice.`,
+            requiresAuthorization: true,
+          },
+          { status: 400 }
+        );
+      }
+
+      const managerResult = await verifyManagerPin(authorization.managerId, authorization.pin);
+      if ("error" in managerResult) {
+        return NextResponse.json(
+          { error: managerResult.error, requiresAuthorization: true },
+          { status: 400 }
+        );
+      }
+
+      authorizedByManager = managerResult;
+
+      for (const item of itemsOverLimit) {
+        item.authorizedById = authorizedByManager.id;
+      }
+    }
+  }
+
+  if (total > 0 && payments.length === 0) {
+    return NextResponse.json({ error: "Selecciona al menos un método de pago." }, { status: 400 });
+  }
 
   const paymentsTotal = payments.reduce((sum, p) => sum + Number(p.amount), 0);
 
@@ -257,7 +464,12 @@ export async function POST(request: NextRequest) {
         soldById: user.id,
         subtotal,
         discountAmount,
-        discountReason: discountAmount > 0 ? (discountReason?.trim() || null) : null,
+        discountReason: saleDiscountNote,
+        discountKind: discountAmount > 0 ? "DESCUENTO_NORMAL" : null,
+        discountReasonCode: saleDiscountReasonCode,
+        employeeBuyerId: employeeBuyer?.id ?? null,
+        authorizedById: authorizedByManager?.id ?? null,
+        authorizedAt: authorizedByManager ? new Date() : null,
         total,
         items: {
           create: resolvedItems.map((item) => ({
@@ -268,6 +480,13 @@ export async function POST(request: NextRequest) {
             lineTotal: item.lineTotal,
             isCustom: item.isCustom,
             description: item.description,
+            discountKind: item.discountKind,
+            discountReason: item.discountReason,
+            discountReasonNote: item.discountReasonNote,
+            originalUnitPrice: item.originalUnitPrice,
+            benefitAmount: item.benefitAmount,
+            beneficiaryEmployeeId: item.beneficiaryEmployeeId,
+            authorizedById: item.authorizedById,
           })),
         },
         payments: {
