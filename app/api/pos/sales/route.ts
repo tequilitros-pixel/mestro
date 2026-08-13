@@ -131,13 +131,31 @@ export async function POST(request: NextRequest) {
     clientCreatedAt?: string;
   } = body;
 
-  if (clientOperationId) {
-    const existing = await prisma.posSale.findUnique({ where: { id: clientOperationId }, include: { items: true, payments: true, branch: true } });
-    if (existing) return NextResponse.json(existing);
-  }
-
   if (!branchId) {
     return NextResponse.json({ error: "Selecciona la sucursal." }, { status: 400 });
+  }
+
+  const hasBranchAccess = async (id: string) => {
+    if (user.role === "ADMIN") return true;
+    const access = await prisma.userBranch.findFirst({ where: { userId: user.id, branchId: id } });
+    return !!access;
+  };
+
+  if (!(await hasBranchAccess(branchId))) {
+    return NextResponse.json({ error: "No autorizado en esta sucursal" }, { status: 403 });
+  }
+
+  // El chequeo de idempotencia va DESPUÉS de validar acceso a la
+  // sucursal: si no, un clientOperationId adivinado o reutilizado
+  // podría devolver los datos de una venta de otra sucursal.
+  if (clientOperationId) {
+    const existing = await prisma.posSale.findUnique({ where: { id: clientOperationId }, include: { items: true, payments: true, branch: true } });
+    if (existing) {
+      if (!(await hasBranchAccess(existing.branchId))) {
+        return NextResponse.json({ error: "No autorizado en esta sucursal" }, { status: 403 });
+      }
+      return NextResponse.json(existing);
+    }
   }
 
   let employeeBuyer: { id: string; name: string } | null = null;
@@ -148,15 +166,6 @@ export async function POST(request: NextRequest) {
     });
     if (!employeeBuyer) {
       return NextResponse.json({ error: "El empleado seleccionado no es válido." }, { status: 400 });
-    }
-  }
-
-  if (user.role === "GERENTE" || user.role === "ENCARGADO") {
-    const hasAccess = await prisma.userBranch.findFirst({
-      where: { userId: user.id, branchId },
-    });
-    if (!hasAccess) {
-      return NextResponse.json({ error: "No autorizado en esta sucursal" }, { status: 403 });
     }
   }
 
