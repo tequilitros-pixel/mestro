@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
 
 const ROLES_QUE_PUEDEN_EDITAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -15,8 +16,18 @@ async function recalcularTotalSalidas(cashCutId: string) {
 }
 
 async function checkAccessToCut(userId: string, role: string, cashCutId: string) {
-  const cashCut = await prisma.cashCut.findUnique({
-    where: { id: cashCutId },
+  /*
+   * El alcance se resuelve desde la sesion, no desde los parametros.
+   * Los argumentos solo se usan para comprobar que coinciden con la
+   * sesion real; si no, se rechaza.
+   */
+  const scope = await getCashCutScope();
+  if (!scope || scope.user.id !== userId || scope.user.role !== role) {
+    return { ok: false, status: 401 as const, error: "No autorizado", cashCut: null };
+  }
+
+  const cashCut = await prisma.cashCut.findFirst({
+    where: withCashCutScope(scope, { id: cashCutId }),
     select: { branchId: true, status: true },
   });
 
@@ -24,14 +35,6 @@ async function checkAccessToCut(userId: string, role: string, cashCutId: string)
     return { ok: false, status: 404 as const, error: "Corte no encontrado", cashCut: null };
   }
 
-  if (role === "GERENTE" || role === "ENCARGADO") {
-    const hasAccess = await prisma.userBranch.findFirst({
-      where: { userId, branchId: cashCut.branchId },
-    });
-    if (!hasAccess) {
-      return { ok: false, status: 403 as const, error: "No autorizado", cashCut: null };
-    }
-  }
 
   return { ok: true as const, cashCut };
 }
@@ -89,7 +92,12 @@ export async function POST(
 
   if (clientOperationId) {
     const existing = await prisma.cashOutflow.findUnique({ where: { id: clientOperationId } });
-    if (existing) return NextResponse.json({ salida: existing, totalOutflows: await recalcularTotalSalidas(cashCutId) });
+    if (existing) {
+      if (existing.cashCutId !== cashCutId) {
+        return NextResponse.json({ error: "La operación ya pertenece a otro corte." }, { status: 409 });
+      }
+      return NextResponse.json({ salida: existing, totalOutflows: await recalcularTotalSalidas(cashCutId) });
+    }
   }
 
   if (!concept || !category || typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {

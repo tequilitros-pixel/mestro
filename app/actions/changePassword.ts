@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
+import { createPersistentSession, revokeAllUserSessions } from "@/lib/session";
 
 export async function changePasswordAction(formData: FormData) {
   const user = await getCurrentUser();
@@ -30,7 +31,7 @@ export async function changePasswordAction(formData: FormData) {
     redirect("/profile?error=confirmacion");
   }
 
-  if (newPassword.length < 6) {
+  if (newPassword.length < 8) {
     redirect("/profile?error=corta");
   }
 
@@ -40,6 +41,9 @@ export async function changePasswordAction(formData: FormData) {
     where: { id: user.id },
     data: { password: hashed },
   });
+
+  await revokeAllUserSessions(user.id);
+  await createPersistentSession(user, false);
 
   redirect("/profile?success=1");
 }

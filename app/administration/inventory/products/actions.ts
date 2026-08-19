@@ -1,6 +1,6 @@
 "use server";
 
-import { InventoryItemType } from "@prisma/client";
+import { InventoryContentUnit, InventoryHandlingUnit, InventoryItemType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { PRODUCT_CATEGORIES } from "./categories";
@@ -33,6 +33,14 @@ function readOptionalNumber(value: FormDataEntryValue | null) {
 
   return number;
 }
+const handlingUnits: Record<string, InventoryHandlingUnit> = { Pieza: "PIEZA", Botella: "BOTELLA", Caja: "CAJA", Paquete: "PAQUETE", Garrafa: "GARRAFA", Kilogramo: "KILOGRAMO", Litro: "LITRO", Costal: "OTRA", Bolsa: "OTRA", Mililitro: "OTRA", Gramo: "OTRA", Metro: "OTRA" };
+function readPresentation(formData: FormData, unit: string) {
+  const contentPerUnit = readOptionalNumber(formData.get("contentPerUnit")); const contentUnitValue = formData.get("contentUnit")?.toString() ?? "";
+  if (contentPerUnit === null && !contentUnitValue) return { handlingUnit: handlingUnits[unit] ?? "OTRA", contentPerUnit: null, contentUnit: null, normalizedContentPerUnit: null };
+  if (contentPerUnit === null || contentPerUnit <= 0 || !Object.values(InventoryContentUnit).includes(contentUnitValue as InventoryContentUnit)) throw new Error("Captura un contenido por unidad mayor a cero y su unidad.");
+  const contentUnit = contentUnitValue as InventoryContentUnit; const normalizedContentPerUnit = contentPerUnit * ({ ML: 1, L: 1000, G: 1, KG: 1000, PIEZAS: 1 }[contentUnit]);
+  return { handlingUnit: handlingUnits[unit] ?? "OTRA", contentPerUnit, contentUnit, normalizedContentPerUnit };
+}
 
 export async function createInventoryProductAction(
   formData: FormData,
@@ -49,6 +57,7 @@ export async function createInventoryProductAction(
     const unitCost = readOptionalNumber(formData.get("unitCost"));
     const minimumStock =
       readOptionalNumber(formData.get("minimumStock")) ?? 0;
+    const presentation = readPresentation(formData, unit);
 
     if (!code) {
       return {
@@ -119,16 +128,14 @@ export async function createInventoryProductAction(
       };
     }
 
-    const selectedPackageIds = formData.getAll("packages").map((v) => v.toString());
-
-    const product = await prisma.$transaction(async (tx) => {
-      const created = await tx.inventoryProduct.create({
+    const product = await prisma.inventoryProduct.create({
         data: {
           code,
           name,
           description,
           category,
           unit,
+          ...presentation,
           unitCost,
           minimumStock,
           itemType: itemTypeValue as InventoryItemType,
@@ -140,28 +147,11 @@ export async function createInventoryProductAction(
           isActive: true,
         },
         select: { id: true },
-      });
-
-      for (const packageId of selectedPackageIds) {
-        const quantity =
-          readOptionalNumber(formData.get(`quantity-${packageId}`)) ?? 1;
-
-        await tx.eventPackageItem.create({
-          data: {
-            packageId,
-            productId: created.id,
-            quantity,
-            calculationType: "FIXED",
-            isRequired: true,
-          },
-        });
-      }
-
-      return created;
     });
 
     revalidatePath("/administration/inventory/products");
     revalidatePath("/administration/inventory/event-packages");
+    revalidatePath("/administration/inventory/events/new");
 
     return {
       success: true,
@@ -188,6 +178,8 @@ export async function toggleProductActiveAction(
     });
 
     revalidatePath("/administration/inventory/products");
+    revalidatePath("/administration/inventory/event-packages");
+    revalidatePath("/administration/inventory/events/new");
 
     return { success: true };
   } catch (error) {
@@ -211,6 +203,8 @@ export async function updateProductCategoryAction(
 
     revalidatePath("/administration/inventory/products");
     revalidatePath(`/administration/inventory/products/${productId}`);
+    revalidatePath("/administration/inventory/event-packages");
+    revalidatePath("/administration/inventory/events/new");
 
     return { success: true };
   } catch (error) {
@@ -231,6 +225,7 @@ export async function updateInventoryProductAction(
     const itemTypeValue = formData.get("itemType")?.toString() ?? "";
     const unitCost = readOptionalNumber(formData.get("unitCost"));
     const minimumStock = readOptionalNumber(formData.get("minimumStock")) ?? 0;
+    const presentation = readPresentation(formData, unit);
 
     if (!name) {
       return { success: false, error: "El nombre del producto es obligatorio." };
@@ -263,6 +258,7 @@ export async function updateInventoryProductAction(
         description,
         category,
         unit,
+        ...presentation,
         unitCost,
         minimumStock,
         itemType: itemTypeValue as InventoryItemType,
@@ -317,4 +313,3 @@ export async function deleteInventoryProductAction(
     return { success: false, error: "No fue posible eliminar el producto." };
   }
 }
-

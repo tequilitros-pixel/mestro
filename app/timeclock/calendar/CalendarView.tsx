@@ -104,6 +104,10 @@ export default function CalendarView({ shifts, openShift }: CalendarViewProps) {
             <ClockIcon className="h-5 w-5" />
           </Link>
         </div>
+        <nav className="grid grid-cols-2 gap-3">
+          <Link href="/timeclock/availability" className="rounded-xl border border-outline-variant bg-surface-container p-3 text-center text-sm font-semibold">Mi disponibilidad</Link>
+          <Link href="/timeclock/requests" className="rounded-xl border border-outline-variant bg-surface-container p-3 text-center text-sm font-semibold">Solicitudes</Link>
+        </nav>
 
         {/* Selector de día */}
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">

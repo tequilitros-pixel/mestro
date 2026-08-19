@@ -59,6 +59,7 @@ type GridData = {
   branches: BranchLite[];
   templates: Template[];
   shifts: Shift[];
+  availability: Record<string, { type: "AVAILABLE_ALL_DAY" | "AVAILABLE_PARTIAL" | "UNAVAILABLE" | "PREFER_OFF"; startTime: string | null; endTime: string | null; source: "EXCEPTION" | "RECURRING" }>;
 };
 
 type Alert =
@@ -254,6 +255,8 @@ function MobileDayView({
   alertCellKeys,
   onShiftClick,
   onAddClick,
+  availability,
+  showAvailability,
 }: {
   days: Date[];
   dayIndex: number;
@@ -266,6 +269,8 @@ function MobileDayView({
   alertCellKeys: Set<string>;
   onShiftClick: (shift: Shift) => void;
   onAddClick: (userId: string, date: string) => void;
+  availability: GridData["availability"];
+  showAvailability: boolean;
 }) {
   const selectedDay = days[dayIndex] ?? days[0];
   const dateStr = formatDateOnly(selectedDay);
@@ -313,6 +318,7 @@ function MobileDayView({
           const cellShifts = shiftsByCell.get(key) ?? [];
           const hasAlert = alertCellKeys.has(key);
           const totals = employeeTotals.get(employee.id) ?? { hours: 0, turnos: 0 };
+          const employeeAvailability = availability[key];
 
           return (
             <div
@@ -342,6 +348,11 @@ function MobileDayView({
                 <p className="mt-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-error">
                   <AlertIcon className="h-3 w-3" />
                   Traslape ese día
+                </p>
+              )}
+              {showAvailability && employeeAvailability && (
+                <p className={`mt-2 text-xs font-semibold ${employeeAvailability.type === "UNAVAILABLE" ? "text-error" : employeeAvailability.type === "AVAILABLE_PARTIAL" ? "text-secondary" : "text-on-surface-variant"}`}>
+                  {employeeAvailability.type === "AVAILABLE_ALL_DAY" ? "● Disponible" : employeeAvailability.type === "UNAVAILABLE" ? "● No disponible" : employeeAvailability.type === "PREFER_OFF" ? "○ Prefiere descanso" : `● Disponible ${employeeAvailability.startTime}–${employeeAvailability.endTime}`}
                 </p>
               )}
 
@@ -378,6 +389,7 @@ export default function ScheduleGrid() {
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [showAvailability, setShowAvailability] = useState(true);
   const [mobileDayIndex, setMobileDayIndex] = useState(0);
   const [copying, setCopying] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
@@ -646,6 +658,7 @@ export default function ScheduleGrid() {
 
         {data && (
           <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs font-semibold text-on-surface-variant"><input type="checkbox" checked={showAvailability} onChange={(e) => setShowAvailability(e.target.checked)} /> Mostrar disponibilidad</label>
             <span
               className={`w-fit rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${
                 data.status === "PUBLISHED"
@@ -753,6 +766,8 @@ export default function ScheduleGrid() {
               alertCellKeys={alertCellKeys}
               onShiftClick={handleShiftClick}
               onAddClick={(userId, date) => setModal({ mode: "create", userId, date })}
+              availability={data.availability}
+              showAvailability={showAvailability}
             />
           </div>
 
@@ -825,6 +840,7 @@ export default function ScheduleGrid() {
                       const key = `${employee.id}|${dateStr}`;
                       const cellShifts = shiftsByCell.get(key) ?? [];
                       const hasAlert = alertCellKeys.has(key);
+                      const availability = data.availability[key];
 
                       return (
                         <div
@@ -835,6 +851,11 @@ export default function ScheduleGrid() {
                               : "border-outline-variant"
                           }`}
                         >
+                          {showAvailability && availability && (
+                            <p className={`text-[10px] font-bold ${availability.type === "UNAVAILABLE" ? "text-error" : availability.type === "AVAILABLE_PARTIAL" ? "text-secondary" : "text-on-surface-variant"}`}>
+                              {availability.type === "AVAILABLE_ALL_DAY" ? "● Disponible" : availability.type === "UNAVAILABLE" ? "● No disponible" : availability.type === "PREFER_OFF" ? "○ Prefiere descanso" : `● ${availability.startTime}–${availability.endTime}`}
+                            </p>
+                          )}
                           {hasAlert && (
                             <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-error">
                               <AlertIcon className="h-3 w-3" />
@@ -902,6 +923,7 @@ export default function ScheduleGrid() {
           branches={data.branches}
           templates={data.templates}
           weekDates={days.map((d) => formatDateOnly(d))}
+          availability={data.availability}
           initial={
             modal.mode === "create"
               ? {

@@ -1,9 +1,9 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { LiquorBatchStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
 
 type FinishLiquorBatchInput = {
   batchId: string;
@@ -155,28 +155,12 @@ export async function finishLiquorBatchWithRemainderAction(
 }
 
 async function getAuthenticatedUserId() {
-  const cookieStore = await cookies();
-  const userId = cookieStore.get("maestro_user")?.value;
-
-  if (!userId) {
+  const user = await getCurrentUser();
+  if (!user) {
     throw new Error(
       "Tu sesión no está disponible. Inicia sesión nuevamente."
     );
   }
-
-  const user = await prisma.user.findUnique({
-    where: {
-      id: userId,
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  if (!user) {
-    throw new Error("El usuario de la sesión ya no existe.");
-  }
-
   return user.id;
 }
 

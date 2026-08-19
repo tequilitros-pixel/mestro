@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { ServiceEventStatus } from "@prisma/client";
+import { getCurrentUser } from "@/lib/auth";
 
 export type ActionResult =
   | { success: true; message: string; id?: string }
@@ -110,6 +111,9 @@ export async function createServiceEventAction(
               unit: item.product.unit,
               itemType: item.product.itemType,
               unitCost: item.product.unitCost,
+              handlingUnit: item.product.handlingUnit,
+              contentPerUnit: item.product.contentPerUnit,
+              contentUnit: item.product.contentUnit,
               plannedQuantity: quantity,
               isCustom: false,
               sortOrder: sortOrder++,
@@ -134,6 +138,9 @@ export async function createServiceEventAction(
               unit: item.product.unit,
               itemType: item.product.itemType,
               unitCost: item.product.unitCost,
+              handlingUnit: item.product.handlingUnit,
+              contentPerUnit: item.product.contentPerUnit,
+              contentUnit: item.product.contentUnit,
               plannedQuantity: item.quantity,
               isCustom: false,
               sortOrder: sortOrder++,
@@ -160,13 +167,15 @@ export async function updateSentQuantityAction(
   sentQuantity: number,
 ): Promise<ActionResult> {
   try {
-    if (sentQuantity < 0) {
+    if (!Number.isFinite(sentQuantity) || sentQuantity < 0) {
       return { success: false, error: "La cantidad no puede ser negativa." };
     }
 
+    const event = await prisma.serviceEvent.findUnique({ where: { id: eventId }, select: { checkoutConfirmedAt: true } });
+    if (!event || event.checkoutConfirmedAt) return { success: false, error: "La salida ya fue confirmada." };
     await prisma.serviceEventItem.update({
       where: { id: itemId },
-      data: { sentQuantity, checkedOut: true },
+      data: { sentQuantity, checkedOut: true, checkoutStatus: sentQuantity === 0 ? "NO_SE_LLEVARA" : "REVISADO" },
     });
 
     revalidatePath(`/administration/inventory/events/${eventId}`);
@@ -183,15 +192,21 @@ export async function updateReturnedQuantityAction(
   eventId: string,
   returnedQuantity: number,
   damagedQuantity: number,
+  returnedOpenQuantity = 0,
 ): Promise<ActionResult> {
   try {
-    if (returnedQuantity < 0 || damagedQuantity < 0) {
+    if (!Number.isFinite(returnedQuantity) || !Number.isFinite(damagedQuantity) || !Number.isFinite(returnedOpenQuantity) || returnedQuantity < 0 || damagedQuantity < 0 || returnedOpenQuantity < 0) {
       return { success: false, error: "Las cantidades no pueden ser negativas." };
     }
 
     const item = await prisma.serviceEventItem.findUnique({
       where: { id: itemId },
-      select: { sentQuantity: true, plannedQuantity: true },
+      select: {
+        sentQuantity: true,
+        plannedQuantity: true,
+        contentPerUnit: true,
+        contentUnit: true,
+      },
     });
 
     if (!item) {
@@ -202,6 +217,20 @@ export async function updateReturnedQuantityAction(
       item.sentQuantity !== null
         ? Number(item.sentQuantity)
         : Number(item.plannedQuantity);
+    if (returnedQuantity > sent) return { success: false, error: "Lo regresado no puede superar lo que salió." };
+    const content = item.contentPerUnit ? Number(item.contentPerUnit) : null;
+    const contentBase =
+      content === null
+        ? null
+        : item.contentUnit === "L" || item.contentUnit === "KG"
+          ? content * 1000
+          : content;
+    if (returnedOpenQuantity > 0 && (!contentBase || returnedOpenQuantity >= contentBase)) {
+      return {
+        success: false,
+        error: "El remanente debe ser menor al contenido de la presentación.",
+      };
+    }
     const lostQuantity = Math.max(sent - returnedQuantity - damagedQuantity, 0);
 
     await prisma.serviceEventItem.update({
@@ -211,6 +240,8 @@ export async function updateReturnedQuantityAction(
         damagedQuantity,
         lostQuantity,
         checkedIn: true,
+        returnedOpenQuantity,
+        returnStatus: returnedQuantity === sent && !returnedOpenQuantity ? "COMPLETO" : "REVISADO",
       },
     });
 
@@ -221,6 +252,16 @@ export async function updateReturnedQuantityAction(
     console.error("Error updating returned quantity:", error);
     return { success: false, error: "No fue posible registrar el regreso." };
   }
+}
+
+export async function confirmEventCheckoutAction(eventId: string): Promise<ActionResult> {
+  const user = await getCurrentUser(); if (!user) return { success: false, error: "Tu sesión terminó." };
+  try { await prisma.$transaction(async (tx) => { const event = await tx.serviceEvent.findUnique({ where: { id: eventId }, include: { items: true } }); if (!event) throw new Error("Evento no encontrado."); if (event.checkoutConfirmedAt) return; if (event.items.some((item) => !item.checkedOut)) throw new Error("Revisa todos los productos antes de confirmar."); await tx.serviceEvent.update({ where: { id: eventId }, data: { checkoutConfirmedAt: new Date(), checkoutConfirmedById: user.id, status: "READY" } }); }); revalidatePath(`/administration/inventory/events/${eventId}`); return { success: true, message: "Salida confirmada." }; } catch (error) { return { success: false, error: error instanceof Error ? error.message : "No fue posible confirmar la salida." }; }
+}
+
+export async function confirmEventReturnAction(eventId: string): Promise<ActionResult> {
+  const user = await getCurrentUser(); if (!user) return { success: false, error: "Tu sesión terminó." };
+  try { await prisma.$transaction(async (tx) => { const event = await tx.serviceEvent.findUnique({ where: { id: eventId }, include: { items: true } }); if (!event) throw new Error("Evento no encontrado."); if (event.returnConfirmedAt) return; if (!event.checkoutConfirmedAt || event.items.some((item) => !item.checkedIn)) throw new Error("Registra y revisa todos los productos antes de confirmar."); await tx.serviceEvent.update({ where: { id: eventId }, data: { returnConfirmedAt: new Date(), returnConfirmedById: user.id, status: "COMPLETED" } }); }); revalidatePath(`/administration/inventory/events/${eventId}`); return { success: true, message: "Regreso confirmado." }; } catch (error) { return { success: false, error: error instanceof Error ? error.message : "No fue posible confirmar el regreso." }; }
 }
 
 export async function addCustomEventItemAction(
@@ -269,6 +310,9 @@ export async function addCustomEventItemAction(
         unit: product.unit,
         itemType: product.itemType,
         unitCost: product.unitCost,
+        handlingUnit: product.handlingUnit,
+        contentPerUnit: product.contentPerUnit,
+        contentUnit: product.contentUnit,
         plannedQuantity,
         isCustom: true,
         sortOrder: (maxSort._max.sortOrder ?? 0) + 1,

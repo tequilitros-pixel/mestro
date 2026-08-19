@@ -187,18 +187,18 @@ function finishBatchWithRemainder() {
 
   if (success) {
     return (
-      <section className="mt-6 overflow-hidden rounded-3xl border border-tertiary-fixed-dim/30 bg-surface-container">
-        <div className="bg-gradient-to-br from-tertiary-fixed-dim/20 via-tertiary-fixed-dim/10 to-surface-container p-6 sm:p-10">
+      <section className="mt-4 overflow-hidden rounded-xl border border-tertiary-fixed-dim/30 bg-surface-container">
+        <div className="bg-surface-container p-4 sm:p-5">
           <div className="mx-auto max-w-4xl text-center">
             <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/15">
               <CheckIcon className="h-9 w-9 text-tertiary-fixed-dim" />
             </div>
 
-            <p className="mt-6 text-sm font-black uppercase tracking-[0.3em] text-tertiary-fixed-dim">
+            <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-tertiary-fixed-dim">
               Embotellado terminado
             </p>
 
-            <h2 className="mt-3 text-4xl font-black text-on-surface sm:text-5xl">
+            <h2 className="mt-2 text-2xl font-bold text-on-surface sm:text-[26px]">
               Botellas generadas correctamente
             </h2>
 
@@ -212,7 +212,7 @@ function finishBatchWithRemainder() {
             </p>
           </div>
 
-          <div className="mx-auto mt-8 grid max-w-4xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mx-auto mt-4 grid max-w-4xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <SuccessCard
               title="Botellas creadas"
               value={formatNumber(success.producedBottles, 0)}
@@ -234,8 +234,8 @@ function finishBatchWithRemainder() {
             />
           </div>
 
-          <div className="mx-auto mt-8 max-w-4xl rounded-3xl border border-outline-variant/80 bg-background/50 p-6">
-            <div className="grid gap-5 sm:grid-cols-2">
+          <div className="mx-auto mt-4 max-w-4xl rounded-xl border border-outline-variant/80 bg-background/50 p-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <ResultRow
                 label="Litros utilizados"
                 value={`${formatNumber(success.litersUsed, 3)} L`}
@@ -248,10 +248,10 @@ function finishBatchWithRemainder() {
             </div>
           </div>
 
-          <div className="mx-auto mt-8 flex max-w-4xl flex-col gap-3 sm:flex-row">
+          <div className="mx-auto mt-4 flex max-w-4xl flex-col gap-3 sm:flex-row">
             <Link
               href={`/liquors/batches/${batchId}`}
-              className="flex-1 rounded-2xl border border-outline-variant px-5 py-4 text-center font-black text-on-surface transition hover:bg-surface-container-high"
+              className="compact-action flex-1 border border-outline-variant text-center font-semibold text-on-surface transition hover:bg-surface-container-high"
             >
               Volver al lote
             </Link>
@@ -260,7 +260,7 @@ function finishBatchWithRemainder() {
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="flex-1 rounded-2xl bg-primary px-5 py-4 font-black text-on-surface transition hover:opacity-90"
+                className="compact-action flex-1 bg-primary font-semibold text-on-surface transition hover:opacity-90"
               >
                 Embotellar volumen restante →
               </button>
@@ -272,9 +272,9 @@ function finishBatchWithRemainder() {
   }
 
   return (
-    <section className="mt-6 overflow-hidden rounded-3xl border border-outline-variant bg-surface-container">
-      <div className="border-b border-outline-variant p-6 sm:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+    <section className="mt-4 overflow-hidden rounded-xl border border-outline-variant bg-surface-container">
+      <div className="border-b border-outline-variant p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-mono text-sm font-black uppercase tracking-[0.3em] text-secondary">
               Paso {step} de 3
@@ -310,7 +310,7 @@ function finishBatchWithRemainder() {
         </div>
       </div>
 
-      <div className="p-6 sm:p-8">
+      <div className="p-4 sm:p-5">
         {error && (
           <div className="mb-6 rounded-2xl border border-error/30 bg-error/10 p-5">
             <p className="text-sm font-black uppercase tracking-wider text-error">

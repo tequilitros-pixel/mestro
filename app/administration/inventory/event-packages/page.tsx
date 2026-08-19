@@ -4,10 +4,10 @@ import NewPackageModal from "./NewPackageModal";
 import DeletePackageButton from "./DeletePackageButton";
 
 export default async function EventPackagesPage() {
-  const packages = await prisma.eventPackage.findMany({
+  const [packages, products] = await Promise.all([prisma.eventPackage.findMany({
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { items: true } } },
-  });
+  }), prisma.inventoryProduct.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, code: true, name: true, category: true, unit: true } })]);
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
@@ -20,7 +20,7 @@ export default async function EventPackagesPage() {
             </p>
           </div>
 
-          <NewPackageModal />
+          <NewPackageModal products={products} />
         </div>
 
         <div className="rounded-2xl border border-outline-variant bg-surface-container">

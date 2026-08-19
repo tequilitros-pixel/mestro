@@ -14,14 +14,14 @@ export type AppIconVariant =
 type AppIconSize = "sm" | "md" | "lg";
 
 const VARIANT_CLASSES: Record<AppIconVariant, string> = {
-  blue: "from-blue-600 to-blue-800 shadow-blue-950/35",
-  blueDeep: "from-blue-600 to-blue-800 shadow-blue-950/35",
-  cyan: "from-blue-600 to-blue-800 shadow-blue-950/35",
-  purple: "from-blue-600 to-blue-800 shadow-blue-950/35",
-  green: "from-blue-600 to-blue-800 shadow-blue-950/35",
-  orange: "from-blue-600 to-blue-800 shadow-blue-950/35",
-  amber: "from-blue-600 to-blue-800 shadow-blue-950/35",
-  slate: "from-blue-600 to-blue-800 shadow-blue-950/35",
+  blue: "",
+  blueDeep: "",
+  cyan: "",
+  purple: "",
+  green: "",
+  orange: "",
+  amber: "",
+  slate: "",
 };
 
 const SIZE_CLASSES: Record<AppIconSize, { container: string; icon: string }> = {
@@ -44,7 +44,7 @@ export function AppIconBadge({
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex shrink-0 items-center justify-center bg-gradient-to-br from-blue-600 to-blue-800 text-white shadow-sm shadow-blue-950/35 ring-1 ring-white/10 ${sizeClasses.container} ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center bg-surface-container-high text-on-surface-variant ring-1 ring-outline-variant ${sizeClasses.container} ${className}`}
     >
       <span className={sizeClasses.icon}>{children}</span>
     </span>

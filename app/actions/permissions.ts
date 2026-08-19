@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { isConfigurablePermissionKey } from "@/lib/permission-modules";
 
 export async function getUserModuleKeys(userId: string): Promise<string[]> {
   const permissions = await prisma.modulePermission.findMany({
@@ -10,7 +11,9 @@ export async function getUserModuleKeys(userId: string): Promise<string[]> {
     select: { moduleKey: true },
   });
 
-  return permissions.map((p) => p.moduleKey);
+  return permissions
+    .map((permission) => permission.moduleKey)
+    .filter(isConfigurablePermissionKey);
 }
 
 export async function setModulePermissionAction(
@@ -22,6 +25,9 @@ export async function setModulePermissionAction(
 
   if (!currentUser || currentUser.role !== "ADMIN") {
     return { success: false, error: "No tienes permiso para hacer esto." };
+  }
+  if (!isConfigurablePermissionKey(moduleKey)) {
+    return { success: false, error: "Ese permiso no es configurable." };
   }
 
   try {
@@ -55,6 +61,9 @@ export async function setGroupPermissionAction(
 
   if (!currentUser || currentUser.role !== "ADMIN") {
     return { success: false, error: "No tienes permiso para hacer esto." };
+  }
+  if (moduleKeys.some((moduleKey) => !isConfigurablePermissionKey(moduleKey))) {
+    return { success: false, error: "El grupo contiene un permiso no configurable." };
   }
 
   try {

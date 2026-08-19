@@ -1,59 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import ProcessTable from "@/components/production/ProcessTable";
+import { PageHeader } from "@/components/ui/CompactUI";
 
 export default async function CookingPage() {
-  const cookings = await prisma.cooking.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      lot: true,
-      equipment: true,
-    },
-  });
-
-  return (
-    <main className="min-h-screen bg-background p-10 text-on-surface">
-      <div className="mx-auto max-w-6xl">
-       
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
-              MAESTRO
-            </p>
-            <h1 className="mt-3 text-4xl font-bold">Cocción</h1>
-            <p className="mt-2 text-on-surface-variant">
-              Procesos de cocción registrados.
-            </p>
-          </div>
-
-          <Link
-            href="/cooking/new"
-            className="rounded-xl bg-primary px-6 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
-          >
-            Nueva cocción
-          </Link>
-        </div>
-
-        <section className="space-y-4">
-          {cookings.length === 0 ? (
-            <div className="rounded-2xl bg-surface-container p-8 text-on-surface-variant">
-              Aún no hay cocciones registradas.
-            </div>
-          ) : (
-            cookings.map((cooking) => (
-              <Link
-                key={cooking.id}
-                href={`/cooking/${cooking.id}`}
-                className="block rounded-2xl bg-surface-container p-6 hover:bg-surface-container-high"
-              >
-                <h2 className="text-2xl font-bold">{cooking.lot.code}</h2>
-                <p className="mt-2 text-on-surface-variant">
-                  {cooking.equipment.name} · {cooking.agaveKg.toLocaleString()} kg · {cooking.status}
-                </p>
-              </Link>
-            ))
-          )}
-        </section>
-      </div>
-    </main>
-  );
+  const cookings = await prisma.cooking.findMany({ orderBy: { createdAt: "desc" }, include: { lot: true, equipment: true } });
+  return <main className="page-frame space-y-4 text-on-surface"><div className="mx-auto max-w-7xl"><PageHeader title="Cocción" description="Procesos de cocción registrados." actions={<Link href="/cooking/new" className="compact-action inline-flex items-center bg-primary font-semibold text-on-primary">Nueva cocción</Link>} /><ProcessTable emptyLabel="Aún no hay cocciones registradas." columns={[{ key: "code", label: "Código del lote", width: "20%" }, { key: "equipment", label: "Horno", width: "18%" }, { key: "agave", label: "Agave", width: "14%" }, { key: "startedAt", label: "Inicio", width: "18%" }, { key: "duration", label: "Duración", width: "14%" }, { key: "status", label: "Estado", width: "16%" }]} filters={[{ key: "equipment", label: "Horno", options: [...new Set(cookings.map((item) => item.equipment.name))] }]} rows={cookings.map((item) => ({ id: item.id, href: `/cooking/${item.id}`, code: item.lot.code, startedAt: item.startedAt.toISOString(), status: item.status === "TERMINADA" ? "Terminado" : "En proceso", finished: item.status === "TERMINADA", values: { equipment: item.equipment.name, agave: `${item.agaveKg.toLocaleString("es-MX")} kg`, duration: `${Math.max(0, Math.round(((item.finishedAt ?? new Date()).getTime() - item.startedAt.getTime()) / 36e5))} h` }, filters: { equipment: item.equipment.name } }))} /></div></main>;
 }

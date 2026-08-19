@@ -17,9 +17,9 @@ export default async function PayrollPage() {
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
       <div className="mx-auto max-w-6xl space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Nómina y horarios</h1>
+          <h1 className="text-3xl font-bold">Nómina</h1>
           <p className="mt-2 text-on-surface-variant">
-            Costo de mano de obra, horas trabajadas y su impacto en las ventas.
+            Revisa las horas reales, corrige incidencias y aprueba la planilla semanal.
           </p>
         </div>
 

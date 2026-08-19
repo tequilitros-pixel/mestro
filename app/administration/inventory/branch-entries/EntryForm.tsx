@@ -1,21 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createInventoryEntryAction, type ActionResult } from "./actions";
 
 type Branch = { id: string; name: string };
-type Product = { id: string; name: string; unit: string };
+type Product = { id: string; code: string; name: string; category: string; unit: string };
 
 export default function EntryForm({
   branches,
   products,
+  canViewTransfers,
 }: {
   branches: Branch[];
   products: Product[];
+  canViewTransfers: boolean;
 }) {
   const [result, setResult] = useState<ActionResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [type, setType] = useState("COMPRA");
+  const [productSearch, setProductSearch] = useState("");
+  const [category, setCategory] = useState("");
+  const [productId, setProductId] = useState("");
+
+  const categories = useMemo(
+    () => Array.from(new Set(products.map((product) => product.category))).sort((a, b) => a.localeCompare(b, "es")),
+    [products],
+  );
+  const filteredProducts = useMemo(() => {
+    const query = productSearch.trim().toLocaleLowerCase("es-MX");
+    return products.filter((product) => {
+      const matchesCategory = !category || product.category === category;
+      const searchable = `${product.name} ${product.code} ${product.category}`.toLocaleLowerCase("es-MX");
+      return matchesCategory && (!query || searchable.includes(query));
+    });
+  }, [category, productSearch, products]);
 
   async function handleSubmit(formData: FormData) {
     setSaving(true);
@@ -29,6 +47,7 @@ export default function EntryForm({
     if (response.success) {
       const form = document.getElementById("entry-form") as HTMLFormElement | null;
       form?.reset();
+      setProductId("");
     }
   }
 
@@ -42,14 +61,9 @@ export default function EntryForm({
         <h2 className="text-xl font-bold text-on-surface">Registrar entrada o ajuste</h2>
         <p className="mt-1 text-sm text-on-surface-variant">
           Compra que llegó a la sucursal, o un ajuste (merma, pérdida, corrección de conteo).
-          Para mover stock entre sucursales usa{" "}
-          <a
-            href="/administration/inventory/sucursales/traspasos"
-            className="font-semibold text-on-surface underline"
-          >
-            Traspasos
-          </a>
-          .
+          {canViewTransfers && (
+            <> Para mover stock entre sucursales usa{" "}<a href="/administration/inventory/sucursales/traspasos" className="font-semibold text-on-surface underline">Traspasos</a>.</>
+          )}
         </p>
       </div>
 
@@ -85,24 +99,58 @@ export default function EntryForm({
           </select>
         </label>
 
-        <label className="space-y-2">
-          <span className="text-sm font-semibold text-on-surface-variant">Producto</span>
+        <div className="space-y-3 md:col-span-2">
+          <span className="block text-sm font-semibold text-on-surface-variant">Producto</span>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label>
+              <span className="sr-only">Buscar producto</span>
+              <input
+                type="search"
+                value={productSearch}
+                onChange={(event) => {
+                  setProductSearch(event.target.value);
+                  setProductId("");
+                }}
+                placeholder="Buscar por nombre o código…"
+                className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+              />
+            </label>
+            <label>
+              <span className="sr-only">Filtrar por categoría</span>
+              <select
+                value={category}
+                onChange={(event) => {
+                  setCategory(event.target.value);
+                  setProductId("");
+                }}
+                className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+              >
+                <option value="">Todas las categorías</option>
+                {categories.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </label>
+          </div>
           <select
             name="productId"
             required
-            defaultValue=""
+            value={productId}
+            onChange={(event) => setProductId(event.target.value)}
             className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
           >
             <option value="" disabled>
-              Selecciona un producto
+              {filteredProducts.length ? `Selecciona un producto (${filteredProducts.length})` : "No se encontraron productos"}
             </option>
-            {products.map((p) => (
+            {filteredProducts.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name} ({p.unit})
+                {p.name} · {p.code} ({p.unit})
               </option>
             ))}
           </select>
-        </label>
+          <p className="text-xs text-on-surface-variant">
+            {filteredProducts.length} de {products.length} productos visibles
+            {category ? ` en ${category}` : ""}.
+          </p>
+        </div>
 
         <label className="space-y-2">
           <span className="text-sm font-semibold text-on-surface-variant">Tipo</span>

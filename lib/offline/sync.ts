@@ -39,6 +39,8 @@ async function runSync() {
                 ? `/api/cash-cuts/${String((operation.payload as Record<string, unknown>).cashCutId)}/salidas`
                 : operation.kind === "cash-cut.close"
                   ? `/api/cash-cuts/${String((operation.payload as Record<string, unknown>).cashCutId)}/cerrar`
+                  : operation.kind === "cash-cut.venta.set"
+                    ? `/api/cash-cuts/${String((operation.payload as Record<string, unknown>).cashCutId)}/ventas`
           : "/api/sync/operations";
       const directApiOperation = operation.kind === "pos.sale.create" || operation.kind.startsWith("cash-cut.");
       const body = directApiOperation

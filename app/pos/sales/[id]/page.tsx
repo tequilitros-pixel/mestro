@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { withRlsContext } from "@/lib/rls";
 import { ChevronLeftIcon } from "@/components/ui/icons";
 import PrintReceiptButton from "./PrintReceiptButton";
 
@@ -29,7 +30,7 @@ export default async function PosReceiptPage({
 
   const { id } = await params;
 
-  const sale = await prisma.posSale.findUnique({
+  const sale = await withRlsContext(user, (tx) => tx.posSale.findUnique({
     where: { id },
     include: {
       branch: true,
@@ -39,7 +40,7 @@ export default async function PosReceiptPage({
       payments: true,
       cashCut: { select: { id: true, code: true } },
     },
-  });
+  }));
 
   if (!sale) notFound();
 

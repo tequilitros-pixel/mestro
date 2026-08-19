@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { setRlsContext, withRlsContext } from "@/lib/rls";
 
 const ROLES_QUE_PUEDEN_CANCELAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -22,7 +23,7 @@ export async function POST(
 
   const { id } = await params;
 
-  const sale = await prisma.posSale.findUnique({
+  const sale = await withRlsContext(user, (tx) => tx.posSale.findUnique({
     where: { id },
     include: {
       items: {
@@ -33,13 +34,13 @@ export async function POST(
       payments: true,
       cashCut: { select: { id: true, status: true } },
     },
-  });
+  }));
 
   if (!sale) {
     return NextResponse.json({ error: "Venta no encontrada" }, { status: 404 });
   }
 
-  if (user.role === "GERENTE" || user.role === "ENCARGADO") {
+  if (user.role !== "ADMIN") {
     const hasAccess = await prisma.userBranch.findFirst({
       where: { userId: user.id, branchId: sale.branchId },
     });
@@ -68,6 +69,7 @@ export async function POST(
   const cancelReason = typeof body?.reason === "string" ? body.reason.trim() : null;
 
   const updated = await prisma.$transaction(async (tx) => {
+    await setRlsContext(tx, user);
     const cancelled = await tx.posSale.update({
       where: { id: sale.id },
       data: {

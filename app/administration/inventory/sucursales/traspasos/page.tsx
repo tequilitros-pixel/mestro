@@ -1,11 +1,16 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import TransferForm from "./TransferForm";
+import { getAccessibleBranchIds } from "@/lib/auth";
 
 export default async function TraspasosPage() {
+  const allowedBranchIds = await getAccessibleBranchIds();
+  const branchWhere = allowedBranchIds === null
+    ? { active: true }
+    : { active: true, id: { in: allowedBranchIds } };
   const [branches, products, transfers] = await Promise.all([
     prisma.branch.findMany({
-      where: { active: true },
+      where: branchWhere,
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
@@ -15,7 +20,10 @@ export default async function TraspasosPage() {
       select: { id: true, name: true, unit: true },
     }),
     prisma.inventoryEntry.findMany({
-      where: { type: "TRASPASO" },
+      where: {
+        type: "TRASPASO",
+        ...(allowedBranchIds === null ? {} : { branchId: { in: allowedBranchIds } }),
+      },
       orderBy: { entryDate: "desc" },
       take: 30,
       include: { branch: true, product: true },

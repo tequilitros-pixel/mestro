@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Card, CardLabel, CardValue } from "@/components/ui/Card";
+import { useEffect, useMemo, useState } from "react";
+import { Card, CardLabel } from "@/components/ui/Card";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
-  EyeIcon,
   AlertIcon,
   PlusIcon,
   TrashIcon,
   LockIcon,
   CheckIcon,
   RefreshIcon,
+  SearchIcon,
 } from "@/components/ui/icons";
 import {
   getPayrollWeekTable,
@@ -76,7 +76,8 @@ function money(value: number) {
 }
 
 function hours(value: number) {
-  return `${value.toFixed(1)} h`;
+  const totalMinutes = Math.max(0, Math.round(value * 60));
+  return `${Math.floor(totalMinutes / 60)}:${String(totalMinutes % 60).padStart(2, "0")}`;
 }
 
 function formatWeekRange(weekStart: string) {
@@ -84,6 +85,11 @@ function formatWeekRange(weekStart: string) {
   const end = parseDateOnly(addDaysToDateOnly(weekStart, 6));
   const fmt = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long", timeZone: "UTC" });
   return `${fmt.format(start)} – ${fmt.format(end)}`;
+}
+
+function formatPaymentDate(weekStart: string) {
+  const paymentDate = parseDateOnly(addDaysToDateOnly(weekStart, 7));
+  return new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(paymentDate);
 }
 
 function formatDayLabel(dateStr: string) {
@@ -120,6 +126,7 @@ export default function PayrollWeekView() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [actionBusy, setActionBusy] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -158,6 +165,39 @@ export default function PayrollWeekView() {
       setRefreshKey((k) => k + 1);
     }
   }
+
+  async function approveWeek() {
+    if (!table) return;
+    const accepted = confirm(
+      `Estás a punto de aprobar la nómina del ${formatWeekRange(table.weekStart)}.\n\nUna vez aprobada, los registros de esta semana quedarán bloqueados.`,
+    );
+    if (!accepted) return;
+    await handlePeriodAction(approvePayrollPeriodAction, "Nómina semanal aprobada");
+  }
+
+  async function reopenWeek() {
+    const reason = prompt("Motivo obligatorio para reabrir este periodo:");
+    if (!reason?.trim()) {
+      showToast("Debes escribir el motivo de reapertura", "error");
+      return;
+    }
+    setActionBusy(true);
+    const result = await reopenPayrollPeriodAction(weekStart, reason.trim());
+    setActionBusy(false);
+    if (result?.error) showToast(result.error, "error");
+    else {
+      showToast("Semana reabierta", "success");
+      setRefreshKey((key) => key + 1);
+    }
+  }
+
+  const visibleEmployees = useMemo(() => {
+    if (!table) return [];
+    const query = search.trim().toLocaleLowerCase("es-MX");
+    return query
+      ? table.employees.filter((employee) => employee.name.toLocaleLowerCase("es-MX").includes(query))
+      : table.employees;
+  }, [search, table]);
 
   return (
     <div className="space-y-6">
@@ -240,7 +280,7 @@ export default function PayrollWeekView() {
                   <button
                     disabled={actionBusy}
                     onClick={() =>
-                      handlePeriodAction(approvePayrollPeriodAction, "Semana aprobada")
+                      approveWeek()
                     }
                     className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:opacity-50"
                   >
@@ -250,7 +290,7 @@ export default function PayrollWeekView() {
                   <button
                     disabled={actionBusy}
                     onClick={() =>
-                      handlePeriodAction(reopenPayrollPeriodAction, "Semana reabierta")
+                      reopenWeek()
                     }
                     className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high disabled:opacity-50"
                   >
@@ -275,7 +315,7 @@ export default function PayrollWeekView() {
                   <button
                     disabled={actionBusy}
                     onClick={() =>
-                      handlePeriodAction(reopenPayrollPeriodAction, "Semana reabierta")
+                      reopenWeek()
                     }
                     className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high disabled:opacity-50"
                   >
@@ -294,123 +334,92 @@ export default function PayrollWeekView() {
             </div>
           </Card>
 
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <Card>
-              <CardLabel>Horas totales</CardLabel>
-              <CardValue>{hours(table.totals.totalHours)}</CardValue>
-            </Card>
-            <Card>
-              <CardLabel>Horas extra</CardLabel>
-              <CardValue>{hours(table.totals.overtimeHours)}</CardValue>
-            </Card>
-            <Card>
-              <CardLabel>Personas con horas</CardLabel>
-              <CardValue>{table.totals.employeesWorked}</CardValue>
-            </Card>
-            <Card>
-              <CardLabel>Pago estimado</CardLabel>
-              <CardValue>{money(table.totals.finalPay)}</CardValue>
-              {table.totals.adjustmentsTotal !== 0 && (
-                <p className="mt-1 text-xs text-on-surface-variant">
-                  {money(table.totals.estimatedPay)} horas{" "}
-                  {table.totals.adjustmentsTotal > 0 ? "+" : "−"}{" "}
-                  {money(Math.abs(table.totals.adjustmentsTotal))} ajustes
-                </p>
-              )}
-            </Card>
-          </div>
+          <section className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container" aria-label="Resumen semanal">
+            <div className="grid grid-cols-2 divide-x divide-y divide-outline-variant sm:grid-cols-5 sm:divide-y-0">
+              {[
+                ["Empleados", String(table.totals.employeesWorked)],
+                ["Horas totales", hours(table.totals.totalHours)],
+                ["Horas extra", hours(table.totals.overtimeHours)],
+                ["Total nómina", money(table.totals.finalPay)],
+                ["Pago", formatPaymentDate(table.weekStart)],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-outline">{label}</p>
+                  <p className="mt-1 truncate text-base font-black tabular-nums text-on-surface" title={value}>{value}</p>
+                </div>
+              ))}
+            </div>
+          </section>
 
-          <Card>
-            <CardLabel>Nómina de la semana — {formatWeekRange(table.weekStart)}</CardLabel>
-            <p className="mt-1 text-xs text-outline">
-              Horas reales tomadas del checador. Estimado, no es una nómina oficial todavía.
-            </p>
+          <section className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest">
+            <div className="flex flex-wrap items-end justify-between gap-3 border-b border-outline-variant bg-surface-container px-4 py-3">
+              <div>
+                <h2 className="font-bold text-on-surface">Planilla semanal</h2>
+                <p className="text-xs text-on-surface-variant">Horas reales del checador · lunes a domingo</p>
+              </div>
+              <label className="relative block w-full sm:w-64">
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar empleado" className="w-full rounded-xl border border-outline-variant bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-primary" />
+              </label>
+            </div>
 
             {table.employees.length === 0 ? (
-              <p className="mt-4 text-sm text-on-surface-variant">
+              <p className="p-8 text-center text-sm text-on-surface-variant">
                 Nadie registró horas en esta semana.
               </p>
             ) : (
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[860px] text-sm">
-                  <thead>
-                    <tr className="border-b border-outline-variant text-left text-xs text-outline">
-                      <th className="pb-2 font-medium">Empleado</th>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-sm">
+                  <thead className="bg-surface-container-high">
+                    <tr className="text-left text-[11px] uppercase tracking-wide text-outline">
+                      <th className="sticky left-0 z-20 w-56 border-b border-r border-outline-variant bg-surface-container-high px-4 py-3 font-bold">Empleado</th>
                       {DAY_LABELS.map((label, i) => (
-                        <th key={label} className="pb-2 text-right font-medium">
-                          {label} {formatDayLabel(addDaysToDateOnly(table.weekStart, i))}
+                        <th key={label} className="w-20 border-b border-r border-outline-variant px-2 py-3 text-center font-bold">
+                          <span className="block">{label}</span><span className="font-normal normal-case">{formatDayLabel(addDaysToDateOnly(table.weekStart, i))}</span>
                         </th>
                       ))}
-                      <th className="pb-2 text-right font-medium">Total</th>
-                      <th className="pb-2 text-right font-medium">Extra</th>
-                      <th className="pb-2 text-right font-medium">Ajustes</th>
-                      <th className="pb-2 text-right font-medium">Pago</th>
-                      <th className="pb-2 text-right font-medium"></th>
+                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Total horas</th>
+                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Pago total</th>
+                      <th className="border-b border-outline-variant px-3 py-3 text-center font-bold">Estado</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-outline-variant">
-                    {table.employees.map((employee) => (
-                      <tr key={employee.id}>
-                        <td className="py-3 font-semibold text-on-surface">
-                          {employee.name}
+                  <tbody>
+                    {visibleEmployees.map((employee) => (
+                      <tr key={employee.id} className="group hover:bg-primary/[0.025]">
+                        <td className="sticky left-0 z-10 border-b border-r border-outline-variant bg-surface-container-lowest px-4 py-2.5 group-hover:bg-surface-container font-semibold text-on-surface">
+                          <button onClick={() => setSelectedUserId(employee.id)} className="text-left hover:text-primary hover:underline">{employee.name}</button>
                           {employee.missingRate && (
-                            <span className="ml-2 rounded-full bg-error/15 px-2 py-0.5 text-[10px] font-bold text-error">
-                              Sin tarifa
-                            </span>
+                            <span className="ml-2 rounded-full bg-error/15 px-2 py-0.5 text-[9px] font-bold text-error">Sin tarifa</span>
                           )}
                         </td>
                         {employee.hoursByDay.map((h, i) => (
-                          <td key={i} className="py-3 text-right text-on-surface-variant">
-                            {h > 0 ? hours(h) : "—"}
+                          <td key={i} className="border-b border-r border-outline-variant p-1.5 text-center">
+                            <button onClick={() => setSelectedUserId(employee.id)} className={`w-full rounded-md px-2 py-2 font-mono text-xs font-bold tabular-nums ${h > 0 ? "bg-tertiary-fixed-dim/12 text-tertiary-fixed-dim hover:bg-tertiary-fixed-dim/20" : "bg-surface-container text-outline"}`}>
+                              {h > 0 ? hours(h) : "—"}
+                            </button>
                           </td>
                         ))}
-                        <td className="py-3 text-right font-bold text-on-surface">
+                        <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-mono font-black tabular-nums text-on-surface">
                           {hours(employee.totalHours)}
                         </td>
-                        <td className="py-3 text-right">
-                          {employee.overtimeHours > 0 ? (
-                            <span className="font-bold text-secondary">
-                              {hours(employee.overtimeHours)}
-                            </span>
-                          ) : (
-                            <span className="text-outline">—</span>
-                          )}
-                        </td>
-                        <td className="py-3 text-right">
-                          {employee.adjustmentsTotal !== 0 ? (
-                            <span
-                              className={`font-semibold ${
-                                employee.adjustmentsTotal > 0 ? "text-tertiary-fixed-dim" : "text-error"
-                              }`}
-                            >
-                              {employee.adjustmentsTotal > 0 ? "+" : "−"}
-                              {money(Math.abs(employee.adjustmentsTotal))}
-                            </span>
-                          ) : (
-                            <span className="text-outline">—</span>
-                          )}
-                        </td>
-                        <td className="py-3 text-right font-bold text-on-surface">
+                        <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-black tabular-nums text-on-surface">
                           {employee.missingRate && employee.adjustmentsTotal === 0
                             ? "—"
                             : money(employee.finalPay)}
                         </td>
-                        <td className="py-3 text-right">
-                          <button
-                            onClick={() => setSelectedUserId(employee.id)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-outline-variant px-2 py-1 text-xs font-semibold text-on-surface-variant hover:bg-surface-container-high"
-                          >
-                            <EyeIcon className="h-3.5 w-3.5" />
-                            Ver
+                        <td className="border-b border-outline-variant px-3 py-2.5 text-center">
+                          <button onClick={() => setSelectedUserId(employee.id)} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${table.period.status === "APROBADA" || table.period.status === "PAGADA" ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim" : "bg-secondary/15 text-secondary"}`}>
+                            {table.period.status === "APROBADA" || table.period.status === "PAGADA" ? "Aprobado" : "Pendiente"}
                           </button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                {visibleEmployees.length === 0 && <p className="p-8 text-center text-sm text-on-surface-variant">No encontramos empleados con ese nombre.</p>}
               </div>
             )}
-          </Card>
+          </section>
         </>
       )}
 

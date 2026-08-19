@@ -8,6 +8,43 @@ export type PermissionGroup = {
   modules: PermissionModule[];
 };
 
+/** Pantallas personales disponibles para cualquier usuario con sesión. */
+export const ALWAYS_AVAILABLE_PATHS = [
+  "/timeclock",
+  "/timeclock/calendar",
+  "/timeclock/availability",
+  "/timeclock/requests",
+] as const;
+
+/** Acceso histórico para operadores que aún no tienen permisos configurados. */
+export const LEGACY_OPERATOR_PERMISSION_KEYS = [
+  "/cooking",
+  "/milling",
+  "/fermentation",
+  "/distillation",
+] as const;
+
+/** Secciones protegidas por rol ADMIN y que no deben ofrecerse como permisos. */
+export const ADMIN_ONLY_PATH_PREFIXES = [
+  "/administration/personnel",
+  "/administration/schedule",
+  "/timeclock/payroll",
+  "/timeclock/geofences",
+  "/pos/categories",
+  "/pos/products",
+  "/pos/settings",
+] as const;
+
+export function isAlwaysAvailablePath(pathname: string): boolean {
+  return ALWAYS_AVAILABLE_PATHS.some((path) => pathname === path);
+}
+
+export function isAdminOnlyPath(pathname: string): boolean {
+  return ADMIN_ONLY_PATH_PREFIXES.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
+}
+
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   {
     group: "Proceso de Producción",
@@ -27,6 +64,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     modules: [
       { key: "/liquors", label: "Inicio" },
       { key: "/liquors/recipes", label: "Recetas" },
+      { key: "/liquors/raw-materials", label: "Materia prima" },
       { key: "/liquors/batches", label: "Lotes" },
       { key: "/liquors/production", label: "Producción" },
       { key: "/liquors/bottling", label: "Embotellado" },
@@ -54,8 +92,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     modules: [
       { key: "/pos", label: "Vender" },
       { key: "/pos/sales", label: "Ventas" },
-      { key: "/pos/categories", label: "Categorías (solo Admin)" },
-      { key: "/pos/products", label: "Productos (solo Admin)" },
+      { key: "/pos/discounts/rules", label: "Descuentos · Administrar" },
+      { key: "/pos/discounts/courtesies", label: "Descuentos · Cortesías" },
+      { key: "/pos/discounts/employees", label: "Descuentos · Trabajadores" },
+      { key: "/pos/discounts/products", label: "Descuentos · Productos" },
     ],
   },
   {
@@ -66,13 +106,23 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "/administration/inventory/event-packages", label: "Paquetes de eventos" },
       { key: "/administration/inventory/equipment-kits", label: "Modalidades de equipo" },
       { key: "/administration/inventory/events", label: "Eventos" },
-      { key: "/administration/inventory/sucursales", label: "Inventario de sucursales (resumen, stock y traspasos)" },
-      { key: "/administration/inventory/branch-entries", label: "Entradas de inventario" },
+      { key: "/administration/inventory/sucursales", label: "Inventario de sucursales · Resumen" },
+      { key: "/administration/inventory/sucursales/stock", label: "Inventario de sucursales · Stock actual" },
+      { key: "/administration/inventory/branch-entries", label: "Inventario de sucursales · Entradas y ajustes" },
+      { key: "/administration/inventory/sucursales/traspasos", label: "Inventario de sucursales · Traspasos" },
       { key: "/administration/inventory/branch-counts", label: "Conteo semanal" },
-      { key: "/administration/personnel", label: "Personal (solo Admin)" },
     ],
   },
 ];
+
+const CONFIGURABLE_PERMISSION_KEYS = new Set(
+  PERMISSION_GROUPS.flatMap((group) => group.modules.map((module) => module.key)),
+);
+
+export function isConfigurablePermissionKey(key: string): boolean {
+  return CONFIGURABLE_PERMISSION_KEYS.has(key);
+}
+
 export function getModuleKeyForPath(pathname: string): string | null {
   const allKeys = PERMISSION_GROUPS.flatMap((g) => g.modules.map((m) => m.key));
 
@@ -83,4 +133,13 @@ export function getModuleKeyForPath(pathname: string): string | null {
   if (matches.length === 0) return null;
 
   return matches.sort((a, b) => b.length - a.length)[0];
+}
+
+/** Primera pantalla útil después de iniciar sesión, según los permisos asignados. */
+export function getDefaultPathForModuleKeys(moduleKeys: string[]): string {
+  const orderedKeys = PERMISSION_GROUPS.flatMap((group) =>
+    group.modules.map((module) => module.key),
+  );
+
+  return orderedKeys.find((key) => moduleKeys.includes(key)) ?? "/profile";
 }

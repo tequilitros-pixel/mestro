@@ -20,26 +20,12 @@ const units = [
   "Paquete",
 ];
 
-type EventPackage = { id: string; name: string };
-
-export default function ProductForm({
-  packages,
-  onSuccess,
-}: {
-  packages: EventPackage[];
-  onSuccess?: () => void;
-}) {
+export default function ProductForm({ onSuccess }: { onSuccess?: () => void; }) {
   const [result, setResult] = useState<CreateInventoryProductResult | null>(
     null,
   );
   const [saving, setSaving] = useState(false);
-  const [selectedPackages, setSelectedPackages] = useState<string[]>([]);
-
-  function togglePackage(id: string) {
-    setSelectedPackages((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
-    );
-  }
+  const [unit, setUnit] = useState(""); const [content, setContent] = useState(""); const [contentUnit, setContentUnit] = useState("ML");
 
   async function handleSubmit(formData: FormData) {
     setSaving(true);
@@ -56,7 +42,6 @@ export default function ProductForm({
       ) as HTMLFormElement | null;
 
       form?.reset();
-      setSelectedPackages([]);
       onSuccess?.();
     }
   }
@@ -133,7 +118,7 @@ export default function ProductForm({
           </span>
 
           <select
-            name="unit"
+            name="unit" value={unit} onChange={(event) => setUnit(event.target.value)}
             required
             defaultValue=""
             className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
@@ -149,6 +134,8 @@ export default function ProductForm({
             ))}
           </select>
         </label>
+
+        <div className="space-y-2 md:col-span-2"><span className="text-sm font-semibold text-on-surface-variant">Contenido de cada unidad</span><div className="grid gap-3 sm:grid-cols-2"><input name="contentPerUnit" type="number" min="0.001" step="0.001" value={content} onChange={(event) => setContent(event.target.value)} placeholder="Ej. 600, 1800 o 1.8" className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm" /><select name="contentUnit" value={contentUnit} onChange={(event) => setContentUnit(event.target.value)} className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm"><option value="ML">ml</option><option value="L">L</option><option value="G">g</option><option value="KG">kg</option><option value="PIEZAS">piezas</option></select></div><p className="text-xs text-on-surface-variant">{content && unit ? `1 ${unit.toLowerCase()} contiene ${content} ${contentUnit === "PIEZAS" ? "piezas" : contentUnit.toLowerCase()}${contentUnit === "L" ? ` (${Number(content) * 1000} ml)` : ""}` : "Presentación sin configurar"}</p></div>
 
         <label className="space-y-2">
           <span className="text-sm font-semibold text-on-surface-variant">
@@ -232,51 +219,6 @@ export default function ProductForm({
           </label>
         ))}
       </div>
-
-      {packages.length > 0 && (
-        <div className="space-y-3 rounded-xl border border-outline-variant bg-background p-4">
-          <p className="text-sm font-semibold text-on-surface-variant">
-            ¿En qué paquetes de eventos se usa?
-          </p>
-          <p className="text-xs text-outline">
-            Se agregará automáticamente a los paquetes que selecciones.
-          </p>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            {packages.map((pkg) => {
-              const checked = selectedPackages.includes(pkg.id);
-              return (
-                <div
-                  key={pkg.id}
-                  className="flex items-center gap-3 rounded-lg border border-outline-variant bg-surface-container px-3 py-2"
-                >
-                  <input
-                    type="checkbox"
-                    name="packages"
-                    value={pkg.id}
-                    checked={checked}
-                    onChange={() => togglePackage(pkg.id)}
-                    className="h-4 w-4"
-                  />
-                  <span className="flex-1 text-sm text-on-surface-variant">
-                    {pkg.name}
-                  </span>
-                  {checked && (
-                    <input
-                      name={`quantity-${pkg.id}`}
-                      type="number"
-                      min="0"
-                      step="0.001"
-                      defaultValue="1"
-                      className="w-20 rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <button
         type="submit"

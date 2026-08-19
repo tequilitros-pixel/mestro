@@ -3,6 +3,7 @@
 import { useEffect, useState, startTransition } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { DateRangeCalendar } from "@/components/ui/DateRangeCalendar";
 
 interface SafeBalance {
   branchId: string;
@@ -45,12 +46,14 @@ export default function SafePage() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [movementDateFrom, setMovementDateFrom] = useState("");
+  const [movementDateTo, setMovementDateTo] = useState("");
 
-  async function loadAll() {
+  async function loadAll(dateFrom = movementDateFrom, dateTo = movementDateTo) {
     try {
       const [balancesRes, movementsRes] = await Promise.all([
         fetch("/api/cash-cuts/safe"),
-        fetch("/api/cash-cuts/safe/movements"),
+        fetch(`/api/cash-cuts/safe/movements?${new URLSearchParams({ ...(dateFrom ? { dateFrom } : {}), ...(dateTo ? { dateTo } : {}) })}`),
       ]);
       if (!balancesRes.ok || !movementsRes.ok) {
         throw new Error("No se pudo cargar la caja fuerte");
@@ -72,7 +75,10 @@ export default function SafePage() {
   }
 
   useEffect(() => {
-    loadAll();
+    // La carga inicial debe ignorar un filtro todavía no aplicado.
+    void loadAll("", "");
+    // `loadAll` cambia al editar el rango, pero el primer fetch debe ocurrir solo al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleRetiro() {
@@ -179,6 +185,22 @@ export default function SafePage() {
           </div>
 
           {formError && <p className="text-error text-sm">{formError}</p>}
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex flex-wrap items-end justify-between gap-3 p-4">
+          <div>
+            <h2 className="text-sm font-semibold text-on-surface-variant">Movimientos por calendario</h2>
+            <p className="mt-1 text-xs text-outline">Selecciona uno o varios días para consultar depósitos y retiros.</p>
+          </div>
+          <DateRangeCalendar
+            from={movementDateFrom}
+            to={movementDateTo}
+            onFromChange={setMovementDateFrom}
+            onToChange={setMovementDateTo}
+          />
+          <Button onClick={() => loadAll()}>Filtrar</Button>
         </div>
       </Card>
 

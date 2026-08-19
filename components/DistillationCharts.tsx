@@ -35,8 +35,8 @@ export default function DistillationCharts({
 
   if (data.length === 0) {
     return (
-      <section className="mt-8 rounded-2xl bg-surface-container p-8">
-        <h2 className="mb-2 text-2xl font-bold">
+      <section className="mt-4 rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5">
+        <h2 className="mb-1 text-sm font-semibold">
           Gráficas de destilación
         </h2>
 
@@ -48,12 +48,12 @@ export default function DistillationCharts({
   }
 
   return (
-    <section className="mt-8 rounded-2xl bg-surface-container p-8">
-      <h2 className="mb-6 text-2xl font-bold">
+    <section className="mt-4 rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5">
+      <h2 className="mb-3 text-sm font-semibold">
         Gráficas de destilación
       </h2>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2">
         <Chart title="Temperatura alambique" data={data} dataKey="temperature" />
         <Chart title="Temperatura salida" data={data} dataKey="outputTemperature" />
         <Chart title="Alcohol leído" data={data} dataKey="alcohol" />
@@ -81,10 +81,10 @@ function Chart({
   dataKey: string;
 }) {
   return (
-    <div className="rounded-2xl bg-surface-container-high p-5">
-      <h3 className="mb-4 font-bold">{title}</h3>
+    <div className="rounded-xl bg-surface-container-high p-3">
+      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
 
-      <div className="h-64">
+      <div className="h-52 sm:h-56">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />

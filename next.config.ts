@@ -19,6 +19,26 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           // No manda la URL completa como referrer a otros sitios.
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "base-uri 'self'",
+              "frame-ancestors 'none'",
+              "object-src 'none'",
+              "form-action 'self'",
+              "img-src 'self' data: blob: https:",
+              "font-src 'self' data:",
+              "style-src 'self' 'unsafe-inline'",
+              "script-src 'self' 'unsafe-inline'",
+              "connect-src 'self' https:",
+              "upgrade-insecure-requests",
+            ].join("; "),
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(self), geolocation=(self), microphone=()",
+          },
           // Fuerza HTTPS en el navegador para este dominio durante 2 años.
           {
             key: "Strict-Transport-Security",

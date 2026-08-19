@@ -70,8 +70,8 @@ export default function RecipeIngredientsEditor({
   }
 
   return (
-    <section className="rounded-3xl border border-outline-variant bg-surface-container/70">
-      <header className="flex flex-col gap-4 border-b border-outline-variant p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+    <section className="rounded-xl border border-outline-variant bg-surface-container/70">
+      <header className="flex flex-col gap-3 border-b border-outline-variant p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-outline">
             Fórmula
@@ -90,7 +90,7 @@ export default function RecipeIngredientsEditor({
         <button
           type="button"
           onClick={openCreateForm}
-          className="rounded-2xl bg-primary px-5 py-3 font-black text-on-surface transition hover:opacity-90"
+          className="compact-action bg-primary font-semibold text-on-surface transition hover:opacity-90"
         >
           + Agregar ingrediente
         </button>
@@ -113,7 +113,7 @@ export default function RecipeIngredientsEditor({
         </div>
       )}
 
-      <footer className="border-t border-outline-variant px-6 py-4 sm:px-8">
+      <footer className="border-t border-outline-variant px-4 py-3">
         <p className="text-sm text-outline">
           {ingredients.length === 1
             ? "1 ingrediente registrado"
@@ -148,8 +148,8 @@ function IngredientRow({
   onEdit: () => void;
 }) {
   return (
-    <article className="p-5 sm:p-6">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+    <article className="p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-start gap-4">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-outline-variant bg-background font-black text-on-surface-variant">
             {ingredient.position}
@@ -384,8 +384,8 @@ function IngredientFormModal({
         }
       }}
     >
-      <div className="max-h-[95vh] w-full overflow-y-auto rounded-t-3xl border border-outline-variant bg-surface-container shadow-2xl sm:max-w-2xl sm:rounded-3xl">
-        <header className="flex items-start justify-between gap-4 border-b border-outline-variant p-6">
+      <div className="compact-modal-panel max-h-[90vh] w-full overflow-y-auto rounded-t-xl border border-outline-variant bg-surface-container sm:max-w-xl sm:rounded-xl">
+        <header className="compact-modal-header flex items-start justify-between gap-4 border-b border-outline-variant">
           <div>
             <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-outline">
               Constructor de recetas
@@ -408,7 +408,7 @@ function IngredientFormModal({
           </button>
         </header>
 
-        <form action={formAction} className="space-y-6 p-6">
+        <form action={formAction} className="compact-modal-body space-y-4">
           <input type="hidden" name="recipeId" value={recipeId} />
 
           {ingredient && (

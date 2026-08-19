@@ -1,6 +1,11 @@
 import type { ComponentType } from "react";
 import type { AppIconVariant } from "@/components/ui/AppIcon";
 import {
+  getModuleKeyForPath,
+  isAdminOnlyPath,
+  isAlwaysAvailablePath,
+} from "@/lib/permission-modules";
+import {
   type IconProps,
   HomeIcon,
   FactoryIcon,
@@ -65,6 +70,8 @@ export type SubMenuItem = {
   icon: ComponentType<IconProps>;
   iconVariant?: AppIconVariant;
   operatorAllowed?: boolean;
+  /** Permiso que controla este enlace cuando su ruta comparte acceso con otra sección. */
+  permissionKey?: string;
   /**
    * Agrupa visualmente los tabs de un submenú bajo un encabezado
    * corto (ej. "Inventario de eventos"). Los items sin `group`
@@ -277,6 +284,12 @@ export const SUBMENUS: Record<
       iconVariant: "orange",
     },
     {
+      href: "/cash-cuts/daily",
+      label: "Cortes",
+      icon: WalletIcon,
+      iconVariant: "green",
+    },
+    {
       href: "/cash-cuts/dashboard",
       label: "Control",
       icon: ChartLineIcon,
@@ -328,6 +341,38 @@ export const SUBMENUS: Record<
       label: "Ventas",
       icon: ChartLineIcon,
       iconVariant: "green",
+    },
+    {
+      href: "/pos/discounts/courtesies",
+      label: "Descuentos",
+      icon: TagIcon,
+      iconVariant: "blue",
+      children: [
+        {
+          href: "/pos/discounts/rules",
+          label: "Administrar",
+          icon: GearIcon,
+          iconVariant: "blue",
+        },
+        {
+          href: "/pos/discounts/courtesies",
+          label: "Cortesías",
+          icon: PartyIcon,
+          iconVariant: "purple",
+        },
+        {
+          href: "/pos/discounts/employees",
+          label: "Trabajadores",
+          icon: UsersIcon,
+          iconVariant: "blue",
+        },
+        {
+          href: "/pos/discounts/products",
+          label: "Productos",
+          icon: PackageIcon,
+          iconVariant: "orange",
+        },
+      ],
     },
     {
       href: "/pos/categories",
@@ -432,6 +477,20 @@ export const SUBMENUS: Record<
       label: "Calendario",
       icon: CalendarIcon,
       iconVariant: "amber",
+      operatorAllowed: true,
+    },
+    {
+      href: "/timeclock/availability",
+      label: "Mi disponibilidad",
+      icon: CalendarIcon,
+      iconVariant: "green",
+      operatorAllowed: true,
+    },
+    {
+      href: "/timeclock/requests",
+      label: "Solicitudes",
+      icon: CalendarIcon,
+      iconVariant: "purple",
       operatorAllowed: true,
     },
     {
@@ -556,26 +615,6 @@ export function formatRole(role: string) {
  * ==========================================================
  */
 
-// Rutas sin candado de permisos: cualquier usuario con sesión
-// puede entrar (checador, calendario propio, inicio de módulos
-// informativos).
-const ALWAYS_VISIBLE_HREFS = new Set<string>([
-  "/",
-  "/administration",
-  "/timeclock",
-  "/timeclock/calendar",
-]);
-
-// Rutas protegidas directamente por rol ADMIN en el servidor,
-// sin pasar por ModulePermission.
-const ADMIN_ONLY_HREFS = new Set<string>([
-  "/administration/schedule",
-  "/timeclock/payroll",
-  "/timeclock/geofences",
-  "/pos/categories",
-  "/pos/products",
-]);
-
 export function isSubmenuItemVisible(
   role: string,
   moduleKeys: string[],
@@ -583,7 +622,10 @@ export function isSubmenuItemVisible(
 ): boolean {
   if (role === "ADMIN") return true;
 
-  if (role === "OPERATOR") {
+  // Compatibilidad con operadores antiguos: si todavía no tienen permisos
+  // configurados conservan su acceso fijo de producción. En cuanto el admin
+  // les asigna permisos, se respeta exactamente esa configuración.
+  if (role === "OPERATOR" && moduleKeys.length === 0) {
     return item.href === "/" || item.operatorAllowed === true;
   }
 
@@ -598,19 +640,18 @@ export function isSubmenuItemVisible(
     );
   }
 
-  if (ALWAYS_VISIBLE_HREFS.has(item.href)) return true;
-  if (ADMIN_ONLY_HREFS.has(item.href)) return false;
+  if (isAlwaysAvailablePath(item.href)) return true;
+  if (isAdminOnlyPath(item.href)) return false;
 
-  /*
-   * Coincidencia por prefijo, igual que getModuleKeyForPath en
-   * permission-modules.ts: una ruta como /sucursales/stock hereda
-   * el permiso de /sucursales aunque no tenga su propia entrada en
-   * PERMISSION_GROUPS, así que el tab debe seguir el mismo criterio
-   * o quedaría oculto para roles con acceso real a la página.
-   */
-  return moduleKeys.some(
-    (key) => item.href === key || item.href.startsWith(`${key}/`)
-  );
+  const permissionHref = item.permissionKey ?? item.href;
+  const requiredKey = item.permissionKey
+    ? item.permissionKey
+    : (getModuleKeyForPath(permissionHref) ?? permissionHref);
+
+  // Se compara el permiso resuelto de forma exacta. Así `/pos` (Vender)
+  // no concede accidentalmente `/pos/sales` (Ventas), mientras que las
+  // rutas sin permiso propio siguen heredando el módulo padre correcto.
+  return moduleKeys.includes(requiredKey);
 }
 
 export function isMainModuleVisible(
@@ -620,7 +661,7 @@ export function isMainModuleVisible(
 ): boolean {
   if (role === "ADMIN") return true;
 
-  if (role === "OPERATOR") {
+  if (role === "OPERATOR" && moduleKeys.length === 0) {
     // El operador conserva su acceso fijo de siempre: solo Producción.
     return module.module === "production";
   }
@@ -633,4 +674,17 @@ export function isMainModuleVisible(
   return items.some((item) =>
     isSubmenuItemVisible(role, moduleKeys, item)
   );
+}
+
+/** Ruta segura de un tab padre: abre el primer hijo realmente autorizado. */
+export function getSubmenuItemDestination(
+  role: string,
+  moduleKeys: string[],
+  item: SubMenuItem,
+): string {
+  if (!item.children) return item.href;
+
+  return item.children.find((child) =>
+    isSubmenuItemVisible(role, moduleKeys, child),
+  )?.href ?? item.href;
 }

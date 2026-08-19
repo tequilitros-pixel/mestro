@@ -40,7 +40,14 @@ export default function OpenShiftsManager({
     setSaving(true);
     setError(null);
 
-    const result = await closeShiftManuallyAction(shiftId, clockOutValue);
+    const adjustedClockOut = new Date(clockOutValue);
+    if (Number.isNaN(adjustedClockOut.getTime())) {
+      setSaving(false);
+      setError("La hora de salida no es válida.");
+      return;
+    }
+
+    const result = await closeShiftManuallyAction(shiftId, adjustedClockOut.toISOString());
 
     setSaving(false);
 

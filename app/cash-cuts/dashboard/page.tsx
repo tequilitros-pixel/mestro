@@ -2,6 +2,8 @@
 
 import { useEffect, useState, startTransition } from "react";
 import { Card } from "@/components/ui/Card";
+import { DateRangeCalendar } from "@/components/ui/DateRangeCalendar";
+import { DataPanel, FilterBar, MetricCard, PageHeader, SectionHeader } from "@/components/ui/CompactUI";
 
 interface BranchSales {
   branch: string;
@@ -80,42 +82,18 @@ export default function DashboardPage() {
     : 1;
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-on-surface">Dashboard</h1>
-        <p className="text-sm text-on-surface-variant">
-          Ventas, diferencias de caja y saldo de caja fuerte — últimos 7 días por defecto.
-        </p>
-      </div>
+    <main className="page-frame space-y-4">
+      <PageHeader title="Dashboard" description="Ventas, diferencias de caja y saldo de caja fuerte — últimos 7 días por defecto." />
 
-      <Card>
-        <div className="flex flex-wrap items-end gap-4 p-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-semibold text-on-surface-variant">Desde</label>
-            <input
-              type="date"
-              className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-semibold text-on-surface-variant">Hasta</label>
-            <input
-              type="date"
-              className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-            />
-          </div>
+      <FilterBar>
+          <DateRangeCalendar from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
           <button
             onClick={loadDashboard}
-            className="bg-primary text-on-primary font-semibold rounded-lg px-4 py-2 text-sm transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97]"
+            className="min-h-9 rounded-lg bg-primary px-3 text-[13px] font-semibold text-on-primary transition duration-150 hover:opacity-90 active:scale-[0.98]"
           >
             Filtrar
           </button>
-        </div>
-      </Card>
+      </FilterBar>
 
       {error && (
         <div className="bg-error/10 text-error text-sm rounded-md p-3 border border-error/30">
@@ -127,48 +105,16 @@ export default function DashboardPage() {
 
       {!loading && data && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <div className="p-4">
-                <div className="text-sm text-on-surface-variant">Ventas totales</div>
-                <div className="text-2xl font-bold text-on-surface">
-                  {formatCurrency(data.totalSales)}
-                </div>
-              </div>
-            </Card>
-            <Card>
-              <div className="p-4">
-                <div className="text-sm text-on-surface-variant">Diferencia acumulada</div>
-                <div
-                  className={`text-2xl font-bold ${
-                    data.totalDifference < 0 ? "text-error" : "text-tertiary-fixed-dim"
-                  }`}
-                >
-                  {formatCurrency(data.totalDifference)}
-                </div>
-              </div>
-            </Card>
-            <Card>
-              <div className="p-4">
-                <div className="text-sm text-on-surface-variant">Cortes con diferencia</div>
-                <div className="text-2xl font-bold text-on-surface">
-                  {data.cortesConDiferencia}
-                </div>
-              </div>
-            </Card>
-            <Card>
-              <div className="p-4">
-                <div className="text-sm text-on-surface-variant">Saldo en caja fuerte</div>
-                <div className="text-2xl font-bold text-on-surface">
-                  {formatCurrency(data.totalSafeBalance)}
-                </div>
-              </div>
-            </Card>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <MetricCard label="Ventas totales" value={formatCurrency(data.totalSales)} />
+            <MetricCard label="Diferencia acumulada" value={formatCurrency(data.totalDifference)} tone={data.totalDifference < 0 ? "danger" : "success"} />
+            <MetricCard label="Cortes con diferencia" value={data.cortesConDiferencia} />
+            <MetricCard label="Saldo en caja fuerte" value={formatCurrency(data.totalSafeBalance)} />
           </div>
 
-          <Card>
-            <div className="p-4 space-y-3">
-              <h2 className="text-sm font-semibold text-on-surface-variant">Ventas por sucursal</h2>
+          <DataPanel>
+            <div className="space-y-3">
+              <SectionHeader title="Ventas por sucursal" />
               {data.salesByBranch.length === 0 && (
                 <p className="text-outline text-sm">Sin cortes cerrados en este periodo.</p>
               )}
@@ -190,7 +136,7 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
-          </Card>
+          </DataPanel>
 
           <Card>
             <div className="p-4 space-y-2">
@@ -253,6 +199,6 @@ export default function DashboardPage() {
           </Card>
         </>
       )}
-    </div>
+    </main>
   );
 }

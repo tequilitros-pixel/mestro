@@ -1,112 +1,12 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { TagIcon } from "@/components/ui/icons";
+import ProcessTable from "@/components/production/ProcessTable";
+import { PageHeader } from "@/components/ui/CompactUI";
+
+const date = (value: Date | null) => value ? new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Mexico_City" }).format(value) : "—";
+const label = (value: string) => value.toLowerCase().replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
 
 export default async function LiquorBatchesPage() {
-  const batches = await prisma.liquorBatch.findMany({
-    orderBy: {
-      createdAt: "desc",
-    },
-    include: {
-      product: true,
-      recipe: true,
-    },
-  });
-
-  return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-on-surface-variant">
-            Elaboración de licores
-          </p>
-
-          <h1 className="mt-2 text-3xl font-black text-on-surface">
-            Lotes
-          </h1>
-
-          <p className="mt-2 text-on-surface-variant">
-            Consulta y continúa los lotes registrados.
-          </p>
-        </div>
-
-        <Link
-          href="/liquors"
-          className="rounded-2xl bg-primary px-5 py-3 text-center font-black text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
-        >
-          + Crear lote
-        </Link>
-      </header>
-
-      {batches.length === 0 ? (
-        <section className="mt-8 rounded-3xl border border-dashed border-outline-variant bg-surface-container/50 p-10 text-center">
-          <TagIcon className="mx-auto h-10 w-10 text-on-surface-variant" />
-
-          <h2 className="mt-5 text-2xl font-black text-on-surface">
-            No hay lotes registrados
-          </h2>
-
-          <p className="mt-3 text-on-surface-variant">
-            Cuando crees un lote aparecerá en esta sección.
-          </p>
-
-          <Link
-            href="/liquors"
-            className="mt-6 inline-flex rounded-2xl bg-primary px-5 py-3 font-black text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
-          >
-            Ir al inicio de licores
-          </Link>
-        </section>
-      ) : (
-        <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {batches.map((batch) => (
-            <Link
-              key={batch.id}
-              href={`/liquors/batches/${batch.id}`}
-              className="rounded-3xl border border-outline-variant bg-surface-container/70 p-6 transition hover:border-primary/25 hover:bg-surface-container"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <span className="text-4xl">
-                  {batch.product.icon ?? "🍹"}
-                </span>
-
-                <span className="rounded-full border border-outline-variant bg-surface-container-high px-3 py-1 text-xs font-black text-on-surface-variant">
-                  {formatStatus(batch.status)}
-                </span>
-              </div>
-
-              <h2 className="mt-5 text-xl font-black text-on-surface">
-                {batch.product.name}
-              </h2>
-
-              <p className="mt-2 font-mono text-sm font-bold text-on-surface-variant">
-                {batch.code}
-              </p>
-
-              <div className="mt-5 border-t border-outline-variant pt-4">
-                <p className="text-xs font-black uppercase tracking-wider text-outline">
-                  Receta
-                </p>
-
-                <p className="mt-2 text-sm font-semibold text-on-surface-variant">
-                  {batch.recipe.name}
-                </p>
-              </div>
-
-              <p className="mt-5 font-black text-on-surface">
-                Ver lote →
-              </p>
-            </Link>
-          ))}
-        </section>
-      )}
-    </main>
-  );
-}
-
-function formatStatus(status: string) {
-  return status
-    .toLowerCase()
-    .replaceAll("_", " ")
-    .replace(/^\w/, (letter) => letter.toUpperCase());
+  const batches = await prisma.liquorBatch.findMany({ orderBy: { createdAt: "desc" }, include: { product: true } });
+  return <main className="page-frame text-on-surface"><div className="mx-auto max-w-7xl"><PageHeader title="Lotes" description="Consulta y continúa los lotes registrados." actions={<Link href="/liquors" className="compact-action inline-flex items-center bg-primary font-semibold text-on-primary">Nuevo lote</Link>} /><ProcessTable emptyLabel="No hay lotes registrados." columns={[{ key: "code", label: "Código de lote", width: "14%" }, { key: "product", label: "Producto", width: "15%" }, { key: "startedAt", label: "Fecha de producción", width: "14%" }, { key: "volume", label: "Volumen", width: "11%" }, { key: "alcohol", label: "Alcohol", width: "10%" }, { key: "expiration", label: "Caducidad", width: "13%" }, { key: "stage", label: "Etapa", width: "12%" }, { key: "status", label: "Estado", width: "11%" }]} filters={[{ key: "product", label: "Producto", options: [...new Set(batches.map((item) => item.product.name))] }, { key: "stage", label: "Etapa", options: [...new Set(batches.map((item) => label(item.status)))] }]} rows={batches.map((item) => { const alcohol = item.finalAlcohol ?? item.initialAlcohol; return { id: item.id, href: `/liquors/batches/${item.id}`, code: item.code, search: `${item.code} ${item.product.name}`, startedAt: item.productionDate.toISOString(), status: item.status === "TERMINADO" ? "Terminado" : "En proceso", finished: item.status === "TERMINADO", values: { product: item.product.name, volume: `${item.actualLiters ?? item.plannedLiters} L`, alcohol: alcohol === null ? "—" : `${alcohol}%`, expiration: date(item.expirationDate), stage: label(item.status) }, filters: { product: item.product.name, stage: label(item.status) } }; })} /></div></main>;
 }

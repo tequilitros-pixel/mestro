@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { addDaysToDateOnly, businessDayStart } from "@/lib/dateOnly";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -16,6 +17,8 @@ export async function GET(req: NextRequest) {
   const requestedBranchId = searchParams.get("branchId");
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
+  const rangeStart = dateFrom ? businessDayStart(dateFrom) : undefined;
+  const rangeEnd = dateTo ? businessDayStart(addDaysToDateOnly(dateTo, 1)) : undefined;
 
   // Si el usuario tiene sucursales restringidas y pidió una específica,
   // solo se respeta si está dentro de lo que puede ver.
@@ -37,8 +40,8 @@ export async function GET(req: NextRequest) {
       ...(dateFrom || dateTo
         ? {
             createdAt: {
-              gte: dateFrom ? new Date(dateFrom) : undefined,
-              lte: dateTo ? new Date(dateTo) : undefined,
+              gte: rangeStart,
+              lt: rangeEnd,
             },
           }
         : {}),

@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { InventoryEntryType } from "@prisma/client";
+import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { isBranchAllowed } from "@/lib/branches/access";
 
 export type ActionResult =
   | { success: true; message: string; id?: string }
@@ -28,6 +30,22 @@ export async function createInventoryEntryAction(
 
     if (!branchId || !productId) {
       return { success: false, error: "Selecciona sucursal y producto." };
+    }
+
+    const [user, allowedBranchIds] = await Promise.all([
+      getCurrentUser(),
+      getAccessibleBranchIds(),
+    ]);
+
+    if (!user) {
+      return { success: false, error: "Tu sesión terminó. Vuelve a iniciar sesión." };
+    }
+
+    if (!isBranchAllowed(allowedBranchIds, branchId)) {
+      return {
+        success: false,
+        error: "No tienes permiso para registrar movimientos en esa sucursal.",
+      };
     }
 
     if (quantity === null || quantity <= 0) {

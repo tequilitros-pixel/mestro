@@ -20,7 +20,7 @@ export default function SyncStatus() {
     : snapshot.failed
       ? "bg-error"
       : snapshot.syncing || snapshot.pending
-        ? "bg-blue-500"
+        ? "bg-on-surface-variant"
         : "bg-emerald-500";
 
   return (

@@ -15,6 +15,7 @@ import { TrashIcon, ClipboardIcon, UsersIcon, ArrowRightIcon } from "@/component
 type Employee = { id: string; name: string };
 type BranchLite = { id: string; name: string; color: string | null };
 type Template = { branchId: string; dayOfWeek: number; startTime: string; endTime: string };
+type Availability = { type: "AVAILABLE_ALL_DAY" | "AVAILABLE_PARTIAL" | "UNAVAILABLE" | "PREFER_OFF"; startTime: string | null; endTime: string | null; source: "EXCEPTION" | "RECURRING" };
 
 export type ShiftModalInitial = {
   id?: string;
@@ -44,6 +45,7 @@ export default function ShiftModal({
   initial,
   onClose,
   onSaved,
+  availability,
 }: {
   employees: Employee[];
   branches: BranchLite[];
@@ -52,6 +54,7 @@ export default function ShiftModal({
   initial: ShiftModalInitial;
   onClose: () => void;
   onSaved: () => void;
+  availability: Record<string, Availability>;
 }) {
   const { showToast } = useToast();
   const isEditing = Boolean(initial.id);
@@ -70,6 +73,8 @@ export default function ShiftModal({
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [availabilityWarning, setAvailabilityWarning] = useState<string | null>(null);
+  const [showOnlyAvailable, setShowOnlyAvailable] = useState(false);
 
   const [showDuplicate, setShowDuplicate] = useState(false);
   const [duplicateDates, setDuplicateDates] = useState<Set<string>>(new Set());
@@ -127,7 +132,20 @@ export default function ShiftModal({
     return templates.find((t) => t.branchId === branchId && t.dayOfWeek === dayIndex) ?? null;
   }, [templates, branchId, date]);
 
-  async function handleSave() {
+  function availabilityFits(employeeId: string) {
+    const item = availability[`${employeeId}|${date}`];
+    if (!item || item.type === "AVAILABLE_ALL_DAY") return true;
+    if (item.type === "UNAVAILABLE" || item.type === "PREFER_OFF") return false;
+    if (!item.startTime || !item.endTime || !startTime || !endTime) return false;
+    const minutes = (value: string) => { const [h, m] = value.split(":").map(Number); return h * 60 + m; };
+    const shiftStart = minutes(startTime); let shiftEnd = minutes(endTime); if (shiftEnd <= shiftStart) shiftEnd += 1440;
+    const availableStart = minutes(item.startTime); let availableEnd = minutes(item.endTime); if (availableEnd <= availableStart) availableEnd += 1440;
+    return shiftStart >= availableStart && shiftEnd <= availableEnd;
+  }
+  const visibleEmployees = showOnlyAvailable && type === "TURNO" ? employees.filter((employee) => availabilityFits(employee.id)) : employees;
+  const selectedAvailability = availability[`${userId}|${date}`];
+
+  async function handleSave(overrideAvailability = false) {
     if (!userId || !date) {
       setError("Selecciona empleado y fecha.");
       return;
@@ -140,6 +158,7 @@ export default function ShiftModal({
 
     setSaving(true);
     setError(null);
+    setAvailabilityWarning(null);
 
     const result = await upsertScheduledShiftAction({
       id: initial.id,
@@ -151,10 +170,15 @@ export default function ShiftModal({
       endTime: type === "TURNO" ? endTime : undefined,
       position,
       notes,
+      overrideAvailability,
     });
 
     setSaving(false);
 
+    if ("requiresAvailabilityOverride" in result && result.requiresAvailabilityOverride) {
+      setAvailabilityWarning(result.warning ?? "El turno entra en conflicto con la disponibilidad.");
+      return;
+    }
     if (result.error) {
       setError(result.error);
       return;
@@ -304,9 +328,9 @@ export default function ShiftModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-surface-dim/80 p-3 sm:p-6">
-      <div className="flex max-h-[94vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-outline-variant bg-surface-container shadow-2xl">
-        <header className="flex shrink-0 items-center justify-between border-b border-outline-variant px-6 py-5">
-          <h2 className="text-xl font-bold text-on-surface">
+      <div className="compact-modal-panel flex w-full max-w-lg flex-col overflow-hidden border border-outline-variant bg-surface-container">
+        <header className="compact-modal-header flex shrink-0 items-center justify-between border-b border-outline-variant">
+          <h2 className="text-lg font-bold text-on-surface">
             {isEditing ? "Editar turno" : "Agregar turno"}
           </h2>
           <button
@@ -318,11 +342,20 @@ export default function ShiftModal({
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-          <div className="space-y-5">
+        <div className="compact-modal-body min-h-0 flex-1 overflow-y-auto">
+          <div className="space-y-4">
             {error && (
               <div className="rounded-xl border border-error/40 bg-error/10 p-3 text-sm text-error">
                 {error}
+              </div>
+            )}
+            {availabilityWarning && (
+              <div className="space-y-3 rounded-xl border border-secondary/40 bg-secondary/10 p-4 text-sm text-secondary">
+                <p className="font-semibold">⚠ {availabilityWarning}</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setAvailabilityWarning(null)} className="rounded-lg border border-secondary/30 px-3 py-2 font-semibold">Cancelar</button>
+                  <button onClick={() => void handleSave(true)} disabled={saving} className="rounded-lg bg-secondary px-3 py-2 font-bold text-on-secondary">Asignar de todas formas</button>
+                </div>
               </div>
             )}
 
@@ -359,12 +392,13 @@ export default function ShiftModal({
                   onChange={(e) => setUserId(e.target.value)}
                   className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
                 >
-                  {employees.map((emp) => (
+                  {visibleEmployees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.name}
                     </option>
                   ))}
                 </select>
+                <label className="flex items-center gap-2 text-xs text-on-surface-variant"><input type="checkbox" checked={showOnlyAvailable} onChange={(e) => setShowOnlyAvailable(e.target.checked)} /> Mostrar solo empleados disponibles</label>
               </label>
 
               <label className="block space-y-2">
@@ -383,6 +417,7 @@ export default function ShiftModal({
 
             {type === "TURNO" && (
               <>
+                {selectedAvailability && <div className={`rounded-xl border p-3 text-sm ${selectedAvailability.type === "UNAVAILABLE" ? "border-error/30 bg-error/10 text-error" : selectedAvailability.type === "AVAILABLE_PARTIAL" ? "border-secondary/30 bg-secondary/10 text-secondary" : "border-outline-variant bg-surface-container-high text-on-surface-variant"}`}><strong>Disponibilidad:</strong> {selectedAvailability.type === "AVAILABLE_ALL_DAY" ? "Todo el día" : selectedAvailability.type === "UNAVAILABLE" ? "No disponible" : selectedAvailability.type === "PREFER_OFF" ? "Preferiría descansar" : `${selectedAvailability.startTime}–${selectedAvailability.endTime}`}</div>}
                 <label className="block space-y-2">
                   <span className="text-sm font-semibold text-on-surface-variant">Sucursal</span>
                   <select
@@ -462,7 +497,7 @@ export default function ShiftModal({
 
             <div className="flex flex-wrap gap-3 border-t border-outline-variant pt-5">
               <button
-                onClick={handleSave}
+                onClick={() => void handleSave(false)}
                 disabled={saving}
                 className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97] disabled:opacity-60 disabled:hover:scale-100"
               >
@@ -508,7 +543,7 @@ export default function ShiftModal({
             </div>
 
             {isEditing && showDuplicate && (
-              <div className="space-y-4 rounded-2xl border border-outline-variant bg-background p-5">
+              <div className="space-y-4 rounded-xl border border-outline-variant bg-background p-4">
                 <p className="text-sm font-semibold text-on-surface">Duplicar este turno a:</p>
 
                 <div className="flex flex-wrap gap-2">
@@ -556,7 +591,7 @@ export default function ShiftModal({
             )}
 
             {isEditing && showMulti && (
-              <div className="space-y-4 rounded-2xl border border-outline-variant bg-background p-5">
+              <div className="space-y-4 rounded-xl border border-outline-variant bg-background p-4">
                 <p className="text-sm font-semibold text-on-surface">
                   Crear este mismo turno para varios empleados y días:
                 </p>
@@ -632,7 +667,7 @@ export default function ShiftModal({
             )}
 
             {isEditing && showMove && (
-              <div className="space-y-4 rounded-2xl border border-outline-variant bg-background p-5">
+              <div className="space-y-4 rounded-xl border border-outline-variant bg-background p-4">
                 <p className="text-sm font-semibold text-on-surface">
                   Mover este turno a otro empleado y/o fecha:
                 </p>
@@ -680,7 +715,7 @@ export default function ShiftModal({
             )}
 
             {isEditing && (
-              <div className="rounded-2xl border border-error/40 bg-error/10 p-5">
+              <div className="rounded-xl border border-error/40 bg-error/10 p-4">
                 {!confirmingDelete ? (
                   <button
                     onClick={() => setConfirmingDelete(true)}

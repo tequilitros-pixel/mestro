@@ -1,10 +1,10 @@
 "use client";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
-import DenominationCounter, {
-  type DenominationCount,
-} from "@/components/cash-cuts/DenominationCounter";
+import DenominationWizard from "@/components/cash-cuts/DenominationWizard";
+import type { CashDenominationCount } from "@/lib/cash-cuts/denominations";
 import {
   ReceiptIcon,
   CheckIcon,
@@ -37,12 +37,16 @@ interface Outflow {
   concept: string;
   category: string;
   amount: number;
+  occurredAt?: string;
+  notes?: string | null;
 }
 
 interface Inflow {
   id: string;
   type: string;
   amount: number;
+  occurredAt?: string;
+  notes?: string | null;
 }
 
 interface Evidence {
@@ -83,10 +87,49 @@ interface CashCut {
     location: string;
     eventDate: string;
   } | null;
+  startingFund: number;
+  date: string;
+  openedAt: string;
+  closedAt: string | null;
+  totalSales: number | null;
+  totalOutflows: number | null;
+  totalInflows: number | null;
+  totalCostOfGoods: number | null;
+  netProfit: number | null;
+  envelopeNotes: string | null;
+  notes: string | null;
+  responsible: { id: string; name: string };
+  createdBy: { id: string; name: string };
+  updatedBy: { id: string; name: string } | null;
+  posSales: Array<{
+    id: string;
+    code: string;
+    subtotal: number;
+    discountAmount: number;
+    total: number;
+    createdAt: string;
+    soldBy: { id: string; name: string };
+    items: Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      quantity: number;
+      unitPrice: number;
+      lineTotal: number;
+    }>;
+  }>;
 }
 
 interface CloseResult {
   assignmentWarning?: string;
+  confirmation?: {
+    cashCounted: number;
+    cashExpected: number;
+    difference: number;
+    envelopeAmount: number;
+    nextFund: number;
+    envelopeNumber: string | null;
+  };
 }
 
 const METODOS = [
@@ -120,7 +163,10 @@ const TIPOS_EVIDENCIA = [
 ];
 
 function isImageUrl(url: string) {
-  return /\.(png|jpe?g|gif|webp|avif)$/i.test(url);
+  const candidate = url.startsWith("/api/")
+    ? new URL(url, "http://local").searchParams.get("name") ?? url
+    : url;
+  return /\.(png|jpe?g|gif|webp|avif)$/i.test(candidate);
 }
 
 const STEPS: { key: Step; label: string }[] = [
@@ -130,6 +176,156 @@ const STEPS: { key: Step; label: string }[] = [
   { key: "evidencias", label: "Evidencias" },
   { key: "cierre", label: "Cierre" },
 ];
+
+const formatMoney = (value: number | null | undefined) =>
+  new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value ?? 0);
+
+const formatDateTime = (value: string | null | undefined) =>
+  value
+    ? new Intl.DateTimeFormat("es-MX", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "America/Mexico_City",
+      }).format(new Date(value))
+    : "Sin registrar";
+
+function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
+  const posSales = cashCut.posSales ?? [];
+  const products = new Map<string, { name: string; quantity: number; total: number }>();
+  for (const sale of posSales) {
+    for (const item of sale.items) {
+      const name = item.description || item.name;
+      const current = products.get(name) ?? { name, quantity: 0, total: 0 };
+      current.quantity += item.quantity;
+      current.total += item.lineTotal;
+      products.set(name, current);
+    }
+  }
+  const productRows = [...products.values()].sort((a, b) => b.total - a.total);
+  const posTotal = posSales.reduce((sum, sale) => sum + sale.total, 0);
+  const discountTotal = posSales.reduce((sum, sale) => sum + sale.discountAmount, 0);
+  const manualSales = Math.max(0, (cashCut.totalSales ?? 0) - posTotal);
+
+  return (
+    <div className="space-y-5">
+      <Link href="/cash-cuts" className="inline-flex items-center gap-1 text-sm font-semibold text-primary">
+        <ChevronLeftIcon className="h-4 w-4" /> Volver a cortes
+      </Link>
+
+      <Card highlight>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardLabel>{cashCut.branch.name}</CardLabel>
+            <CardValue>{cashCut.code}</CardValue>
+            <p className="mt-1 text-sm text-on-surface-variant">Radiografía completa del turno</p>
+          </div>
+          <span className="rounded-full bg-surface-container-highest px-3 py-1 text-xs font-bold text-on-surface-variant">
+            {cashCut.status}
+          </span>
+        </div>
+      </Card>
+
+      <section>
+        <h2 className="mb-3 text-base font-bold text-on-surface">Turno y responsables</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Card><CardLabel>Responsable del turno</CardLabel><CardValue>{cashCut.responsible?.name ?? "Sin registrar"}</CardValue></Card>
+          <Card><CardLabel>Abierto por</CardLabel><CardValue>{cashCut.createdBy?.name ?? "Sin registrar"}</CardValue></Card>
+          <Card><CardLabel>Apertura</CardLabel><p className="font-bold text-on-surface">{formatDateTime(cashCut.openedAt)}</p></Card>
+          <Card><CardLabel>Cierre</CardLabel><p className="font-bold text-on-surface">{formatDateTime(cashCut.closedAt)}</p></Card>
+        </div>
+        {cashCut.event && (
+          <Card className="mt-3">
+            <CardLabel>Evento vinculado</CardLabel>
+            <p className="font-bold text-on-surface">{cashCut.event.code} · {cashCut.event.clientName}</p>
+            <p className="text-sm text-on-surface-variant">{cashCut.event.location}</p>
+          </Card>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-base font-bold text-on-surface">Resultado de caja</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Card><CardLabel>Fondo inicial</CardLabel><CardValue>{formatMoney(cashCut.startingFund)}</CardValue></Card>
+          <Card><CardLabel>Efectivo esperado</CardLabel><CardValue>{formatMoney(cashCut.cashExpected)}</CardValue></Card>
+          <Card><CardLabel>Efectivo contado</CardLabel><CardValue>{formatMoney(cashCut.cashCounted)}</CardValue></Card>
+          <Card><CardLabel>Al sobre</CardLabel><CardValue>{formatMoney(cashCut.envelopeAmount)}</CardValue></Card>
+          <Card><CardLabel>Fondo restante</CardLabel><CardValue>{formatMoney(cashCut.nextFund)}</CardValue></Card>
+          <Card>
+            <CardLabel>Diferencia</CardLabel>
+            <p className={`text-2xl font-bold ${(cashCut.difference ?? 0) < 0 ? "text-error" : "text-on-surface"}`}>{formatMoney(cashCut.difference)}</p>
+          </Card>
+        </div>
+        {(cashCut.envelopeNumber || cashCut.envelopeNotes) && (
+          <Card className="mt-3">
+            <CardLabel>Sobre</CardLabel>
+            <p className="font-bold text-on-surface">{cashCut.envelopeNumber ? `Número ${cashCut.envelopeNumber}` : "Sin número"}</p>
+            {cashCut.envelopeNotes && <p className="text-sm text-on-surface-variant">{cashCut.envelopeNotes}</p>}
+          </Card>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-base font-bold text-on-surface">Ventas</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Card highlight><CardLabel>Total vendido</CardLabel><CardValue>{formatMoney(cashCut.totalSales)}</CardValue></Card>
+          <Card><CardLabel>Tickets POS</CardLabel><CardValue>{posSales.length}</CardValue></Card>
+          <Card><CardLabel>Descuentos POS</CardLabel><CardValue>{formatMoney(discountTotal)}</CardValue></Card>
+          <Card><CardLabel>Captura manual</CardLabel><CardValue>{formatMoney(manualSales)}</CardValue></Card>
+        </div>
+        <div className="mt-3 space-y-2">
+          {cashCut.salesByMethod.filter((sale) => sale.amount > 0).map((sale) => (
+            <Card key={sale.id}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold text-on-surface">{METODOS.find((method) => method.key === sale.method)?.label ?? sale.method}</span>
+                <span className="font-bold text-on-surface">{formatMoney(sale.amount)}</span>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-base font-bold text-on-surface">Productos vendidos</h2>
+        {productRows.length > 0 ? (
+          <Card>
+            <div className="divide-y divide-outline-variant">
+              {productRows.map((product) => (
+                <div key={product.name} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                  <div><p className="font-semibold text-on-surface">{product.name}</p><p className="text-xs text-on-surface-variant">{product.quantity} unidad(es)</p></div>
+                  <span className="font-bold text-on-surface">{formatMoney(product.total)}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : (
+          <Card><p className="text-sm text-on-surface-variant">Este turno no tiene productos registrados desde el Punto de Venta; las ventas pudieron capturarse manualmente.</p></Card>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-base font-bold text-on-surface">Movimientos del turno</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Card>
+            <CardLabel>Entradas · {formatMoney(cashCut.totalInflows)}</CardLabel>
+            <div className="mt-2 space-y-2">{cashCut.inflows.length ? cashCut.inflows.map((entry) => <div key={entry.id} className="flex justify-between gap-2 text-sm"><span className="text-on-surface-variant">{entry.type}</span><b className="text-on-surface">{formatMoney(entry.amount)}</b></div>) : <p className="text-sm text-on-surface-variant">Sin entradas</p>}</div>
+          </Card>
+          <Card>
+            <CardLabel>Salidas · {formatMoney(cashCut.totalOutflows)}</CardLabel>
+            <div className="mt-2 space-y-2">{cashCut.outflows.length ? cashCut.outflows.map((entry) => <div key={entry.id} className="flex justify-between gap-2 text-sm"><span className="text-on-surface-variant">{entry.concept}</span><b className="text-on-surface">{formatMoney(entry.amount)}</b></div>) : <p className="text-sm text-on-surface-variant">Sin salidas</p>}</div>
+          </Card>
+        </div>
+      </section>
+
+      {(cashCut.notes || cashCut.evidences.length > 0) && (
+        <section>
+          <h2 className="mb-3 text-base font-bold text-on-surface">Notas y evidencias</h2>
+          {cashCut.notes && <Card className="mb-3"><p className="text-sm text-on-surface">{cashCut.notes}</p></Card>}
+          <p className="text-sm text-on-surface-variant">{cashCut.evidences.length} evidencia(s) asociada(s) al turno.</p>
+        </section>
+      )}
+    </div>
+  );
+}
 
 /**
  * El avance de cada paso se calcula a partir de los datos reales del
@@ -312,11 +508,24 @@ const load = useCallback(async () => {
 
   const isClosed = cashCut.status !== "ABIERTO";
 
+  if (isClosed) {
+    return <div className="mx-auto max-w-3xl p-6"><ClosedCutSummary cashCut={cashCut} /></div>;
+  }
+
   return (
     <div className="max-w-2xl mx-auto p-6">
       <div className="mb-4">
-        <p className="text-on-surface-variant text-sm">{cashCut.branch.name}</p>
-        <h1 className="text-2xl font-bold text-on-surface">{cashCut.code}</h1>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-on-surface-variant text-sm">{cashCut.branch.name}</p>
+            <h1 className="text-2xl font-bold text-on-surface">{cashCut.code}</h1>
+          </div>
+          {!isClosed && (
+            <Button type="button" variant="secondary" onClick={() => setStep("cierre")}>
+              Cerrar caja
+            </Button>
+          )}
+        </div>
         <span
           className={`inline-block mt-1 px-3 py-1 rounded-full text-xs font-bold ${
             isClosed ? "bg-surface-container-highest text-on-surface-variant" : "bg-tertiary-fixed-dim/20 text-tertiary-fixed-dim"
@@ -364,22 +573,55 @@ function VentasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
     return initial;
   });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function saveMethod(method: string) {
     setSaving(true);
-    await fetch(`/api/cash-cuts/${cashCutId}/ventas`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ method, amount: Number(values[method] || 0) }),
-    });
-    setSaving(false);
-    onSaved();
+    setError(null);
+    const amount = Number(values[method] || 0);
+
+    if (!navigator.onLine) {
+      const id = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+      await enqueueOperation({ id, kind: "cash-cut.venta.set", createdAt, payload: { cashCutId, method, amount } });
+      const existing = cashCut.salesByMethod.find((s) => s.method === method);
+      const salesByMethod = existing
+        ? cashCut.salesByMethod.map((s) => (s.method === method ? { ...s, amount } : s))
+        : [...cashCut.salesByMethod, { id, method, amount }];
+      saveLocalCut({ ...cashCut, salesByMethod });
+      setSaving(false);
+      onSaved();
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/cash-cuts/${cashCutId}/ventas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ method, amount }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "No se pudo guardar la venta.");
+        return;
+      }
+      onSaved();
+    } catch {
+      setError("No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const total = Object.values(values).reduce((sum, v) => sum + (Number(v) || 0), 0);
 
   return (
     <div className="space-y-3">
+      <p className="text-xs text-on-surface-variant">
+        Si vendiste con el Punto de Venta, estos montos ya están cargados — no los vuelvas a
+        capturar aquí, porque escribir un número nuevo <span className="font-semibold">reemplaza</span>{" "}
+        (no suma) lo que ya se cobró en el POS para ese método de pago.
+      </p>
       {METODOS.map((m) => (
         <Card key={m.key}>
           <div className="flex items-center gap-3">
@@ -404,6 +646,7 @@ function VentasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
         <CardValue>${total.toFixed(2)}</CardValue>
       </Card>
       {saving && <p className="text-on-surface-variant text-sm">Guardando...</p>}
+      {error && <p className="text-error text-sm">{error}</p>}
     </div>
   );
 }
@@ -608,6 +851,11 @@ function EvidenciasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
       return;
     }
 
+    if (!navigator.onLine) {
+      setError("Necesitas conexión a internet para subir evidencias.");
+      return;
+    }
+
     setSaving(true);
 
     const formData = new FormData();
@@ -615,22 +863,26 @@ function EvidenciasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
     formData.append("type", type);
     if (notes) formData.append("notes", notes);
 
-    const res = await fetch(`/api/cash-cuts/${cashCutId}/evidencias`, {
-      method: "POST",
-      body: formData,
-    });
+    try {
+      const res = await fetch(`/api/cash-cuts/${cashCutId}/evidencias`, {
+        method: "POST",
+        body: formData,
+      });
 
-    setSaving(false);
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "No se pudo subir la evidencia");
+        return;
+      }
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setError(data?.error ?? "No se pudo subir la evidencia");
-      return;
+      setFile(null);
+      setNotes("");
+      onSaved();
+    } catch {
+      setError("No se pudo subir la evidencia. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      setSaving(false);
     }
-
-    setFile(null);
-    setNotes("");
-    onSaved();
   }
 
   return (
@@ -728,16 +980,10 @@ function EvidenciasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
 }
 
 function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
-  const [cashCounted, setCashCounted] = useState(cashCut.cashCounted?.toString() ?? "");
-  const [cashCountedBreakdown, setCashCountedBreakdown] = useState<
-    DenominationCount[]
-  >([]);
-  const [envelopeAmount, setEnvelopeAmount] = useState(cashCut.envelopeAmount?.toString() ?? "");
+  const [cashCounted, setCashCounted] = useState<number | null>(null);
+  const [cashCountedBreakdown, setCashCountedBreakdown] = useState<CashDenominationCount[]>([]);
+  const [envelopeAmount, setEnvelopeAmount] = useState("");
   const [envelopeNumber, setEnvelopeNumber] = useState(cashCut.envelopeNumber ?? "");
-  const [nextFund, setNextFund] = useState(cashCut.nextFund?.toString() ?? "");
-  const [nextFundBreakdown, setNextFundBreakdown] = useState<
-    DenominationCount[]
-  >([]);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<CloseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -746,54 +992,141 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
     (sum, s) => sum + s.amount,
     0
   );
-  const canClose = totalVentas > 0 || (typeof navigator !== "undefined" && !navigator.onLine);
+  // También debe poder cerrarse una caja sin ventas (por ejemplo, un turno
+  // abierto por error o un día sin operación). El conteo físico sigue siendo obligatorio.
+  const canClose = true;
+  const cashSales = cashCut.salesByMethod.find((sale) => sale.method === "EFECTIVO")?.amount ?? 0;
+  const expectedCash = cashCut.startingFund + cashSales +
+    cashCut.inflows.reduce((sum, inflow) => sum + inflow.amount, 0) -
+    cashCut.outflows.reduce((sum, outflow) => sum + outflow.amount, 0);
 
   async function handleClose() {
     setError(null);
 
-    if (!canClose) {
-      setError("Captura al menos una venta antes de cerrar el corte.");
+    if (cashCounted === null) {
+      setError("Primero cuenta todo el efectivo de la caja.");
       return;
     }
-
-    if (cashCounted === "" || nextFund === "") {
-      setError("Captura el efectivo contado y el fondo para el siguiente turno.");
+    const envelope = Number(envelopeAmount || 0);
+    if (!Number.isFinite(envelope) || envelope < 0) {
+      setError("Captura un monto de sobre válido.");
+      return;
+    }
+    if (envelope > cashCounted) {
+      setError("El sobre no puede ser mayor al efectivo contado.");
       return;
     }
     setSaving(true);
     const closePayload = {
       cashCutId,
-      cashCounted: Number(cashCounted),
-      envelopeAmount: envelopeAmount ? Number(envelopeAmount) : undefined,
-      envelopeNumber: envelopeNumber || undefined,
-      nextFund: Number(nextFund),
+      closingMode: "COUNT_THEN_ENVELOPE",
+      cashCounted,
       cashCountedDenominations: cashCountedBreakdown,
-      nextFundDenominations: nextFundBreakdown,
+      envelopeAmount: envelope,
+      envelopeNumber: envelopeNumber || undefined,
     };
     if (!navigator.onLine) {
       const createdAt = new Date().toISOString();
       await enqueueOperation({ id: crypto.randomUUID(), kind: "cash-cut.close", createdAt, payload: closePayload });
-      saveLocalCut({ ...cashCut, status: "CERRADO", cashCounted: Number(cashCounted), envelopeAmount: envelopeAmount ? Number(envelopeAmount) : null, envelopeNumber: envelopeNumber || null, nextFund: Number(nextFund) });
+      saveLocalCut({ ...cashCut, status: "CERRADO", cashCounted, cashExpected: expectedCash, difference: cashCounted - expectedCash, envelopeAmount: envelope, envelopeNumber: envelopeNumber || null, nextFund: cashCounted - envelope });
       localStorage.removeItem(`maestro:open-cash-cut:${cashCut.branch.id}`);
-      setResult({ assignmentWarning: "Cierre guardado en el dispositivo y pendiente de sincronización." });
-      setSaving(false); onSaved(); return;
-    }
-    const res = await fetch(`/api/cash-cuts/${cashCutId}/cerrar`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(closePayload),
-    });
-    setSaving(false);
-
-    if (!res.ok) {
-      const data = await res.json();
-      setError(data.error ?? "No se pudo cerrar el corte");
+      setResult({
+        assignmentWarning: "Cierre guardado en el dispositivo y pendiente de sincronización.",
+        confirmation: {
+          cashCounted,
+          cashExpected: expectedCash,
+          difference: cashCounted - expectedCash,
+          envelopeAmount: envelope,
+          nextFund: cashCounted - envelope,
+          envelopeNumber: envelopeNumber || null,
+        },
+      });
+      setSaving(false);
+      onSaved();
       return;
     }
 
-    const data: CloseResult = await res.json();
-    setResult(data);
-    onSaved();
+    let data;
+    try {
+      const res = await fetch(`/api/cash-cuts/${cashCutId}/cerrar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(closePayload),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        setError(errData.error ?? "No se pudo cerrar el corte");
+        return;
+      }
+
+      data = await res.json();
+    } catch {
+      setError("No se pudo cerrar el corte. Revisa tu conexión e inténtalo de nuevo.");
+      return;
+    } finally {
+      setSaving(false);
+    }
+
+    const updatedCut = { ...cashCut, ...data.cashCut };
+    saveLocalCut(updatedCut);
+    setResult({
+      assignmentWarning: data.assignmentWarning,
+      confirmation: {
+        cashCounted: data.cashCut.cashCounted,
+        cashExpected: data.cashCut.cashExpected,
+        difference: data.cashCut.difference,
+        envelopeAmount: data.cashCut.envelopeAmount ?? 0,
+        nextFund: data.cashCut.nextFund ?? 0,
+        envelopeNumber: data.cashCut.envelopeNumber ?? null,
+      },
+    });
+  }
+
+  if (result?.confirmation) {
+    const confirmation = result.confirmation;
+    return (
+      <div className="space-y-4">
+        <Card highlight className="text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim">
+            <CheckIcon className="h-6 w-6" />
+          </div>
+          <h2 className="text-2xl font-bold text-on-surface">Caja cerrada correctamente</h2>
+          <p className="mt-2 text-sm text-on-surface-variant">Revisa el resumen final del cierre.</p>
+        </Card>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Card><CardLabel>Efectivo contado</CardLabel><CardValue>${confirmation.cashCounted.toFixed(2)}</CardValue></Card>
+          <Card><CardLabel>Efectivo esperado</CardLabel><CardValue>${confirmation.cashExpected.toFixed(2)}</CardValue></Card>
+          <Card><CardLabel>Dinero al sobre</CardLabel><CardValue>${confirmation.envelopeAmount.toFixed(2)}</CardValue></Card>
+          <Card><CardLabel>Fondo en caja</CardLabel><CardValue>${confirmation.nextFund.toFixed(2)}</CardValue></Card>
+        </div>
+
+        <Card>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardLabel>Diferencia del corte</CardLabel>
+              <CardValue>${confirmation.difference.toFixed(2)}</CardValue>
+            </div>
+            {confirmation.envelopeNumber && (
+              <div className="text-right">
+                <CardLabel>Número de sobre</CardLabel>
+                <p className="font-bold text-on-surface">{confirmation.envelopeNumber}</p>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {result.assignmentWarning && <p className="text-sm text-secondary">{result.assignmentWarning}</p>}
+
+        <Link
+          href="/cash-cuts"
+          className="inline-flex w-full items-center justify-center rounded-full bg-primary px-5 py-3 text-base font-semibold text-on-primary transition duration-150 hover:opacity-90 active:scale-[0.97]"
+        >
+          Volver a Cortes
+        </Link>
+      </div>
+    );
   }
 
   if (cashCut.status !== "ABIERTO") {
@@ -830,7 +1163,7 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
         )}
         {cierreBreakdown.length > 0 && (
           <DenominationBreakdownView
-            title="Desglose del efectivo contado al cerrar"
+            title="Desglose registrado al cerrar"
             rows={cierreBreakdown}
           />
         )}
@@ -855,8 +1188,7 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
         <div className="space-y-1.5">
           <ChecklistRow
             ok={totalVentas > 0}
-            required
-            label={`Ventas capturadas: $${totalVentas.toFixed(2)}`}
+            label={`Ventas capturadas: $${totalVentas.toFixed(2)}${totalVentas === 0 ? " (sin ventas)" : ""}`}
           />
           <ChecklistRow
             ok={cashCut.outflows.length > 0}
@@ -873,56 +1205,65 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
         </div>
       </Card>
 
-      <Card>
-        <CardLabel>Efectivo contado físicamente</CardLabel>
-        <DenominationCounter
-          onTotalChange={(total, breakdown) => {
-            setCashCounted(total > 0 ? String(total) : "");
-            setCashCountedBreakdown(breakdown);
-          }}
-        />
-      </Card>
-      <Card>
-        <CardLabel>Monto enviado al sobre</CardLabel>
-        <input
-          type="number"
-          inputMode="decimal"
-          value={envelopeAmount}
-          onChange={(e) => setEnvelopeAmount(e.target.value)}
-          className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
-        />
-      </Card>
-      <Card>
-        <CardLabel>Número de sobre (opcional)</CardLabel>
-        <input
-          value={envelopeNumber}
-          onChange={(e) => setEnvelopeNumber(e.target.value)}
-          className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
-        />
-      </Card>
-      <Card>
-        <CardLabel>Fondo para el siguiente turno</CardLabel>
-        <DenominationCounter
-          onTotalChange={(total, breakdown) => {
-            setNextFund(total > 0 ? String(total) : "");
-            setNextFundBreakdown(breakdown);
-          }}
-        />
-      </Card>
-
       {error && <p className="text-error text-sm">{error}</p>}
       {result?.assignmentWarning && (
         <p className="text-secondary text-sm">{result.assignmentWarning}</p>
       )}
 
-      <Button
-        className="w-full"
-        size="lg"
-        disabled={saving || !canClose}
-        onClick={handleClose}
-      >
-        {saving ? "Cerrando..." : "Cerrar corte"}
-      </Button>
+      {canClose && cashCounted === null && (
+        <DenominationWizard
+          title="Contar efectivo de cierre"
+          description="Cuenta todo el dinero físico que hay en la caja, una denominación a la vez."
+          confirmLabel="Confirmar conteo"
+          onConfirm={(total, breakdown) => {
+            setCashCounted(total);
+            setCashCountedBreakdown(breakdown);
+            setError(null);
+          }}
+        />
+      )}
+
+      {canClose && cashCounted !== null && (
+        <div className="space-y-3">
+          <Card highlight>
+            <CardLabel>Efectivo contado</CardLabel>
+            <CardValue>${cashCounted.toFixed(2)}</CardValue>
+            <button type="button" onClick={() => setCashCounted(null)} className="mt-2 text-xs font-semibold text-primary">
+              Editar conteo
+            </button>
+          </Card>
+          <Card>
+            <CardLabel>Dinero que va al sobre</CardLabel>
+            <p className="mb-3 text-xs text-on-surface-variant">Este dinero se enviará a caja fuerte.</p>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={cashCounted}
+              step="0.01"
+              value={envelopeAmount}
+              onChange={(event) => setEnvelopeAmount(event.target.value)}
+              className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-lg font-bold text-on-surface outline-none focus:border-primary"
+              placeholder="0.00"
+            />
+          </Card>
+          <Card>
+            <CardLabel>Número de sobre (opcional)</CardLabel>
+            <input
+              value={envelopeNumber}
+              onChange={(event) => setEnvelopeNumber(event.target.value)}
+              className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none focus:border-primary"
+            />
+          </Card>
+          <Card highlight>
+            <CardLabel>Fondo que queda en caja</CardLabel>
+            <CardValue>${Math.max(0, cashCounted - (Number(envelopeAmount) || 0)).toFixed(2)}</CardValue>
+          </Card>
+          <Button className="w-full" size="lg" disabled={saving} onClick={handleClose}>
+            {saving ? "Cerrando..." : "Confirmar y cerrar caja"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -26,7 +26,8 @@ export type OfflineOperation = {
     | "cash-cut.open"
     | "cash-cut.inflow.create"
     | "cash-cut.outflow.create"
-    | "cash-cut.close";
+    | "cash-cut.close"
+    | "cash-cut.venta.set";
   payload: CookingEventPayload | Record<string, unknown>;
   createdAt: string;
   attempts: number;

@@ -12,6 +12,8 @@ import {
   parseDateOnly,
   todayDateOnly,
 } from "@/lib/dateOnly";
+import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/periodLock";
+import { availabilityConflict, getAvailabilityMatrix, getEffectiveAvailability } from "@/lib/availability";
 
 /**
  * Si la semana de `dateStr` todavía no tiene ninguna fila en
@@ -85,6 +87,7 @@ export async function getScheduleGridForWeek(weekStart: string) {
     prisma.scheduleWeek.findUnique({ where: { weekStart: start } }),
     getPayrollSettings(),
   ]);
+  const availability = await getAvailabilityMatrix(employees.map((employee) => employee.id), start, end);
 
   return {
     success: true,
@@ -101,6 +104,7 @@ export async function getScheduleGridForWeek(weekStart: string) {
     branches,
     shifts,
     templates,
+    availability,
   };
 }
 
@@ -114,6 +118,8 @@ type UpsertShiftInput = {
   endTime?: string;
   position?: string;
   notes?: string;
+  overrideAvailability?: boolean;
+  overrideReason?: string;
 };
 
 /**
@@ -130,10 +136,30 @@ export async function upsertScheduledShiftAction(input: UpsertShiftInput) {
     return { error: "Faltan datos del turno" };
   }
 
+  const originalShift = input.id
+    ? await prisma.scheduledShift.findUnique({ where: { id: input.id }, select: { date: true } })
+    : null;
+  if (
+    (originalShift && await isPayrollDateLocked(originalShift.date)) ||
+    await isPayrollDateLocked(input.date)
+  ) {
+    return { error: PAYROLL_LOCKED_MESSAGE };
+  }
+
   const type = input.type ?? "TURNO";
 
   if (type === "TURNO" && (!input.branchId || !input.startTime || !input.endTime)) {
     return { error: "Un turno necesita sucursal, hora de entrada y hora de salida." };
+  }
+
+  const effectiveAvailability = type === "TURNO"
+    ? await getEffectiveAvailability(input.userId, input.date)
+    : null;
+  const conflict = type === "TURNO"
+    ? availabilityConflict(effectiveAvailability, input.startTime!, input.endTime!)
+    : null;
+  if (conflict && !input.overrideAvailability) {
+    return { requiresAvailabilityOverride: true, warning: conflict };
   }
 
   const data = {
@@ -148,11 +174,25 @@ export async function upsertScheduledShiftAction(input: UpsertShiftInput) {
   };
 
   await prisma.$transaction(async (tx) => {
+    let shiftId: string;
     if (!input.id) {
       await ensureWeekStartsAsDraftIfEmpty(tx, input.date);
-      await tx.scheduledShift.create({ data });
+      const shift = await tx.scheduledShift.create({ data });
+      shiftId = shift.id;
     } else {
       await tx.scheduledShift.update({ where: { id: input.id }, data });
+      shiftId = input.id;
+    }
+    if (conflict && effectiveAvailability && input.overrideAvailability) {
+      await tx.availabilityOverrideAudit.create({
+        data: {
+          shiftId,
+          userId: input.userId,
+          overriddenById: admin.id,
+          availabilitySnapshot: effectiveAvailability,
+          reason: input.overrideReason?.trim() || null,
+        },
+      });
     }
   });
 
@@ -183,6 +223,10 @@ export async function duplicateShiftAction(shiftId: string, targetDates: string[
 
   if (!source) {
     return { error: "Turno no encontrado" };
+  }
+
+  for (const date of dates) {
+    if (await isPayrollDateLocked(date)) return { error: PAYROLL_LOCKED_MESSAGE };
   }
 
   await prisma.$transaction(async (tx) => {
@@ -271,6 +315,8 @@ export async function moveScheduledShiftAction(
 
   if (!source) return { error: "Turno no encontrado" };
 
+  if (await isPayrollDateLocked(source.date)) return { error: PAYROLL_LOCKED_MESSAGE };
+
   if (source.timeClockEntries.length > 0) {
     return {
       error:
@@ -281,6 +327,8 @@ export async function moveScheduledShiftAction(
   const newUserId = input.userId || source.userId;
   const newDateStr = input.date || formatDateOnly(source.date);
   const sourceDateStr = formatDateOnly(source.date);
+
+  if (await isPayrollDateLocked(newDateStr)) return { error: PAYROLL_LOCKED_MESSAGE };
 
   if (newUserId === source.userId && newDateStr === sourceDateStr) {
     return { error: "El turno ya está en ese empleado y fecha." };
@@ -348,6 +396,10 @@ export async function multiDuplicateShiftAction(
 
   const source = await prisma.scheduledShift.findUnique({ where: { id: shiftId } });
   if (!source) return { error: "Turno no encontrado" };
+
+  for (const target of cleanTargets) {
+    if (await isPayrollDateLocked(target.date)) return { error: PAYROLL_LOCKED_MESSAGE };
+  }
 
   const sourceDateStr = formatDateOnly(source.date);
   const toCreate: { userId: string; date: string }[] = [];
@@ -454,6 +506,10 @@ export async function deleteScheduledShiftAction(shiftId: string) {
     return { error: "No tienes permiso" };
   }
 
+  const shift = await prisma.scheduledShift.findUnique({ where: { id: shiftId }, select: { date: true } });
+  if (!shift) return { error: "Turno no encontrado" };
+  if (await isPayrollDateLocked(shift.date)) return { error: PAYROLL_LOCKED_MESSAGE };
+
   await prisma.scheduledShift.delete({ where: { id: shiftId } });
 
   revalidatePath("/administration/schedule");
@@ -469,6 +525,7 @@ export async function copyPreviousWeekAction(weekStart: string) {
   }
 
   const currentMondayStr = mondayOfWeek(weekStart);
+  if (await isPayrollDateLocked(currentMondayStr)) return { error: PAYROLL_LOCKED_MESSAGE };
   const previousMondayStr = addDaysToDateOnly(currentMondayStr, -7);
   const previousStart = parseDateOnly(previousMondayStr);
   const previousEnd = parseDateOnly(currentMondayStr);

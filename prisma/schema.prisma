@@ -11,6 +11,8 @@ model User {
   name                      String
   username                  String                 @unique
   email                     String?                @unique
+  /// Teléfono en formato E.164 (ej. +524941234567) para acceso mediante SMS.
+  phone                     String?                @unique
   password                  String
   /// PIN de 4 dígitos (hasheado) para el checador compartido (kiosco):
   /// permite identificarse en una tablet/teléfono común de la sucursal
@@ -61,6 +63,7 @@ model User {
   pushSubscriptions  PushSubscription[]
   passwordResetCodes PasswordResetCode[]
   modulePermissions  ModulePermission[]
+  sessions           UserSession[]
 
   posCategoriesCreated     PosCategory[]      @relation("PosCategoryCreatedBy")
   posProductsCreated       PosProduct[]       @relation("PosProductCreatedBy")
@@ -71,6 +74,8 @@ model User {
   posSaleItemsBeneficiary  PosSaleItem[]      @relation("PosSaleItemBeneficiary")
   posSaleItemsAuthorized   PosSaleItem[]      @relation("PosSaleItemAuthorizedBy")
   posDiscountLimitsUpdated PosDiscountLimit[] @relation("PosDiscountLimitUpdatedBy")
+  posDiscountRulesCreated  PosDiscountRule[]  @relation("PosDiscountRuleCreatedBy")
+  posDiscountRulesUpdated  PosDiscountRule[]  @relation("PosDiscountRuleUpdatedBy")
   posSettingsUpdated       PosSettings[]      @relation("PosSettingsUpdatedBy")
 
   overtimeRecords         OvertimeRecord[]      @relation("OvertimeWorker")
@@ -88,9 +93,39 @@ model User {
   payrollIncidentJustifications   PayrollIncidentJustification[] @relation("PayrollIncidentJustificationOwner")
   payrollIncidentJustificationsBy PayrollIncidentJustification[] @relation("PayrollIncidentJustificationBy")
 
-  scheduleTemplatesCreated ScheduleTemplate[]      @relation("ScheduleTemplateCreatedBy")
-  scheduleTemplateShifts   ScheduleTemplateShift[] @relation("ScheduleTemplateShiftOwner")
-  scheduleEventsCreated    ScheduleEvent[]         @relation("ScheduleEventCreatedBy")
+  scheduleTemplatesCreated    ScheduleTemplate[]              @relation("ScheduleTemplateCreatedBy")
+  scheduleTemplateShifts      ScheduleTemplateShift[]         @relation("ScheduleTemplateShiftOwner")
+  scheduleEventsCreated       ScheduleEvent[]                 @relation("ScheduleEventCreatedBy")
+  availabilityRules           EmployeeAvailabilityRule[]
+  availabilityExceptions      EmployeeAvailabilityException[]
+  availabilitySettingsUpdated AvailabilitySettings[]          @relation("AvailabilitySettingsUpdatedBy")
+  availabilityOverrides       AvailabilityOverrideAudit[]     @relation("AvailabilityOverrideEmployee")
+  availabilityOverridesBy     AvailabilityOverrideAudit[]     @relation("AvailabilityOverrideBy")
+  shiftRequests               ShiftChangeRequest[]            @relation("ShiftRequestOwner")
+  shiftRequestsAsSwapTarget   ShiftChangeRequest[]            @relation("ShiftRequestSwapTarget")
+  shiftRequestsReviewed       ShiftChangeRequest[]            @relation("ShiftRequestReviewedBy")
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuthThrottle {
+  key          String    @id
+  attempts     Int       @default(0)
+  windowStart  DateTime  @default(now())
+  blockedUntil DateTime?
+  updatedAt    DateTime  @updatedAt
+
+  @@index([blockedUntil])
 }
 
 model Equipment {
@@ -949,6 +984,7 @@ model Branch {
   scheduleTemplates      BranchScheduleTemplate[]
   geofenceAlerts         GeofenceAlert[]
   posSales               PosSale[]
+  posDiscountRules       PosDiscountRule[]
   overtimeRecords        OvertimeRecord[]
   rawMaterialTransfers   RawMaterialMovement[]
   payrollSettings        PayrollSettings?
@@ -1410,7 +1446,10 @@ enum LiquorBottleMovementType {
 model PasswordResetCode {
   id        String   @id @default(cuid())
   userId    String
-  code      String
+  // `code` queda temporalmente nullable para un despliegue compatible;
+  // el código nuevo escribe y verifica exclusivamente `codeHash`.
+  code      String?
+  codeHash  String?
   expiresAt DateTime
   used      Boolean  @default(false)
   attempts  Int      @default(0)
@@ -1418,7 +1457,6 @@ model PasswordResetCode {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([code])
 }
 
 enum CashSafeMovementType {
@@ -1456,6 +1494,11 @@ model InventoryProduct {
 
   category String
   unit     String
+  /// Cómo se captura y muestra el producto. Nulo conserva compatibilidad histórica.
+  handlingUnit    InventoryHandlingUnit?
+  contentPerUnit  Decimal? @db.Decimal(12, 3)
+  contentUnit     InventoryContentUnit?
+  normalizedContentPerUnit Decimal? @db.Decimal(14, 3)
 
   unitCost     Decimal? @db.Decimal(12, 4)
   minimumStock Decimal  @default(0) @db.Decimal(12, 3)
@@ -1492,6 +1535,25 @@ enum InventoryItemType {
   CONSUMABLE
   RETURNABLE
   EQUIPMENT
+}
+
+enum InventoryHandlingUnit {
+  BOTELLA
+  GARRAFA
+  CAJA
+  PAQUETE
+  PIEZA
+  KILOGRAMO
+  LITRO
+  OTRA
+}
+
+enum InventoryContentUnit {
+  ML
+  L
+  G
+  KG
+  PIEZAS
 }
 
 model EventPackage {
@@ -1553,6 +1615,10 @@ model ServiceEvent {
   // descontó del inventario de una sucursal (al abrir un corte de
   // caja eligiendo este evento). Evita descontarlo dos veces.
   stockDeductedAt DateTime?
+  checkoutConfirmedAt DateTime?
+  checkoutConfirmedById String?
+  returnConfirmedAt DateTime?
+  returnConfirmedById String?
 
   package      EventPackage?      @relation(fields: [packageId], references: [id])
   equipmentKit EquipmentKit?      @relation(fields: [equipmentKitId], references: [id])
@@ -1570,6 +1636,14 @@ model ServiceEventItem {
   unit        String
   itemType    InventoryItemType
   unitCost    Decimal?          @db.Decimal(12, 4)
+  handlingUnit InventoryHandlingUnit?
+  contentPerUnit Decimal?       @db.Decimal(12, 3)
+  contentUnit InventoryContentUnit?
+  returnedOpenQuantity Decimal? @db.Decimal(12, 3)
+  checkoutStatus String @default("PENDIENTE")
+  returnStatus String @default("PENDIENTE")
+  checkoutNotes String?
+  returnNotes String?
 
   plannedQuantity  Decimal  @db.Decimal(12, 3)
   sentQuantity     Decimal? @db.Decimal(12, 3)
@@ -1696,6 +1770,11 @@ model InventoryEntry {
   type      InventoryEntryType
   quantity  Decimal            @db.Decimal(12, 3)
   unitCost  Decimal?           @db.Decimal(12, 4)
+  originalQuantity Decimal?    @db.Decimal(12, 3)
+  originalUnit     String?
+  handlingUnit     InventoryHandlingUnit?
+  contentPerUnit   Decimal?    @db.Decimal(12, 3)
+  contentUnit      InventoryContentUnit?
   entryDate DateTime           @default(now())
   notes     String?
   createdAt DateTime           @default(now())
@@ -1873,15 +1952,74 @@ model ScheduledShift {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user             User             @relation("ScheduledShifts", fields: [userId], references: [id], onDelete: Cascade)
-  branch           Branch?          @relation(fields: [branchId], references: [id])
-  event            ScheduleEvent?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  timeClockEntries TimeClockEntry[]
+  user                  User                        @relation("ScheduledShifts", fields: [userId], references: [id], onDelete: Cascade)
+  branch                Branch?                     @relation(fields: [branchId], references: [id])
+  event                 ScheduleEvent?              @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  timeClockEntries      TimeClockEntry[]
+  availabilityOverrides AvailabilityOverrideAudit[]
+  changeRequests        ShiftChangeRequest[]
 
   @@index([userId])
   @@index([branchId])
   @@index([date])
   @@index([eventId])
+}
+
+model AvailabilityOverrideAudit {
+  id                   String   @id @default(cuid())
+  shiftId              String
+  userId               String
+  overriddenById       String
+  availabilitySnapshot Json
+  reason               String?
+  createdAt            DateTime @default(now())
+
+  shift        ScheduledShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  user         User           @relation("AvailabilityOverrideEmployee", fields: [userId], references: [id], onDelete: Cascade)
+  overriddenBy User           @relation("AvailabilityOverrideBy", fields: [overriddenById], references: [id])
+
+  @@index([shiftId])
+  @@index([userId, createdAt])
+}
+
+enum ShiftChangeRequestType {
+  CANNOT_WORK
+  CHANGE_TIME
+  SWAP
+  DAY_OFF
+}
+
+enum ShiftChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model ShiftChangeRequest {
+  id                String                   @id @default(cuid())
+  shiftId           String
+  requestedById     String
+  type              ShiftChangeRequestType
+  proposedStartTime String?
+  proposedEndTime   String?
+  swapTargetUserId  String?
+  reason            String
+  status            ShiftChangeRequestStatus @default(PENDING)
+  reviewedById      String?
+  reviewedAt        DateTime?
+  reviewNotes       String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  shift          ScheduledShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  requestedBy    User           @relation("ShiftRequestOwner", fields: [requestedById], references: [id], onDelete: Cascade)
+  swapTargetUser User?          @relation("ShiftRequestSwapTarget", fields: [swapTargetUserId], references: [id])
+  reviewedBy     User?          @relation("ShiftRequestReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([requestedById, status])
+  @@index([shiftId, status])
+  @@index([status, createdAt])
 }
 
 enum ShiftType {
@@ -1952,6 +2090,74 @@ model ScheduleWeek {
 enum ScheduleWeekStatus {
   DRAFT
   PUBLISHED
+}
+
+enum AvailabilityType {
+  AVAILABLE_ALL_DAY
+  AVAILABLE_PARTIAL
+  UNAVAILABLE
+  PREFER_OFF
+}
+
+enum AvailabilityReason {
+  MEDICAL
+  SCHOOL
+  FAMILY
+  TRAVEL
+  ERRAND
+  OTHER
+}
+
+/// Regla semanal recurrente. dayOfWeek usa lunes=0…domingo=6.
+model EmployeeAvailabilityRule {
+  id          String              @id @default(cuid())
+  userId      String
+  dayOfWeek   Int
+  type        AvailabilityType
+  startTime   String?
+  endTime     String?
+  reason      AvailabilityReason?
+  reasonNotes String?
+  active      Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dayOfWeek])
+  @@index([userId])
+}
+
+/// Excepción para una fecha concreta; siempre tiene prioridad sobre la regla recurrente.
+model EmployeeAvailabilityException {
+  id          String              @id @default(cuid())
+  userId      String
+  date        DateTime
+  type        AvailabilityType
+  startTime   String?
+  endTime     String?
+  reason      AvailabilityReason?
+  reasonNotes String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+/// Regla global de cierre para capturar la disponibilidad de la semana siguiente.
+model AvailabilitySettings {
+  id              String   @id @default("default")
+  deadlineWeekday Int      @default(3)
+  deadlineTime    String   @default("18:00")
+  weeksAhead      Int      @default(1)
+  timezone        String   @default("America/Mexico_City")
+  updatedById     String?
+  updatedAt       DateTime @updatedAt
+
+  updatedBy User? @relation("AvailabilitySettingsUpdatedBy", fields: [updatedById], references: [id])
 }
 
 /**
@@ -2538,6 +2744,32 @@ model PosDiscountLimit {
 
   updatedById String?
   updatedBy   User?   @relation("PosDiscountLimitUpdatedBy", fields: [updatedById], references: [id])
+}
+
+enum PosDiscountRuleMode {
+  DISCOUNT
+  BLOCK
+}
+
+model PosDiscountRule {
+  id        String              @id @default(cuid())
+  name      String
+  mode      PosDiscountRuleMode @default(DISCOUNT)
+  percent   Float?
+  active    Boolean             @default(true)
+  startDate DateTime?
+  endDate   DateTime?
+  branches  Branch[]
+
+  createdById String
+  createdBy   User     @relation("PosDiscountRuleCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?    @relation("PosDiscountRuleUpdatedBy", fields: [updatedById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active, mode])
+  @@index([startDate, endDate])
 }
 
 // Configuración global del Punto de Venta editable desde

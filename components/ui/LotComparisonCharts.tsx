@@ -34,8 +34,8 @@ export default function LotComparisonCharts({ lots }: { lots: HistoricLot[] }) {
 
   if (data.length === 0) {
     return (
-      <section className="mt-8 rounded-2xl bg-surface-container p-8">
-        <h2 className="mb-2 text-2xl font-bold">Comparación de lotes</h2>
+      <section className="mt-4 rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5">
+        <h2 className="mb-1 text-sm font-semibold">Comparación de lotes</h2>
         <p className="text-on-surface-variant">
           Aún no hay lotes terminados para comparar.
         </p>
@@ -44,14 +44,14 @@ export default function LotComparisonCharts({ lots }: { lots: HistoricLot[] }) {
   }
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-2xl bg-surface-container p-8">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <h2 className="text-2xl font-bold">Extracción por lote</h2>
-          <p className="text-sm text-on-surface-variant">%</p>
+    <div className="space-y-4">
+      <section className="rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5">
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <h2 className="text-sm font-semibold">Extracción por lote</h2>
+          <p className="text-xs text-on-surface-variant">%</p>
         </div>
-        <div className="rounded-2xl bg-surface-container-high p-5">
-          <div className="h-96">
+        <div className="rounded-xl bg-surface-container-high p-3">
+          <div className="h-64 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" />
@@ -73,13 +73,13 @@ export default function LotComparisonCharts({ lots }: { lots: HistoricLot[] }) {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-surface-container p-8">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <h2 className="text-2xl font-bold">Costo por litro</h2>
-          <p className="text-sm text-on-surface-variant">$ / L</p>
+      <section className="rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5">
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <h2 className="text-sm font-semibold">Costo por litro</h2>
+          <p className="text-xs text-on-surface-variant">$ / L</p>
         </div>
-        <div className="rounded-2xl bg-surface-container-high p-5">
-          <div className="h-96">
+        <div className="rounded-xl bg-surface-container-high p-3">
+          <div className="h-64 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" />
@@ -102,12 +102,12 @@ export default function LotComparisonCharts({ lots }: { lots: HistoricLot[] }) {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-surface-container p-8">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <h2 className="text-2xl font-bold">Litros producidos y horas de cocción</h2>
+      <section className="rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5">
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <h2 className="text-sm font-semibold">Litros producidos y horas de cocción</h2>
         </div>
-        <div className="rounded-2xl bg-surface-container-high p-5">
-          <div className="h-96">
+        <div className="rounded-xl bg-surface-container-high p-3">
+          <div className="h-64 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" />

@@ -1,97 +1,15 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { MartiniIcon } from "@/components/ui/icons";
+import ProcessTable from "@/components/production/ProcessTable";
+import { MetricCard, PageHeader } from "@/components/ui/CompactUI";
+
+const label = (value: string) => value.toLowerCase().replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
 
 export default async function LiquorProductionPage() {
-  const batches = await prisma.liquorBatch.findMany({
-    where: {
-      status: {
-        notIn: ["TERMINADO"],
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-    include: {
-      product: true,
-    },
-  });
-
-  return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
-      <div>
-        <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-on-surface-variant">
-          Elaboración de licores
-        </p>
-
-        <h1 className="mt-2 text-3xl font-black text-on-surface">
-          Producción
-        </h1>
-
-        <p className="mt-2 text-on-surface-variant">
-          Continúa los lotes que se encuentran en elaboración.
-        </p>
-      </div>
-
-      {batches.length === 0 ? (
-        <section className="mt-8 rounded-3xl border border-dashed border-outline-variant bg-surface-container/50 p-10 text-center">
-          <MartiniIcon className="mx-auto h-12 w-12 text-on-surface-variant" />
-
-          <h2 className="mt-5 text-2xl font-black text-on-surface">
-            No hay producciones activas
-          </h2>
-
-          <p className="mt-3 text-on-surface-variant">
-            Inicia un lote nuevo para comenzar la elaboración.
-          </p>
-
-          <Link
-            href="/liquors"
-            className="mt-6 inline-flex rounded-2xl bg-primary px-5 py-3 font-black text-on-surface transition duration-150 ease-out hover:opacity-90 hover:scale-[1.04] active:scale-[0.97]"
-          >
-            Iniciar nuevo lote
-          </Link>
-        </section>
-      ) : (
-        <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {batches.map((batch) => (
-            <Link
-              key={batch.id}
-              href={`/liquors/batches/${batch.id}`}
-              className="rounded-3xl border border-outline-variant bg-surface-container/70 p-6 transition hover:border-primary/25"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-4xl">
-                  {batch.product.icon ?? "🍹"}
-                </span>
-
-                <span className="rounded-full border border-outline-variant bg-surface-container-high px-3 py-1 text-xs font-black text-on-surface-variant">
-                  {formatStatus(batch.status)}
-                </span>
-              </div>
-
-              <h2 className="mt-5 text-xl font-black text-on-surface">
-                {batch.product.name}
-              </h2>
-
-              <p className="mt-2 font-mono text-sm text-on-surface-variant">
-                {batch.code}
-              </p>
-
-              <p className="mt-5 font-black text-on-surface">
-                Continuar producción →
-              </p>
-            </Link>
-          ))}
-        </section>
-      )}
-    </main>
-  );
-}
-
-function formatStatus(status: string) {
-  return status
-    .toLowerCase()
-    .replaceAll("_", " ")
-    .replace(/^\w/, (letter) => letter.toUpperCase());
+  const batches = await prisma.liquorBatch.findMany({ orderBy: { createdAt: "desc" }, include: { product: true, recipe: true, steps: { select: { status: true, title: true } } } });
+  const active = batches.filter((item) => item.status !== "TERMINADO");
+  const volume = active.reduce((total, item) => total + (item.actualLiters ?? item.plannedLiters), 0);
+  const finished = batches.filter((item) => item.status === "TERMINADO").length;
+  const alerts = active.filter((item) => item.qualityStatus === "RECHAZADO" || item.pausedAt).length;
+  return <main className="page-frame text-on-surface"><div className="mx-auto max-w-7xl"><PageHeader title="Producción" description="Control de lotes, pasos y avance de elaboración." actions={<Link href="/liquors" className="compact-action inline-flex items-center bg-primary font-semibold text-on-primary">Nueva producción</Link>} /><section className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><MetricCard label="Producciones activas" value={active.length} /><MetricCard label="Volumen en proceso" value={`${volume.toLocaleString("es-MX")} L`} /><MetricCard label="Producciones terminadas" value={finished} tone="success" /><MetricCard label="Con alerta" value={alerts} tone={alerts ? "warning" : "neutral"} /></section><div className="mt-4"><ProcessTable emptyLabel="No hay producciones registradas." columns={[{ key: "code", label: "Código de lote", width: "14%" }, { key: "product", label: "Producto", width: "14%" }, { key: "recipe", label: "Receta", width: "14%" }, { key: "volume", label: "Volumen", width: "10%" }, { key: "startedAt", label: "Inicio", width: "13%" }, { key: "step", label: "Paso actual", width: "15%" }, { key: "progress", label: "Avance", width: "10%" }, { key: "status", label: "Estado", width: "10%" }]} filters={[{ key: "product", label: "Producto", options: [...new Set(batches.map((item) => item.product.name))] }, { key: "step", label: "Paso actual", options: [...new Set(batches.flatMap((item) => item.steps.filter((step) => step.status !== "COMPLETADO").map((step) => step.title)))] }]} rows={batches.map((item) => { const done = item.steps.filter((step) => step.status === "COMPLETADO").length; const current = item.steps.find((step) => step.status !== "COMPLETADO")?.title ?? "—"; const progress = item.steps.length ? Math.round((done / item.steps.length) * 100) : 0; return { id: item.id, href: `/liquors/batches/${item.id}`, code: item.code, search: `${item.code} ${item.product.name} ${item.recipe.name}`, startedAt: (item.startedAt ?? item.productionDate).toISOString(), status: item.status === "TERMINADO" ? "Terminado" : "En proceso", finished: item.status === "TERMINADO", values: { product: item.product.name, recipe: item.recipe.name, volume: `${item.actualLiters ?? item.plannedLiters} L`, step: current, progress: `${progress}%`, }, filters: { product: item.product.name, step: current } }; })} /></div></div></main>;
 }

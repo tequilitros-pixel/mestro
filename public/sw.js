@@ -1,4 +1,6 @@
-const CACHE_NAME = "maestro-shell-v1";
+// Al actualizar la interfaz, la versión invalida los recursos estáticos de
+// versiones anteriores antes de volver a servirlos desde caché.
+const CACHE_NAME = "maestro-shell-v2";
 const STATIC_ASSETS = [
   "/manifest.json",
   "/icon-192.png",

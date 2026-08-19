@@ -195,6 +195,7 @@ export default function PayrollDashboard() {
 
   return (
     <PageTabs
+      defaultTab="nomina"
       tabs={[
         {
           key: "resumen",

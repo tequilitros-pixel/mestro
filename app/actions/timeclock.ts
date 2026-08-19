@@ -16,6 +16,7 @@ import {
   matchTodaysScheduledShift,
   type Coords,
 } from "@/lib/timeclockShared";
+import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/periodLock";
 
 export async function getMyOpenShift() {
   const user = await getCurrentUser();
@@ -239,6 +240,10 @@ export async function requestTimeClockEditAction(
     return { error: "Este turno sigue abierto. Ciérralo desde el checador antes de corregirlo." };
   }
 
+  if (await isPayrollDateLocked(entry.clockIn)) {
+    return { error: PAYROLL_LOCKED_MESSAGE };
+  }
+
   const existingPending = await prisma.timeClockEditRequest.findFirst({
     where: { timeClockId: entryId, status: "PENDIENTE" },
   });
@@ -318,6 +323,10 @@ export async function reviewTimeClockEditRequestAction(
 
   if (request.status !== "PENDIENTE") {
     return { error: "Esta solicitud ya fue revisada" };
+  }
+
+  if (await isPayrollDateLocked(request.originalClockIn)) {
+    return { error: PAYROLL_LOCKED_MESSAGE };
   }
 
   await prisma.$transaction(async (tx) => {

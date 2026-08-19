@@ -3,6 +3,7 @@
 import { useEffect, useState, startTransition } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { DateRangeCalendar } from "@/components/ui/DateRangeCalendar";
 
 interface Branch {
   id: string;
@@ -67,6 +68,12 @@ export default function EnvelopesPage() {
   }
 };
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchEnvelopes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const total = rows.reduce((sum, r) => sum + r.envelopeAmount, 0);
 
   const byBranch = rows.reduce<Record<string, number>>((acc, r) => {
@@ -101,25 +108,7 @@ export default function EnvelopesPage() {
             </select>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-semibold text-on-surface-variant">Desde</label>
-            <input
-              type="date"
-              className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-semibold text-on-surface-variant">Hasta</label>
-            <input
-              type="date"
-              className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-            />
-          </div>
+          <DateRangeCalendar from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
 
           <Button onClick={fetchEnvelopes}>Filtrar</Button>
         </div>

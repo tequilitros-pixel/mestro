@@ -1,29 +1,8 @@
-import Link from "next/link";
 import ClockWidget from "./ClockWidget";
-import RecentShifts from "./RecentShifts";
-import { getMyRecentClosedShifts } from "@/app/actions/timeclock";
+import Link from "next/link";
+import { ArrowRightIcon, CalendarIcon, ClockIcon, ReceiptIcon } from "@/components/ui/icons";
 
-export default async function TimeClockPage() {
-  const recentShifts = await getMyRecentClosedShifts(10);
-
-  const serializedShifts = recentShifts
-    .filter((s) => s.clockOut)
-    .map((s) => ({
-      id: s.id,
-      clockIn: s.clockIn.toISOString(),
-      clockOut: s.clockOut!.toISOString(),
-      branch: s.branch,
-      latestEditRequest: s.editRequests[0]
-        ? {
-            id: s.editRequests[0].id,
-            status: s.editRequests[0].status,
-            requestedClockIn: s.editRequests[0].requestedClockIn.toISOString(),
-            requestedClockOut: s.editRequests[0].requestedClockOut.toISOString(),
-            reason: s.editRequests[0].reason,
-          }
-        : null,
-    }));
-
+export default function TimeClockPage() {
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
       <div className="mx-auto max-w-md space-y-8">
@@ -36,7 +15,26 @@ export default async function TimeClockPage() {
 
         <ClockWidget />
 
-        <RecentShifts shifts={serializedShifts} />
+        <nav className="grid gap-3" aria-label="Información personal del checador">
+          <TimeclockLink
+            href="/timeclock/availability"
+            icon={<CalendarIcon className="h-5 w-5" />}
+            title="Mi disponibilidad"
+            description="Indica con anticipación cuándo puedes trabajar."
+          />
+          <TimeclockLink
+            href="/timeclock/hours"
+            icon={<ClockIcon className="h-5 w-5" />}
+            title="Ver horas y pagos"
+            description="Consulta tus horas semanales y pago estimado."
+          />
+          <TimeclockLink
+            href="/timeclock/history"
+            icon={<ReceiptIcon className="h-5 w-5" />}
+            title="Ver historial"
+            description="Revisa entradas, salidas y solicita correcciones."
+          />
+        </nav>
 
         <p className="text-center text-xs text-on-surface-variant">
           ¿Estás en un dispositivo compartido de la sucursal?{" "}
@@ -46,5 +44,18 @@ export default async function TimeClockPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+function TimeclockLink({ href, icon, title, description }: { href: string; icon: React.ReactNode; title: string; description: string }) {
+  return (
+    <Link href={href} className="group flex items-center gap-4 rounded-2xl border border-outline-variant bg-surface-container p-4 transition-[transform,border-color,background-color] duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] hover:border-primary/35 hover:bg-surface-container-high active:scale-[0.98]">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-bold text-on-surface">{title}</span>
+        <span className="mt-0.5 block text-xs text-on-surface-variant">{description}</span>
+      </span>
+      <ArrowRightIcon className="h-5 w-5 shrink-0 text-on-surface-variant transition-transform duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-0.5" />
+    </Link>
   );
 }

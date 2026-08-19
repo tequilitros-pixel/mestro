@@ -50,8 +50,8 @@ export default function FinishFermentationModal({
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/80 p-4 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-outline-variant bg-background shadow-2xl">
-            <header className="border-b border-outline-variant p-6 sm:p-8">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-outline-variant bg-background shadow-xl">
+            <header className="border-b border-outline-variant p-4 sm:p-5">
               <div className="flex items-start justify-between gap-5">
                 <div>
                   <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-outline">
@@ -79,7 +79,7 @@ export default function FinishFermentationModal({
               </div>
             </header>
 
-            <div className="space-y-6 p-6 sm:p-8">
+            <div className="space-y-4 p-4 sm:p-5">
               <section className="grid gap-4 sm:grid-cols-3">
                 <SummaryCard title="Lote" value={lotCode} />
                 <SummaryCard title="Tina" value={tank} />

@@ -73,10 +73,19 @@ export default function RecentShifts({ shifts }: { shifts: Shift[] }) {
     setSaving(true);
     setError(null);
 
+    const adjustedClockIn = new Date(clockInValue);
+    const adjustedClockOut = new Date(clockOutValue);
+
+    if (Number.isNaN(adjustedClockIn.getTime()) || Number.isNaN(adjustedClockOut.getTime())) {
+      setSaving(false);
+      setError("Las horas no son válidas.");
+      return;
+    }
+
     const result = await requestTimeClockEditAction(
       shiftId,
-      clockInValue,
-      clockOutValue,
+      adjustedClockIn.toISOString(),
+      adjustedClockOut.toISOString(),
       reason,
     );
 

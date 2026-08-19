@@ -2,92 +2,10 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import SuccessToast from "@/components/ui/SuccessToast";
+import ProcessTable from "@/components/production/ProcessTable";
+import { PageHeader } from "@/components/ui/CompactUI";
 
 export default async function FermentationPage() {
-  const fermentations = await prisma.fermentation.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      lot: true,
-      readings: { orderBy: { createdAt: "desc" }, take: 1 },
-    },
-  });
-
-  return (
-    <main className="min-h-screen bg-background p-10 text-on-surface">
-      <Suspense fallback={null}>
-        <SuccessToast params={{ created: "Fermentación iniciada exitosamente" }} />
-      </Suspense>
-
-      <div className="mx-auto max-w-6xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
-              MAESTRO
-            </p>
-            <h1 className="mt-3 text-4xl font-bold">Fermentación</h1>
-          </div>
-
-          <Link
-            href="/fermentation/new"
-            className="rounded-xl bg-primary px-6 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
-          >
-            Nueva fermentación
-          </Link>
-        </div>
-
-        <section className="mt-8 grid gap-4">
-          {fermentations.length === 0 ? (
-            <div className="rounded-2xl bg-surface-container p-8 text-center text-on-surface-variant">
-              No hay fermentaciones registradas.
-            </div>
-          ) : (
-            fermentations.map((fermentation) => {
-              const last = fermentation.readings[0];
-
-              return (
-                <Link
-                  key={fermentation.id}
-                  href={`/fermentation/${fermentation.id}`}
-                  className="rounded-2xl bg-surface-container p-6 transition hover:bg-surface-container-high"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-on-surface-variant">Lote</p>
-                      <h2 className="text-2xl font-bold">
-                        {fermentation.lot.code}
-                      </h2>
-                    </div>
-
-                    <p className="text-xl font-bold text-tertiary-fixed-dim">
-                      {fermentation.status}
-                    </p>
-                  </div>
-
-                  <div className="mt-6 grid gap-4 md:grid-cols-5">
-                    <Kpi title="Tina" value={fermentation.tank} />
-                    <Kpi title="Mosto" value={`${fermentation.mustLiters} L`} />
-                    <Kpi title="°Brix" value={last?.brix ?? fermentation.initialBrix} />
-                    <Kpi title="pH" value={last?.ph ?? fermentation.initialPh} />
-                    <Kpi
-                      title="Temp."
-                      value={`${last?.temperature ?? fermentation.initialTemperature}°C`}
-                    />
-                  </div>
-                </Link>
-              );
-            })
-          )}
-        </section>
-      </div>
-    </main>
-  );
-}
-
-function Kpi({ title, value }: { title: string; value: string | number }) {
-  return (
-    <div className="rounded-xl bg-surface-container-high p-4">
-      <p className="text-sm text-on-surface-variant">{title}</p>
-      <p className="mt-1 text-xl font-bold">{value}</p>
-    </div>
-  );
+  const fermentations = await prisma.fermentation.findMany({ orderBy: { createdAt: "desc" }, include: { lot: true, readings: { orderBy: { createdAt: "desc" }, take: 1 } } });
+  return <main className="page-frame space-y-4 text-on-surface"><Suspense fallback={null}><SuccessToast params={{ created: "Fermentación iniciada exitosamente" }} /></Suspense><div className="mx-auto max-w-7xl"><PageHeader title="Fermentación" description="Lecturas y avance de cada tina." actions={<Link href="/fermentation/new" className="compact-action inline-flex items-center bg-primary font-semibold text-on-primary">Nueva fermentación</Link>} /><ProcessTable emptyLabel="No hay fermentaciones registradas." columns={[{ key: "code", label: "Código del lote", width: "16%" }, { key: "tank", label: "Tina", width: "13%" }, { key: "must", label: "Mosto", width: "12%" }, { key: "brix", label: "°Brix actual", width: "12%" }, { key: "ph", label: "pH actual", width: "12%" }, { key: "temperature", label: "Temperatura", width: "14%" }, { key: "status", label: "Estado", width: "21%" }]} filters={[{ key: "tank", label: "Tina", options: [...new Set(fermentations.map((item) => item.tank))] }]} rows={fermentations.map((item) => { const last = item.readings[0]; return { id: item.id, href: `/fermentation/${item.id}`, code: item.lot.code, startedAt: item.startedAt.toISOString(), status: item.status === "TERMINADA" ? "Terminado" : "En proceso", finished: item.status === "TERMINADA", values: { tank: item.tank, must: `${item.mustLiters.toLocaleString("es-MX")} L`, brix: String(last?.brix ?? item.initialBrix), ph: String(last?.ph ?? item.initialPh), temperature: `${last?.temperature ?? item.initialTemperature} °C` }, filters: { tank: item.tank } }; })} /></div></main>;
 }

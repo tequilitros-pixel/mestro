@@ -947,6 +947,9 @@ export async function reopenPayrollPeriodAction(weekStart: string, notes?: strin
   if (period.status === "PAGADA") return { error: "Ya está pagada, no se puede reabrir" };
   if (period.status === "BORRADOR") return { error: "Ya está en borrador" };
 
+  const reopenReason = notes?.trim();
+  if (!reopenReason) return { error: "Es obligatorio escribir el motivo de reapertura" };
+
   await prisma.$transaction([
     prisma.payrollEntry.deleteMany({ where: { periodId: period.id } }),
     prisma.payrollPeriod.update({
@@ -957,7 +960,7 @@ export async function reopenPayrollPeriodAction(weekStart: string, notes?: strin
         submittedAt: null,
         approvedById: null,
         approvedAt: null,
-        rejectedNotes: notes?.trim() || null,
+        rejectedNotes: reopenReason,
       },
     }),
   ]);

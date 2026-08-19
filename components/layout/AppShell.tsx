@@ -1,9 +1,7 @@
 import type { ReactNode } from "react";
 import AppHeader from "@/components/layout/AppHeader";
-import BackButton from "@/components/layout/BackButton";
 import MainNavigation from "@/components/layout/MainNavigation";
 import ModuleNavigation from "@/components/layout/ModuleNavigation";
-import AppFooter from "@/components/layout/AppFooter";
 import { OfflineProvider } from "@/components/offline/OfflineProvider";
 import SyncStatus from "@/components/offline/SyncStatus";
 
@@ -25,32 +23,17 @@ export default function AppShell({
 }: AppShellProps) {
   return (
     <OfflineProvider>
-    <div className="flex min-h-screen flex-col bg-background text-on-surface">
-      <header className="no-print sticky top-0 z-50 border-b border-outline-variant bg-surface/95 shadow-xl backdrop-blur">
-        <div className="mx-auto w-full max-w-7xl">
-          <div className="px-4 pt-2 sm:px-6">
-            <div className="flex items-center justify-between gap-3">
-              <BackButton />
-              <SyncStatus />
-            </div>
-          </div>
-
+      <div className="flex min-h-screen flex-col bg-background text-on-surface">
+        <MainNavigation role={user.role} moduleKeys={moduleKeys} />
+        <header className="no-print sticky top-0 z-50 flex h-14 items-center gap-3 border-b border-outline-variant bg-surface-container-low/95 pl-14 pr-3 backdrop-blur sm:pl-16 sm:pr-4">
           <AppHeader user={user} />
-
-          <MainNavigation role={user.role} moduleKeys={moduleKeys} />
-
+          <SyncStatus />
+        </header>
+        <div className="flex min-h-0 flex-1">
           <ModuleNavigation role={user.role} moduleKeys={moduleKeys} />
+          <div className="app-content min-w-0 flex-1">{children}</div>
         </div>
-      </header>
-
-      <div className="app-content">
-        {children}
       </div>
-
-      <div className="no-print mx-auto w-full max-w-7xl">
-        <AppFooter />
-      </div>
-    </div>
     </OfflineProvider>
   );
 }

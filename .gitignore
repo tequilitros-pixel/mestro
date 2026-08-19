@@ -69,3 +69,31 @@ next-env.d.ts
 /android/app/src/main/assets/capacitor.config.json
 .claude/settings.local.json
 _pgtest_tmp.mjs
+
+# --- agregado durante el incidente del 18-ago-2026 ---
+
+# Archivos temporales de diagnostico y respaldos (borrables)
+.tmp-nav/
+.tmp-hotfix/
+revisar-base.mjs
+probar-conexion.mjs
+reparar-migracion.mjs
+revisar-migraciones.sh
+migrate-status.txt
+revisar-base.txt
+
+# CONTIENEN CREDENCIALES EN TEXTO PLANO. No commitear hasta redactarlas.
+REVOCAR_CREDENCIALES.md
+AUDITORIA_APP_STORE.md
+CHECKLIST_RAPIDO_CREDENCIALES.md
+SCRIPT_ROTACION_CREDENCIALES.md
+
+# Duplicados de macOS ("carpeta 2"). Basura, pendiente de borrar.
+*\ 2/
+*\ 2.*
+tsconfig.hotfixcheck.json
+_to_delete/
+.tmp-cortes/
+.tmp-eventos/
+PLAN_REMEDIACION.md
+.tmp-git/

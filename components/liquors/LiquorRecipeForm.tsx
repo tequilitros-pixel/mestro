@@ -33,7 +33,7 @@ export default function LiquorRecipeForm({
   return (
     <form
       action={formAction}
-      className="space-y-8 rounded-3xl border border-outline-variant bg-surface-container/70 p-6 sm:p-8"
+      className="compact-form-panel space-y-4 rounded-xl border border-outline-variant bg-surface-container/70"
     >
       {state.error && (
         <div className="rounded-2xl border border-error/30 bg-error/10 p-4 text-error">
@@ -46,7 +46,7 @@ export default function LiquorRecipeForm({
           Información general
         </p>
 
-        <div className="mt-5 grid gap-5 md:grid-cols-2">
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
           <Field label="Producto">
             <select
               name="productId"
@@ -130,7 +130,7 @@ export default function LiquorRecipeForm({
           Información adicional
         </p>
 
-        <div className="mt-5 space-y-5">
+        <div className="mt-4 space-y-4">
           <Field label="Instrucciones generales">
             <textarea
               name="instructions"
@@ -154,7 +154,7 @@ export default function LiquorRecipeForm({
       <div className="flex flex-col-reverse gap-3 border-t border-outline-variant pt-6 sm:flex-row sm:justify-end">
         <Link
           href="/liquors/recipes"
-          className="rounded-2xl border border-outline-variant px-6 py-3 text-center font-bold text-on-surface-variant transition hover:bg-surface-container-high"
+          className="compact-action border border-outline-variant text-center font-semibold text-on-surface-variant transition hover:bg-surface-container-high"
         >
           Cancelar
         </Link>
@@ -190,7 +190,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-2xl bg-primary px-7 py-3 font-black text-on-surface transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant"
+      className="compact-action bg-primary font-semibold text-on-surface transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant"
     >
       {pending
         ? "Guardando receta..."

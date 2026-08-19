@@ -2,12 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import EventStatusSelector from "./EventStatusSelector";
-import ChecklistItemRow from "./ChecklistItemRow";
 import AddCustomItemForm from "./AddCustomItemForm";
 import EventDetailTabs from "./EventDetailTabs";
 import RecountForm from "./RecountForm";
 import MarkFulfilledButton from "./MarkFulfilledButton";
-import { ClipboardIcon, RefreshIcon, ListChecksIcon } from "@/components/ui/icons";
+import EventChecklistTable from "./EventChecklistTable";
+import { ListChecksIcon } from "@/components/ui/icons";
 
 export default async function EventDetailPage({
   params,
@@ -21,7 +21,10 @@ export default async function EventDetailPage({
     include: {
       package: true,
       equipmentKit: true,
-      items: { orderBy: { sortOrder: "asc" } },
+      items: {
+        orderBy: { sortOrder: "asc" },
+        include: { product: { select: { category: true, code: true } } },
+      },
       recounts: {
         orderBy: { dayNumber: "desc" },
         include: { items: true },
@@ -71,9 +74,17 @@ export default async function EventDetailPage({
       returnedQuantity:
         item.returnedQuantity !== null ? Number(item.returnedQuantity) : null,
       damagedQuantity: Number(item.damagedQuantity),
+      returnedOpenQuantity:
+        item.returnedOpenQuantity !== null ? Number(item.returnedOpenQuantity) : null,
       checkedOut: item.checkedOut,
       checkedIn: item.checkedIn,
       isCustom: item.isCustom,
+      handlingUnit: item.handlingUnit,
+      contentPerUnit: item.contentPerUnit !== null ? Number(item.contentPerUnit) : null,
+      contentUnit: item.contentUnit,
+      itemType: item.itemType,
+      category: item.product.category,
+      productCode: item.product.code,
     };
   }
 
@@ -143,31 +154,12 @@ export default async function EventDetailPage({
 
   const salidaTab = (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-xl font-bold text-on-surface">
-          <ClipboardIcon className="h-5 w-5 text-on-surface-variant" />
-          Lista para llevar
-        </h2>
-        <span className="text-sm text-on-surface-variant">
-          {sentCount} / {totalItems} subidos
-        </span>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container">
-        {totalItems === 0 && (
-          <p className="p-6 text-sm text-on-surface-variant">
-            Este evento no tiene productos ni equipo asignado.
-          </p>
-        )}
-        {event.items.map((item) => (
-          <ChecklistItemRow
-            key={item.id}
-            eventId={event.id}
-            phase="salida"
-            item={toRowItem(item)}
-          />
-        ))}
-      </div>
+      <EventChecklistTable
+        eventId={event.id}
+        phase="salida"
+        items={event.items.map(toRowItem)}
+        confirmed={Boolean(event.checkoutConfirmedAt)}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <AddCustomItemForm
@@ -185,31 +177,12 @@ export default async function EventDetailPage({
   );
 
   const regresoTab = (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-xl font-bold text-on-surface">
-          <RefreshIcon className="h-5 w-5 text-on-surface-variant" />
-          Lista de regreso
-        </h2>
-        <span className="text-sm text-on-surface-variant">
-          {returnedCount} / {totalItems} regresados
-        </span>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container">
-        {totalItems === 0 && (
-          <p className="p-6 text-sm text-on-surface-variant">Nada que regresar todavía.</p>
-        )}
-        {event.items.map((item) => (
-          <ChecklistItemRow
-            key={item.id}
-            eventId={event.id}
-            phase="regreso"
-            item={toRowItem(item)}
-          />
-        ))}
-      </div>
-    </section>
+    <EventChecklistTable
+      eventId={event.id}
+      phase="regreso"
+      items={event.items.map(toRowItem)}
+      confirmed={Boolean(event.returnConfirmedAt)}
+    />
   );
 
   const reconteoTab = (

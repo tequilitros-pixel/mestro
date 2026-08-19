@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { withRlsContext } from "@/lib/rls";
 
 export async function GET(
   request: Request,
@@ -13,7 +14,7 @@ export async function GET(
 
   const { id } = await params;
 
-  const sale = await prisma.posSale.findUnique({
+  const sale = await withRlsContext(user, (tx) => tx.posSale.findUnique({
     where: { id },
     include: {
       branch: true,
@@ -23,13 +24,13 @@ export async function GET(
       payments: true,
       cashCut: { select: { id: true, code: true } },
     },
-  });
+  }));
 
   if (!sale) {
     return NextResponse.json({ error: "Venta no encontrada" }, { status: 404 });
   }
 
-  if (user.role === "GERENTE" || user.role === "ENCARGADO") {
+  if (user.role !== "ADMIN") {
     const hasAccess = await prisma.userBranch.findFirst({
       where: { userId: user.id, branchId: sale.branchId },
     });

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { isBranchAllowed } from "@/lib/branches/access";
+import { addDaysToDateOnly, businessDayStart } from "@/lib/dateOnly";
+
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -9,30 +13,40 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const branchId = searchParams.get("branchId") ?? undefined;
+  const requestedBranchId = searchParams.get("branchId") ?? undefined;
   const category = searchParams.get("category") ?? undefined;
+  const concept = searchParams.get("concept")?.trim() ?? undefined;
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
-  // GERENTE/ENCARGADO solo ven salidas de sus sucursales asignadas.
-  let allowedBranchIds: string[] | undefined;
-  if (user.role === "GERENTE" || user.role === "ENCARGADO") {
-    const userBranches = await prisma.userBranch.findMany({
-      where: { userId: user.id },
-      select: { branchId: true },
-    });
-    allowedBranchIds = userBranches.map((b) => b.branchId);
+  if ((from && !DATE_ONLY_PATTERN.test(from)) || (to && !DATE_ONLY_PATTERN.test(to))) {
+    return NextResponse.json({ error: "El rango de fechas no es válido." }, { status: 400 });
   }
+  if (from && to && from > to) {
+    return NextResponse.json({ error: "La fecha inicial no puede ser posterior a la final." }, { status: 400 });
+  }
+  const fromDate = from ? businessDayStart(from) : undefined;
+
+  // La fecha final es inclusiva para que un filtro de un solo día incluya
+  // todas las salidas capturadas durante ese día, no solo las de medianoche.
+  const endExclusive = to ? businessDayStart(addDaysToDateOnly(to, 1)) : undefined;
+
+  // GERENTE/ENCARGADO solo ven salidas de sus sucursales asignadas.
+  const allowedBranchIds = await getAccessibleBranchIds();
+
+  if (requestedBranchId && !isBranchAllowed(allowedBranchIds, requestedBranchId)) {
+    return NextResponse.json({ error: "No tienes acceso a esa sucursal." }, { status: 403 });
+  }
+
+  const branchFilter = requestedBranchId ?? (allowedBranchIds ? { in: allowedBranchIds } : undefined);
 
   const outflows = await prisma.cashOutflow.findMany({
     where: {
       category: category ?? undefined,
-      occurredAt: {
-        gte: from ? new Date(from) : undefined,
-        lte: to ? new Date(to) : undefined,
-      },
+      concept: concept ? { contains: concept, mode: "insensitive" } : undefined,
+      occurredAt: { gte: fromDate, lt: endExclusive },
       cashCut: {
-        branchId: branchId ?? (allowedBranchIds ? { in: allowedBranchIds } : undefined),
+        branchId: branchFilter,
       },
     },
     include: {

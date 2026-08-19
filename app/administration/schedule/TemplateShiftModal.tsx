@@ -108,8 +108,8 @@ export default function TemplateShiftModal({
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-surface-dim/80 p-3 sm:p-6">
-      <div className="flex max-h-[94vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-outline-variant bg-surface-container shadow-2xl">
-        <header className="flex shrink-0 items-center justify-between border-b border-outline-variant px-6 py-5">
+      <div className="compact-modal-panel flex w-full max-w-lg flex-col overflow-hidden border border-outline-variant bg-surface-container">
+        <header className="compact-modal-header flex shrink-0 items-center justify-between border-b border-outline-variant">
           <h2 className="text-xl font-bold text-on-surface">
             {isEditing ? "Editar turno de plantilla" : "Agregar turno a la plantilla"}
           </h2>
@@ -122,8 +122,8 @@ export default function TemplateShiftModal({
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-          <div className="space-y-5">
+        <div className="compact-modal-body min-h-0 flex-1 overflow-y-auto">
+          <div className="space-y-4">
             {error && (
               <div className="rounded-xl border border-error/40 bg-error/10 p-3 text-sm text-error">
                 {error}
@@ -270,7 +270,7 @@ export default function TemplateShiftModal({
             </div>
 
             {isEditing && (
-              <div className="rounded-2xl border border-error/40 bg-error/10 p-5">
+              <div className="rounded-xl border border-error/40 bg-error/10 p-4">
                 {!confirmingDelete ? (
                   <button
                     onClick={() => setConfirmingDelete(true)}

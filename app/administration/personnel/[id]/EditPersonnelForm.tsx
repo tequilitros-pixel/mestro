@@ -31,6 +31,7 @@ interface UserData {
   name: string;
   username: string;
   email: string | null;
+  phone: string | null;
   role: UserRole;
   hourlyRate: number | null;
   hasPin: boolean;
@@ -49,6 +50,7 @@ export default function EditPersonnelForm({
   const [name, setName] = useState(user.name);
   const [username, setUsername] = useState(user.username);
   const [email, setEmail] = useState(user.email ?? "");
+  const [phone, setPhone] = useState(user.phone ?? "");
   const [role, setRole] = useState<UserRole>(user.role);
   const [branchIds, setBranchIds] = useState<string[]>(
     user.branches.map((b) => b.branch.id),
@@ -154,6 +156,7 @@ export default function EditPersonnelForm({
       name,
       username,
       email: email || undefined,
+      phone: phone || undefined,
       role,
       branchIds: ROLES_CON_SUCURSAL.includes(role) ? branchIds : [],
       newPassword: newPassword || undefined,
@@ -172,7 +175,7 @@ export default function EditPersonnelForm({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {error && (
         <div className="rounded-xl border border-error/40 bg-error/10 p-3 text-sm text-error">
           {error}
@@ -185,7 +188,7 @@ export default function EditPersonnelForm({
         </div>
       )}
 
-      <section className="space-y-5 rounded-2xl border border-outline-variant bg-surface-container p-6">
+      <section className="compact-form-panel space-y-4 rounded-xl border border-outline-variant bg-surface-container">
         <SectionHeader icon={UsersIcon} title="Identidad" />
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -209,6 +212,17 @@ export default function EditPersonnelForm({
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+            />
+          </Field>
+
+          <Field label="Teléfono para acceso por SMS">
+            <input
+              type="tel"
+              inputMode="tel"
+              placeholder="494 123 4567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
               className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             />
           </Field>
@@ -264,7 +278,7 @@ export default function EditPersonnelForm({
         )}
       </section>
 
-      <section className="space-y-4 rounded-2xl border border-outline-variant bg-surface-container p-6">
+      <section className="compact-form-panel space-y-4 rounded-xl border border-outline-variant bg-surface-container">
         <SectionHeader icon={LockIcon} title="Seguridad" />
 
         <Field label="Nueva contraseña (déjalo vacío para no cambiarla)">
@@ -282,13 +296,13 @@ export default function EditPersonnelForm({
         <button
           onClick={handleSave}
           disabled={saving}
-          className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97] disabled:opacity-60 disabled:hover:scale-100"
+          className="compact-action bg-primary font-semibold text-on-primary transition duration-150 hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:hover:scale-100"
         >
           {saving ? "Guardando..." : "Guardar cambios"}
         </button>
       </div>
 
-      <section className="space-y-4 rounded-2xl border border-outline-variant bg-surface-container p-6">
+      <section className="compact-form-panel space-y-4 rounded-xl border border-outline-variant bg-surface-container">
         <SectionHeader icon={DollarIcon} title="Pago por hora" />
 
         <p className="text-sm text-on-surface-variant">
@@ -319,7 +333,7 @@ export default function EditPersonnelForm({
         )}
       </section>
 
-      <section className="space-y-4 rounded-2xl border border-outline-variant bg-surface-container p-6">
+      <section className="compact-form-panel space-y-4 rounded-xl border border-outline-variant bg-surface-container">
         <SectionHeader icon={GridIcon} title="Checador de kiosco" />
 
         <p className="text-sm text-on-surface-variant">

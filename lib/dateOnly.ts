@@ -48,7 +48,66 @@ export function mondayOfWeek(dateStr: string): string {
  * horario del servidor o navegador donde se ejecute.
  */
 export function todayDateOnly(): string {
+  return formatBusinessDateOnly(new Date());
+}
+
+export const BUSINESS_TIME_ZONE = "America/Mexico_City";
+
+/** Date -> fecha de calendario en la zona horaria del negocio. */
+export function formatBusinessDateOnly(date: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Mexico_City",
-  }).format(new Date());
+    timeZone: BUSINESS_TIME_ZONE,
+  }).format(date);
+}
+
+/**
+ * Inicio UTC de una fecha de calendario en la zona horaria del negocio.
+ * El calculo consulta el offset real de Intl para no depender del huso del
+ * servidor ni codificar UTC-6 manualmente.
+ */
+export function businessDayStart(dateStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const wallClockAsUtc = Date.UTC(year, month - 1, day);
+  const probe = new Date(wallClockAsUtc);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(probe);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  const representedAsUtc = Date.UTC(
+    value("year"),
+    value("month") - 1,
+    value("day"),
+    value("hour"),
+    value("minute"),
+    value("second"),
+  );
+  const offset = representedAsUtc - wallClockAsUtc;
+  return new Date(wallClockAsUtc - offset);
+}
+
+/** Primer día del mes que contiene la fecha dada. */
+export function firstDayOfMonth(dateStr: string): string {
+  return `${dateStr.slice(0, 7)}-01`;
+}
+
+/** Último día del mes que contiene la fecha dada. */
+export function lastDayOfMonth(dateStr: string): string {
+  const [year, month] = dateStr.slice(0, 7).split("-").map(Number);
+  const nextMonthFirstDay =
+    month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  return addDaysToDateOnly(nextMonthFirstDay, -1);
+}
+
+/** Dia 30 del mes, o el ultimo dia real cuando el mes es mas corto. */
+export function lastSalesDayOfMonth(dateStr: string): string {
+  const lastDay = lastDayOfMonth(dateStr);
+  return Number(lastDay.slice(-2)) > 30 ? `${dateStr.slice(0, 7)}-30` : lastDay;
 }

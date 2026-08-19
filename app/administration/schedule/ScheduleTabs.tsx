@@ -6,11 +6,13 @@ import { AppIconBadge } from "@/components/ui/AppIcon";
 import ScheduleGrid from "./ScheduleGrid";
 import TemplatesEditor from "./TemplatesEditor";
 import TemplatesManager from "./TemplatesManager";
+import ShiftRequestsManager from "./ShiftRequestsManager";
 
-type Tab = "horario" | "plantillas" | "estandar";
+type Tab = "horario" | "solicitudes" | "plantillas" | "estandar";
 
 const TABS: { key: Tab; label: string; icon: typeof CalendarIcon }[] = [
   { key: "horario", label: "Horario", icon: GridIcon },
+  { key: "solicitudes", label: "Solicitudes", icon: CalendarIcon },
   { key: "plantillas", label: "Plantillas", icon: BookIcon },
   { key: "estandar", label: "Horario estándar", icon: ToolboxIcon },
 ];
@@ -44,6 +46,7 @@ export default function ScheduleTabs() {
       </div>
 
       {tab === "horario" && <ScheduleGrid />}
+      {tab === "solicitudes" && <ShiftRequestsManager />}
       {tab === "plantillas" && <TemplatesManager />}
       {tab === "estandar" && <TemplatesEditor />}
     </div>

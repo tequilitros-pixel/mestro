@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card, CardLabel } from "@/components/ui/Card";
-import DenominationCounter, {
-  type DenominationCount,
-} from "@/components/cash-cuts/DenominationCounter";
+import DenominationWizard from "@/components/cash-cuts/DenominationWizard";
+import type { CashDenominationCount } from "@/lib/cash-cuts/denominations";
 import { enqueueOperation } from "@/lib/offline/queue";
+import { todayDateOnly } from "@/lib/dateOnly";
 
 interface Branch {
   id: string;
@@ -36,11 +36,8 @@ export default function NuevoCortePage() {
   const router = useRouter();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchId] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [startingFund, setStartingFund] = useState("");
-  const [startingFundBreakdown, setStartingFundBreakdown] = useState<
-    DenominationCount[]
-  >([]);
+  const [date, setDate] = useState(todayDateOnly);
+  const [counting, setCounting] = useState(false);
   const [events, setEvents] = useState<EligibleEvent[]>([]);
   const [eventId, setEventId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -51,12 +48,19 @@ export default function NuevoCortePage() {
     if (cachedBranches) {
       window.setTimeout(() => setBranches(JSON.parse(cachedBranches)), 0);
     }
-    fetch("/api/branches")
-      .then((res) => res.json())
+    fetch("/api/branches/accessible")
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "No se pudieron cargar las sucursales.");
+        return data.branches as Branch[];
+      })
       .then((data) => {
         setBranches(data);
         localStorage.setItem("maestro:cash-cut-branches", JSON.stringify(data));
         if (data.length === 1) setBranchId(data[0].id);
+      })
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "No se pudieron cargar las sucursales.");
       });
 
     fetch("/api/cash-cuts/events")
@@ -65,12 +69,11 @@ export default function NuevoCortePage() {
       .catch(() => setEvents([]));
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function openCashCut(total: number, breakdown: CashDenominationCount[]) {
     setError(null);
 
-    if (!branchId || startingFund === "") {
-      setError("Selecciona la sucursal y captura el fondo de caja.");
+    if (!branchId) {
+      setError("Selecciona la sucursal.");
       return;
     }
 
@@ -78,8 +81,8 @@ export default function NuevoCortePage() {
     const payload = {
       branchId,
       date,
-      startingFund: Number(startingFund),
-      startingFundDenominations: startingFundBreakdown,
+      startingFund: total,
+      startingFundDenominations: breakdown,
       eventId: eventId || undefined,
     };
     if (!navigator.onLine) {
@@ -95,6 +98,7 @@ export default function NuevoCortePage() {
         id,
         code: `CC-${branch.code}-PENDIENTE`,
         status: "ABIERTO",
+        startingFund: total,
         branch: { id: branch.id, name: branch.name },
         salesByMethod: [], outflows: [], inflows: [], evidences: [], denominations: [],
         cashCounted: null, cashExpected: null, difference: null, envelopeAmount: null,
@@ -104,32 +108,33 @@ export default function NuevoCortePage() {
       router.push(`/cash-cuts/daily/${id}`);
       return;
     }
-    const res = await fetch("/api/cash-cuts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    setLoading(false);
-
-    if (!res.ok) {
-      const data = await res.json();
-      setError(data.error ?? "No se pudo abrir el corte");
-      return;
+    try {
+      const res = await fetch("/api/cash-cuts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const cashCut = await res.json();
+      if (!res.ok) {
+        setError(cashCut.error ?? "No se pudo abrir el corte");
+        return;
+      }
+      router.push(`/cash-cuts/daily/${cashCut.id}`);
+    } catch {
+      setError("No se pudo abrir el corte. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      setLoading(false);
     }
-
-    const cashCut = await res.json();
-    router.push(`/cash-cuts/daily/${cashCut.id}`);
   }
 
   return (
     <div className="max-w-md mx-auto p-6">
-      <h1 className="text-2xl font-bold text-on-surface mb-1">Nuevo corte de caja</h1>
+      <h1 className="text-2xl font-bold text-on-surface mb-1">Iniciar caja</h1>
       <p className="text-on-surface-variant text-sm mb-6">
         Abre el turno contando el fondo de caja billete por billete.
       </p>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      {!counting ? <div className="space-y-4">
         <Card>
           <CardLabel>Sucursal</CardLabel>
           <select
@@ -179,22 +184,25 @@ export default function NuevoCortePage() {
           </Card>
         )}
 
-        <Card>
-          <CardLabel>Fondo de caja (con el que abres el turno)</CardLabel>
-          <DenominationCounter
-            onTotalChange={(total, breakdown) => {
-              setStartingFund(total > 0 ? String(total) : "");
-              setStartingFundBreakdown(breakdown);
-            }}
-          />
-        </Card>
-
         {error && <p className="text-error text-sm">{error}</p>}
 
-        <Button type="submit" size="lg" className="w-full" disabled={loading}>
-          {loading ? "Abriendo..." : "Abrir corte"}
+        <Button type="button" size="lg" className="w-full" onClick={() => {
+          if (!branchId) { setError("Selecciona la sucursal."); return; }
+          setError(null);
+          setCounting(true);
+        }}>
+          Contar fondo inicial
         </Button>
-      </form>
+      </div> : (
+        <DenominationWizard
+          title="Fondo inicial"
+          description="Captura una denominación a la vez. Puedes escribir 0 y continuar."
+          confirmLabel="Confirmar e iniciar caja"
+          busy={loading}
+          onConfirm={openCashCut}
+        />
+      )}
+      {counting && error && <p className="mt-4 text-sm text-error">{error}</p>}
     </div>
   );
 }

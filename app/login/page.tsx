@@ -1,6 +1,8 @@
 import { loginAction } from "@/app/actions/login";
 import AgaveBackdrop from "@/components/ui/AgaveBackdrop";
 import { CoffeeIcon, HeartIcon } from "@/components/ui/icons";
+import SmsLoginForm from "./SmsLoginForm";
+import SessionAlert from "@/app/components/SessionAlert";
 
 const TIME_ZONE = "America/Mexico_City";
 
@@ -10,6 +12,7 @@ export default async function LoginPage({
   searchParams?: Promise<{
     error?: string;
     reset?: string;
+    expired?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -48,6 +51,7 @@ export default async function LoginPage({
   const hasError = params?.error === "1";
   const isLocked = params?.error === "locked";
   const justReset = params?.reset === "1";
+  const sessionExpired = params?.expired === "1";
 
 
   return (
@@ -57,6 +61,10 @@ export default async function LoginPage({
         <AgaveBackdrop className="h-full w-full" />
         <div className="absolute inset-0 bg-gradient-to-b from-surface-dim/80 via-surface-dim/70 to-surface-dim/90" />
         <div className="absolute inset-0 bg-gradient-to-t from-secondary-container/30 via-transparent to-transparent" />
+      </div>
+
+      <div className="w-full max-w-md">
+        <SessionAlert />
       </div>
 
       <section className="w-full max-w-md overflow-hidden rounded-xl border border-outline-variant bg-surface-dim/50 shadow-2xl backdrop-blur-xl">
@@ -92,9 +100,10 @@ export default async function LoginPage({
         </div>
 
         <div className="p-6 sm:p-8">
+          <div>
           {hasError && (
             <div className="mb-5 rounded-xl border border-error/30 bg-error/10 p-3 text-sm text-error">
-              Correo o contraseña incorrectos.
+              Teléfono, correo o contraseña incorrectos.
             </div>
           )}
 
@@ -111,25 +120,44 @@ export default async function LoginPage({
             </div>
           )}
 
+          {sessionExpired && (
+            <div className="mb-5 rounded-xl border border-secondary/30 bg-secondary/10 p-3 text-sm text-secondary">
+              Tu sesión anterior ya no era válida. Inicia sesión nuevamente.
+            </div>
+          )}
+
           <form action={loginAction} className="space-y-5">
             <div>
               <label
-                htmlFor="email"
+                htmlFor="identifier"
                 className="mb-2 block text-sm font-semibold text-on-surface-variant"
               >
-                Correo electrónico
+                Número de teléfono o correo
               </label>
 
               <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
+                id="identifier"
+                name="identifier"
+                type="text"
+                autoComplete="username"
                 required
-                placeholder="tu@correo.com"
+                placeholder="494 123 4567 o tu@correo.com"
                 className="w-full rounded-xl border border-outline-variant bg-surface-dim/60 px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
               />
             </div>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-outline-variant bg-surface-container-high/40 p-3">
+              <input
+                name="rememberDevice"
+                type="checkbox"
+                defaultChecked
+                className="mt-0.5 h-4 w-4 accent-primary"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-on-surface">Recordar este dispositivo por 30 días</span>
+                <span className="mt-1 block text-xs text-on-surface-variant">No tendrás que volver a iniciar sesión mientras no pulses “Cerrar sesión”.</span>
+              </span>
+            </label>
 
             <div>
               <div className="mb-2 flex items-center justify-between">
@@ -166,8 +194,18 @@ export default async function LoginPage({
               Ingresar
             </button>
           </form>
+          </div>
 
-          <div className="mt-8 border-t border-outline-variant pt-6 text-center">
+          <details className="mt-6 border-t border-outline-variant pt-5">
+            <summary className="cursor-pointer text-center text-sm font-semibold text-on-surface-variant hover:text-primary">
+              Ingresar con código por SMS
+            </summary>
+            <div className="mt-5">
+              <SmsLoginForm />
+            </div>
+          </details>
+
+          <div className="mt-8 border-t border-outline-variant pt-6 text-center space-y-4">
             <p className="flex flex-wrap items-center justify-center gap-x-1 text-xs leading-5 text-outline">
               <span>Hecho con</span>
               <CoffeeIcon className="h-3.5 w-3.5" />
@@ -175,6 +213,15 @@ export default async function LoginPage({
               <HeartIcon className="h-3.5 w-3.5" />
               <span>para Destiladora del Norte.</span>
             </p>
+            <div className="flex flex-wrap items-center justify-center gap-x-3 text-xs text-outline">
+              <a href="/privacy-policy" className="hover:text-primary transition">
+                Política de Privacidad
+              </a>
+              <span>•</span>
+              <a href="/terms-of-service" className="hover:text-primary transition">
+                Términos de Servicio
+              </a>
+            </div>
           </div>
         </div>
       </section>

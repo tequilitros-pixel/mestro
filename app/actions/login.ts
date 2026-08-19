@@ -1,36 +1,58 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { createPersistentSession, destinationForUser, revokeCurrentSession } from "@/lib/session";
+import { normalizeMexicanPhone } from "@/lib/phone";
+import { clearAuthAttempts, consumeAuthAttempt, requestFingerprint } from "@/lib/authThrottle";
 
 export async function loginAction(formData: FormData) {
-  const email = String(formData.get("email") ?? "")
+  const identifier = String(formData.get("identifier") ?? formData.get("email") ?? "")
     .trim()
     .toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  const rememberDevice = formData.get("rememberDevice") === "on";
 
-  const password = String(
-    formData.get("password") ?? ""
-  );
-
-  if (!email || !password) {
+  if (!identifier || !password) {
     redirect("/login?error=1");
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email },
+  const normalizedPhone = normalizeMexicanPhone(identifier);
+  const fingerprint = await requestFingerprint();
+  /*
+   * A PROPOSITO en secuencia, no con Promise.all. Las dos llamadas abren una
+   * transaccion SERIALIZABLE contra la misma tabla AuthThrottle; en paralelo
+   * se bloquean entre si y Postgres aborta una con 40001 en cada intento de
+   * acceso. Se siguen ejecutando LAS DOS (sin cortocircuito) para que ambos
+   * contadores sigan sumando igual que antes.
+   */
+  const ipAllowed = await consumeAuthAttempt({
+    scope: "login-ip",
+    identifiers: [fingerprint],
+    maxAttempts: 30,
+    windowMs: 15 * 60_000,
+  });
+  const accountAllowed = await consumeAuthAttempt({
+    scope: "login-account",
+    identifiers: [fingerprint, identifier],
+    maxAttempts: 10,
+    windowMs: 15 * 60_000,
+  });
+  if (!ipAllowed || !accountAllowed) redirect("/login?error=locked");
+
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: identifier },
+        { username: identifier },
+        ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+      ],
+    },
   });
 
   if (!user || !user.active) {
     redirect("/login?error=1");
-  }
-
-  const MAX_ATTEMPTS = 10;
-  const LOCK_MINUTES = 15;
-
-  if (user!.lockedUntil && user!.lockedUntil > new Date()) {
-    redirect("/login?error=locked");
   }
 
   const passwordMatches = await bcrypt.compare(
@@ -39,63 +61,17 @@ export async function loginAction(formData: FormData) {
   );
 
   if (!passwordMatches) {
-    const attempts = user!.failedLoginAttempts + 1;
-
-    await prisma.user.update({
-      where: { id: user!.id },
-      data: {
-        failedLoginAttempts: attempts,
-        lockedUntil:
-          attempts >= MAX_ATTEMPTS
-            ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000)
-            : null,
-      },
-    });
-
     redirect("/login?error=1");
   }
 
-  if (user!.failedLoginAttempts > 0 || user!.lockedUntil) {
-    await prisma.user.update({
-      where: { id: user!.id },
-      data: { failedLoginAttempts: 0, lockedUntil: null },
-    });
-  }
+  await clearAuthAttempts("login-account", [fingerprint, identifier]);
 
-  const cookieStore = await cookies();
-
-  const cookieOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
-  };
-
-  cookieStore.set(
-    "maestro_user",
-    user.id,
-    cookieOptions
-  );
-
-  cookieStore.set(
-    "maestro_role",
-    user.role,
-    cookieOptions
-  );
-
-  if (user.role === "OPERATOR") {
-    redirect("/cooking");
-  }
-
-  redirect("/");
+  await createPersistentSession(user, rememberDevice);
+  redirect(await destinationForUser(user));
 }
 
 export async function logoutAction() {
-  const cookieStore = await cookies();
-
-  cookieStore.delete("maestro_user");
-  cookieStore.delete("maestro_role");
+  await revokeCurrentSession();
 
   redirect("/login");
 }

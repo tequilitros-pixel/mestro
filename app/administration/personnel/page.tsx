@@ -31,6 +31,7 @@ interface PersonnelUser {
   name: string;
   username: string;
   email: string | null;
+  phone: string | null;
   role: PersonnelRole;
   active: boolean;
   branches: { branch: Branch }[];
@@ -50,6 +51,7 @@ export default function PersonnelPage() {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<PersonnelRole>("ENCARGADO");
   const [branchIds, setBranchIds] = useState<string[]>([]);
@@ -103,6 +105,7 @@ export default function PersonnelPage() {
       name,
       username,
       email: email || undefined,
+      phone: phone || undefined,
       password,
       role,
       branchIds: ROLES_CON_SUCURSAL.includes(role) ? branchIds : [],
@@ -117,6 +120,7 @@ export default function PersonnelPage() {
     setName("");
     setUsername("");
     setEmail("");
+    setPhone("");
     setPassword("");
     setRole("ENCARGADO");
     setBranchIds([]);
@@ -429,6 +433,17 @@ export default function PersonnelPage() {
                                       placeholder="correo@ejemplo.com"
                                       value={email}
                                       onChange={(e) => setEmail(e.target.value)}
+                                      className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+                                    />
+                                  </Field>
+
+                                  <Field label="Teléfono para acceso por SMS">
+                                    <input
+                                      type="tel"
+                                      inputMode="tel"
+                                      placeholder="494 123 4567"
+                                      value={phone}
+                                      onChange={(e) => setPhone(e.target.value)}
                                       className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
                                     />
                                   </Field>

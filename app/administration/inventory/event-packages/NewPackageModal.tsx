@@ -3,7 +3,7 @@
 import { useState } from "react";
 import EventPackageForm from "./EventPackageForm";
 
-export default function NewPackageModal() {
+export default function NewPackageModal({ products }: { products: Array<{ id: string; code: string; name: string; category: string; unit: string }> }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -31,7 +31,7 @@ export default function NewPackageModal() {
             </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
-              <EventPackageForm onSuccess={() => setOpen(false)} />
+              <EventPackageForm products={products} onSuccess={() => setOpen(false)} />
             </div>
           </div>
         </div>

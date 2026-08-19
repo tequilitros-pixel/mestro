@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/auth";
+import { withRlsContext } from "@/lib/rls";
 
 export type PosActionResult =
   | { success: true; message: string; id?: string }
@@ -273,9 +275,10 @@ export async function deleteProductAction(
   productId: string,
 ): Promise<PosActionResult> {
   try {
-    const saleItemCount = await prisma.posSaleItem.count({
+    const user = await requireAdmin();
+    const saleItemCount = await withRlsContext(user, (tx) => tx.posSaleItem.count({
       where: { variant: { productId } },
-    });
+    }));
 
     if (saleItemCount > 0) {
       return {

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import "./globals.css";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserModuleKeys } from "@/app/actions/permissions";
+import { getDefaultPathForModuleKeys } from "@/lib/permission-modules";
 
 import AppShell from "@/components/layout/AppShell";
 import { ToastProvider } from "@/components/ui/Toast";
@@ -19,22 +19,6 @@ const OPERATOR_ALLOWED_PATHS = [
 function matchesPath(pathname: string, path: string) {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
-
-/*
- * Tipografía del nuevo sistema de diseño (definido en Stitch).
- * Reemplaza a Geist en toda la app.
- */
-const inter = Inter({
-  variable: "--font-inter",
-  weight: ["400", "600", "700", "800"],
-  subsets: ["latin"],
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
-  weight: ["500", "600"],
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Destiladora del Norte",
@@ -59,9 +43,15 @@ export default async function RootLayout({
    */
   const user = await getCurrentUser();
 
+  const moduleKeys = user && user.role !== "ADMIN"
+    ? await getUserModuleKeys(user.id)
+    : [];
+
   if (user) {
     if (!user.active) {
-      redirect("/login");
+      // Evita un ciclo /login → /login cuando queda una cookie de un
+      // usuario desactivado. Esta ruta elimina la sesión antes de volver.
+      redirect("/api/session/clear");
     }
 
     const pathname = (await headers()).get("x-pathname") ?? "";
@@ -69,8 +59,23 @@ export default async function RootLayout({
       matchesPath(pathname, path),
     );
 
-    if (user.role === "OPERATOR" && pathname && !isAllowedForOperator) {
+    if (
+      user.role === "OPERATOR" &&
+      moduleKeys.length === 0 &&
+      pathname &&
+      !isAllowedForOperator
+    ) {
       redirect("/cooking");
+    }
+
+    // La portada contiene información global. Los usuarios con acceso
+    // limitado entran directamente al primer módulo que tienen autorizado.
+    if (user.role !== "ADMIN" && pathname === "/") {
+      redirect(
+        user.role === "OPERATOR" && moduleKeys.length === 0
+          ? "/cooking"
+          : getDefaultPathForModuleKeys(moduleKeys),
+      );
     }
   }
 
@@ -80,15 +85,10 @@ export default async function RootLayout({
    * fijo a producción). Para el resto, la navegación debe reflejar
    * exactamente lo que tienen otorgado.
    */
-  const moduleKeys =
-    user && user.role !== "ADMIN" && user.role !== "OPERATOR"
-      ? await getUserModuleKeys(user.id)
-      : [];
-
   return (
     <html
       lang="es"
-      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
       <body className="min-h-screen bg-background text-on-surface">
         <ToastProvider>

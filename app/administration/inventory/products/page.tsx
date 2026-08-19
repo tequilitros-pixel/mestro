@@ -4,16 +4,9 @@ import NewProductModal from "./NewProductModal";
 import ProductsList from "./ProductsList";
 
 export default async function InventoryProductsPage() {
-  const [packages, products] = await Promise.all([
-    prisma.eventPackage.findMany({
-      where: { isActive: true },
+  const products = await prisma.inventoryProduct.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-    prisma.inventoryProduct.findMany({
-      orderBy: { name: "asc" },
-    }),
-  ]);
+  });
 
   const productsForList = products.map((p) => ({
     id: p.id,
@@ -51,7 +44,7 @@ export default async function InventoryProductsPage() {
               ← Regresar a Inventario
             </Link>
 
-            <NewProductModal packages={packages} />
+            <NewProductModal />
           </div>
         </div>
 

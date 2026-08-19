@@ -7,11 +7,9 @@ import {
   getNearbyBranches,
   clockInAction,
   clockOutAction,
-  getMyTimeClockSummary,
   reportGeofenceAlert,
 } from "@/app/actions/timeclock";
-import { Card, CardLabel, CardValue } from "@/components/ui/Card";
-import { ClockIcon, DollarIcon, LoginIcon, LogoutIcon } from "@/components/ui/icons";
+import { ClockIcon, LoginIcon, LogoutIcon } from "@/components/ui/icons";
 import { distanceMeters, hasGeofence, type BranchLocation } from "@/lib/geo";
 import { enqueueOperation } from "@/lib/offline/queue";
 
@@ -21,28 +19,14 @@ type OpenShift = {
   clockIn: string | Date;
   branch: Branch;
 };
-type Summary = {
-  hourlyRate: number | null;
-  hasOpenShift: boolean;
-  todayHours: number;
-  weekHours: number;
-  todayPay: number | null;
-  weekPay: number | null;
-};
 type OutOfRange = { distance: number; radius: number } | null;
 
-function formatHours(hours: number) {
-  const totalMinutes = Math.max(0, Math.round(hours * 60));
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  return `${h}h ${m}m`;
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
-  }).format(value);
+function formatElapsed(milliseconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
 }
 
 function toDatetimeLocal(date: Date) {
@@ -80,7 +64,7 @@ export default function ClockWidget() {
   const [loading, setLoading] = useState(true);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [openShift, setOpenShift] = useState<OpenShift | null>(null);
-  const [summary, setSummary] = useState<Summary | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const [selectedBranch, setSelectedBranch] = useState("");
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -99,10 +83,9 @@ export default function ClockWidget() {
   async function load() {
     setLoading(true);
     try {
-      const [shift, myBranches, summaryResult] = await Promise.all([
+      const [shift, myBranches] = await Promise.all([
         getMyOpenShift(),
         getMyBranches(),
-        getMyTimeClockSummary(),
       ]);
       setOpenShift(shift as OpenShift | null);
       setBranches(myBranches);
@@ -110,7 +93,6 @@ export default function ClockWidget() {
       if (shift) localStorage.setItem("maestro:timeclock-open-shift", JSON.stringify(shift));
       else localStorage.removeItem("maestro:timeclock-open-shift");
       if (myBranches.length > 0) setSelectedBranch(myBranches[0].id);
-      if ("success" in summaryResult) setSummary(summaryResult as Summary);
     } catch {
       const cachedBranches = localStorage.getItem("maestro:timeclock-branches");
       const cachedShift = localStorage.getItem("maestro:timeclock-open-shift");
@@ -188,11 +170,15 @@ export default function ClockWidget() {
   useEffect(() => {
     if (!openShift) return;
 
-    const interval = setInterval(() => {
+    const stopwatch = setInterval(() => setNow(Date.now()), 1_000);
+    const refresh = setInterval(() => {
       if (navigator.onLine) load();
     }, 60_000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(stopwatch);
+      clearInterval(refresh);
+    };
   }, [openShift]);
 
   // Mientras haya un turno abierto en una sucursal con geocerca,
@@ -331,8 +317,17 @@ export default function ClockWidget() {
     }
 
     setSaving(true);
+    const adjustedClockIn = new Date(clockInValue);
+    const adjustedClockOut = new Date(clockOutValue);
+
+    if (Number.isNaN(adjustedClockIn.getTime()) || Number.isNaN(adjustedClockOut.getTime())) {
+      setSaving(false);
+      setError("Las horas no son válidas.");
+      return;
+    }
+
     if (!navigator.onLine) {
-      const clockOut = new Date(clockOutValue);
+      const clockOut = adjustedClockOut;
       await enqueueOperation({ id: crypto.randomUUID(), kind: "timeclock.clock-out", createdAt: new Date().toISOString(), payload: { entryId: openShift.id, clockOut: clockOut.toISOString(), coords } });
       setOpenShift(null);
       localStorage.removeItem("maestro:timeclock-open-shift");
@@ -340,7 +335,14 @@ export default function ClockWidget() {
       setSaving(false);
       return;
     }
-    const result = await clockOutAction(openShift.id, clockInValue, clockOutValue, coords);
+    // datetime-local no incluye zona horaria. Convertir en el navegador conserva
+    // la hora local del empleado y envía a Vercel un instante ISO inequívoco.
+    const result = await clockOutAction(
+      openShift.id,
+      adjustedClockIn.toISOString(),
+      adjustedClockOut.toISOString(),
+      coords,
+    );
     setSaving(false);
 
     if (result.error) {
@@ -381,51 +383,6 @@ export default function ClockWidget() {
 
   return (
     <div className="space-y-4">
-      {summary && (
-        <div className="grid grid-cols-2 gap-3">
-          <Card>
-            <CardLabel>
-              <span className="inline-flex items-center gap-1.5">
-                <ClockIcon className="h-3.5 w-3.5" />
-                Horas hoy
-              </span>
-            </CardLabel>
-            <CardValue>{formatHours(summary.todayHours)}</CardValue>
-          </Card>
-
-          <Card>
-            <CardLabel>
-              <span className="inline-flex items-center gap-1.5">
-                <ClockIcon className="h-3.5 w-3.5" />
-                Horas esta semana
-              </span>
-            </CardLabel>
-            <CardValue>{formatHours(summary.weekHours)}</CardValue>
-          </Card>
-
-          <div className="col-span-2">
-            <Card highlight>
-              <CardLabel>
-                <span className="inline-flex items-center gap-1.5">
-                  <DollarIcon className="h-3.5 w-3.5" />
-                  Ganado esta semana
-                </span>
-              </CardLabel>
-              <CardValue>
-                {summary.hourlyRate !== null && summary.weekPay !== null
-                  ? formatCurrency(summary.weekPay)
-                  : "—"}
-              </CardValue>
-              {summary.hourlyRate === null && (
-                <p className="mt-1 text-xs text-on-surface-variant">
-                  Pídele a un administrador que configure tu pago por hora.
-                </p>
-              )}
-            </Card>
-          </div>
-        </div>
-      )}
-
       {error && (
         <div className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">
           {error}
@@ -493,6 +450,16 @@ export default function ClockWidget() {
               minute: "2-digit",
             })}
           </p>
+
+          <div className="rounded-2xl bg-background/55 px-4 py-5">
+            <p className="flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-on-surface-variant">
+              <ClockIcon className="h-4 w-4" />
+              Tiempo del turno
+            </p>
+            <p className="mt-2 font-mono text-4xl font-black tabular-nums tracking-tight text-on-surface" aria-live="off">
+              {formatElapsed(now - new Date(openShift.clockIn).getTime())}
+            </p>
+          </div>
 
           <button
             onClick={startConfirming}

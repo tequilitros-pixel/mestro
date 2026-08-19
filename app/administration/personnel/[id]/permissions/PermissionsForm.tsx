@@ -5,8 +5,11 @@ import {
   setModulePermissionAction,
   setGroupPermissionAction,
 } from "@/app/actions/permissions";
-import { PERMISSION_GROUPS } from "@/lib/permission-modules";
-import { CrownIcon } from "@/components/ui/icons";
+import {
+  PERMISSION_GROUPS,
+  isConfigurablePermissionKey,
+} from "@/lib/permission-modules";
+import { ClockIcon, CrownIcon, LockIcon } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/Toast";
 
 export default function PermissionsForm({
@@ -20,7 +23,9 @@ export default function PermissionsForm({
   userRole: string;
   initialKeys: string[];
 }) {
-  const [granted, setGranted] = useState<Set<string>>(new Set(initialKeys));
+  const [granted, setGranted] = useState<Set<string>>(
+    new Set(initialKeys.filter(isConfigurablePermissionKey)),
+  );
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const { showToast } = useToast();
 
@@ -86,7 +91,7 @@ export default function PermissionsForm({
 
   if (isAdmin) {
     return (
-      <div className="flex items-center gap-4 rounded-2xl border border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 p-6">
+      <div className="flex items-center gap-3 rounded-xl border border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 p-4">
         <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-tertiary-fixed-dim/15">
           <CrownIcon className="h-6 w-6" />
         </span>
@@ -100,13 +105,34 @@ export default function PermissionsForm({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between rounded-2xl border border-outline-variant bg-surface-container px-6 py-4">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-xl border border-outline-variant bg-surface-container px-4 py-3">
         <p className="text-sm text-on-surface-variant">Acceso concedido</p>
         <p className="text-lg font-bold text-on-surface">
           {granted.size}
           <span className="text-on-surface-variant"> / {totalModules}</span>
         </p>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="flex gap-3 rounded-2xl border border-outline-variant bg-surface-container p-4">
+          <ClockIcon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+          <div>
+            <p className="text-sm font-bold text-on-surface">Acceso personal permanente</p>
+            <p className="mt-1 text-xs leading-5 text-on-surface-variant">
+              Checador, calendario propio y perfil están disponibles para todos los usuarios activos.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-3 rounded-2xl border border-outline-variant bg-surface-container p-4">
+          <LockIcon className="mt-0.5 h-5 w-5 shrink-0 text-secondary" />
+          <div>
+            <p className="text-sm font-bold text-on-surface">Exclusivo de administradores</p>
+            <p className="mt-1 text-xs leading-5 text-on-surface-variant">
+              Personal, catálogo del Punto de Venta, programación, nómina y geozonas no se pueden delegar.
+            </p>
+          </div>
+        </div>
       </div>
 
       {PERMISSION_GROUPS.map((group) => {
@@ -118,9 +144,9 @@ export default function PermissionsForm({
         return (
           <div
             key={group.group}
-            className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container"
+            className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container"
           >
-            <div className="flex items-center justify-between gap-3 border-b border-outline-variant bg-surface-container-high px-6 py-4">
+            <div className="flex items-center justify-between gap-3 border-b border-outline-variant bg-surface-container-high px-4 py-3">
               <div className="flex items-center gap-3">
                 <h3 className="font-bold text-on-surface">{group.group}</h3>
                 <span

@@ -1,116 +1,14 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import ProcessTable from "@/components/production/ProcessTable";
+import { MetricCard, PageHeader } from "@/components/ui/CompactUI";
 
+const TYPE_LABELS: Record<string, string> = { DESTROZADO: "Destrozado", RECTIFICACION: "Rectificación" };
 
 export default async function DistillationPage() {
-  const distillations = await prisma.distillation.findMany({
-    include: {
-      lot: true,
-      equipment: true,
-    },
-    orderBy: {
-      startedAt: "desc",
-    },
-  });
-
-  const activeCount = distillations.filter((d) => d.status === "ACTIVA").length;
-  const finishedCount = distillations.filter(
-    (d) => d.status === "TERMINADA"
-  ).length;
-
-  const totalLoadedLiters = distillations.reduce(
-    (sum, d) => sum + d.loadedLiters,
-    0
-  );
-
-  return (
-    <main className="min-h-screen bg-background p-10 text-on-surface">
-      <div className="mx-auto max-w-7xl">
-      
-
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
-              MAESTRO
-            </p>
-
-            <h1 className="mt-3 text-5xl font-bold">Destilación</h1>
-
-            <p className="mt-2 text-on-surface-variant">
-              Control de alambiques, destrozado, rectificación y cortes.
-            </p>
-          </div>
-
-          <Link
-            href="/distillation/new"
-            className="rounded-xl bg-primary px-5 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
-          >
-            Nueva destilación
-          </Link>
-        </div>
-
-        <section className="grid gap-5 md:grid-cols-3">
-          <Card title="Corridas activas" value={activeCount} />
-          <Card title="Corridas terminadas" value={finishedCount} />
-          <Card title="Litros cargados" value={`${totalLoadedLiters.toLocaleString()} L`} />
-        </section>
-
-        <section className="mt-10 space-y-4">
-          {distillations.length === 0 ? (
-            <div className="rounded-2xl bg-surface-container p-8 text-on-surface-variant">
-              Aún no hay destilaciones registradas.
-            </div>
-          ) : (
-            distillations.map((distillation) => (
-              <Link
-                key={distillation.id}
-                href={`/distillation/${distillation.id}`}
-                className="block rounded-2xl bg-surface-container p-6 transition hover:bg-surface-container-high"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-mono text-sm uppercase tracking-[0.25em] text-outline">
-                      {distillation.type}
-                    </p>
-
-                    <h2 className="mt-2 text-2xl font-bold">
-                      {distillation.lot.code}
-                    </h2>
-
-                    <p className="mt-2 text-on-surface-variant">
-                      {distillation.equipment.name} •{" "}
-                      {distillation.loadedLiters.toLocaleString()} L cargados
-                    </p>
-
-                    <p className="mt-1 text-sm text-outline">
-                      Inicio: {distillation.startedAt.toLocaleString()}
-                    </p>
-                  </div>
-
-                  <span
-                    className={`rounded-full px-4 py-2 text-sm font-bold ${
-                      distillation.status === "ACTIVA"
-                        ? "bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim"
-                        : "bg-surface-container-highest text-on-surface-variant"
-                    }`}
-                  >
-                    {distillation.status}
-                  </span>
-                </div>
-              </Link>
-            ))
-          )}
-        </section>
-      </div>
-    </main>
-  );
-}
-
-function Card({ title, value }: { title: string; value: string | number }) {
-  return (
-    <div className="rounded-2xl bg-surface-container p-6">
-      <p className="text-on-surface-variant">{title}</p>
-      <p className="mt-4 text-4xl font-bold text-primary">{value}</p>
-    </div>
-  );
+  const distillations = await prisma.distillation.findMany({ include: { lot: true, equipment: true }, orderBy: { startedAt: "desc" } });
+  const active = distillations.filter((item) => item.status === "ACTIVA").length;
+  const finished = distillations.filter((item) => item.status === "TERMINADA").length;
+  const liters = distillations.reduce((sum, item) => sum + item.loadedLiters, 0);
+  return <main className="page-frame space-y-4 text-on-surface"><div className="mx-auto max-w-7xl"><PageHeader title="Destilación" description="Control de alambiques, destrozado, rectificación y cortes." actions={<Link href="/distillation/new" className="compact-action inline-flex items-center bg-primary font-semibold text-on-primary">Nueva destilación</Link>} /><div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3"><MetricCard label="Corridas activas" value={active} /><MetricCard label="Corridas terminadas" value={finished} /><MetricCard label="Litros cargados" value={`${liters.toLocaleString("es-MX")} L`} /></div><ProcessTable emptyLabel="Aún no hay destilaciones registradas." columns={[{ key: "code", label: "Código del lote", width: "19%" }, { key: "type", label: "Tipo", width: "15%" }, { key: "equipment", label: "Alambique", width: "19%" }, { key: "liters", label: "Litros cargados", width: "16%" }, { key: "startedAt", label: "Inicio", width: "17%" }, { key: "status", label: "Estado", width: "14%" }]} filters={[{ key: "type", label: "Tipo", options: [...new Set(distillations.map((item) => TYPE_LABELS[item.type] ?? item.type))] }, { key: "equipment", label: "Alambique", options: [...new Set(distillations.map((item) => item.equipment.name))] }]} rows={distillations.map((item) => ({ id: item.id, href: `/distillation/${item.id}`, code: item.lot.code, startedAt: item.startedAt.toISOString(), status: item.status === "TERMINADA" ? "Terminado" : "En proceso", finished: item.status === "TERMINADA", values: { type: TYPE_LABELS[item.type] ?? item.type, equipment: item.equipment.name, liters: `${item.loadedLiters.toLocaleString("es-MX")} L` }, filters: { type: TYPE_LABELS[item.type] ?? item.type, equipment: item.equipment.name } }))} /></div></main>;
 }

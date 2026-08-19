@@ -29,6 +29,7 @@ type Product = {
   trackExpiration: boolean;
   canBeSold: boolean;
   mustReturn: boolean;
+  contentPerUnit: number | null; contentUnit: string | null;
 };
 
 export default function EditProductForm({ product }: { product: Product }) {
@@ -38,6 +39,7 @@ export default function EditProductForm({ product }: { product: Product }) {
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [unit, setUnit] = useState(product.unit); const [content, setContent] = useState(product.contentPerUnit?.toString() ?? ""); const [contentUnit, setContentUnit] = useState(product.contentUnit ?? "ML");
 
   async function handleSubmit(formData: FormData) {
     setSaving(true);
@@ -117,7 +119,7 @@ export default function EditProductForm({ product }: { product: Product }) {
             <select
               name="unit"
               required
-              defaultValue={product.unit}
+              value={unit} onChange={(event) => setUnit(event.target.value)}
               className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             >
               {units.map((u) => (
@@ -125,6 +127,8 @@ export default function EditProductForm({ product }: { product: Product }) {
               ))}
             </select>
           </label>
+
+          <div className="space-y-2 md:col-span-2"><span className="text-sm font-semibold text-on-surface-variant">Contenido de cada unidad</span><div className="grid gap-3 sm:grid-cols-2"><input name="contentPerUnit" type="number" min="0.001" step="0.001" value={content} onChange={(event) => setContent(event.target.value)} placeholder="Ej. 600, 1800 o 1.8" className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm" /><select name="contentUnit" value={contentUnit} onChange={(event) => setContentUnit(event.target.value)} className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm"><option value="ML">ml</option><option value="L">L</option><option value="G">g</option><option value="KG">kg</option><option value="PIEZAS">piezas</option></select></div><p className="text-xs text-on-surface-variant">{content ? `1 ${unit.toLowerCase()} contiene ${content} ${contentUnit === "PIEZAS" ? "piezas" : contentUnit.toLowerCase()}${contentUnit === "L" ? ` (${Number(content) * 1000} ml)` : ""}` : "Presentación sin configurar"}</p></div>
 
           <label className="space-y-2">
             <span className="text-sm font-semibold text-on-surface-variant">Tipo de producto</span>

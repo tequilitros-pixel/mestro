@@ -12,6 +12,7 @@ export type PosSettingsActionResult =
 const ROLES_CON_LIMITE: UserRole[] = ["ADMIN", "GERENTE", "ENCARGADO"];
 
 export async function getDiscountLimits(): Promise<Record<string, number | null>> {
+  await requireAdmin();
   const rows = await prisma.posDiscountLimit.findMany();
   const byRole = new Map(rows.map((r) => [r.role, r.maxPercent]));
 
@@ -49,6 +50,7 @@ export async function updateDiscountLimitsAction(
 }
 
 export async function getPosSettings() {
+  await requireAdmin();
   const settings = await prisma.posSettings.findUnique({ where: { id: "default" } });
   return {
     employeeDiscountPercent: settings?.employeeDiscountPercent ?? 50,

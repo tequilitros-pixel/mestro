@@ -183,8 +183,8 @@ export default function EventModal({
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-surface-dim/80 p-3 sm:p-6">
-      <div className="flex max-h-[94vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-outline-variant bg-surface-container shadow-2xl">
-        <header className="flex shrink-0 items-center justify-between border-b border-outline-variant px-6 py-5">
+      <div className="compact-modal-panel flex w-full max-w-lg flex-col overflow-hidden border border-outline-variant bg-surface-container">
+        <header className="compact-modal-header flex shrink-0 items-center justify-between border-b border-outline-variant">
           <h2 className="inline-flex items-center gap-2 text-xl font-bold text-on-surface">
             <PartyIcon className="h-5 w-5" />
             {isEditing ? "Editar evento" : "Nuevo evento"}
@@ -198,11 +198,11 @@ export default function EventModal({
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+        <div className="compact-modal-body min-h-0 flex-1 overflow-y-auto">
           {loading ? (
             <p className="text-sm text-on-surface-variant">Cargando evento...</p>
           ) : (
-            <div className="space-y-5">
+            <div className="space-y-4">
               {error && (
                 <div className="rounded-xl border border-error/40 bg-error/10 p-3 text-sm text-error">
                   {error}
@@ -357,7 +357,7 @@ export default function EventModal({
               </div>
 
               {isEditing && cost && (
-                <div className="space-y-3 rounded-2xl border border-outline-variant bg-background p-5">
+                <div className="space-y-3 rounded-xl border border-outline-variant bg-background p-4">
                   <p className="flex items-center gap-2 text-sm font-semibold text-on-surface">
                     <CoinsIcon className="h-4 w-4" />
                     Costo de mano de obra (estimado, con tarifa actual)
@@ -444,7 +444,7 @@ export default function EventModal({
               </div>
 
               {isEditing && (
-                <div className="rounded-2xl border border-error/40 bg-error/10 p-5">
+                <div className="rounded-xl border border-error/40 bg-error/10 p-4">
                   {!confirmingDelete ? (
                     <button
                       onClick={() => setConfirmingDelete(true)}

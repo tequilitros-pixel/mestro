@@ -15,6 +15,17 @@ function readOptionalNumber(value: FormDataEntryValue | null) {
   return Number.isFinite(number) ? number : null;
 }
 
+type SubmittedItem = { productId: string; quantity: number };
+
+function readItems(formData: FormData): SubmittedItem[] | null {
+  const raw = formData.get("items")?.toString() ?? "[]";
+  try {
+    const items = JSON.parse(raw) as SubmittedItem[];
+    if (!Array.isArray(items) || !items.length || items.some((item) => !item.productId || !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0) || new Set(items.map((item) => item.productId)).size !== items.length) return null;
+    return items.map((item) => ({ productId: item.productId, quantity: Number(item.quantity) }));
+  } catch { return null; }
+}
+
 export async function createEventPackageAction(
   formData: FormData,
 ): Promise<ActionResult> {
@@ -24,10 +35,15 @@ export async function createEventPackageAction(
     const pricePerPerson = readOptionalNumber(formData.get("pricePerPerson"));
     const includedHours = readOptionalNumber(formData.get("includedHours"));
     const minimumGuests = readOptionalNumber(formData.get("minimumGuests"));
+    const items = readItems(formData);
 
     if (!name) {
       return { success: false, error: "El nombre del paquete es obligatorio." };
     }
+    if (!items) return { success: false, error: "Selecciona al menos un producto y captura una cantidad mayor a cero." };
+
+    const activeProducts = await prisma.inventoryProduct.findMany({ where: { id: { in: items.map((item) => item.productId) }, isActive: true }, select: { id: true } });
+    if (activeProducts.length !== items.length) return { success: false, error: "Uno o más productos están inactivos o ya no existen." };
 
     if (pricePerPerson !== null && pricePerPerson < 0) {
       return { success: false, error: "El precio por persona no puede ser negativo." };
@@ -41,11 +57,13 @@ export async function createEventPackageAction(
         includedHours: includedHours !== null ? Math.trunc(includedHours) : null,
         minimumGuests: minimumGuests !== null ? Math.trunc(minimumGuests) : null,
         isActive: true,
+        items: { create: items.map((item, sortOrder) => ({ productId: item.productId, quantity: item.quantity, calculationType: "FIXED", isRequired: true, sortOrder })) },
       },
       select: { id: true },
     });
 
     revalidatePath("/administration/inventory/event-packages");
+    revalidatePath("/administration/inventory/events/new");
 
     return { success: true, message: "Paquete creado correctamente.", id: eventPackage.id };
   } catch (error) {
@@ -110,6 +128,8 @@ export async function addEventPackageItemAction(
     if (existing) {
       return { success: false, error: "Ese producto ya está en el paquete." };
     }
+    const product = await prisma.inventoryProduct.findFirst({ where: { id: productId, isActive: true }, select: { id: true } });
+    if (!product) return { success: false, error: "No se puede agregar un producto inactivo." };
 
     await prisma.eventPackageItem.create({
       data: {

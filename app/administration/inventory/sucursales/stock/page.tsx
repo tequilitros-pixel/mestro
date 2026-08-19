@@ -2,6 +2,17 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { computeStockMatrix } from "../../lib/stock";
 
+const numberFormat = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 });
+const literFormat = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 3 });
+
+function formatStock(quantity: number, unit: string) {
+  if (unit.trim().toLowerCase() === "ml") {
+    return `${literFormat.format(quantity / 1000)} L (${numberFormat.format(quantity)} ml)`;
+  }
+
+  return `${numberFormat.format(quantity)} ${unit}`;
+}
+
 export default async function BranchStockPage() {
   const products = await prisma.inventoryProduct.findMany({
     where: { isActive: true, trackStock: true },
@@ -24,7 +35,7 @@ export default async function BranchStockPage() {
           <h1 className="text-3xl font-bold sm:text-4xl">Stock actual</h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-on-surface-variant sm:text-base">
             Estimado a partir del último conteo cerrado de cada sucursal más las
-            entradas, traspasos y ajustes registrados desde entonces.
+            movimientos y ajustes registrados desde entonces.
           </p>
         </div>
 
@@ -70,13 +81,15 @@ export default async function BranchStockPage() {
                   >
                     <td className="sticky left-0 bg-surface-container px-4 py-3 font-medium text-on-surface">
                       {product.name}
-                      <span className="ml-2 text-xs text-on-surface-variant">{product.unit}</span>
+                      {product.unit.trim().toLowerCase() !== "ml" && (
+                        <span className="ml-2 text-xs text-on-surface-variant">{product.unit}</span>
+                      )}
                     </td>
                     {matrix.branches.map((branch) => {
                       const stock = matrix.stockByBranch.get(branch.id)?.get(product.id) ?? 0;
                       return (
                         <td key={branch.id} className="px-4 py-3 text-right text-on-surface-variant">
-                          {stock.toFixed(1)}
+                          {formatStock(stock, product.unit)}
                         </td>
                       );
                     })}
@@ -85,10 +98,10 @@ export default async function BranchStockPage() {
                         isLow ? "text-error" : "text-on-surface"
                       }`}
                     >
-                      {total.toFixed(1)}
+                      {formatStock(total, product.unit)}
                     </td>
                     <td className="px-4 py-3 text-right text-on-surface-variant">
-                      {minimum > 0 ? minimum : "—"}
+                      {minimum > 0 ? formatStock(minimum, product.unit) : "—"}
                     </td>
                   </tr>
                 );

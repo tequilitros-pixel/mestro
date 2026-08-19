@@ -677,3 +677,13 @@ export function GridIcon(props: IconProps) {
     </svg>
   );
 }
+
+/* Alias de compatibilidad para las pantallas de estado global. */
+export const ChevronDownIcon = ChevronRightIcon;
+export const LogOutIcon = LogoutIcon;
+export const SettingsIcon = GearIcon;
+export const MenuIcon = GridIcon;
+export const AlertCircleIcon = InfoIcon;
+export const CheckCircleIcon = CheckIcon;
+export const AlertTriangleIcon = AlertIcon;
+export const RefreshCwIcon = RefreshIcon;

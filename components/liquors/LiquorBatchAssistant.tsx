@@ -56,7 +56,7 @@ export default function LiquorBatchAssistant({
 
   if (!currentStep) {
     return (
-      <section className="rounded-3xl border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 p-8 text-center">
+      <section className="compact-form-panel rounded-xl border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 text-center">
         <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-tertiary-fixed-dim">
           Elaboración completada
         </p>
@@ -72,7 +72,7 @@ export default function LiquorBatchAssistant({
         <button
   type="button"
   onClick={() => setFinishModalOpen(true)}
-  className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl bg-tertiary-fixed-dim py-4 text-xl font-black text-on-surface transition duration-150 ease-out hover:scale-[1.02] hover:opacity-90 active:scale-[0.98]"
+  className="compact-action mt-4 flex w-full items-center justify-center gap-2 bg-tertiary-fixed-dim font-bold text-on-surface transition duration-150 hover:opacity-90 active:scale-[0.98]"
 >
   <CheckIcon className="h-5 w-5" />
   Finalizar lote
@@ -89,7 +89,7 @@ export default function LiquorBatchAssistant({
   }
 
   return (
-    <section className="rounded-3xl border border-secondary/30 bg-surface-container p-6 sm:p-8">
+    <section className="compact-form-panel rounded-xl border border-secondary/30 bg-surface-container">
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-secondary">
@@ -115,7 +115,7 @@ export default function LiquorBatchAssistant({
         />
       </div>
 
-      <div className="mt-8 rounded-3xl border border-outline-variant bg-background/60 p-6 sm:p-8">
+      <div className="mt-4 rounded-xl border border-outline-variant bg-background/60 p-4">
         <p className="font-mono text-xs font-semibold uppercase tracking-[0.25em] text-outline">
           {formatStepType(currentStep.type)}
         </p>
@@ -158,7 +158,7 @@ export default function LiquorBatchAssistant({
         <button
   type="button"
   onClick={() => setPauseModalOpen(true)}
-  className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-secondary bg-secondary/10 py-4 text-lg font-bold text-secondary transition duration-150 ease-out hover:scale-[1.01] hover:bg-secondary/20 active:scale-[0.99]"
+      className="compact-action mt-3 flex w-full items-center justify-center gap-2 border border-secondary bg-secondary/10 font-semibold text-secondary transition duration-150 hover:bg-secondary/20 active:scale-[0.99]"
 >
   <PauseIcon className="h-5 w-5" />
   Pausar elaboración
@@ -205,7 +205,7 @@ function StepForm({
   return (
     <form
       action={completeLiquorBatchStepAction}
-      className="mt-8 space-y-7"
+      className="mt-4 space-y-4"
     >
       <input
         type="hidden"
@@ -343,7 +343,7 @@ function SubmitButton({
     <button
       type="submit"
       disabled={pending || disabled}
-      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-secondary py-4 text-lg font-bold text-on-surface transition duration-150 ease-out hover:scale-[1.01] hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant disabled:hover:scale-100"
+      className="compact-action flex w-full items-center justify-center gap-2 bg-secondary font-semibold text-on-surface transition duration-150 hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant disabled:hover:scale-100"
     >
       {pending ? (
         "Guardando paso..."

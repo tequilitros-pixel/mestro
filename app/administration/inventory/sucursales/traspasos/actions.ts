@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { isBranchAllowed } from "@/lib/branches/access";
 
 export type ActionResult =
   | { success: true; message: string }
@@ -9,6 +11,16 @@ export type ActionResult =
 
 export async function createTransferAction(formData: FormData): Promise<ActionResult> {
   try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, error: "Tu sesión terminó. Vuelve a iniciar sesión." };
+    if (user.role !== "ADMIN") {
+      const permission = await prisma.modulePermission.findUnique({
+        where: { userId_moduleKey: { userId: user.id, moduleKey: "/administration/inventory/sucursales/traspasos" } },
+        select: { id: true },
+      });
+      if (!permission) return { success: false, error: "No tienes permiso para realizar traspasos." };
+    }
+
     const fromBranchId = formData.get("fromBranchId")?.toString() ?? "";
     const toBranchId = formData.get("toBranchId")?.toString() ?? "";
     const productId = formData.get("productId")?.toString() ?? "";
@@ -21,6 +33,11 @@ export async function createTransferAction(formData: FormData): Promise<ActionRe
 
     if (fromBranchId === toBranchId) {
       return { success: false, error: "La sucursal origen y destino no pueden ser la misma." };
+    }
+
+    const allowedBranchIds = await getAccessibleBranchIds();
+    if (!isBranchAllowed(allowedBranchIds, fromBranchId) || !isBranchAllowed(allowedBranchIds, toBranchId)) {
+      return { success: false, error: "No tienes acceso a una de las sucursales seleccionadas." };
     }
 
     const quantity = Number(quantityRaw);

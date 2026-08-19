@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { cleanText, optionalCleanText, plainObject } from "@/lib/inputValidation";
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -11,7 +12,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const includeInactive = searchParams.get("includeInactive") === "true";
 
-  if (user.role === "GERENTE" || user.role === "ENCARGADO") {
+  if (user.role !== "ADMIN") {
     const userBranches = await prisma.userBranch.findMany({
       where: { userId: user.id },
       include: { branch: true },
@@ -38,11 +39,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Solo un administrador puede crear sucursales" }, { status: 403 });
   }
 
-  const body = await request.json();
-  const { name, code, address } = body;
+  const body = plainObject(await request.json().catch(() => null));
+  const name = cleanText(body?.name, { min: 2, max: 100 });
+  const code = cleanText(body?.code, { min: 2, max: 20, pattern: /^[A-Za-z0-9_-]+$/ });
+  const address = optionalCleanText(body?.address, 250);
 
-  if (!name || !code) {
-    return NextResponse.json({ error: "Faltan datos: name, code" }, { status: 400 });
+  if (!body || !name || !code || (body.address && !address)) {
+    return NextResponse.json({ error: "Datos de sucursal inválidos" }, { status: 400 });
   }
 
   const existing = await prisma.branch.findUnique({ where: { code } });

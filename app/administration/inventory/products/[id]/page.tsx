@@ -44,6 +44,8 @@ export default async function EditProductPage({
             trackExpiration: product.trackExpiration,
             canBeSold: product.canBeSold,
             mustReturn: product.mustReturn,
+            contentPerUnit: product.contentPerUnit !== null ? Number(product.contentPerUnit) : null,
+            contentUnit: product.contentUnit,
           }}
         />
       </div>

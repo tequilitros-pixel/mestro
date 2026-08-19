@@ -3,6 +3,9 @@
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { revokeAllUserSessions } from "@/lib/session";
+import { verifyPasswordResetCode } from "@/lib/passwordReset";
+import { consumeAuthAttempt, requestFingerprint } from "@/lib/authThrottle";
 
 export async function resetPasswordAction(formData: FormData) {
   const email = String(formData.get("email") ?? "")
@@ -30,6 +33,15 @@ export async function resetPasswordAction(formData: FormData) {
   if (password.length < 8) {
     backToForm();
   }
+
+  const fingerprint = await requestFingerprint();
+  const allowed = await consumeAuthAttempt({
+    scope: "password-reset-check",
+    identifiers: [fingerprint, email],
+    maxAttempts: 8,
+    windowMs: 15 * 60_000,
+  });
+  if (!allowed) backToForm();
 
   const user = await prisma.user.findUnique({
     where: { email },
@@ -68,7 +80,7 @@ export async function resetPasswordAction(formData: FormData) {
     backToForm();
   }
 
-  if (resetCode!.code !== code) {
+  if (!resetCode!.codeHash || !verifyPasswordResetCode(code, resetCode!.codeHash)) {
     await prisma.passwordResetCode.update({
       where: { id: resetCode!.id },
       data: { attempts: { increment: 1 } },
@@ -88,6 +100,8 @@ export async function resetPasswordAction(formData: FormData) {
       data: { used: true },
     }),
   ]);
+
+  await revokeAllUserSessions(user!.id);
 
   redirect("/login?reset=1");
 }

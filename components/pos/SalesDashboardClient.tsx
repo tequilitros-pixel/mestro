@@ -14,12 +14,21 @@ import {
   SearchIcon,
 } from "@/components/ui/icons";
 import PageTabs from "@/components/ui/PageTabs";
+import { DateRangeCalendar } from "@/components/ui/DateRangeCalendar";
 import {
   DailyBranchChart,
   RankingBarChart,
   DistributionPieChart,
   HourlyChart,
 } from "./SalesCharts";
+import {
+  todayDateOnly,
+  mondayOfWeek,
+  addDaysToDateOnly,
+  firstDayOfMonth,
+  lastSalesDayOfMonth,
+  formatBusinessDateOnly,
+} from "@/lib/dateOnly";
 
 type SaleItem = { id: string; name: string; quantity: number; lineTotal: number };
 type SalePayment = { method: string; amount: number };
@@ -56,6 +65,28 @@ type AnalyticsSale = {
 
 type BranchOption = { id: string; name: string };
 
+type Period = "day" | "week" | "month" | "custom";
+
+const PERIOD_LABELS: Record<Period, string> = {
+  day: "Día",
+  week: "Semana",
+  month: "Mes",
+  custom: "Calendario",
+};
+
+/** Rango de fechas (calendario, sin hora) del periodo elegido. */
+function periodDateRange(period: Period): { from: string; to: string } {
+  const today = todayDateOnly();
+  if (period === "week") {
+    const monday = mondayOfWeek(today);
+    return { from: monday, to: addDaysToDateOnly(monday, 6) };
+  }
+  if (period === "month") {
+    return { from: firstDayOfMonth(today), to: lastSalesDayOfMonth(today) };
+  }
+  return { from: today, to: today };
+}
+
 const PAYMENT_LABELS: Record<string, string> = {
   EFECTIVO: "Efectivo",
   TARJETA: "Tarjeta",
@@ -79,19 +110,15 @@ const formatDayLabel = (iso: string) =>
     month: "short",
   });
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function dayKey(iso: string) {
-  return new Date(iso).toISOString().slice(0, 10);
+  return formatBusinessDateOnly(new Date(iso));
 }
 
-function EmptyPeriod({ days }: { days: number }) {
+function EmptyPeriod() {
   return (
     <Card className="text-center">
       <p className="text-sm text-on-surface-variant">
-        No hay ventas registradas en los últimos {days} días para este filtro.
+        No hay ventas registradas en este periodo para este filtro.
       </p>
     </Card>
   );
@@ -100,32 +127,35 @@ function EmptyPeriod({ days }: { days: number }) {
 export default function SalesDashboardClient({
   branches,
   initialSales,
-  analytics,
-  analyticsDays,
+  analytics: initialAnalytics,
   canCancel,
 }: {
   branches: BranchOption[];
   initialSales: Sale[];
   analytics: AnalyticsSale[];
-  analyticsDays: number;
   canCancel: boolean;
 }) {
   const [branchId, setBranchId] = useState("");
-  const [date, setDate] = useState(todayIso());
+  const [dateFrom, setDateFrom] = useState(todayDateOnly());
+  const [dateTo, setDateTo] = useState(todayDateOnly());
   const [search, setSearch] = useState("");
   const [sales, setSales] = useState<Sale[]>(initialSales);
   const [loading, setLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [analyticsBranchId, setAnalyticsBranchId] = useState("");
+  const [period, setPeriod] = useState<Period>("day");
+  const [analyticsFrom, setAnalyticsFrom] = useState(todayDateOnly());
+  const [analyticsTo, setAnalyticsTo] = useState(todayDateOnly());
+  const [analytics, setAnalytics] = useState<AnalyticsSale[]>(initialAnalytics);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState("");
 
-  async function refetch(nextBranchId: string, nextDate: string) {
+  async function refetch(nextBranchId: string, nextFrom: string, nextTo: string) {
     setLoading(true);
     const params = new URLSearchParams();
     if (nextBranchId) params.set("branchId", nextBranchId);
-    const dayStart = new Date(`${nextDate}T00:00:00`);
-    const dayEnd = new Date(`${nextDate}T23:59:59.999`);
-    params.set("dateFrom", dayStart.toISOString());
-    params.set("dateTo", dayEnd.toISOString());
+    params.set("dateFrom", nextFrom);
+    params.set("dateTo", nextTo);
 
     const res = await fetch(`/api/pos/sales?${params.toString()}`);
     if (res.ok) {
@@ -136,12 +166,40 @@ export default function SalesDashboardClient({
 
   function handleBranchChange(value: string) {
     setBranchId(value);
-    refetch(value, date);
+    refetch(value, dateFrom, dateTo);
   }
 
-  function handleDateChange(value: string) {
-    setDate(value);
-    refetch(branchId, value);
+  async function loadAnalytics(from: string, to: string) {
+    setAnalyticsLoading(true);
+    setAnalyticsError("");
+    const params = new URLSearchParams();
+    params.set("dateFrom", from);
+    params.set("dateTo", to);
+
+    try {
+      const res = await fetch(`/api/pos/sales/analytics?${params.toString()}`);
+      if (!res.ok) throw new Error("No fue posible cargar el periodo.");
+      setAnalytics(await res.json());
+    } catch {
+      setAnalyticsError("No fue posible cargar las ventas. Intenta de nuevo.");
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }
+
+  function handlePeriodChange(nextPeriod: Exclude<Period, "custom">) {
+    const range = periodDateRange(nextPeriod);
+    setPeriod(nextPeriod);
+    setAnalyticsFrom(range.from);
+    setAnalyticsTo(range.to);
+    void loadAnalytics(range.from, range.to);
+  }
+
+  function handleAnalyticsRange(nextFrom: string, nextTo: string) {
+    setPeriod("custom");
+    setAnalyticsFrom(nextFrom);
+    setAnalyticsTo(nextTo);
+    if (nextFrom && nextTo && nextFrom <= nextTo) void loadAnalytics(nextFrom, nextTo);
   }
 
   async function handleCancel(sale: Sale) {
@@ -162,7 +220,7 @@ export default function SalesDashboardClient({
       return;
     }
 
-    refetch(branchId, date);
+    refetch(branchId, dateFrom, dateTo);
   }
 
   const activeSales = sales.filter((s) => s.status !== "CANCELADA");
@@ -327,8 +385,46 @@ export default function SalesDashboardClient({
   const analyticsScopeLabel =
     branches.find((b) => b.id === analyticsBranchId)?.name ?? "Todas las sucursales";
 
+  const periodFrom = analyticsFrom;
+  const periodTo = analyticsTo;
+
+  const periodRangeLabel =
+    period === "day"
+      ? "Hoy"
+      : period === "week"
+        ? `Del ${formatDayLabel(periodFrom)} al ${formatDayLabel(periodTo)} (lun-dom)`
+        : period === "month"
+          ? `Del ${formatDayLabel(periodFrom)} al ${formatDayLabel(periodTo)}`
+          : `Del ${formatDayLabel(periodFrom)} al ${formatDayLabel(periodTo)}`;
+
   const analyticsScopeSelector = (
     <div className="flex flex-wrap items-center gap-3">
+      <div className="inline-flex rounded-xl border border-outline-variant bg-surface-container p-1">
+        {(["day", "week", "month"] as Array<Exclude<Period, "custom">>).map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => handlePeriodChange(p)}
+            disabled={analyticsLoading}
+            className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors disabled:opacity-60 ${
+              period === p
+                ? "bg-primary text-on-primary"
+                : "text-on-surface-variant hover:text-on-surface"
+            }`}
+          >
+            {PERIOD_LABELS[p]}
+          </button>
+        ))}
+      </div>
+
+      <DateRangeCalendar
+        compact
+        from={analyticsFrom}
+        to={analyticsTo}
+        onFromChange={(value) => handleAnalyticsRange(value, analyticsTo)}
+        onToChange={(value) => handleAnalyticsRange(analyticsFrom, value)}
+      />
+
       <select
         value={analyticsBranchId}
         onChange={(e) => setAnalyticsBranchId(e.target.value)}
@@ -343,17 +439,22 @@ export default function SalesDashboardClient({
       </select>
 
       <p className="text-xs text-on-surface-variant">
-        Últimos {analyticsDays} días · {analyticsScopeLabel}
+        {analyticsLoading ? "Cargando..." : periodRangeLabel} · {analyticsScopeLabel}
       </p>
+      {analyticsError && (
+        <p role="alert" className="w-full text-sm font-medium text-error">
+          {analyticsError}
+        </p>
+      )}
     </div>
   );
 
   const emptyPeriod = scopedAnalytics.length === 0;
 
-  const emptyPeriodCard = <EmptyPeriod days={analyticsDays} />;
+  const emptyPeriodCard = <EmptyPeriod />;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-6">
+    <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-5">
       <div>
         <h1 className="text-2xl font-bold text-on-surface">Ventas del Punto de Venta</h1>
         <p className="text-sm text-on-surface-variant">
@@ -371,8 +472,8 @@ export default function SalesDashboardClient({
               <div className="space-y-6">
                 {analyticsScopeSelector}
 
-                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                  <Card>
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <Card className="p-4">
                     <CardLabel>Ventas del periodo</CardLabel>
                     <CardValue>{formatCurrency(periodTotals.total)}</CardValue>
                     <p className="mt-1 text-xs text-on-surface-variant">
@@ -380,7 +481,7 @@ export default function SalesDashboardClient({
                     </p>
                   </Card>
 
-                  <Card>
+                  <Card className="p-4">
                     <CardLabel>Promedio diario</CardLabel>
                     <CardValue>{formatCurrency(periodTotals.dailyAverage)}</CardValue>
                     <p className="mt-1 text-xs text-on-surface-variant">
@@ -388,13 +489,13 @@ export default function SalesDashboardClient({
                     </p>
                   </Card>
 
-                  <Card>
+                  <Card className="p-4">
                     <CardLabel>Ticket promedio</CardLabel>
                     <CardValue>{formatCurrency(periodTotals.ticket)}</CardValue>
                     <p className="mt-1 text-xs text-on-surface-variant">Por venta</p>
                   </Card>
 
-                  <Card>
+                  <Card className="p-4">
                     <CardLabel>Hoy</CardLabel>
                     <CardValue>{formatCurrency(summary.totalSales)}</CardValue>
                     <p className="mt-1 text-xs text-on-surface-variant">
@@ -721,17 +822,24 @@ export default function SalesDashboardClient({
                     ))}
                   </select>
 
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => handleDateChange(e.target.value)}
-                    className="rounded-xl border border-outline-variant bg-surface-container px-4 py-2.5 text-sm text-on-surface outline-none focus:border-primary"
+                  <DateRangeCalendar
+                    compact
+                    from={dateFrom}
+                    to={dateTo}
+                    onFromChange={(value) => {
+                      setDateFrom(value);
+                      if (value && dateTo && value <= dateTo) void refetch(branchId, value, dateTo);
+                    }}
+                    onToChange={(value) => {
+                      setDateTo(value);
+                      if (dateFrom && value && dateFrom <= value) void refetch(branchId, dateFrom, value);
+                    }}
                   />
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <Card>
-                    <CardLabel>Ventas del día</CardLabel>
+                    <CardLabel>Ventas del rango</CardLabel>
                     <CardValue>{formatCurrency(summary.totalSales)}</CardValue>
                     <p className="mt-1 text-xs text-on-surface-variant">
                       {summary.count} venta{summary.count === 1 ? "" : "s"}
@@ -741,7 +849,7 @@ export default function SalesDashboardClient({
                   <Card>
                     <CardLabel>Ticket promedio</CardLabel>
                     <CardValue>{formatCurrency(summary.ticket)}</CardValue>
-                    <p className="mt-1 text-xs text-on-surface-variant">Del día filtrado</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">Del rango filtrado</p>
                   </Card>
 
                   <Card>

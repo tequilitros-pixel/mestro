@@ -230,7 +230,13 @@ async function ensureInitialAdmin() {
     return existingUser;
   }
 
-  const password = await bcrypt.hash("adan123", 12);
+  const initialPassword = process.env.MAESTRO_INITIAL_ADMIN_PASSWORD;
+  if (!initialPassword || initialPassword.length < 12) {
+    throw new Error(
+      "Define MAESTRO_INITIAL_ADMIN_PASSWORD con al menos 12 caracteres para crear el administrador inicial.",
+    );
+  }
+  const password = await bcrypt.hash(initialPassword, 12);
 
   const user = await prisma.user.create({
     data: {

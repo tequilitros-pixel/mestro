@@ -27,13 +27,15 @@ export default function PageTabs({
   const activeTab = tabs.find((t) => t.key === active) ?? tabs[0];
 
   return (
-    <div className="space-y-6">
-      <div className="inline-flex flex-wrap gap-1 rounded-2xl border border-outline-variant bg-surface-container p-1.5">
+    <div className="space-y-4">
+      <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-outline-variant bg-surface-container p-1" role="tablist">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setActive(t.key)}
-            className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition ${
+            role="tab"
+            aria-selected={active === t.key}
+            className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 py-1 text-[13px] font-semibold transition-colors duration-150 sm:px-3 ${tabs.length <= 4 ? "flex-1 justify-center" : ""} ${
               active === t.key
                 ? "bg-primary text-on-primary shadow"
                 : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"

@@ -94,6 +94,8 @@ function mapSettingsRow(row: {
  * ("default"). Sin `branchId`, siempre regresa el global.
  */
 export async function getPayrollSettings(branchId?: string | null): Promise<PayrollSettingsValues> {
+  const auth = await requireAdmin();
+  if (auth.error !== undefined) return DEFAULT_SETTINGS;
   if (!overtimeReady()) return DEFAULT_SETTINGS;
 
   try {
@@ -123,6 +125,8 @@ export async function getPayrollSettings(branchId?: string | null): Promise<Payr
 export async function getBranchPayrollOverrides(): Promise<
   { branchId: string; branchName: string; settings: PayrollSettingsValues }[]
 > {
+  const auth = await requireAdmin();
+  if (auth.error !== undefined) return [];
   if (!overtimeReady()) return [];
 
   try {

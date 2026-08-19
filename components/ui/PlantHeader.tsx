@@ -28,14 +28,14 @@ export default function PlantHeader({
   health,
 }: PlantHeaderProps) {
   return (
-    <section className="surface-sheen rounded-xl border border-outline-variant bg-surface-container p-8">
-      <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+    <section className="surface-sheen rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
             Destiladora del Norte
           </p>
 
-          <h1 className="mt-3 text-5xl font-bold text-primary">
+          <h1 className="mt-1 text-2xl font-bold text-on-surface sm:text-[26px]">
             {title}
           </h1>
 
@@ -44,11 +44,11 @@ export default function PlantHeader({
           </p>
         </div>
 
-        <div className="rounded-xl bg-surface-container-high p-5 text-right">
-          <p className="text-sm text-on-surface-variant">Estado general</p>
+        <div className="rounded-xl bg-surface-container-high p-3 text-right">
+          <p className="text-xs text-on-surface-variant">Estado general</p>
 
           <p
-            className={`mt-2 inline-flex items-center gap-2 text-2xl font-bold ${STATUS_TEXT_CLASSES[statusLevel]}`}
+            className={`mt-1 inline-flex items-center gap-2 text-lg font-bold ${STATUS_TEXT_CLASSES[statusLevel]}`}
           >
             <span
               className={`h-2.5 w-2.5 shrink-0 rounded-full ${STATUS_DOT_CLASSES[statusLevel]}`}

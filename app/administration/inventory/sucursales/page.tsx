@@ -9,6 +9,7 @@ import {
   ChartLineIcon,
 } from "@/components/ui/icons";
 import PageTabs from "@/components/ui/PageTabs";
+import { getCurrentUser } from "@/lib/auth";
 
 const formatDate = (value: Date) =>
   new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(
@@ -22,18 +23,29 @@ const entryTypeLabels: Record<string, string> = {
 };
 
 const quickActions = [
-  { label: "Nueva entrada", href: "/administration/inventory/branch-entries" },
+  { label: "Nueva entrada", href: "/administration/inventory/branch-entries", permissionKey: "/administration/inventory/branch-entries" },
   {
     label: "Nuevo traspaso",
     href: "/administration/inventory/sucursales/traspasos",
+    permissionKey: "/administration/inventory/sucursales/traspasos",
   },
   {
     label: "Nuevo conteo",
     href: "/administration/inventory/branch-counts/new",
+    permissionKey: "/administration/inventory/branch-counts",
   },
 ];
 
 export default async function SucursalesInventoryPage() {
+  const user = await getCurrentUser();
+  const permissionRows = user?.role === "ADMIN" ? [] : await prisma.modulePermission.findMany({
+    where: { userId: user?.id ?? "" },
+    select: { moduleKey: true },
+  });
+  const permissionKeys = new Set(permissionRows.map((permission) => permission.moduleKey));
+  const visibleQuickActions = quickActions.filter(
+    (action) => user?.role === "ADMIN" || permissionKeys.has(action.permissionKey),
+  );
   const fourteenDaysAgo = new Date();
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
   fourteenDaysAgo.setHours(0, 0, 0, 0);
@@ -105,12 +117,12 @@ export default async function SucursalesInventoryPage() {
               Inventario de sucursales
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-on-surface-variant sm:text-base">
-              Stock por sucursal, entradas, traspasos y conteos semanales.
+              Stock por sucursal, movimientos y conteos semanales.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {quickActions.map((action) => (
+            {visibleQuickActions.map((action) => (
               <Link
                 key={action.href}
                 href={action.href}

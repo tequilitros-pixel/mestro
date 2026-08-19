@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { parseDateOnly, addDaysToDateOnly, formatDateOnly } from "@/lib/dateOnly";
+import { withRlsContext } from "@/lib/rls";
 
 /**
  * Analítica de nómina para dirección: costo real de mano de obra,
@@ -219,13 +220,13 @@ export async function getPayrollAnalytics(
       },
     }),
 
-    prisma.posSale.findMany({
+    withRlsContext(currentUser, (tx) => tx.posSale.findMany({
       where: {
         createdAt: { gte: start, lt: end },
         status: "COMPLETADA",
       },
       select: { total: true, createdAt: true, branchId: true },
-    }),
+    })),
 
     prisma.branch.findMany({
       where: { active: true },

@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import EntryForm from "./EntryForm";
+import { InventoryEntryType } from "@prisma/client";
 
 const typeLabels: Record<string, string> = {
   COMPRA: "Compra",
@@ -8,18 +10,40 @@ const typeLabels: Record<string, string> = {
 };
 
 export default async function BranchEntriesPage() {
+  const [allowedBranchIds, user] = await Promise.all([
+    getAccessibleBranchIds(),
+    getCurrentUser(),
+  ]);
+  const canViewTransfers = user?.role === "ADMIN" || Boolean(user && await prisma.modulePermission.findUnique({
+    where: {
+      userId_moduleKey: {
+        userId: user.id,
+        moduleKey: "/administration/inventory/sucursales/traspasos",
+      },
+    },
+    select: { id: true },
+  }));
+  const branchWhere = allowedBranchIds === null
+    ? { active: true }
+    : { active: true, id: { in: allowedBranchIds } };
+  const entryWhere = {
+    type: { in: [InventoryEntryType.COMPRA, InventoryEntryType.AJUSTE] },
+    ...(allowedBranchIds === null ? {} : { branchId: { in: allowedBranchIds } }),
+  };
+
   const [branches, products, entries] = await Promise.all([
     prisma.branch.findMany({
-      where: { active: true },
+      where: branchWhere,
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
     prisma.inventoryProduct.findMany({
       where: { isActive: true, trackStock: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, unit: true },
+      select: { id: true, code: true, name: true, category: true, unit: true },
     }),
     prisma.inventoryEntry.findMany({
+      where: entryWhere,
       orderBy: { entryDate: "desc" },
       take: 20,
       include: { branch: true, product: true },
@@ -42,7 +66,14 @@ export default async function BranchEntriesPage() {
           </p>
         </div>
 
-        <EntryForm branches={branches} products={products} />
+        {branches.length > 0 ? (
+          <EntryForm branches={branches} products={products} canViewTransfers={canViewTransfers} />
+        ) : (
+          <div className="rounded-2xl border border-secondary/30 bg-secondary/10 p-6 text-sm text-on-surface">
+            No tienes sucursales asignadas. Pide a un administrador que te asigne al menos una
+            para registrar entradas o ajustes.
+          </div>
+        )}
 
         <div className="rounded-2xl border border-outline-variant bg-surface-container divide-y divide-outline-variant">
           <div className="p-6">

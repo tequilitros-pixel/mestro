@@ -6,9 +6,7 @@ import ProductForm from "./ProductForm";
 type EventPackage = { id: string; name: string };
 
 export default function NewProductModal({
-  packages,
 }: {
-  packages: EventPackage[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -37,7 +35,7 @@ export default function NewProductModal({
             </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
-              <ProductForm packages={packages} onSuccess={() => setOpen(false)} />
+              <ProductForm onSuccess={() => setOpen(false)} />
             </div>
           </div>
         </div>

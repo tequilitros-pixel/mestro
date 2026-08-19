@@ -1,81 +1,49 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { Prisma } from "@prisma/client";
+import LotsTable, { type LotFilters } from "@/components/lots/LotsTable";
+import { PageHeader } from "@/components/ui/CompactUI";
+import { addDaysToDateOnly, businessDayStart, lastDayOfMonth } from "@/lib/dateOnly";
 
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-export default async function LotsPage() {
+function firstValue(value: string | string[] | undefined) { return typeof value === "string" ? value : ""; }
+function validDate(value: string) { return /^\d{4}-\d{2}-\d{2}$/.test(value); }
+
+export default async function LotsPage({ searchParams }: { searchParams: SearchParams }) {
+  const params = await searchParams;
+  const filters: LotFilters = {
+    query: firstValue(params.query),
+    status: ["ACTIVE", "TERMINATED"].includes(firstValue(params.status)) ? firstValue(params.status) as LotFilters["status"] : "ALL",
+    sort: firstValue(params.sort) === "asc" ? "asc" : "desc",
+    year: /^\d{4}$/.test(firstValue(params.year)) ? firstValue(params.year) : "",
+    month: /^(?:[1-9]|1[0-2])$/.test(firstValue(params.month)) ? firstValue(params.month) : "",
+    from: validDate(firstValue(params.from)) ? firstValue(params.from) : "",
+    to: validDate(firstValue(params.to)) ? firstValue(params.to) : "",
+  };
+  const where: Prisma.LotWhereInput = {};
+  if (filters.query) where.code = { contains: filters.query, mode: "insensitive" };
+  if (filters.status === "TERMINATED") where.stage = "TERMINADO";
+  if (filters.status === "ACTIVE") where.stage = { not: "TERMINADO" };
+  const dateFrom = filters.from || (filters.year ? `${filters.year}-${filters.month ? filters.month.padStart(2, "0") : "01"}-01` : "");
+  const dateTo = filters.to || (filters.year ? filters.month ? lastDayOfMonth(`${filters.year}-${filters.month.padStart(2, "0")}`) : `${filters.year}-12-31` : "");
+  if (dateFrom || dateTo) where.startedAt = { ...(dateFrom ? { gte: businessDayStart(dateFrom) } : {}), ...(dateTo ? { lt: businessDayStart(addDaysToDateOnly(dateTo, 1)) } : {}) };
   const lots = await prisma.lot.findMany({
-    orderBy: { createdAt: "desc" },
+    where,
+    orderBy: { startedAt: filters.sort },
   });
 
   return (
-    <main className="min-h-screen bg-background p-10 text-on-surface">
-      <div className="mx-auto max-w-6xl">
-
-
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
-              MAESTRO
-            </p>
-            <h1 className="mt-3 text-4xl font-bold text-primary">Lotes</h1>
-            <p className="mt-2 text-on-surface-variant">
-              Expedientes de producción desde recepción hasta producto terminado.
-            </p>
-          </div>
-
-          <Link
+    <main className="page-frame space-y-4 text-on-surface">
+      <div className="mx-auto max-w-7xl">
+        <PageHeader title="Lotes" description="Expedientes de producción desde recepción hasta producto terminado." actions={<Link
             href="/lots/new"
-            className="rounded-xl bg-primary px-5 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
+            className="compact-action inline-flex items-center bg-primary font-semibold text-on-primary transition duration-150 hover:opacity-90 active:scale-[0.98]"
           >
             Nuevo lote
-          </Link>
-        </div>
-
-        <div className="grid gap-4">
-          {lots.length === 0 ? (
-            <div className="rounded-xl bg-surface-container p-8 text-on-surface-variant">
-              Aún no hay lotes registrados.
-            </div>
-          ) : (
-            lots.map((lot) => (
-              <Link
-                key={lot.id}
-                href={`/lots/${lot.id}`}
-                className="rounded-xl bg-surface-container p-6 transition hover:bg-surface-container-high"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-on-surface-variant">Código de lote</p>
-                    <h2 className="mt-1 text-2xl font-bold text-primary">{lot.code}</h2>
-                  </div>
-
-                  <span className="rounded-full border border-outline-variant bg-surface-container-high px-4 py-2 font-mono text-sm font-bold text-on-surface-variant">
-                    {lot.stage}
-                  </span>
-                </div>
-
-                <div className="mt-5 grid gap-4 md:grid-cols-3">
-                  <Kpi title="Agave" value={`${lot.agaveKg.toLocaleString()} kg`} />
-                  <Kpi title="ART" value={lot.art ?? "-"} />
-                  <Kpi
-                    title="Inicio"
-                    value={lot.startedAt.toLocaleDateString()}
-                  />
-                </div>
-              </Link>
-            ))
-          )}
-        </div>
+          </Link>} />
+        <LotsTable key={JSON.stringify(filters)} lots={lots.map((lot) => ({ ...lot, startedAt: lot.startedAt.toISOString() }))} filters={filters} />
       </div>
     </main>
-  );
-}
-
-function Kpi({ title, value }: { title: string; value: string | number }) {
-  return (
-    <div className="rounded-xl bg-surface-container-high p-4">
-      <p className="text-sm text-on-surface-variant">{title}</p>
-      <p className="mt-1 text-xl font-bold text-primary">{value}</p>
-    </div>
   );
 }

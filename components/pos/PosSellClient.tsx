@@ -163,6 +163,8 @@ export default function PosSellClient({
   const [employeeDiscountPercent, setEmployeeDiscountPercent] = useState(50);
   const [discountLimitPercent, setDiscountLimitPercent] = useState<number | null>(null);
   const [managers, setManagers] = useState<Employee[]>([]);
+  const [configuredDiscounts, setConfiguredDiscounts] = useState<Array<{ id: string; name: string; percent: number }>>([]);
+  const [discountBlockedBy, setDiscountBlockedBy] = useState<string | null>(null);
   const [localOpenBranches, setLocalOpenBranches] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
 
@@ -227,6 +229,17 @@ export default function PosSellClient({
       cancelled = true;
     };
   }, [branchOptions]);
+
+  useEffect(() => {
+    if (!branchId) return;
+    fetch(`/api/pos/discount-rules?branchId=${encodeURIComponent(branchId)}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((data: { blockedBy: string | null; discounts: Array<{ id: string; name: string; percent: number }> } | null) => {
+        setDiscountBlockedBy(data?.blockedBy ?? null);
+        setConfiguredDiscounts(data?.discounts?.filter((rule) => typeof rule.percent === "number") ?? []);
+      })
+      .catch(() => { setDiscountBlockedBy(null); setConfiguredDiscounts([]); });
+  }, [branchId]);
 
   const branch = branchOptions.find((b) => b.id === branchId) ?? null;
   const hasOpenCut = Boolean(branch?.openCashCutId) || localOpenBranches.has(branchId);
@@ -393,6 +406,12 @@ export default function PosSellClient({
             >
               <ReceiptIcon className="h-4 w-4" />
               Ventas
+            </Link>
+            <Link
+              href="/pos/discounts/courtesies"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+            >
+              Descuentos
             </Link>
           </div>
         </div>
@@ -747,6 +766,8 @@ export default function PosSellClient({
           initialAmount={discountAmount}
           initialReasonCode={discountReasonCode}
           initialReasonNote={discountReasonNote}
+          configuredDiscounts={configuredDiscounts}
+          blockedBy={discountBlockedBy}
           onApply={(amount, reasonCode, reasonNote) => {
             setDiscountAmount(amount);
             setDiscountReasonCode(reasonCode);
@@ -948,6 +969,8 @@ function DiscountModal({
   initialAmount,
   initialReasonCode,
   initialReasonNote,
+  configuredDiscounts,
+  blockedBy,
   onApply,
   onClose,
 }: {
@@ -955,6 +978,8 @@ function DiscountModal({
   initialAmount: number;
   initialReasonCode: string;
   initialReasonNote: string;
+  configuredDiscounts: Array<{ id: string; name: string; percent: number }>;
+  blockedBy: string | null;
   onApply: (amount: number, reasonCode: string, reasonNote: string) => void;
   onClose: () => void;
 }) {
@@ -968,6 +993,7 @@ function DiscountModal({
   return (
     <ModalShell title="Descuento" onClose={onClose}>
       <div className="space-y-4">
+        {blockedBy && <p className="rounded-xl bg-error/10 p-3 text-sm font-semibold text-error">Descuentos desactivados: {blockedBy}</p>}
         <div>
           <label className="mb-1 block text-xs font-semibold text-on-surface-variant">
             Monto de descuento
@@ -987,13 +1013,14 @@ function DiscountModal({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {QUICK_PERCENTS.map((pct) => (
+          {(configuredDiscounts.length ? configuredDiscounts.map((rule) => ({ key: rule.id, label: rule.name, percent: rule.percent })) : QUICK_PERCENTS.map((percent) => ({ key: String(percent), label: `${percent}%`, percent }))).map((rule) => (
             <button
-              key={pct}
-              onClick={() => setAmount(Math.round(subtotal * (pct / 100) * 100) / 100)}
+              key={rule.key}
+              disabled={Boolean(blockedBy)}
+              onClick={() => setAmount(Math.round(subtotal * (rule.percent / 100) * 100) / 100)}
               className="rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface transition hover:border-primary"
             >
-              {pct}%
+              {rule.label}
             </button>
           ))}
         </div>
@@ -1015,7 +1042,7 @@ function DiscountModal({
             Quitar
           </button>
           <button
-            disabled={!canApply}
+            disabled={!canApply || Boolean(blockedBy)}
             onClick={() =>
               onApply(Math.min(Math.max(amount, 0), subtotal), reasonCode, reasonNote)
             }

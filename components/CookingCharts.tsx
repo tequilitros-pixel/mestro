@@ -86,8 +86,8 @@ export default function CookingCharts({ events }: { events: CookingEvent[] }) {
 
   if (data.length === 0) {
     return (
-      <section className="mt-8 rounded-2xl bg-surface-container p-8">
-        <h2 className="mb-2 text-2xl font-bold">Gráficas de cocción</h2>
+      <section className="mt-4 rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5">
+        <h2 className="mb-1 text-sm font-semibold">Gráficas de cocción</h2>
         <p className="text-on-surface-variant">
           Aún no hay temperaturas registradas para graficar.
         </p>
@@ -96,14 +96,14 @@ export default function CookingCharts({ events }: { events: CookingEvent[] }) {
   }
 
   return (
-    <section className="mt-8 rounded-2xl bg-surface-container p-8">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <h2 className="text-2xl font-bold">Gráficas de cocción</h2>
-        <p className="text-sm text-on-surface-variant">Temperatura por hora</p>
+    <section className="mt-4 rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5">
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <h2 className="text-sm font-semibold">Gráficas de cocción</h2>
+        <p className="text-xs text-on-surface-variant">Temperatura por hora</p>
       </div>
 
-      <div className="rounded-2xl bg-surface-container-high p-5">
-        <div className="h-96">
+      <div className="rounded-xl bg-surface-container-high p-3">
+        <div className="h-64 sm:h-72">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 35, right: 30, left: 10, bottom: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" />

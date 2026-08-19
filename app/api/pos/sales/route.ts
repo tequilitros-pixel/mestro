@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
 import { PaymentMethod, PosBenefitReason } from "@prisma/client";
 import { getDiscountLimitsByRole, verifyManagerPin } from "@/lib/pos/discountLimits";
+import { getActiveDiscountRules } from "@/lib/pos/discountRules";
+import { setRlsContext, withRlsContext } from "@/lib/rls";
+import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
 
 const ROLES_QUE_PUEDEN_VENDER = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -68,15 +71,16 @@ export async function GET(request: NextRequest) {
     branchFilter = { in: allowedBranchIds };
   }
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  const startOfToday = businessDayStart(todayDateOnly());
+  const rangeStart = dateFrom ? businessDayStart(dateFrom) : startOfToday;
+  const rangeEnd = dateTo ? businessDayStart(addDaysToDateOnly(dateTo, 1)) : undefined;
 
-  const sales = await prisma.posSale.findMany({
+  const sales = await withRlsContext(user, (tx) => tx.posSale.findMany({
     where: {
       ...(branchFilter ? { branchId: branchFilter } : {}),
       createdAt: {
-        gte: dateFrom ? new Date(dateFrom) : startOfToday,
-        lte: dateTo ? new Date(dateTo) : undefined,
+        gte: rangeStart,
+        lt: rangeEnd,
       },
     },
     include: {
@@ -87,7 +91,7 @@ export async function GET(request: NextRequest) {
     },
     orderBy: { createdAt: "desc" },
     take: 200,
-  });
+  }));
 
   return NextResponse.json(sales);
 }
@@ -149,12 +153,27 @@ export async function POST(request: NextRequest) {
   // sucursal: si no, un clientOperationId adivinado o reutilizado
   // podría devolver los datos de una venta de otra sucursal.
   if (clientOperationId) {
-    const existing = await prisma.posSale.findUnique({ where: { id: clientOperationId }, include: { items: true, payments: true, branch: true } });
+    const existing = await withRlsContext(user, (tx) => tx.posSale.findUnique({ where: { id: clientOperationId }, include: { items: true, payments: true, branch: true } }));
     if (existing) {
       if (!(await hasBranchAccess(existing.branchId))) {
         return NextResponse.json({ error: "No autorizado en esta sucursal" }, { status: 403 });
       }
       return NextResponse.json(existing);
+    }
+  }
+
+  const requestsBenefit =
+    Number(rawDiscountAmount) > 0 ||
+    Boolean(employeeBuyerId) ||
+    (Array.isArray(items) && items.some((item) => !item.isCustom && Boolean(item.discount)));
+  if (requestsBenefit) {
+    const activeRules = await getActiveDiscountRules(branchId);
+    const blockingRule = activeRules.find((rule) => rule.mode === "BLOCK");
+    if (blockingRule) {
+      return NextResponse.json(
+        { error: `Los descuentos están desactivados en esta sucursal: ${blockingRule.name}.` },
+        { status: 403 },
+      );
     }
   }
 
@@ -467,9 +486,9 @@ export async function POST(request: NextRequest) {
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
 
-  const todayCount = await prisma.posSale.count({
+  const todayCount = await withRlsContext(user, (tx) => tx.posSale.count({
     where: { branchId, createdAt: { gte: dayStart } },
-  });
+  }));
 
   const code = clientOperationId
     ? `POS-${branch.code}-${clientOperationId.replace(/-/g, "").slice(0, 12).toUpperCase()}`
@@ -480,6 +499,7 @@ export async function POST(request: NextRequest) {
   }
 
   const sale = await prisma.$transaction(async (tx) => {
+    await setRlsContext(tx, user);
     const createdSale = await tx.posSale.create({
       data: {
         ...(clientOperationId ? { id: clientOperationId } : {}),

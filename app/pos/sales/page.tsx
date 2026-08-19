@@ -1,14 +1,8 @@
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import SalesDashboardClient from "@/components/pos/SalesDashboardClient";
-
-/**
- * Ventana de análisis por defecto. La lista con buscador (pestaña
- * "Buscar") sigue refrescándose por día contra /api/pos/sales, pero
- * las pestañas visuales (sucursales, productos, categorías) necesitan
- * varios días para poder comparar tendencias.
- */
-const ANALYTICS_DAYS = 30;
+import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
+import { withRlsContext } from "@/lib/rls";
 
 export default async function PosSalesPage() {
   const user = await getCurrentUser();
@@ -23,19 +17,19 @@ export default async function PosSalesPage() {
     select: { id: true, name: true },
   });
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-
-  const analyticsFrom = new Date(startOfToday);
-  analyticsFrom.setDate(analyticsFrom.getDate() - (ANALYTICS_DAYS - 1));
+  const today = todayDateOnly();
+  const startOfToday = businessDayStart(today);
+  const startOfTomorrow = businessDayStart(addDaysToDateOnly(today, 1));
 
   const branchFilter = allowedBranchIds ? { in: allowedBranchIds } : undefined;
 
-  const [sales, analyticsSales] = await Promise.all([
-    prisma.posSale.findMany({
+  if (!user) return null;
+
+  const [sales, analyticsSales] = await withRlsContext(user, (tx) => Promise.all([
+    tx.posSale.findMany({
       where: {
         branchId: branchFilter,
-        createdAt: { gte: startOfToday },
+        createdAt: { gte: startOfToday, lt: startOfTomorrow },
       },
       include: {
         branch: { select: { id: true, name: true } },
@@ -48,10 +42,13 @@ export default async function PosSalesPage() {
       take: 200,
     }),
 
-    prisma.posSale.findMany({
+    // Carga inicial del dashboard: coincide con el periodo por defecto
+    // ("Día" = hoy) de las pestañas visuales. Al cambiar de periodo el
+    // cliente vuelve a pedir datos a /api/pos/sales/analytics.
+    tx.posSale.findMany({
       where: {
         branchId: branchFilter,
-        createdAt: { gte: analyticsFrom },
+        createdAt: { gte: startOfToday, lt: startOfTomorrow },
         status: "COMPLETADA",
       },
       select: {
@@ -80,12 +77,11 @@ export default async function PosSalesPage() {
       },
       orderBy: { createdAt: "desc" },
     }),
-  ]);
+  ]));
 
   return (
     <SalesDashboardClient
       branches={branches}
-      analyticsDays={ANALYTICS_DAYS}
       analytics={analyticsSales.map((s) => ({
         id: s.id,
         total: s.total,

@@ -4,6 +4,7 @@ import { useEffect, useState, startTransition } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { DateRangeCalendar } from "@/components/ui/DateRangeCalendar";
 
 interface Branch {
   id: string;
@@ -24,9 +25,9 @@ interface AuditEntry {
 }
 
 const ACTION_LABELS: Record<string, string> = {
-  CREATE: "Creación",
-  UPDATE: "Edición",
-  CLOSE: "Cierre",
+  CREADO: "Creación",
+  EDITADO: "Edición",
+  CERRADO: "Cierre",
 };
 
 const formatDateTime = (value: string) =>
@@ -110,25 +111,7 @@ export default function AuditPage() {
             </select>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-semibold text-on-surface-variant">Desde</label>
-            <input
-              type="date"
-              className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-semibold text-on-surface-variant">Hasta</label>
-            <input
-              type="date"
-              className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-            />
-          </div>
+          <DateRangeCalendar from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
 
           <Button onClick={fetchAudit}>Filtrar</Button>
         </div>
@@ -205,4 +188,3 @@ export default function AuditPage() {
     </div>
   );
 }
-

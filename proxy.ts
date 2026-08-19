@@ -30,9 +30,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  const userId = request.cookies.get("maestro_user")?.value;
+  const sessionToken = request.cookies.get("maestro_session")?.value;
 
-  if (!userId) {
+  if (!sessionToken) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { denominationTotal, validDenominationRows } from "@/lib/cash-cuts/denominations";
 
 const ROLES_QUE_PUEDEN_CERRAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -18,21 +20,20 @@ export async function POST(
 
   const { id: cashCutId } = await params;
 
-  const cashCut = await prisma.cashCut.findUnique({
-    where: { id: cashCutId },
+  const scope = await getCashCutScope();
+  if (!scope) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  // Fuera de alcance e inexistente responden igual: no se revela
+  // que el corte existe ni a que sucursal pertenece.
+  const cashCut = await prisma.cashCut.findFirst({
+    where: withCashCutScope(scope, { id: cashCutId }),
     include: { salesByMethod: true },
   });
 
   if (!cashCut) {
     return NextResponse.json({ error: "Corte no encontrado" }, { status: 404 });
-  }
-    if (user.role === "GERENTE" || user.role === "ENCARGADO") {
-    const hasAccess = await prisma.userBranch.findFirst({
-      where: { userId: user.id, branchId: cashCut.branchId },
-    });
-    if (!hasAccess) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
-    }
   }
 
 
@@ -46,6 +47,7 @@ export async function POST(
     totalCostOfGoods,
     cashCountedDenominations,
     nextFundDenominations,
+    closingMode,
     clientOperationId,
     clientCreatedAt,
   } = body;
@@ -55,7 +57,12 @@ export async function POST(
     return NextResponse.json({ error: "Este corte ya está cerrado" }, { status: 403 });
   }
 
-  if (typeof cashCounted !== "number" || typeof nextFund !== "number") {
+  const countThenEnvelope = closingMode === "COUNT_THEN_ENVELOPE";
+  const validCashCounted =
+    typeof cashCounted === "number" && Number.isFinite(cashCounted) && cashCounted >= 0;
+  const validNextFund =
+    typeof nextFund === "number" && Number.isFinite(nextFund) && nextFund >= 0;
+  if (!validCashCounted || (!countThenEnvelope && !validNextFund)) {
     return NextResponse.json(
       { error: "Faltan datos: cashCounted y nextFund son obligatorios" },
       { status: 400 }
@@ -84,11 +91,6 @@ export async function POST(
       }));
   }
 
-  const denominationRows = [
-    ...toDenominationRows("CIERRE", cashCountedDenominations),
-    ...toDenominationRows("SIGUIENTE_TURNO", nextFundDenominations),
-  ];
-
   const [outflows, inflows] = await Promise.all([
     prisma.cashOutflow.findMany({ where: { cashCutId } }),
     prisma.cashInflow.findMany({ where: { cashCutId } }),
@@ -104,29 +106,61 @@ export async function POST(
   const cashExpected =
     cashCut.startingFund + cashSales + totalInflows - totalOutflows;
 
-  const difference = cashCounted - cashExpected;
+  const countedRows = validDenominationRows(cashCountedDenominations);
+  const countedFromDenominations = denominationTotal(countedRows);
+  if (countThenEnvelope && Math.abs(Number(cashCounted) - countedFromDenominations) > 0.001) {
+    return NextResponse.json(
+      { error: "El total contado no coincide con las denominaciones." },
+      { status: 400 },
+    );
+  }
+  if (
+    countThenEnvelope &&
+    (typeof envelopeAmount !== "number" ||
+      !Number.isFinite(envelopeAmount) ||
+      envelopeAmount < 0 ||
+      envelopeAmount > cashCounted)
+  ) {
+    return NextResponse.json(
+      { error: "El sobre debe estar entre $0 y el efectivo contado." },
+      { status: 400 },
+    );
+  }
+
+  const finalCashCounted = cashCounted;
+  const finalEnvelopeAmount = envelopeAmount;
+  const finalNextFund = countThenEnvelope
+    ? Math.max(0, cashCounted - envelopeAmount)
+    : nextFund;
+  const denominationRows = countThenEnvelope
+    ? countedRows.map((row) => ({ context: "CIERRE" as const, ...row }))
+    : [
+        ...toDenominationRows("CIERRE", cashCountedDenominations),
+        ...toDenominationRows("SIGUIENTE_TURNO", nextFundDenominations),
+      ];
+  const difference = finalCashCounted - cashExpected;
 
   const netProfit =
     totalCostOfGoods !== undefined
       ? totalSales - totalCostOfGoods - totalOutflows
       : null;
 
-  const assignedCash = (envelopeAmount ?? 0) + nextFund;
+  const assignedCash = (finalEnvelopeAmount ?? 0) + finalNextFund;
   const assignmentWarning =
-    Math.abs(assignedCash - cashCounted) > 1
-      ? `El sobre + fondo siguiente ($${assignedCash}) no coincide con lo contado ($${cashCounted}).`
+    Math.abs(assignedCash - finalCashCounted) > 1
+      ? `El sobre + fondo siguiente ($${assignedCash}) no coincide con lo contado ($${finalCashCounted}).`
       : null;
 
   const updated = await prisma.cashCut.update({
     where: { id: cashCutId },
     data: {
-      cashCounted,
+      cashCounted: finalCashCounted,
       cashExpected,
       difference,
-      envelopeAmount,
+      envelopeAmount: finalEnvelopeAmount,
       envelopeNumber,
       envelopeNotes,
-      nextFund,
+      nextFund: finalNextFund,
       totalSales,
       totalOutflows,
       totalInflows,
@@ -145,13 +179,13 @@ export async function POST(
       ...(denominationRows.length > 0
         ? { denominations: { create: denominationRows } }
         : {}),
-      ...(envelopeAmount && envelopeAmount > 0
+      ...(finalEnvelopeAmount && finalEnvelopeAmount > 0
         ? {
             safeMovements: {
               create: {
                 branchId: cashCut.branchId,
                 type: "DEPOSITO_SOBRE",
-                amount: envelopeAmount,
+                amount: finalEnvelopeAmount,
                 userId: user.id,
                 notes: envelopeNumber ? `Sobre #${envelopeNumber}` : undefined,
               },

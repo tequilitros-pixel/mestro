@@ -1,73 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-
+import ProcessTable from "@/components/production/ProcessTable";
+import { PageHeader } from "@/components/ui/CompactUI";
 
 export default async function MillingPage() {
-  const millings = await prisma.milling.findMany({
-    include: {
-      lot: true,
-      equipment: true,
-    },
-    orderBy: {
-      startedAt: "desc",
-    },
-  });
-
-  return (
-    <main className="min-h-screen bg-background p-10 text-on-surface">
-      <div className="mx-auto max-w-6xl">
-       
-
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
-              MAESTRO
-            </p>
-
-            <h1 className="mt-3 text-4xl font-bold">Molienda</h1>
-
-            <p className="mt-2 text-on-surface-variant">
-              Procesos de molienda registrados.
-            </p>
-          </div>
-
-          <Link
-            href="/milling/new"
-            className="rounded-xl bg-primary px-5 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
-          >
-            Nueva molienda
-          </Link>
-        </div>
-
-        <section className="space-y-4">
-          {millings.length === 0 ? (
-            <div className="rounded-2xl bg-surface-container p-8 text-on-surface-variant">
-              Aún no hay moliendas registradas.
-            </div>
-          ) : (
-            millings.map((milling) => (
-              <Link
-                key={milling.id}
-                href={`/milling/${milling.id}`}
-                className="block rounded-2xl bg-surface-container p-6 transition hover:bg-surface-container-high"
-              >
-                <h2 className="text-2xl font-bold">
-                  {milling.lot.code}
-                </h2>
-
-                <p className="mt-2 text-on-surface-variant">
-                  {milling.equipment.name} •{" "}
-                  {milling.cookedKg.toLocaleString()} kg
-                </p>
-
-                <p className="mt-2 text-on-surface-variant font-semibold">
-                  {milling.status}
-                </p>
-              </Link>
-            ))
-          )}
-        </section>
-      </div>
-    </main>
-  );
+  const millings = await prisma.milling.findMany({ include: { lot: true, equipment: true }, orderBy: { startedAt: "desc" } });
+  return <main className="page-frame space-y-4 text-on-surface"><div className="mx-auto max-w-7xl"><PageHeader title="Molienda" description="Procesos de molienda registrados." actions={<Link href="/milling/new" className="compact-action inline-flex items-center bg-primary font-semibold text-on-primary">Nueva molienda</Link>} /><ProcessTable emptyLabel="Aún no hay moliendas registradas." columns={[{ key: "code", label: "Código del lote", width: "20%" }, { key: "equipment", label: "Equipo", width: "18%" }, { key: "agave", label: "Agave procesado", width: "16%" }, { key: "startedAt", label: "Inicio", width: "18%" }, { key: "yield", label: "Rendimiento", width: "14%" }, { key: "status", label: "Estado", width: "14%" }]} filters={[{ key: "equipment", label: "Equipo", options: [...new Set(millings.map((item) => item.equipment.name))] }]} rows={millings.map((item) => ({ id: item.id, href: `/milling/${item.id}`, code: item.lot.code, startedAt: item.startedAt.toISOString(), status: item.status === "TERMINADA" ? "Terminado" : "En proceso", finished: item.status === "TERMINADA", values: { equipment: item.equipment.name, agave: `${item.cookedKg.toLocaleString("es-MX")} kg`, yield: (item.finalMashLiters ?? item.mashLiters) !== null ? `${(item.finalMashLiters ?? item.mashLiters ?? 0).toLocaleString("es-MX")} L` : "—" }, filters: { equipment: item.equipment.name } }))} /></div></main>;
 }

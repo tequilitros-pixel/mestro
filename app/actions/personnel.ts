@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import type { UserRole } from "@prisma/client";
+import { normalizeMexicanPhone } from "@/lib/phone";
 
 export async function getPersonnel() {
   return prisma.user.findMany({
@@ -13,6 +14,7 @@ export async function getPersonnel() {
       name: true,
       username: true,
       email: true,
+      phone: true,
       role: true,
       active: true,
       branches: { include: { branch: { select: { id: true, name: true } } } },
@@ -29,6 +31,7 @@ export async function getPersonnelById(userId: string) {
       name: true,
       username: true,
       email: true,
+      phone: true,
       role: true,
       active: true,
       hourlyRate: true,
@@ -55,6 +58,7 @@ interface CreatePersonnelInput {
   name: string;
   username: string;
   email?: string;
+  phone?: string;
   password: string;
   role: UserRole;
   branchIds: string[];
@@ -78,12 +82,18 @@ export async function createPersonnel(input: CreatePersonnelInput) {
   }
 
   const hashedPassword = await bcrypt.hash(input.password, 10);
+  const phone = input.phone?.trim() ? normalizeMexicanPhone(input.phone) : null;
+  if (input.phone?.trim() && !phone) return { error: "El teléfono debe tener 10 dígitos." };
+  if (phone && await prisma.user.findUnique({ where: { phone } })) {
+    return { error: "Ese teléfono ya está registrado." };
+  }
 
   const user = await prisma.user.create({
     data: {
       name: input.name,
       username: input.username,
       email: input.email || undefined,
+      phone,
       password: hashedPassword,
       role: input.role,
       branches: {
@@ -101,6 +111,7 @@ interface UpdatePersonnelInput {
   name: string;
   username: string;
   email?: string;
+  phone?: string;
   role: UserRole;
   branchIds: string[];
   newPassword?: string;
@@ -123,16 +134,24 @@ export async function updatePersonnel(input: UpdatePersonnelInput) {
     return { error: "Ese nombre de usuario ya lo usa otro trabajador" };
   }
 
+  const phone = input.phone?.trim() ? normalizeMexicanPhone(input.phone) : null;
+  if (input.phone?.trim() && !phone) return { error: "El teléfono debe tener 10 dígitos." };
+  if (phone && await prisma.user.findFirst({ where: { phone, NOT: { id: input.userId } } })) {
+    return { error: "Ese teléfono ya está registrado." };
+  }
+
   const data: {
     name: string;
     username: string;
     email: string | undefined;
+    phone: string | null;
     role: UserRole;
     password?: string;
   } = {
     name: input.name,
     username: input.username,
     email: input.email || undefined,
+    phone,
     role: input.role,
   };
 

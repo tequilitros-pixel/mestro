@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { BottleIcon } from "@/components/ui/icons";
+import { MetricCard, PageHeader } from "@/components/ui/CompactUI";
 import BottlingList, { type BottlingCard } from "./BottlingList";
 
 export default async function LiquorBottlingPage() {
@@ -55,6 +55,8 @@ export default async function LiquorBottlingPage() {
             plannedBottles: latest.plannedBottles,
             producedBottles: latest.producedBottles,
             rejectedBottles: latest.rejectedBottles,
+            startedAt: latest.startedAt?.toISOString() ?? null,
+            finishedAt: latest.finishedAt?.toISOString() ?? null,
           }
         : null,
     };
@@ -96,68 +98,22 @@ export default async function LiquorBottlingPage() {
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
-      <header>
-        <p className="font-mono text-sm font-black uppercase tracking-[0.2em] text-on-surface-variant">
-          Elaboración de licores
-        </p>
-
-        <h1 className="mt-2 text-3xl font-black text-on-surface">
-          Embotellado
-        </h1>
-
-        <p className="mt-2 max-w-3xl text-on-surface-variant">
-          Selecciona un lote listo para iniciar o continuar su proceso de
-          embotellado.
-        </p>
-      </header>
+      <PageHeader title="Embotellado" description="Control de producción, mermas y presentaciones." />
 
       {batches.length === 0 ? (
-        <section className="mt-8 rounded-3xl border border-dashed border-outline-variant bg-surface-container/50 p-10 text-center">
-          <BottleIcon className="mx-auto h-10 w-10 text-on-surface-variant" />
-
-          <h2 className="mt-5 text-2xl font-black text-on-surface">
-            No hay lotes disponibles para embotellar
-          </h2>
-
-          <p className="mx-auto mt-3 max-w-xl text-on-surface-variant">
-            Los lotes aparecerán aquí cuando estén listos para embotellado.
-          </p>
-
-          <Link
-            href="/liquors/production"
-            className="mt-6 inline-flex rounded-2xl bg-primary px-5 py-3 font-black text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
-          >
-            Ver producción
-          </Link>
-        </section>
+        <p className="mt-4 rounded-xl border border-dashed border-outline-variant px-4 py-6 text-center text-sm text-on-surface-variant">No hay lotes disponibles para embotellar. <Link href="/liquors/production" className="font-semibold underline">Ver producción</Link></p>
       ) : (
         <>
-          <section className="mt-8 grid gap-4 sm:grid-cols-3">
-            <SummaryCard label="Listos para embotellar" value={readyCount} />
-            <SummaryCard label="Embotellando ahora" value={inProgressCount} />
-            <SummaryCard
-              label="Botellas producidas"
-              value={producedBottles}
-            />
+          <section className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard label="Embotellados activos" value={inProgressCount} />
+            <MetricCard label="Botellas producidas" value={producedBottles} tone="success" />
+            <MetricCard label="Listos para embotellar" value={readyCount} />
+            <MetricCard label="Litros utilizados" value={`${batches.reduce((sum, item) => sum + (item.actualLiters ?? 0), 0).toLocaleString("es-MX")} L`} />
           </section>
 
-          <BottlingList batches={cards} />
+          <div className="mt-4"><BottlingList batches={cards} /></div>
         </>
       )}
     </main>
-  );
-}
-
-function SummaryCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-3xl border border-outline-variant bg-surface-container p-6">
-      <p className="text-xs font-black uppercase tracking-wider text-on-surface-variant">
-        {label}
-      </p>
-
-      <p className="mt-3 text-3xl font-black text-on-surface">
-        {new Intl.NumberFormat("es-MX").format(value)}
-      </p>
-    </div>
   );
 }
