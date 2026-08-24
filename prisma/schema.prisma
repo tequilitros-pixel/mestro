@@ -47,6 +47,9 @@ model User {
   cashOutflowsAuthorized    CashOutflow[]          @relation("CashOutflowAuthorizedBy")
   cashCutAuditEntries       CashCutAuditEntry[]    @relation("CashCutAuditBy")
   cashSafeMovementsBy       CashSafeMovement[]     @relation("CashSafeMovementBy")
+  cashSafeEnvelopesCreated  CashSafeEnvelope[]         @relation("CashSafeEnvelopeCreatedBy")
+  cashSafeEnvelopesReceived CashSafeEnvelope[]         @relation("CashSafeEnvelopeReceivedBy")
+  cashSafeEnvelopeMovements CashSafeEnvelopeMovement[] @relation("CashSafeEnvelopeMovementBy")
   hourlyRate                Decimal?               @db.Decimal(10, 2)
   timeClockEntries          TimeClockEntry[]       @relation("TimeClockEntries")
   timeClockEntriesClosed    TimeClockEntry[]       @relation("TimeClockClosedBy")
@@ -104,6 +107,10 @@ model User {
   shiftRequests               ShiftChangeRequest[]            @relation("ShiftRequestOwner")
   shiftRequestsAsSwapTarget   ShiftChangeRequest[]            @relation("ShiftRequestSwapTarget")
   shiftRequestsReviewed       ShiftChangeRequest[]            @relation("ShiftRequestReviewedBy")
+
+  eventAddedProducts      EventAddedProduct[]    @relation("EventAddedBy")
+  eventAddedCancelled     EventAddedProduct[]    @relation("EventAddedCancelledBy")
+  eventAddedLogs          EventAddedProductLog[] @relation("EventAddedLogBy")
 }
 
 model UserSession {
@@ -980,6 +987,7 @@ model Branch {
   liquorMovementsFrom    LiquorBottleMovement[]   @relation("LiquorMovementFromBranch")
   liquorMovementsTo      LiquorBottleMovement[]   @relation("LiquorMovementToBranch")
   cashSafeMovements      CashSafeMovement[]
+  cashSafeEnvelopes      CashSafeEnvelope[]
   scheduledShifts        ScheduledShift[]
   scheduleTemplates      BranchScheduleTemplate[]
   geofenceAlerts         GeofenceAlert[]
@@ -994,6 +1002,9 @@ model Branch {
 
   @@index([active])
   @@index([geofenceId])
+
+  eventAddedSource  EventAddedProduct[] @relation("EventAddedSourceBranch")
+  eventAddedReturns EventAddedProduct[] @relation("EventAddedReturnBranch")
 }
 
 /**
@@ -1103,6 +1114,8 @@ model CashCut {
   evidences     CashCutEvidence[]
   auditEntries  CashCutAuditEntry[]
   safeMovements CashSafeMovement[]
+  safeEnvelope  CashSafeEnvelope?
+  safeEnvelopeMovements CashSafeEnvelopeMovement[]
   denominations CashCutDenomination[]
   posSales      PosSale[]
 
@@ -1486,6 +1499,133 @@ model CashSafeMovement {
   @@index([cashCutId])
 }
 
+enum CashSafeEnvelopeStatus {
+  /// Generado al cerrar el corte. Aun NO confirmado como recibido
+  /// fisicamente en la caja fuerte de la sucursal. No suma al saldo
+  /// de "Caja fuerte" mientras este en este estado.
+  PENDIENTE
+  /// Recibido. saldo == monto original, sin retiros todavia.
+  EN_CAJA_FUERTE
+  /// Recibido, con retiro(s) parcial(es). 0 < saldo < original.
+  PARCIAL
+  /// saldo == 0. Retirado por completo. NUNCA se elimina: queda
+  /// para auditoria.
+  VACIO
+}
+
+enum CashSafeEnvelopeMovementType {
+  /// Creacion del sobre desde el cierre de un corte. Carga el
+  /// monto original como saldo inicial.
+  INGRESO
+  /// Confirmacion de llegada fisica a caja fuerte. Si el monto
+  /// contado difiere del original, genera ademas un AJUSTE_* con
+  /// nota automatica -- la diferencia nunca se oculta.
+  RECEPCION
+  /// Retiro parcial o total. Un retiro que deja saldo en 0 es
+  /// simplemente un RETIRO cuyo newBalance es 0.
+  RETIRO
+  /// Correccion administrativa que incrementa el saldo. Motivo
+  /// obligatorio, restringido por rol.
+  AJUSTE_POSITIVO
+  /// Correccion administrativa que reduce el saldo. Motivo
+  /// obligatorio, restringido por rol.
+  AJUSTE_NEGATIVO
+}
+
+/**
+ * Un sobre fisico de dinero, identificable, que nace en el cierre
+ * de un corte y vive para siempre (nunca se borra). La unidad
+ * principal de control de Caja fuerte -- el saldo de una sucursal
+ * se calcula sumando los sobres validos, nunca al reves.
+ *
+ * @@unique en cashCutId es la garantia de que un reintento del
+ * cierre de corte (doble clic, retry de red) jamas produce dos
+ * sobres para el mismo corte: la creacion usa upsert sobre este
+ * campo.
+ */
+model CashSafeEnvelope {
+  id       String @id @default(cuid())
+  /// Codigo legible unico, ej. HUE-20260819-001. Generado
+  /// automaticamente -- ver lib/cash-cuts/safeEnvelopes.ts.
+  code     String @unique
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  /// Un sobre por corte. Backbone de la idempotencia.
+  cashCutId String  @unique
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id])
+  /// Copiado de CashCut.date al crear el sobre -- denormalizado
+  /// a proposito para reportes rapidos sin join.
+  cutDate   DateTime
+
+  /// Nunca cambia una vez creado. La cantidad que se escribe en
+  /// el sobre fisico.
+  originalAmount Float
+  /// Se mueve con cada CashSafeEnvelopeMovement. Siempre debe
+  /// coincidir con newBalance del ultimo movimiento -- se valida
+  /// en el helper de dominio, no aqui.
+  currentBalance Float
+
+  status CashSafeEnvelopeStatus @default(PENDIENTE)
+
+  createdById String
+  createdBy   User     @relation("CashSafeEnvelopeCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  /// Cuando se confirma la llegada fisica a la caja fuerte.
+  receivedById     String?
+  receivedBy       User?     @relation("CashSafeEnvelopeReceivedBy", fields: [receivedById], references: [id])
+  receivedAt       DateTime?
+  /// Lo efectivamente contado al recibir. Si difiere de
+  /// originalAmount, el movimiento RECEPCION viene acompanado de
+  /// un AJUSTE_* automatico.
+  receivedAmount   Float?
+
+  movements CashSafeEnvelopeMovement[]
+
+  @@index([branchId])
+  @@index([status])
+  @@index([cutDate])
+}
+
+/**
+ * Ledger inmutable de un sobre. Una fila por cada cambio de
+ * saldo. NUNCA se edita ni se borra una fila existente -- toda
+ * correccion es una fila nueva de tipo AJUSTE_POSITIVO/NEGATIVO.
+ */
+model CashSafeEnvelopeMovement {
+  id         String                       @id @default(cuid())
+  envelopeId String
+  envelope   CashSafeEnvelope             @relation(fields: [envelopeId], references: [id])
+
+  type   CashSafeEnvelopeMovementType
+  /// Siempre positivo. El signo lo da `type`.
+  amount Float
+
+  previousBalance Float
+  newBalance      Float
+
+  /// Motivo. Obligatorio en el servidor para RETIRO y AJUSTE_*
+  /// (no se fuerza aqui a nivel de schema porque INGRESO/RECEPCION
+  /// pueden no necesitarlo).
+  notes String?
+
+  /// Referencia al corte de origen cuando aplica (tipicamente en
+  /// el movimiento INGRESO).
+  cashCutId String?
+  cashCut   CashCut? @relation(fields: [cashCutId], references: [id])
+
+  userId String
+  user   User   @relation("CashSafeEnvelopeMovementBy", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([envelopeId])
+  @@index([cashCutId])
+  @@index([type])
+}
+
 model InventoryProduct {
   id          String  @id @default(cuid())
   code        String  @unique
@@ -1529,6 +1669,8 @@ model InventoryProduct {
   @@index([category])
   @@index([itemType])
   @@index([isActive])
+
+  eventAddedProducts EventAddedProduct[]
 }
 
 enum InventoryItemType {
@@ -1625,6 +1767,7 @@ model ServiceEvent {
   items        ServiceEventItem[]
   recounts     EventRecount[]
   cashCuts     CashCut[]
+  addedProducts EventAddedProduct[]
 }
 
 model ServiceEventItem {
@@ -1757,6 +1900,9 @@ enum InventoryEntryType {
   // evento: descuenta lo cargado (ServiceEventItem) del inventario
   // de la sucursal donde se abre el corte.
   SALIDA_EVENTO
+  // Regreso de producto que se habia enviado a un evento. Contraparte
+  // de SALIDA_EVENTO: reingresa a la sucursal lo que no se consumio.
+  REGRESO_EVENTO
   // Entrada automática al terminar un embotellado (createLiquorBottlingAction):
   // abona las botellas recién creadas a la sucursal de resguardo del
   // producto terminado (LiquorProduct.inventoryProductId).
@@ -2827,4 +2973,118 @@ model NotificationRule {
 
   @@index([active])
   @@index([triggerType])
+}
+
+
+/*
+ * ============================================================
+ * Productos conseguidos DURANTE el evento
+ * ------------------------------------------------------------
+ * No toca ServiceEventItem ni los paquetes originales: es una
+ * fuente paralela de existencia para el mismo evento.
+ *
+ * El inventario NO se guarda como saldo en ninguna tabla; se
+ * calcula desde InventoryEntry (ver lib/.../stock.ts). Por eso
+ * un envio desde sucursal genera un InventoryEntry negativo
+ * (SALIDA_EVENTO) al mandarlo y uno positivo (REGRESO_EVENTO)
+ * al regresarlo, y aqui solo se guarda la referencia.
+ *
+ * Una compra externa NO genera InventoryEntry: nunca salio de
+ * una sucursal, solo suma existencia al evento y costo.
+ * ============================================================
+ */
+model EventAddedProduct {
+  id      String @id @default(cuid())
+  eventId String
+
+  /// Nulo solo cuando es un producto temporal aun sin catalogar.
+  productId String?
+
+  /// Datos del producto temporal. Requieren autorizacion de GERENTE/ADMIN.
+  temporaryName     String?
+  temporaryCategory String?
+
+  sourceType     EventAddedSourceType
+  /// Obligatorio cuando sourceType es ENVIO_SUCURSAL o ENVIO_ALMACEN.
+  sourceBranchId String?
+
+  /// Cantidad en unidad de manejo (ej. 4 botellas).
+  quantityOriginal Decimal                @db.Decimal(12, 3)
+  handlingUnit     InventoryHandlingUnit?
+  contentPerUnit   Decimal?               @db.Decimal(12, 3)
+  contentUnit      InventoryContentUnit?
+  /// Equivalencia interna (ml, g o piezas). Los calculos usan esta.
+  normalizedQuantity Decimal @db.Decimal(14, 3)
+
+  /// Costo. Se valida en el servidor, nunca se confia en el navegador.
+  unitCost  Decimal? @db.Decimal(12, 4)
+  totalCost Decimal? @db.Decimal(12, 2)
+
+  /// Regreso. consumedQuantity NO se guarda: es quantityOriginal - returnedQuantity.
+  returnedQuantity     Decimal  @default(0) @db.Decimal(12, 3)
+  returnedOpenQuantity Decimal? @db.Decimal(12, 3)
+  /// Sucursal a la que se devolvio, cuando aplica.
+  returnBranchId       String?
+
+  supplier  String?
+  reference String?
+  notes     String?
+
+  status       EventAddedStatus @default(ACTIVO)
+  cancelReason String?
+  cancelledById String?
+  cancelledAt   DateTime?
+
+  addedById String
+  addedAt   DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Movimiento de salida generado si vino de una sucursal o almacen.
+  movementId       String?
+  /// Movimiento de regreso, cuando ya se devolvio.
+  returnMovementId String?
+
+  event        ServiceEvent      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  product      InventoryProduct? @relation(fields: [productId], references: [id])
+  sourceBranch Branch?           @relation("EventAddedSourceBranch", fields: [sourceBranchId], references: [id])
+  returnBranch Branch?           @relation("EventAddedReturnBranch", fields: [returnBranchId], references: [id])
+  addedBy      User              @relation("EventAddedBy", fields: [addedById], references: [id])
+  cancelledBy  User?             @relation("EventAddedCancelledBy", fields: [cancelledById], references: [id])
+
+  logs EventAddedProductLog[]
+
+  @@index([eventId])
+  @@index([productId])
+  @@index([status])
+  @@index([sourceBranchId])
+}
+
+/// Bitacora de correcciones. Nada se borra fisicamente.
+model EventAddedProductLog {
+  id               String   @id @default(cuid())
+  addedProductId   String
+  field            String
+  oldValue         String?
+  newValue         String?
+  reason           String?
+  changedById      String
+  changedAt        DateTime @default(now())
+
+  addedProduct EventAddedProduct @relation(fields: [addedProductId], references: [id], onDelete: Cascade)
+  changedBy    User              @relation("EventAddedLogBy", fields: [changedById], references: [id])
+
+  @@index([addedProductId])
+}
+
+enum EventAddedSourceType {
+  COMPRA_EVENTO
+  ENVIO_SUCURSAL
+  ENVIO_ALMACEN
+  PRESTAMO
+  OTRO
+}
+
+enum EventAddedStatus {
+  ACTIVO
+  CANCELADO
 }
