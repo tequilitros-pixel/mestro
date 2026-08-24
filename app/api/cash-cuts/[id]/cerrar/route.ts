@@ -1,10 +1,34 @@
+// PENDIENTE DE SCHEMA -- NO REEMPLAZAR EL ARCHIVO REAL TODAVIA.
+// Reemplazo listo de app/api/cash-cuts/[id]/cerrar/route.ts para
+// aplicar en el MISMO PR que la migracion de sobres. Aplicar antes
+// rompe el cierre de corte en produccion (referencia un modelo que
+// no existe).
+//
+// Unico cambio real contra el original: el bloque que creaba un
+// CashSafeMovement DEPOSITO_SOBRE (nivel sucursal) ahora crea el
+// sobre identificable (nivel corte) via createEnvelopeForCashCut,
+// DENTRO de la misma transaccion de cierre -- mismo patron de
+// idempotencia que ya usa el resto de esta ruta con
+// clientOperationId.
+//
+// CashSafeMovement se deja de escribir en el flujo nuevo a
+// proposito: es lo que permite que el saldo legado se congele solo,
+// sin necesidad de una fecha de "cutover" -- ver DISENO.md #3.
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
 import { denominationTotal, validDenominationRows } from "@/lib/cash-cuts/denominations";
+import { createEnvelopeForCashCut } from "@/lib/cash-cuts/safeEnvelopes";
 
 const ROLES_QUE_PUEDEN_CERRAR = ["ADMIN", "GERENTE", "ENCARGADO"];
+
+class CashCutAlreadyClosedError extends Error {
+  constructor() {
+    super("Este corte ya esta cerrado");
+  }
+}
 
 export async function POST(
   request: Request,
@@ -29,13 +53,12 @@ export async function POST(
   // que el corte existe ni a que sucursal pertenece.
   const cashCut = await prisma.cashCut.findFirst({
     where: withCashCutScope(scope, { id: cashCutId }),
-    include: { salesByMethod: true },
+    include: { salesByMethod: true, branch: { select: { code: true } } },
   });
 
   if (!cashCut) {
     return NextResponse.json({ error: "Corte no encontrado" }, { status: 404 });
   }
-
 
   const body = await request.json();
   const {
@@ -151,49 +174,80 @@ export async function POST(
       ? `El sobre + fondo siguiente ($${assignedCash}) no coincide con lo contado ($${finalCashCounted}).`
       : null;
 
-  const updated = await prisma.cashCut.update({
-    where: { id: cashCutId },
-    data: {
-      cashCounted: finalCashCounted,
-      cashExpected,
-      difference,
-      envelopeAmount: finalEnvelopeAmount,
-      envelopeNumber,
-      envelopeNotes,
-      nextFund: finalNextFund,
-      totalSales,
-      totalOutflows,
-      totalInflows,
-      totalCostOfGoods: totalCostOfGoods ?? null,
-      netProfit,
-      status: "CERRADO",
-      closedAt,
-      updatedById: user.id,
-      auditEntries: {
-        create: {
-          action: "CERRADO",
-          userId: user.id,
-          newValue: `diferencia: ${difference}`,
-        },
-      },
-      ...(denominationRows.length > 0
-        ? { denominations: { create: denominationRows } }
-        : {}),
-      ...(finalEnvelopeAmount && finalEnvelopeAmount > 0
-        ? {
-            safeMovements: {
-              create: {
-                branchId: cashCut.branchId,
-                type: "DEPOSITO_SOBRE",
-                amount: finalEnvelopeAmount,
-                userId: user.id,
-                notes: envelopeNumber ? `Sobre #${envelopeNumber}` : undefined,
-              },
-            },
-          }
-        : {}),
-    },
-  });
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      // La lectura exterior solamente valida acceso y reduce trabajo. Este
+      // lock es la autoridad para el cierre: un segundo POST espera al
+      // primero y, cuando obtiene la fila, ya ve CERRADO sin crear otro
+      // audit entry, denominaciones ni sobre.
+      const lockedCuts = await tx.$queryRaw<Array<{ status: string }>>`
+        SELECT "status"
+        FROM "CashCut"
+        WHERE "id" = ${cashCutId}
+        FOR UPDATE
+      `;
+      if (lockedCuts[0]?.status !== "ABIERTO") {
+        throw new CashCutAlreadyClosedError();
+      }
 
-  return NextResponse.json({ cashCut: updated, assignmentWarning });
+      const cut = await tx.cashCut.update({
+        where: { id: cashCutId },
+        data: {
+          cashCounted: finalCashCounted,
+          cashExpected,
+          difference,
+          envelopeAmount: finalEnvelopeAmount,
+          envelopeNumber,
+          envelopeNotes,
+          nextFund: finalNextFund,
+          totalSales,
+          totalOutflows,
+          totalInflows,
+          totalCostOfGoods: totalCostOfGoods ?? null,
+          netProfit,
+          status: "CERRADO",
+          closedAt,
+          updatedById: user.id,
+          auditEntries: {
+            create: {
+              action: "CERRADO",
+              userId: user.id,
+              newValue: `diferencia: ${difference}`,
+            },
+          },
+          ...(denominationRows.length > 0
+            ? { denominations: { create: denominationRows } }
+            : {}),
+          // Ya NO se crea CashSafeMovement aqui -- ver nota de
+          // cabecera. El sobre identificable es ahora la unica
+          // fuente para dinero mandado a caja fuerte.
+        },
+      });
+
+      if (finalEnvelopeAmount && finalEnvelopeAmount > 0) {
+        await createEnvelopeForCashCut(tx, {
+          cashCutId,
+          branchId: cut.branchId,
+          branchCode: cashCut.branch.code,
+          cutDate: cut.date,
+          amount: finalEnvelopeAmount,
+          userId: user.id,
+        });
+      }
+
+      return cut;
+    });
+
+    return NextResponse.json({ cashCut: updated, assignmentWarning });
+  } catch (error) {
+    if (!(error instanceof CashCutAlreadyClosedError)) throw error;
+
+    const current = await prisma.cashCut.findFirst({
+      where: withCashCutScope(scope, { id: cashCutId }),
+    });
+    if (clientOperationId && current) {
+      return NextResponse.json({ cashCut: current, duplicate: true });
+    }
+    return NextResponse.json({ error: "Este corte ya está cerrado" }, { status: 409 });
+  }
 }

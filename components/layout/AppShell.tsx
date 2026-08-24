@@ -29,7 +29,7 @@ export default function AppShell({
           <AppHeader user={user} />
           <SyncStatus />
         </header>
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           <ModuleNavigation role={user.role} moduleKeys={moduleKeys} />
           <div className="app-content min-w-0 flex-1">{children}</div>
         </div>
