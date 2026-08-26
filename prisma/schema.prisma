@@ -7,59 +7,59 @@ datasource db {
 }
 
 model User {
-  id                        String                 @id @default(cuid())
+  id                        String                     @id @default(cuid())
   name                      String
-  username                  String                 @unique
-  email                     String?                @unique
+  username                  String                     @unique
+  email                     String?                    @unique
   /// Teléfono en formato E.164 (ej. +524941234567) para acceso mediante SMS.
-  phone                     String?                @unique
+  phone                     String?                    @unique
   password                  String
   /// PIN de 4 dígitos (hasheado) para el checador compartido (kiosco):
   /// permite identificarse en una tablet/teléfono común de la sucursal
   /// sin escribir la contraseña completa. Null = no puede usar kiosco.
   pinHash                   String?
-  failedLoginAttempts       Int                    @default(0)
+  failedLoginAttempts       Int                        @default(0)
   lockedUntil               DateTime?
   role                      UserRole
-  active                    Boolean                @default(true)
-  createdAt                 DateTime               @default(now())
-  updatedAt                 DateTime               @updatedAt
+  active                    Boolean                    @default(true)
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
   lastLogin                 DateTime?
-  cookingsFinished          Cooking[]              @relation("CookingFinishedBy")
-  distillationsFinished     Distillation[]         @relation("DistillationFinishedBy")
-  fermentationsFinished     Fermentation[]         @relation("FermentationFinishedBy")
-  liquorBatchesCreated      LiquorBatch[]          @relation("LiquorBatchCreatedBy")
-  liquorBatchesFinished     LiquorBatch[]          @relation("LiquorBatchFinishedBy")
-  liquorBottlesSold         LiquorBottle[]         @relation("LiquorBottleSoldBy")
-  liquorBottleMovements     LiquorBottleMovement[] @relation("LiquorBottleMovementCreatedBy")
-  liquorBatchsPaused        LiquorBatch[]          @relation("LiquorBatchPausedBy")
-  liquorEventsCreated       LiquorBatchEvent[]     @relation("LiquorBatchEventCreatedBy")
-  liquorBatchStepsCompleted LiquorBatchStep[]      @relation("LiquorBatchStepCompletedBy")
-  liquorBottlingsCreated    LiquorBottling[]       @relation("LiquorBottlingCreatedBy")
-  liquorBottlingsFinished   LiquorBottling[]       @relation("LiquorBottlingFinishedBy")
-  liquorProductsCreated     LiquorProduct[]        @relation("LiquorProductCreatedBy")
-  liquorRecipesCreated      LiquorRecipe[]         @relation("LiquorRecipeCreatedBy")
+  cookingsFinished          Cooking[]                  @relation("CookingFinishedBy")
+  distillationsFinished     Distillation[]             @relation("DistillationFinishedBy")
+  fermentationsFinished     Fermentation[]             @relation("FermentationFinishedBy")
+  liquorBatchesCreated      LiquorBatch[]              @relation("LiquorBatchCreatedBy")
+  liquorBatchesFinished     LiquorBatch[]              @relation("LiquorBatchFinishedBy")
+  liquorBottlesSold         LiquorBottle[]             @relation("LiquorBottleSoldBy")
+  liquorBottleMovements     LiquorBottleMovement[]     @relation("LiquorBottleMovementCreatedBy")
+  liquorBatchsPaused        LiquorBatch[]              @relation("LiquorBatchPausedBy")
+  liquorEventsCreated       LiquorBatchEvent[]         @relation("LiquorBatchEventCreatedBy")
+  liquorBatchStepsCompleted LiquorBatchStep[]          @relation("LiquorBatchStepCompletedBy")
+  liquorBottlingsCreated    LiquorBottling[]           @relation("LiquorBottlingCreatedBy")
+  liquorBottlingsFinished   LiquorBottling[]           @relation("LiquorBottlingFinishedBy")
+  liquorProductsCreated     LiquorProduct[]            @relation("LiquorProductCreatedBy")
+  liquorRecipesCreated      LiquorRecipe[]             @relation("LiquorRecipeCreatedBy")
   lots                      Lot[]
   branches                  UserBranch[]
-  cashCutsResponsible       CashCut[]              @relation("CashCutResponsible")
-  cashCutsCreated           CashCut[]              @relation("CashCutCreatedBy")
-  cashCutsUpdated           CashCut[]              @relation("CashCutUpdatedBy")
-  cashOutflowsAuthorized    CashOutflow[]          @relation("CashOutflowAuthorizedBy")
-  cashCutAuditEntries       CashCutAuditEntry[]    @relation("CashCutAuditBy")
-  cashSafeMovementsBy       CashSafeMovement[]     @relation("CashSafeMovementBy")
+  cashCutsResponsible       CashCut[]                  @relation("CashCutResponsible")
+  cashCutsCreated           CashCut[]                  @relation("CashCutCreatedBy")
+  cashCutsUpdated           CashCut[]                  @relation("CashCutUpdatedBy")
+  cashOutflowsAuthorized    CashOutflow[]              @relation("CashOutflowAuthorizedBy")
+  cashCutAuditEntries       CashCutAuditEntry[]        @relation("CashCutAuditBy")
+  cashSafeMovementsBy       CashSafeMovement[]         @relation("CashSafeMovementBy")
   cashSafeEnvelopesCreated  CashSafeEnvelope[]         @relation("CashSafeEnvelopeCreatedBy")
   cashSafeEnvelopesReceived CashSafeEnvelope[]         @relation("CashSafeEnvelopeReceivedBy")
   cashSafeEnvelopeMovements CashSafeEnvelopeMovement[] @relation("CashSafeEnvelopeMovementBy")
-  hourlyRate                Decimal?               @db.Decimal(10, 2)
-  timeClockEntries          TimeClockEntry[]       @relation("TimeClockEntries")
-  timeClockEntriesClosed    TimeClockEntry[]       @relation("TimeClockClosedBy")
-  timeClockEditRequests     TimeClockEditRequest[] @relation("TimeClockEditRequestedBy")
-  timeClockEditReviews      TimeClockEditRequest[] @relation("TimeClockEditReviewedBy")
-  scheduledShifts           ScheduledShift[]       @relation("ScheduledShifts")
-  scheduleWeeksPublished    ScheduleWeek[]         @relation("ScheduleWeekPublishedBy")
+  hourlyRate                Decimal?                   @db.Decimal(10, 2)
+  timeClockEntries          TimeClockEntry[]           @relation("TimeClockEntries")
+  timeClockEntriesClosed    TimeClockEntry[]           @relation("TimeClockClosedBy")
+  timeClockEditRequests     TimeClockEditRequest[]     @relation("TimeClockEditRequestedBy")
+  timeClockEditReviews      TimeClockEditRequest[]     @relation("TimeClockEditReviewedBy")
+  scheduledShifts           ScheduledShift[]           @relation("ScheduledShifts")
+  scheduleWeeksPublished    ScheduleWeek[]             @relation("ScheduleWeekPublishedBy")
   geofenceAlerts            GeofenceAlert[]
-  salaryRates               SalaryRate[]           @relation("SalaryRateOwner")
-  salaryRatesCreated        SalaryRate[]           @relation("SalaryRateCreatedBy")
+  salaryRates               SalaryRate[]               @relation("SalaryRateOwner")
+  salaryRatesCreated        SalaryRate[]               @relation("SalaryRateCreatedBy")
 
   millingsFinished   Milling[]           @relation("MillingFinishedBy")
   millingDischarges  MillingDischarge[]
@@ -108,9 +108,24 @@ model User {
   shiftRequestsAsSwapTarget   ShiftChangeRequest[]            @relation("ShiftRequestSwapTarget")
   shiftRequestsReviewed       ShiftChangeRequest[]            @relation("ShiftRequestReviewedBy")
 
-  eventAddedProducts      EventAddedProduct[]    @relation("EventAddedBy")
-  eventAddedCancelled     EventAddedProduct[]    @relation("EventAddedCancelledBy")
-  eventAddedLogs          EventAddedProductLog[] @relation("EventAddedLogBy")
+  eventAddedProducts  EventAddedProduct[]    @relation("EventAddedBy")
+  eventAddedCancelled EventAddedProduct[]    @relation("EventAddedCancelledBy")
+  eventAddedLogs      EventAddedProductLog[] @relation("EventAddedLogBy")
+
+  workforceEmployee                     Employee?
+  workforceSchedulePeriodsCreated       SchedulePeriod[]             @relation("WorkforceSchedulePeriodCreatedBy")
+  workforceShiftsCreated                Shift[]                      @relation("WorkforceShiftCreatedBy")
+  workforceShiftRevisionsChanged        ShiftRevision[]              @relation("WorkforceShiftRevisionChangedBy")
+  workforceSchedulePublications         SchedulePublication[]        @relation("WorkforceSchedulePublicationPublishedBy")
+  workforceClockCorrectionsRequested    ClockCorrection[]            @relation("WorkforceClockCorrectionRequestedBy")
+  workforceClockCorrectionsApproved     ClockCorrection[]            @relation("WorkforceClockCorrectionApprovedBy")
+  workforceClockCorrectionsRejected     ClockCorrection[]            @relation("WorkforceClockCorrectionRejectedBy")
+  workforceAttendanceExceptionsResolved AttendanceException[]        @relation("WorkforceAttendanceExceptionResolvedBy")
+  workforceTimesheetsApproved           Timesheet[]                  @relation("WorkforceTimesheetApprovedBy")
+  workforceTimesheetAdjustmentsCreated  TimesheetAdjustment[]        @relation("WorkforceTimesheetAdjustmentCreatedBy")
+  workforceTimesheetAdjustmentsApproved TimesheetAdjustment[]        @relation("WorkforceTimesheetAdjustmentApprovedBy")
+  workforcePayrollAdjustmentsCreated    WorkforcePayrollAdjustment[] @relation("WorkforcePayrollAdjustmentCreatedBy")
+  workforcePayrollAdjustmentsApproved   WorkforcePayrollAdjustment[] @relation("WorkforcePayrollAdjustmentApprovedBy")
 }
 
 model UserSession {
@@ -967,6 +982,8 @@ model Branch {
   /// Color (hex) para identificar la sucursal en la cuadrícula de
   /// Horario. Si no tiene, la UI le asigna uno por defecto.
   color            String?
+  /// Zona horaria IANA usada para derivar fechas de negocio locales.
+  timezone         String?
   /**
    * Geocerca del checador: si la sucursal tiene una geozona asignada,
    * el checador exige que el empleado esté dentro de ese radio (en
@@ -981,30 +998,36 @@ model Branch {
   entries          InventoryEntry[]
   timeClockEntries TimeClockEntry[]
 
-  users                  UserBranch[]
-  cashCuts               CashCut[]
-  liquorBottles          LiquorBottle[]
-  liquorMovementsFrom    LiquorBottleMovement[]   @relation("LiquorMovementFromBranch")
-  liquorMovementsTo      LiquorBottleMovement[]   @relation("LiquorMovementToBranch")
-  cashSafeMovements      CashSafeMovement[]
-  cashSafeEnvelopes      CashSafeEnvelope[]
-  scheduledShifts        ScheduledShift[]
-  scheduleTemplates      BranchScheduleTemplate[]
-  geofenceAlerts         GeofenceAlert[]
-  posSales               PosSale[]
-  posDiscountRules       PosDiscountRule[]
-  overtimeRecords        OvertimeRecord[]
-  rawMaterialTransfers   RawMaterialMovement[]
-  payrollSettings        PayrollSettings?
-  scheduleWeekTemplates  ScheduleTemplate[]
-  scheduleTemplateShifts ScheduleTemplateShift[]
-  scheduleEvents         ScheduleEvent[]
-
-  @@index([active])
-  @@index([geofenceId])
+  users                    UserBranch[]
+  cashCuts                 CashCut[]
+  liquorBottles            LiquorBottle[]
+  liquorMovementsFrom      LiquorBottleMovement[]   @relation("LiquorMovementFromBranch")
+  liquorMovementsTo        LiquorBottleMovement[]   @relation("LiquorMovementToBranch")
+  cashSafeMovements        CashSafeMovement[]
+  cashSafeEnvelopes        CashSafeEnvelope[]
+  scheduledShifts          ScheduledShift[]
+  scheduleTemplates        BranchScheduleTemplate[]
+  geofenceAlerts           GeofenceAlert[]
+  posSales                 PosSale[]
+  posDiscountRules         PosDiscountRule[]
+  overtimeRecords          OvertimeRecord[]
+  rawMaterialTransfers     RawMaterialMovement[]
+  payrollSettings          PayrollSettings?
+  scheduleWeekTemplates    ScheduleTemplate[]
+  scheduleTemplateShifts   ScheduleTemplateShift[]
+  scheduleEvents           ScheduleEvent[]
+  workforceAssignments     BranchAssignment[]
+  workforceSchedulePeriods SchedulePeriod[]
+  workforceShifts          Shift[]
+  workforceShiftRevisions  ShiftRevision[]
+  workforceClockEvents     ClockEvent[]
+  workforceSessions        WorkSession[]
 
   eventAddedSource  EventAddedProduct[] @relation("EventAddedSourceBranch")
   eventAddedReturns EventAddedProduct[] @relation("EventAddedReturnBranch")
+
+  @@index([active])
+  @@index([geofenceId])
 }
 
 /**
@@ -1108,16 +1131,16 @@ model CashCut {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  salesByMethod CashSalePayment[]
-  outflows      CashOutflow[]
-  inflows       CashInflow[]
-  evidences     CashCutEvidence[]
-  auditEntries  CashCutAuditEntry[]
-  safeMovements CashSafeMovement[]
-  safeEnvelope  CashSafeEnvelope?
+  salesByMethod         CashSalePayment[]
+  outflows              CashOutflow[]
+  inflows               CashInflow[]
+  evidences             CashCutEvidence[]
+  auditEntries          CashCutAuditEntry[]
+  safeMovements         CashSafeMovement[]
+  safeEnvelope          CashSafeEnvelope?
   safeEnvelopeMovements CashSafeEnvelopeMovement[]
-  denominations CashCutDenomination[]
-  posSales      PosSale[]
+  denominations         CashCutDenomination[]
+  posSales              PosSale[]
 
   @@index([branchId])
   @@index([responsibleId])
@@ -1537,24 +1560,23 @@ enum CashSafeEnvelopeMovementType {
  * de un corte y vive para siempre (nunca se borra). La unidad
  * principal de control de Caja fuerte -- el saldo de una sucursal
  * se calcula sumando los sobres validos, nunca al reves.
- *
  * @@unique en cashCutId es la garantia de que un reintento del
  * cierre de corte (doble clic, retry de red) jamas produce dos
  * sobres para el mismo corte: la creacion usa upsert sobre este
  * campo.
  */
 model CashSafeEnvelope {
-  id       String @id @default(cuid())
+  id   String @id @default(cuid())
   /// Codigo legible unico, ej. HUE-20260819-001. Generado
   /// automaticamente -- ver lib/cash-cuts/safeEnvelopes.ts.
-  code     String @unique
+  code String @unique
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
 
   /// Un sobre por corte. Backbone de la idempotencia.
-  cashCutId String  @unique
-  cashCut   CashCut @relation(fields: [cashCutId], references: [id])
+  cashCutId String   @unique
+  cashCut   CashCut  @relation(fields: [cashCutId], references: [id])
   /// Copiado de CashCut.date al crear el sobre -- denormalizado
   /// a proposito para reportes rapidos sin join.
   cutDate   DateTime
@@ -1574,13 +1596,13 @@ model CashSafeEnvelope {
   createdAt   DateTime @default(now())
 
   /// Cuando se confirma la llegada fisica a la caja fuerte.
-  receivedById     String?
-  receivedBy       User?     @relation("CashSafeEnvelopeReceivedBy", fields: [receivedById], references: [id])
-  receivedAt       DateTime?
+  receivedById   String?
+  receivedBy     User?     @relation("CashSafeEnvelopeReceivedBy", fields: [receivedById], references: [id])
+  receivedAt     DateTime?
   /// Lo efectivamente contado al recibir. Si difiere de
   /// originalAmount, el movimiento RECEPCION viene acompanado de
   /// un AJUSTE_* automatico.
-  receivedAmount   Float?
+  receivedAmount Float?
 
   movements CashSafeEnvelopeMovement[]
 
@@ -1595,9 +1617,9 @@ model CashSafeEnvelope {
  * correccion es una fila nueva de tipo AJUSTE_POSITIVO/NEGATIVO.
  */
 model CashSafeEnvelopeMovement {
-  id         String                       @id @default(cuid())
+  id         String           @id @default(cuid())
   envelopeId String
-  envelope   CashSafeEnvelope             @relation(fields: [envelopeId], references: [id])
+  envelope   CashSafeEnvelope @relation(fields: [envelopeId], references: [id])
 
   type   CashSafeEnvelopeMovementType
   /// Siempre positivo. El signo lo da `type`.
@@ -1632,13 +1654,13 @@ model InventoryProduct {
   name        String
   description String?
 
-  category String
-  unit     String
+  category                 String
+  unit                     String
   /// Cómo se captura y muestra el producto. Nulo conserva compatibilidad histórica.
-  handlingUnit    InventoryHandlingUnit?
-  contentPerUnit  Decimal? @db.Decimal(12, 3)
-  contentUnit     InventoryContentUnit?
-  normalizedContentPerUnit Decimal? @db.Decimal(14, 3)
+  handlingUnit             InventoryHandlingUnit?
+  contentPerUnit           Decimal?               @db.Decimal(12, 3)
+  contentUnit              InventoryContentUnit?
+  normalizedContentPerUnit Decimal?               @db.Decimal(14, 3)
 
   unitCost     Decimal? @db.Decimal(12, 4)
   minimumStock Decimal  @default(0) @db.Decimal(12, 3)
@@ -1665,12 +1687,12 @@ model InventoryProduct {
   liquorProduct     LiquorProduct?
   rawMaterialLinks  RawMaterial[]          @relation("RawMaterialInventoryLink")
 
+  eventAddedProducts EventAddedProduct[]
+
   @@index([name])
   @@index([category])
   @@index([itemType])
   @@index([isActive])
-
-  eventAddedProducts EventAddedProduct[]
 }
 
 enum InventoryItemType {
@@ -1756,17 +1778,17 @@ model ServiceEvent {
   // Se marca cuando el inventario cargado a este evento ya se
   // descontó del inventario de una sucursal (al abrir un corte de
   // caja eligiendo este evento). Evita descontarlo dos veces.
-  stockDeductedAt DateTime?
-  checkoutConfirmedAt DateTime?
+  stockDeductedAt       DateTime?
+  checkoutConfirmedAt   DateTime?
   checkoutConfirmedById String?
-  returnConfirmedAt DateTime?
-  returnConfirmedById String?
+  returnConfirmedAt     DateTime?
+  returnConfirmedById   String?
 
-  package      EventPackage?      @relation(fields: [packageId], references: [id])
-  equipmentKit EquipmentKit?      @relation(fields: [equipmentKitId], references: [id])
-  items        ServiceEventItem[]
-  recounts     EventRecount[]
-  cashCuts     CashCut[]
+  package       EventPackage?       @relation(fields: [packageId], references: [id])
+  equipmentKit  EquipmentKit?       @relation(fields: [equipmentKitId], references: [id])
+  items         ServiceEventItem[]
+  recounts      EventRecount[]
+  cashCuts      CashCut[]
   addedProducts EventAddedProduct[]
 }
 
@@ -1775,18 +1797,18 @@ model ServiceEventItem {
   eventId   String
   productId String
 
-  productName String
-  unit        String
-  itemType    InventoryItemType
-  unitCost    Decimal?          @db.Decimal(12, 4)
-  handlingUnit InventoryHandlingUnit?
-  contentPerUnit Decimal?       @db.Decimal(12, 3)
-  contentUnit InventoryContentUnit?
-  returnedOpenQuantity Decimal? @db.Decimal(12, 3)
-  checkoutStatus String @default("PENDIENTE")
-  returnStatus String @default("PENDIENTE")
-  checkoutNotes String?
-  returnNotes String?
+  productName          String
+  unit                 String
+  itemType             InventoryItemType
+  unitCost             Decimal?               @db.Decimal(12, 4)
+  handlingUnit         InventoryHandlingUnit?
+  contentPerUnit       Decimal?               @db.Decimal(12, 3)
+  contentUnit          InventoryContentUnit?
+  returnedOpenQuantity Decimal?               @db.Decimal(12, 3)
+  checkoutStatus       String                 @default("PENDIENTE")
+  returnStatus         String                 @default("PENDIENTE")
+  checkoutNotes        String?
+  returnNotes          String?
 
   plannedQuantity  Decimal  @db.Decimal(12, 3)
   sentQuantity     Decimal? @db.Decimal(12, 3)
@@ -1910,20 +1932,20 @@ enum InventoryEntryType {
 }
 
 model InventoryEntry {
-  id        String             @id @default(cuid())
-  branchId  String
-  productId String
-  type      InventoryEntryType
-  quantity  Decimal            @db.Decimal(12, 3)
-  unitCost  Decimal?           @db.Decimal(12, 4)
-  originalQuantity Decimal?    @db.Decimal(12, 3)
+  id               String                 @id @default(cuid())
+  branchId         String
+  productId        String
+  type             InventoryEntryType
+  quantity         Decimal                @db.Decimal(12, 3)
+  unitCost         Decimal?               @db.Decimal(12, 4)
+  originalQuantity Decimal?               @db.Decimal(12, 3)
   originalUnit     String?
   handlingUnit     InventoryHandlingUnit?
-  contentPerUnit   Decimal?    @db.Decimal(12, 3)
+  contentPerUnit   Decimal?               @db.Decimal(12, 3)
   contentUnit      InventoryContentUnit?
-  entryDate DateTime           @default(now())
-  notes     String?
-  createdAt DateTime           @default(now())
+  entryDate        DateTime               @default(now())
+  notes            String?
+  createdAt        DateTime               @default(now())
 
   branch  Branch           @relation(fields: [branchId], references: [id])
   product InventoryProduct @relation(fields: [productId], references: [id])
@@ -2548,10 +2570,12 @@ model PayrollPeriod {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  submittedBy User?          @relation("PayrollPeriodSubmittedBy", fields: [submittedById], references: [id])
-  approvedBy  User?          @relation("PayrollPeriodApprovedBy", fields: [approvedById], references: [id])
-  paidBy      User?          @relation("PayrollPeriodPaidBy", fields: [paidById], references: [id])
-  entries     PayrollEntry[]
+  submittedBy          User?                        @relation("PayrollPeriodSubmittedBy", fields: [submittedById], references: [id])
+  approvedBy           User?                        @relation("PayrollPeriodApprovedBy", fields: [approvedById], references: [id])
+  paidBy               User?                        @relation("PayrollPeriodPaidBy", fields: [paidById], references: [id])
+  entries              PayrollEntry[]
+  workforceLines       PayrollLine[]
+  workforceAdjustments WorkforcePayrollAdjustment[] @relation("WorkforcePayrollAdjustmentAppliedPeriod")
 
   @@index([status])
 }
@@ -2638,6 +2662,576 @@ model PayrollSettings {
   updatedAt DateTime @updatedAt
 
   branch Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * ==========================================================
+ * Workforce V1 foundation
+ * ----------------------------------------------------------
+ * Additive domain model. Legacy scheduling, clock and payroll
+ * models remain the only active runtime write path in Phase 1A.
+ * ==========================================================
+ */
+
+enum EmploymentStatus {
+  ACTIVE
+  INACTIVE
+  TERMINATED
+}
+
+enum DataConfidence {
+  KNOWN
+  LEGACY_UNKNOWN
+  ESTIMATED
+}
+
+enum WorkforceRateType {
+  HOURLY
+  DAILY
+  WEEKLY
+  SALARY
+}
+
+enum BranchAssignmentType {
+  HOME
+  ALLOWED
+}
+
+enum WorkforceAvailabilityExceptionType {
+  AVAILABLE
+  UNAVAILABLE
+}
+
+enum SchedulePeriodStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum WorkforceShiftStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+}
+
+enum ClockEventType {
+  CLOCK_IN
+  BREAK_START
+  BREAK_END
+  CLOCK_OUT
+}
+
+enum ClockCorrectionType {
+  MODIFY_OCCURRED_TIME
+  ADD_MISSING_EVENT
+  VOID_EVENT
+}
+
+enum WorkforceDecisionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum WorkSessionStatus {
+  OPEN
+  COMPLETE
+  INCOMPLETE
+}
+
+enum AttendanceExceptionType {
+  LATE
+  EARLY_DEPARTURE
+  MISSING_PUNCH
+  NO_SHOW
+  UNSCHEDULED_WORK
+  OVERTIME
+  BREAK_ANOMALY
+}
+
+enum AttendanceExceptionSeverity {
+  INFO
+  WARNING
+  BLOCKING
+}
+
+enum AttendanceExceptionStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum TimesheetStatus {
+  OPEN
+  REVIEW
+  APPROVED
+  LOCKED
+}
+
+enum TimesheetAdjustmentType {
+  ADD_PAYABLE_TIME
+  REMOVE_PAYABLE_TIME
+  RECLASSIFY_TIME
+}
+
+model Employee {
+  id             String   @id @default(cuid())
+  userId         String?  @unique
+  employeeNumber String?  @unique
+  firstName      String
+  lastName       String
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  employments Employment[]
+
+  @@index([active])
+}
+
+model Employment {
+  id                String           @id @default(cuid())
+  employeeId        String
+  status            EmploymentStatus @default(ACTIVE)
+  startedAt         DateTime?
+  endedAt           DateTime?
+  terminationReason String?
+  dataConfidence    DataConfidence   @default(KNOWN)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  employee               Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  payRates               PayRate[]
+  branchAssignments      BranchAssignment[]
+  availabilityRules      AvailabilityRule[]
+  availabilityExceptions AvailabilityException[]
+  shifts                 Shift[]
+  shiftRevisions         ShiftRevision[]
+  clockEvents            ClockEvent[]
+  clockCorrections       ClockCorrection[]
+  workSessions           WorkSession[]
+  attendanceExceptions   AttendanceException[]
+  timesheets             Timesheet[]
+  payrollLines           PayrollLine[]
+
+  @@index([employeeId, status])
+}
+
+model PayRate {
+  id            String            @id @default(cuid())
+  employmentId  String
+  rateType      WorkforceRateType
+  amount        Decimal           @db.Decimal(12, 2)
+  currency      String            @db.Char(3)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@index([employmentId, effectiveFrom])
+}
+
+model BranchAssignment {
+  id            String               @id @default(cuid())
+  employmentId  String
+  branchId      String
+  type          BranchAssignmentType
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch     Branch     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@index([employmentId, effectiveFrom, effectiveTo])
+  @@index([branchId, effectiveFrom, effectiveTo])
+}
+
+model AvailabilityRule {
+  id            String    @id @default(cuid())
+  employmentId  String
+  dayOfWeek     Int
+  available     Boolean
+  startTime     String?
+  endTime       String?
+  effectiveFrom DateTime? @db.Date
+  effectiveTo   DateTime? @db.Date
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@index([employmentId, effectiveFrom])
+  @@index([employmentId, dayOfWeek])
+}
+
+model AvailabilityException {
+  id           String                             @id @default(cuid())
+  employmentId String
+  date         DateTime                           @db.Date
+  type         WorkforceAvailabilityExceptionType
+  startTime    String?
+  endTime      String?
+  reason       String?
+  createdAt    DateTime                           @default(now())
+  updatedAt    DateTime                           @updatedAt
+
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@unique([employmentId, date])
+}
+
+model SchedulePeriod {
+  id          String               @id @default(cuid())
+  branchId    String
+  periodStart DateTime             @db.Date
+  periodEnd   DateTime             @db.Date
+  status      SchedulePeriodStatus @default(DRAFT)
+  version     Int                  @default(1)
+  createdById String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  branch       Branch                @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy    User                  @relation("WorkforceSchedulePeriodCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  shifts       Shift[]
+  publications SchedulePublication[]
+
+  @@unique([branchId, periodStart, periodEnd])
+  @@index([branchId, status])
+}
+
+model Shift {
+  id                   String               @id @default(cuid())
+  schedulePeriodId     String
+  employmentId         String
+  branchId             String
+  businessDate         DateTime             @db.Date
+  startAt              DateTime
+  endAt                DateTime
+  expectedBreakMinutes Int                  @default(0)
+  status               WorkforceShiftStatus @default(DRAFT)
+  version              Int                  @default(1)
+  createdById          String
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  schedulePeriod       SchedulePeriod             @relation(fields: [schedulePeriodId], references: [id], onDelete: Restrict)
+  employment           Employment                 @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch               Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy            User                       @relation("WorkforceShiftCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  revisions            ShiftRevision[]
+  publicationLinks     SchedulePublicationShift[]
+  workSessions         WorkSession[]
+  attendanceExceptions AttendanceException[]
+
+  @@index([branchId, startAt])
+  @@index([employmentId, startAt])
+  @@index([businessDate])
+  @@index([schedulePeriodId])
+}
+
+model ShiftRevision {
+  id                   String               @id @default(cuid())
+  shiftId              String
+  revisionNumber       Int
+  employmentId         String
+  branchId             String
+  businessDate         DateTime             @db.Date
+  startAt              DateTime
+  endAt                DateTime
+  expectedBreakMinutes Int
+  status               WorkforceShiftStatus
+  reason               String?
+  changedById          String
+  changedAt            DateTime             @default(now())
+
+  shift            Shift                      @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  employment       Employment                 @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch           Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  changedBy        User                       @relation("WorkforceShiftRevisionChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
+  publicationLinks SchedulePublicationShift[]
+
+  @@unique([shiftId, revisionNumber])
+  @@index([employmentId, startAt])
+  @@index([branchId, startAt])
+}
+
+model SchedulePublication {
+  id               String   @id @default(cuid())
+  schedulePeriodId String
+  version          Int
+  publishedById    String
+  publishedAt      DateTime @default(now())
+
+  schedulePeriod SchedulePeriod             @relation(fields: [schedulePeriodId], references: [id], onDelete: Restrict)
+  publishedBy    User                       @relation("WorkforceSchedulePublicationPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+  shifts         SchedulePublicationShift[]
+
+  @@unique([schedulePeriodId, version])
+}
+
+model SchedulePublicationShift {
+  id              String @id @default(cuid())
+  publicationId   String
+  shiftId         String
+  shiftRevisionId String
+
+  publication   SchedulePublication @relation(fields: [publicationId], references: [id], onDelete: Restrict)
+  shift         Shift               @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  shiftRevision ShiftRevision       @relation(fields: [shiftRevisionId], references: [id], onDelete: Restrict)
+
+  @@unique([publicationId, shiftId])
+  @@index([shiftRevisionId])
+}
+
+model ClockEvent {
+  id               String         @id @default(cuid())
+  employmentId     String
+  branchId         String
+  type             ClockEventType
+  deviceOccurredAt DateTime
+  serverReceivedAt DateTime       @default(now())
+  timezone         String
+  source           String
+  deviceId         String?
+  idempotencyKey   String         @unique
+  createdAt        DateTime       @default(now())
+
+  employment       Employment              @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch           Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  targetedBy       ClockCorrection[]
+  workSessionLinks WorkSessionClockEvent[]
+
+  @@index([employmentId, deviceOccurredAt])
+  @@index([branchId, serverReceivedAt])
+}
+
+model ClockCorrection {
+  id                 String                  @id @default(cuid())
+  employmentId       String
+  targetClockEventId String?
+  type               ClockCorrectionType
+  proposedEventType  ClockEventType?
+  proposedOccurredAt DateTime?
+  reason             String
+  status             WorkforceDecisionStatus @default(PENDING)
+  requestedById      String
+  requestedAt        DateTime                @default(now())
+  approvedById       String?
+  approvedAt         DateTime?
+  rejectedById       String?
+  rejectedAt         DateTime?
+  rejectionReason    String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  employment       Employment  @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  targetClockEvent ClockEvent? @relation(fields: [targetClockEventId], references: [id], onDelete: Restrict)
+  requestedBy      User        @relation("WorkforceClockCorrectionRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  approvedBy       User?       @relation("WorkforceClockCorrectionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedBy       User?       @relation("WorkforceClockCorrectionRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
+
+  @@index([employmentId, requestedAt])
+  @@index([targetClockEventId])
+  @@index([status])
+}
+
+model WorkSession {
+  id                    String            @id @default(cuid())
+  employmentId          String
+  branchId              String
+  shiftId               String?
+  businessDate          DateTime          @db.Date
+  startedAt             DateTime?
+  endedAt               DateTime?
+  workedMinutes         Int               @default(0)
+  breakMinutes          Int               @default(0)
+  reconstructionVersion Int               @default(1)
+  status                WorkSessionStatus
+  reconstructedAt       DateTime
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  employment           Employment                 @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch               Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  shift                Shift?                     @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  clockEventLinks      WorkSessionClockEvent[]
+  attendanceExceptions AttendanceException[]
+  timesheetLineLinks   TimesheetLineWorkSession[]
+
+  @@index([employmentId, businessDate])
+  @@index([branchId, businessDate])
+  @@index([shiftId])
+}
+
+model WorkSessionClockEvent {
+  id            String @id @default(cuid())
+  workSessionId String
+  clockEventId  String
+  sequence      Int
+
+  workSession WorkSession @relation(fields: [workSessionId], references: [id], onDelete: Restrict)
+  clockEvent  ClockEvent  @relation(fields: [clockEventId], references: [id], onDelete: Restrict)
+
+  @@unique([workSessionId, clockEventId])
+  @@unique([workSessionId, sequence])
+  @@index([clockEventId])
+}
+
+model AttendanceException {
+  id            String                      @id @default(cuid())
+  employmentId  String
+  shiftId       String?
+  workSessionId String?
+  type          AttendanceExceptionType
+  severity      AttendanceExceptionSeverity
+  status        AttendanceExceptionStatus   @default(OPEN)
+  blocking      Boolean                     @default(false)
+  detectedAt    DateTime                    @default(now())
+  resolvedById  String?
+  resolvedAt    DateTime?
+  resolution    String?
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
+
+  employment  Employment   @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  shift       Shift?       @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  workSession WorkSession? @relation(fields: [workSessionId], references: [id], onDelete: Restrict)
+  resolvedBy  User?        @relation("WorkforceAttendanceExceptionResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status, type])
+  @@index([employmentId, detectedAt])
+  @@index([shiftId])
+  @@index([workSessionId])
+}
+
+model Timesheet {
+  id           String          @id @default(cuid())
+  employmentId String
+  periodStart  DateTime        @db.Date
+  periodEnd    DateTime        @db.Date
+  status       TimesheetStatus @default(OPEN)
+  version      Int             @default(1)
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  employment  Employment      @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  approvedBy  User?           @relation("WorkforceTimesheetApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  lines       TimesheetLine[]
+  payrollLine PayrollLine?
+
+  @@unique([employmentId, periodStart, periodEnd])
+  @@index([employmentId, periodStart])
+  @@index([status])
+}
+
+model TimesheetLine {
+  id                    String   @id @default(cuid())
+  timesheetId           String
+  businessDate          DateTime @db.Date
+  workedMinutes         Int      @default(0)
+  adjustmentMinutes     Int      @default(0)
+  regularPayableMinutes Int      @default(0)
+  overtimeTier1Minutes  Int      @default(0)
+  overtimeTier2Minutes  Int      @default(0)
+  totalPayableMinutes   Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  timesheet        Timesheet                  @relation(fields: [timesheetId], references: [id], onDelete: Restrict)
+  workSessionLinks TimesheetLineWorkSession[]
+  adjustments      TimesheetAdjustment[]
+
+  @@unique([timesheetId, businessDate])
+}
+
+model TimesheetLineWorkSession {
+  id              String @id @default(cuid())
+  timesheetLineId String
+  workSessionId   String
+
+  timesheetLine TimesheetLine @relation(fields: [timesheetLineId], references: [id], onDelete: Restrict)
+  workSession   WorkSession   @relation(fields: [workSessionId], references: [id], onDelete: Restrict)
+
+  @@unique([timesheetLineId, workSessionId])
+  @@index([workSessionId])
+}
+
+model TimesheetAdjustment {
+  id              String                  @id @default(cuid())
+  timesheetLineId String
+  type            TimesheetAdjustmentType
+  minutes         Int
+  reason          String
+  status          WorkforceDecisionStatus @default(PENDING)
+  createdById     String
+  createdAt       DateTime                @default(now())
+  approvedById    String?
+  approvedAt      DateTime?
+
+  timesheetLine TimesheetLine @relation(fields: [timesheetLineId], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("WorkforceTimesheetAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy    User?         @relation("WorkforceTimesheetAdjustmentApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([timesheetLineId, status])
+}
+
+model PayrollLine {
+  id                      String            @id @default(cuid())
+  payrollPeriodId         String
+  employmentId            String
+  timesheetId             String            @unique
+  employeeNameSnapshot    String
+  rateTypeSnapshot        WorkforceRateType
+  payRateAmountSnapshot   Decimal           @db.Decimal(12, 2)
+  currencySnapshot        String            @db.Char(3)
+  regularMinutes          Int               @default(0)
+  overtimeTier1Minutes    Int               @default(0)
+  overtimeTier2Minutes    Int               @default(0)
+  overtimeTier1Multiplier Decimal           @db.Decimal(5, 2)
+  overtimeTier2Multiplier Decimal           @db.Decimal(5, 2)
+  adjustmentAmount        Decimal           @default(0) @db.Decimal(12, 2)
+  grossAmount             Decimal           @db.Decimal(12, 2)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  payrollPeriod    PayrollPeriod                @relation(fields: [payrollPeriodId], references: [id], onDelete: Restrict)
+  employment       Employment                   @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  timesheet        Timesheet                    @relation(fields: [timesheetId], references: [id], onDelete: Restrict)
+  retroAdjustments WorkforcePayrollAdjustment[] @relation("WorkforcePayrollAdjustmentOriginalLine")
+
+  @@unique([payrollPeriodId, employmentId])
+}
+
+/// Ajuste retroactivo de una línea histórica; no reemplaza PayrollAdjustment legacy.
+model WorkforcePayrollAdjustment {
+  id                     String                  @id @default(cuid())
+  originalPayrollLineId  String
+  appliedPayrollPeriodId String
+  minutes                Int?
+  amount                 Decimal?                @db.Decimal(12, 2)
+  reason                 String
+  status                 WorkforceDecisionStatus @default(PENDING)
+  createdById            String
+  createdAt              DateTime                @default(now())
+  approvedById           String?
+  approvedAt             DateTime?
+
+  originalPayrollLine  PayrollLine   @relation("WorkforcePayrollAdjustmentOriginalLine", fields: [originalPayrollLineId], references: [id], onDelete: Restrict)
+  appliedPayrollPeriod PayrollPeriod @relation("WorkforcePayrollAdjustmentAppliedPeriod", fields: [appliedPayrollPeriodId], references: [id], onDelete: Restrict)
+  createdBy            User          @relation("WorkforcePayrollAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy           User?         @relation("WorkforcePayrollAdjustmentApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([originalPayrollLineId])
+  @@index([appliedPayrollPeriodId, status])
 }
 
 /**
@@ -2975,20 +3569,17 @@ model NotificationRule {
   @@index([triggerType])
 }
 
-
-/*
+/**
  * ============================================================
  * Productos conseguidos DURANTE el evento
  * ------------------------------------------------------------
  * No toca ServiceEventItem ni los paquetes originales: es una
  * fuente paralela de existencia para el mismo evento.
- *
  * El inventario NO se guarda como saldo en ninguna tabla; se
  * calcula desde InventoryEntry (ver lib/.../stock.ts). Por eso
  * un envio desde sucursal genera un InventoryEntry negativo
  * (SALIDA_EVENTO) al mandarlo y uno positivo (REGRESO_EVENTO)
  * al regresarlo, y aqui solo se guarda la referencia.
- *
  * Una compra externa NO genera InventoryEntry: nunca salio de
  * una sucursal, solo suma existencia al evento y costo.
  * ============================================================
@@ -3009,12 +3600,12 @@ model EventAddedProduct {
   sourceBranchId String?
 
   /// Cantidad en unidad de manejo (ej. 4 botellas).
-  quantityOriginal Decimal                @db.Decimal(12, 3)
-  handlingUnit     InventoryHandlingUnit?
-  contentPerUnit   Decimal?               @db.Decimal(12, 3)
-  contentUnit      InventoryContentUnit?
+  quantityOriginal   Decimal                @db.Decimal(12, 3)
+  handlingUnit       InventoryHandlingUnit?
+  contentPerUnit     Decimal?               @db.Decimal(12, 3)
+  contentUnit        InventoryContentUnit?
   /// Equivalencia interna (ml, g o piezas). Los calculos usan esta.
-  normalizedQuantity Decimal @db.Decimal(14, 3)
+  normalizedQuantity Decimal                @db.Decimal(14, 3)
 
   /// Costo. Se valida en el servidor, nunca se confia en el navegador.
   unitCost  Decimal? @db.Decimal(12, 4)
@@ -3030,8 +3621,8 @@ model EventAddedProduct {
   reference String?
   notes     String?
 
-  status       EventAddedStatus @default(ACTIVO)
-  cancelReason String?
+  status        EventAddedStatus @default(ACTIVO)
+  cancelReason  String?
   cancelledById String?
   cancelledAt   DateTime?
 
@@ -3061,14 +3652,14 @@ model EventAddedProduct {
 
 /// Bitacora de correcciones. Nada se borra fisicamente.
 model EventAddedProductLog {
-  id               String   @id @default(cuid())
-  addedProductId   String
-  field            String
-  oldValue         String?
-  newValue         String?
-  reason           String?
-  changedById      String
-  changedAt        DateTime @default(now())
+  id             String   @id @default(cuid())
+  addedProductId String
+  field          String
+  oldValue       String?
+  newValue       String?
+  reason         String?
+  changedById    String
+  changedAt      DateTime @default(now())
 
   addedProduct EventAddedProduct @relation(fields: [addedProductId], references: [id], onDelete: Cascade)
   changedBy    User              @relation("EventAddedLogBy", fields: [changedById], references: [id])
