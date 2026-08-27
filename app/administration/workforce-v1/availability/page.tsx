@@ -1,0 +1,11 @@
+import Link from "next/link";
+import { Card } from "@/components/ui/Card";
+import { requireAdmin } from "@/lib/auth";
+import { getTeamAvailability } from "@/lib/workforce/availability/service";
+
+const field = "rounded-lg border border-outline-variant bg-surface px-3 py-2";
+
+export default async function TeamAvailabilityPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+  const admin=await requireAdmin(); const query=await searchParams; const value=query.date??new Date().toISOString().slice(0,10); const date=new Date(`${value}T00:00:00.000Z`); const team=await getTeamAvailability({id:admin.id,role:admin.role},date);
+  return <section className="space-y-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-xl font-bold">Disponibilidad del equipo</h2><p className="text-sm text-on-surface-variant">Conflictos derivados; no existe tabla ScheduleConflict.</p></div><form className="flex gap-2"><input aria-label="Fecha" name="date" type="date" defaultValue={value} className={field}/><button className="rounded-lg bg-primary px-3 py-2 font-semibold text-on-primary">Ver</button></form></div><div className="grid gap-3 md:grid-cols-2">{team.map((item)=><Card key={item.employmentId}><div className="flex flex-wrap items-start justify-between gap-2"><div><Link href={`/administration/workforce-v1/employees/${item.employee.id}`} className="font-bold text-primary hover:underline">{item.employee.displayName??"Sin nombre"}</Link><p className="text-xs text-on-surface-variant">{item.branches.length?item.branches.map((branch)=>`${branch.type}: ${branch.name}`).join(" · "):"Sin sucursal autorizada"}</p></div><span className={`rounded-full px-2 py-1 text-xs font-bold ${item.availability.state==="UNAVAILABLE"?"bg-error/10 text-error":item.availability.state==="UNKNOWN"?"bg-secondary/10 text-secondary":"bg-primary/10 text-primary"}`}>{item.availability.state}</span></div><p className="mt-3 text-sm">Fuente: {item.availability.source}{item.availability.startTime?` · ${item.availability.startTime}–${item.availability.endTime}`:""}</p><p className="text-xs font-semibold text-on-surface-variant">Scheduling: {item.conflict}</p></Card>)}</div></section>;
+}

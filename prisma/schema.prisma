@@ -2972,7 +2972,7 @@ model ShiftRevision {
   endAt                DateTime
   expectedBreakMinutes Int
   status               WorkforceShiftStatus
-  reason               String?
+  reason               String
   changedById          String
   changedAt            DateTime             @default(now())
 
