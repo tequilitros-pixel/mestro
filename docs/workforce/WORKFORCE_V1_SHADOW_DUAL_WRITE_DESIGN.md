@@ -1,5 +1,7 @@
 # Workforce V1 — Shadow dual-write design
 
+> **SUPERSEDED BY CLEAN REWRITE STRATEGY.** Preserved as architectural research and fallback only. Do not implement its outbox or dual-write runtime by default.
+
 Fecha: 2026-08-26
 
 ## Scope and invariants

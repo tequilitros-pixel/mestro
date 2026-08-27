@@ -1,5 +1,7 @@
 # Workforce V1 — Write path matrix
 
+> **SUPERSEDED BY CLEAN REWRITE STRATEGY.** Preserved as architectural research and fallback only.
+
 Legacy remains the only source of truth and read path throughout shadow validation.
 
 | Legacy action | Source model | Workforce target | Classification | Idempotency | Failure mode | Rollout | Notes |
