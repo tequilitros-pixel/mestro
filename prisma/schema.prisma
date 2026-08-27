@@ -1023,6 +1023,7 @@ model Branch {
   workforceShifts               Shift[]
   workforceShiftRevisions       ShiftRevision[]
   workforceClockEvents          ClockEvent[]
+  workforceClockCorrections     ClockCorrection[]
   workforceSessions             WorkSession[]
 
   eventAddedSource  EventAddedProduct[] @relation("EventAddedSourceBranch")
@@ -3060,7 +3061,9 @@ model ClockEvent {
 model ClockCorrection {
   id                 String                  @id @default(cuid())
   employmentId       String
+  branchId           String?
   targetClockEventId String?
+  targetCorrectionId String?
   type               ClockCorrectionType
   proposedEventType  ClockEventType?
   proposedOccurredAt DateTime?
@@ -3076,14 +3079,19 @@ model ClockCorrection {
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
 
-  employment       Employment  @relation(fields: [employmentId], references: [id], onDelete: Restrict)
-  targetClockEvent ClockEvent? @relation(fields: [targetClockEventId], references: [id], onDelete: Restrict)
-  requestedBy      User        @relation("WorkforceClockCorrectionRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
-  approvedBy       User?       @relation("WorkforceClockCorrectionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  rejectedBy       User?       @relation("WorkforceClockCorrectionRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
+  employment              Employment        @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch                  Branch?           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  targetClockEvent        ClockEvent?       @relation(fields: [targetClockEventId], references: [id], onDelete: Restrict)
+  targetCorrection        ClockCorrection?  @relation("WorkforceClockCorrectionCompensation", fields: [targetCorrectionId], references: [id], onDelete: Restrict)
+  compensatingCorrections ClockCorrection[] @relation("WorkforceClockCorrectionCompensation")
+  requestedBy             User              @relation("WorkforceClockCorrectionRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  approvedBy              User?             @relation("WorkforceClockCorrectionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedBy              User?             @relation("WorkforceClockCorrectionRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
 
   @@index([employmentId, requestedAt])
+  @@index([branchId, requestedAt])
   @@index([targetClockEventId])
+  @@index([targetCorrectionId])
   @@index([status])
 }
 

@@ -49,6 +49,12 @@ export default async function WorkforceV1Layout({
             Horario
           </Link>
           <Link
+            className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
+            href="/administration/workforce-v1/clock-corrections"
+          >
+            Correcciones
+          </Link>
+          <Link
             className="whitespace-nowrap rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-on-primary"
             href="/administration/workforce-v1/employees/new"
           >
