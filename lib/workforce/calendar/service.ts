@@ -1,22 +1,82 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { dateOnly } from "@/lib/workforce/availability/rules";
-import { resolveOwnEmployee, type WorkforceActor } from "@/lib/workforce/availability/service";
-import { calendarStatus, latestPublishedRevisions } from "./rules";
+import {
+  resolveOwnEmployee,
+  type WorkforceActor,
+} from "@/lib/workforce/availability/service";
+import { effectiveCalendarStatus } from "./rules";
 
-export type CalendarShift = { id: string; businessDate: Date; startAt: Date; endAt: Date; branchName: string; branchTimezone: string; status: "NEW" | "CHANGED" | "CANCELLED"; revisionNumber: number };
+export type CalendarShift = {
+  id: string;
+  businessDate: Date;
+  startAt: Date;
+  endAt: Date;
+  branchName: string;
+  branchTimezone: string;
+  status: "NEW" | "CHANGED" | "CANCELLED";
+  revisionNumber: number;
+};
 
-export async function getEmployeeCalendar(actor: WorkforceActor, from: Date, days: number) {
+export async function getEmployeeCalendar(
+  actor: WorkforceActor,
+  from: Date,
+  days: number,
+) {
   const { employee, employment } = await resolveOwnEmployee(actor);
   const start = dateOnly(from);
   const end = new Date(start.getTime() + days * 86_400_000);
-  const links = await prisma.schedulePublicationShift.findMany({
-    where: { shiftRevision: { employmentId: employment.id, businessDate: { gte: start, lt: end } } },
-    include: { publication: true, shiftRevision: { include: { branch: true } } },
-    orderBy: [{ publication: { publishedAt: "desc" } }, { shiftRevision: { revisionNumber: "desc" } }],
+  const shifts = await prisma.shift.findMany({
+    where: {
+      employmentId: employment.id,
+      businessDate: { gte: start, lt: end },
+      status: { in: ["PUBLISHED", "CANCELLED"] },
+    },
+    include: {
+      branch: true,
+      revisions: {
+        include: { branch: true },
+        orderBy: { revisionNumber: "desc" },
+        take: 1,
+      },
+      publicationLinks: { select: { shiftRevisionId: true } },
+    },
+    orderBy: { startAt: "asc" },
   });
-  const latest = latestPublishedRevisions(links.map((link)=>({ shiftId:link.shiftId, publicationPublishedAt:link.publication.publishedAt, revisionNumber:link.shiftRevision.revisionNumber, revisionStatus:link.shiftRevision.status, businessDate:link.shiftRevision.businessDate, startAt:link.shiftRevision.startAt, endAt:link.shiftRevision.endAt, branchName:link.shiftRevision.branch.name, branchTimezone:link.shiftRevision.branch.timezone })));
-  return { employee, employment, shifts: latest.map((row):CalendarShift=>({ id:row.shiftId,businessDate:row.businessDate,startAt:row.startAt,endAt:row.endAt,branchName:row.branchName,branchTimezone:row.branchTimezone??"America/Mexico_City",status:calendarStatus(row),revisionNumber:row.revisionNumber })) };
+  return {
+    employee,
+    employment,
+    shifts: shifts.map((shift): CalendarShift => {
+      const revision = shift.revisions[0];
+      const historicalRevisionIds = new Set(
+        shift.publicationLinks.map((item) => item.shiftRevisionId),
+      );
+      return {
+        id: shift.id,
+        businessDate: revision?.businessDate ?? shift.businessDate,
+        startAt: revision?.startAt ?? shift.startAt,
+        endAt: revision?.endAt ?? shift.endAt,
+        branchName: revision?.branch.name ?? shift.branch.name,
+        branchTimezone:
+          revision?.branch.timezone ??
+          shift.branch.timezone ??
+          "America/Mexico_City",
+        status: effectiveCalendarStatus({
+          status: revision?.status ?? shift.status,
+          hasPublicationLink: shift.publicationLinks.length > 0,
+          latestRevisionLinked: revision
+            ? historicalRevisionIds.has(revision.id)
+            : false,
+        }),
+        revisionNumber: revision?.revisionNumber ?? 0,
+      };
+    }),
+  };
 }
 
-export const calendarNotificationEvents = ["schedule.published", "shift.changed", "shift.cancelled", "availability.conflict.resolved"] as const;
+export const calendarNotificationEvents = [
+  "schedule.published",
+  "shift.changed",
+  "shift.cancelled",
+  "availability.conflict.resolved",
+] as const;

@@ -117,6 +117,7 @@ model User {
   workforceShiftsCreated                Shift[]                      @relation("WorkforceShiftCreatedBy")
   workforceShiftRevisionsChanged        ShiftRevision[]              @relation("WorkforceShiftRevisionChangedBy")
   workforceSchedulePublications         SchedulePublication[]        @relation("WorkforceSchedulePublicationPublishedBy")
+  workforceStaffingRequirementsCreated  StaffingRequirement[]        @relation("WorkforceStaffingRequirementCreatedBy")
   workforceClockCorrectionsRequested    ClockCorrection[]            @relation("WorkforceClockCorrectionRequestedBy")
   workforceClockCorrectionsApproved     ClockCorrection[]            @relation("WorkforceClockCorrectionApprovedBy")
   workforceClockCorrectionsRejected     ClockCorrection[]            @relation("WorkforceClockCorrectionRejectedBy")
@@ -998,30 +999,31 @@ model Branch {
   entries          InventoryEntry[]
   timeClockEntries TimeClockEntry[]
 
-  users                    UserBranch[]
-  cashCuts                 CashCut[]
-  liquorBottles            LiquorBottle[]
-  liquorMovementsFrom      LiquorBottleMovement[]   @relation("LiquorMovementFromBranch")
-  liquorMovementsTo        LiquorBottleMovement[]   @relation("LiquorMovementToBranch")
-  cashSafeMovements        CashSafeMovement[]
-  cashSafeEnvelopes        CashSafeEnvelope[]
-  scheduledShifts          ScheduledShift[]
-  scheduleTemplates        BranchScheduleTemplate[]
-  geofenceAlerts           GeofenceAlert[]
-  posSales                 PosSale[]
-  posDiscountRules         PosDiscountRule[]
-  overtimeRecords          OvertimeRecord[]
-  rawMaterialTransfers     RawMaterialMovement[]
-  payrollSettings          PayrollSettings?
-  scheduleWeekTemplates    ScheduleTemplate[]
-  scheduleTemplateShifts   ScheduleTemplateShift[]
-  scheduleEvents           ScheduleEvent[]
-  workforceAssignments     BranchAssignment[]
-  workforceSchedulePeriods SchedulePeriod[]
-  workforceShifts          Shift[]
-  workforceShiftRevisions  ShiftRevision[]
-  workforceClockEvents     ClockEvent[]
-  workforceSessions        WorkSession[]
+  users                         UserBranch[]
+  cashCuts                      CashCut[]
+  liquorBottles                 LiquorBottle[]
+  liquorMovementsFrom           LiquorBottleMovement[]   @relation("LiquorMovementFromBranch")
+  liquorMovementsTo             LiquorBottleMovement[]   @relation("LiquorMovementToBranch")
+  cashSafeMovements             CashSafeMovement[]
+  cashSafeEnvelopes             CashSafeEnvelope[]
+  scheduledShifts               ScheduledShift[]
+  scheduleTemplates             BranchScheduleTemplate[]
+  geofenceAlerts                GeofenceAlert[]
+  posSales                      PosSale[]
+  posDiscountRules              PosDiscountRule[]
+  overtimeRecords               OvertimeRecord[]
+  rawMaterialTransfers          RawMaterialMovement[]
+  payrollSettings               PayrollSettings?
+  scheduleWeekTemplates         ScheduleTemplate[]
+  scheduleTemplateShifts        ScheduleTemplateShift[]
+  scheduleEvents                ScheduleEvent[]
+  workforceAssignments          BranchAssignment[]
+  workforceSchedulePeriods      SchedulePeriod[]
+  workforceStaffingRequirements StaffingRequirement[]
+  workforceShifts               Shift[]
+  workforceShiftRevisions       ShiftRevision[]
+  workforceClockEvents          ClockEvent[]
+  workforceSessions             WorkSession[]
 
   eventAddedSource  EventAddedProduct[] @relation("EventAddedSourceBranch")
   eventAddedReturns EventAddedProduct[] @relation("EventAddedReturnBranch")
@@ -2934,7 +2936,7 @@ model SchedulePeriod {
 model Shift {
   id                   String               @id @default(cuid())
   schedulePeriodId     String
-  employmentId         String
+  employmentId         String?
   branchId             String
   businessDate         DateTime             @db.Date
   startAt              DateTime
@@ -2947,7 +2949,7 @@ model Shift {
   updatedAt            DateTime             @updatedAt
 
   schedulePeriod       SchedulePeriod             @relation(fields: [schedulePeriodId], references: [id], onDelete: Restrict)
-  employment           Employment                 @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  employment           Employment?                @relation(fields: [employmentId], references: [id], onDelete: Restrict)
   branch               Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
   createdBy            User                       @relation("WorkforceShiftCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   revisions            ShiftRevision[]
@@ -2965,7 +2967,7 @@ model ShiftRevision {
   id                   String               @id @default(cuid())
   shiftId              String
   revisionNumber       Int
-  employmentId         String
+  employmentId         String?
   branchId             String
   businessDate         DateTime             @db.Date
   startAt              DateTime
@@ -2977,7 +2979,7 @@ model ShiftRevision {
   changedAt            DateTime             @default(now())
 
   shift            Shift                      @relation(fields: [shiftId], references: [id], onDelete: Restrict)
-  employment       Employment                 @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  employment       Employment?                @relation(fields: [employmentId], references: [id], onDelete: Restrict)
   branch           Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
   changedBy        User                       @relation("WorkforceShiftRevisionChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
   publicationLinks SchedulePublicationShift[]
@@ -3013,6 +3015,24 @@ model SchedulePublicationShift {
 
   @@unique([publicationId, shiftId])
   @@index([shiftRevisionId])
+}
+
+model StaffingRequirement {
+  id            String   @id @default(cuid())
+  branchId      String
+  businessDate  DateTime @db.Date
+  startTime     String
+  endTime       String
+  requiredCount Int
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  branch    Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy User   @relation("WorkforceStaffingRequirementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([branchId, businessDate, startTime, endTime])
+  @@index([branchId, businessDate])
 }
 
 model ClockEvent {
