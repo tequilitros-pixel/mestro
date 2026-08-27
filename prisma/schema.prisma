@@ -2740,6 +2740,27 @@ enum WorkSessionStatus {
   INCOMPLETE
 }
 
+enum WorkSessionOrigin {
+  NATIVE_RECONSTRUCTED
+  LEGACY_IMPORTED
+}
+
+enum WorkforceMigrationClassification {
+  SAFE
+  SAFE_WITH_UNKNOWN
+  REVIEW_REQUIRED
+  ARCHIVE_ONLY
+  SKIPPED
+}
+
+enum WorkforceMigrationStatus {
+  PENDING
+  MIGRATED
+  REVIEW
+  SKIPPED
+  FAILED
+}
+
 enum AttendanceExceptionType {
   LATE
   EARLY_DEPARTURE
@@ -2779,8 +2800,11 @@ model Employee {
   id             String   @id @default(cuid())
   userId         String?  @unique
   employeeNumber String?  @unique
-  firstName      String
-  lastName       String
+  /// Human-readable identity as supplied by its authoritative source.
+  /// Legacy names remain unsplit; native flows should also capture name parts.
+  displayName    String?
+  firstName      String?
+  lastName       String?
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -2824,7 +2848,8 @@ model PayRate {
   employmentId  String
   rateType      WorkforceRateType
   amount        Decimal           @db.Decimal(12, 2)
-  currency      String            @db.Char(3)
+  /// Native rates must provide ISO-4217 currency. NULL means unknown legacy history.
+  currency      String?           @db.Char(3)
   effectiveFrom DateTime
   effectiveTo   DateTime?
   createdAt     DateTime          @default(now())
@@ -3051,7 +3076,10 @@ model WorkSession {
   startedAt             DateTime?
   endedAt               DateTime?
   workedMinutes         Int               @default(0)
-  breakMinutes          Int               @default(0)
+  /// NULL means legacy break information is unknown; 0 means known zero.
+  breakMinutes          Int?
+  /// Legacy imports may have no ClockEvent links because the source stored a composite row.
+  origin                WorkSessionOrigin @default(NATIVE_RECONSTRUCTED)
   reconstructionVersion Int               @default(1)
   status                WorkSessionStatus
   reconstructedAt       DateTime
@@ -3068,6 +3096,26 @@ model WorkSession {
   @@index([employmentId, businessDate])
   @@index([branchId, businessDate])
   @@index([shiftId])
+}
+
+/// Technical migration ledger. It is not part of normal Workforce runtime behavior.
+model WorkforceMigrationRecord {
+  id               String                           @id @default(cuid())
+  migrationVersion String
+  legacyModel      String
+  legacyId         String
+  targetModel      String?
+  targetId         String?
+  classification   WorkforceMigrationClassification
+  confidence       DataConfidence?
+  status           WorkforceMigrationStatus         @default(PENDING)
+  notes            String?
+  createdAt        DateTime                         @default(now())
+  updatedAt        DateTime                         @updatedAt
+
+  @@unique([migrationVersion, legacyModel, legacyId])
+  @@index([status, classification])
+  @@index([targetModel, targetId])
 }
 
 model WorkSessionClockEvent {
