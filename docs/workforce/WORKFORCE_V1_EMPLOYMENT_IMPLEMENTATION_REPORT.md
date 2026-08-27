@@ -68,3 +68,32 @@ The isolated route correctly redirects an anonymous browser session to login. De
 ## Legacy safety
 
 Legacy models, actions, routes and user-visible behavior remain unchanged. No migration was created or applied. Production was not accessed.
+
+## Authenticated QA gate — 2026-08-26
+
+Result: **BLOCKED before authenticated UI mutation**. The project has one legitimate session path: submit the normal login form, which verifies the stored password and calls `createPersistentSession` to create an HttpOnly cookie. DEV contains an active login-capable ADMIN, but the local environment does not provide `MAESTRO_INITIAL_ADMIN_PASSWORD` and no already-authenticated localhost ADMIN session is available.
+
+No authentication bypass, hardcoded admin, password reset, direct UserSession insertion, copied production cookie or weakened `requireAdmin` check was introduced. The production browser session was not used against production.
+
+### Completed evidence
+
+- Anonymous request is denied and redirected to `/login`.
+- Pure authorization test accepts ADMIN and rejects non-admin/null.
+- Service tests cover HOME overlap, adjacent historical rates, native/legacy currency and lifecycle/rehire representation.
+- DEV seed evidence still contains the expected create/history scenarios: 6 employees, 6 employments, 6 HOME, 2 ALLOWED and 7 rates; one rate change preserves the closed prior row; inactive and terminated histories remain.
+- No QA rows were created during this gate, so cleanup was unnecessary.
+- No Workforce runtime/console error was observed before the expected login redirect. A development-only CSP/React-refresh console warning appeared on the login page; it is outside Employment and not an application runtime exception.
+
+### Not completed
+
+- Authenticated desktop list/create/detail/assignment/rate/history click-through.
+- Authenticated mobile viewport click-through.
+- UI attempt to add overlapping HOME and then use the correct HOME-change action.
+- UI termination flow.
+- Non-admin browser denial (no safe authenticated non-admin localhost fixture/session).
+
+The foundation cannot be approved until a user signs in normally as ADMIN on the local DEV server (or the project provides an authorized local test credential/fixture) and these interactions are completed. Rehire remains service-level only because its UI is intentionally deferred.
+
+### Preexisting environment blocker
+
+The global build compiles application code and completes TypeScript, then page-data collection for `/forgot-password` fails because `RESEND_API_KEY` is absent. This is a **PREEXISTING ENVIRONMENT BLOCKER** unrelated to Workforce. No dummy secret or Resend/config change was made.
