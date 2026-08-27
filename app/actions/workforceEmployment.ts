@@ -44,8 +44,15 @@ export async function createWorkforceEmployeeAction(formData: FormData) {
 
 export async function changeWorkforceHomeAction(formData: FormData) {
   await authorize();
-  await changeHomeBranch({ employmentId: String(formData.get("employmentId")), branchId: String(formData.get("branchId")), effectiveFrom: dateValue(formData, "effectiveFrom") });
-  revalidatePath(`/administration/workforce-v1/employees/${String(formData.get("employeeId"))}`);
+  const employeeId = String(formData.get("employeeId"));
+  let error: string | null = null;
+  try {
+    await changeHomeBranch({ employmentId: String(formData.get("employmentId")), branchId: String(formData.get("branchId")), effectiveFrom: dateValue(formData, "effectiveFrom") });
+  } catch (cause) {
+    error = cause instanceof Error ? cause.message : "No fue posible cambiar la sucursal HOME.";
+  }
+  if (error) redirect(`/administration/workforce-v1/employees/${employeeId}?error=${encodeURIComponent(error)}`);
+  revalidatePath(`/administration/workforce-v1/employees/${employeeId}`);
 }
 
 export async function addWorkforceAllowedBranchAction(formData: FormData) {

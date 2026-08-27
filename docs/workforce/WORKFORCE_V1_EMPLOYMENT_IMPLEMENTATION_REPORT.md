@@ -71,28 +71,35 @@ Legacy models, actions, routes and user-visible behavior remain unchanged. No mi
 
 ## Authenticated QA gate — 2026-08-26
 
-Result: **BLOCKED before authenticated UI mutation**. The project has one legitimate session path: submit the normal login form, which verifies the stored password and calls `createPersistentSession` to create an HttpOnly cookie. DEV contains an active login-capable ADMIN, but the local environment does not provide `MAESTRO_INITIAL_ADMIN_PASSWORD` and no already-authenticated localhost ADMIN session is available.
+Result: **PASS**. `scripts/workforce/seed-auth-qa.ts` creates only the exact synthetic `WFQA-ADMIN` and `WFQA-OPERATOR` identities after verifying the DEV endpoint. It requires a 16+ character `WFQA_ADMIN_PASSWORD`, hashes it with bcrypt and never prints or stores it in the repository. Both accounts authenticate through the normal login action, password verification and `createPersistentSession` HttpOnly cookie.
 
 No authentication bypass, hardcoded admin, password reset, direct UserSession insertion, copied production cookie or weakened `requireAdmin` check was introduced. The production browser session was not used against production.
 
-### Completed evidence
+### Authenticated desktop and functional evidence
 
-- Anonymous request is denied and redirected to `/login`.
-- Pure authorization test accepts ADMIN and rejects non-admin/null.
-- Service tests cover HOME overlap, adjacent historical rates, native/legacy currency and lifecycle/rehire representation.
-- DEV seed evidence still contains the expected create/history scenarios: 6 employees, 6 employments, 6 HOME, 2 ALLOWED and 7 rates; one rate change preserves the closed prior row; inactive and terminated histories remain.
-- No QA rows were created during this gate, so cleanup was unnecessary.
-- No Workforce runtime/console error was observed before the expected login redirect. A development-only CSP/React-refresh console warning appeared on the login page; it is outside Employment and not an application runtime exception.
+- ADMIN login, logout and second login passed through the real `/login` form.
+- Employee list rendered 10 existing V1 employees with no page-level overflow.
+- UI created `WFQA-MANUAL-EMPLOYMENT` without User, with ACTIVE Employment, HOME and MXN 125 HOURLY PayRate; detail matched persisted state.
+- UI changed the rate to MXN 150 effective 2026-09-01. The prior MXN 125 row remained and closed at the same boundary.
+- UI added one ALLOWED branch.
+- An overlapping HOME attempt was rejected and transactionally rolled back. QA found that the raw service exception previously produced HTTP 500; the action now redirects back with a visible error alert.
+- A valid HOME change effective 2026-09-02 preserved the old HOME row and displayed both history rows.
+- UI terminated the Employment effective 2026-09-03 with a reason. Employee, two rates and three branch assignments remained visible.
+- Rehire remains service-level PASS and UI-deferred as explicitly allowed.
 
-### Not completed
+### Mobile and authorization evidence
 
-- Authenticated desktop list/create/detail/assignment/rate/history click-through.
-- Authenticated mobile viewport click-through.
-- UI attempt to add overlapping HOME and then use the correct HOME-change action.
-- UI termination flow.
-- Non-admin browser denial (no safe authenticated non-admin localhost fixture/session).
+- At 390 × 844, list and detail reported document/body width 390 with no global horizontal overflow.
+- Detail retained four effective-date inputs, four selectors, action buttons and the complete history section. The employee table intentionally scrolls inside its own bounded container on narrow screens.
+- Anonymous access redirected to `/login`.
+- WFQA-OPERATOR authenticated normally and `/administration/workforce-v1` redirected to `/cooking`.
+- WFQA-ADMIN authenticated normally and accessed the V1 route.
 
-The foundation cannot be approved until a user signs in normally as ADMIN on the local DEV server (or the project provides an authorized local test credential/fixture) and these interactions are completed. Rehire remains service-level only because its UI is intentionally deferred.
+The first login attempt hit a transient DEV Prisma `P2028` timeout in `authThrottle`; a single clean retry succeeded and subsequent logins succeeded. Workforce pages produced no application runtime errors. The existing development CSP/React-refresh warning remains DEV-only and did not break QA.
+
+### Cleanup
+
+The manual Employee was removed by exact synthetic displayName/employeeNumber scope together with 1 Employment, 2 PayRates and 3 BranchAssignments. The two exact QA users, their sessions/permissions and the temporary secret were removed. The deterministic six-employee Employment seed remains unchanged.
 
 ### Preexisting environment blocker
 
