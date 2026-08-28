@@ -79,3 +79,16 @@ Server-side validation rejects negative/absurd minutes, invalid timezones, inval
 ## DEV validation
 
 The formal additive migration `20260829000000_add_workforce_settings` was applied only to verified DEV `cash-safe-envelopes-dev`. Automated coverage proves defaults, effective-date resolution, invalid-value rejection, non-admin rejection, critical-change confirmation and historical preservation. Authenticated desktop/mobile QA verified labeled controls, audit history and no horizontal document overflow.
+
+Authenticated UI persistence QA created a safe future operational version for
+2090-01-02, reloaded it from DEV, and verified actor, timestamp and reason in
+the immutable history. A restoring version effective 2090-01-03 returns the
+late-arrival tolerance to the approved five-minute default. This keeps the
+audit trail honest while preventing the temporary QA value from remaining the
+future active policy. ADMIN access passed; OPERATOR redirected to `/cooking`
+and anonymous access redirected to `/login`.
+
+Desktop 1280×800 and mobile 390×844 both matched their viewport width with no
+document overflow. The development-only CSP/React Refresh `unsafe-eval` log is
+preexisting environment noise; there were no Workforce Settings runtime
+exceptions.

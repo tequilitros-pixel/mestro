@@ -12,6 +12,13 @@ export const LEGAL_FIELDS = [
   "legalWeeklyDoubleLimitMinutes",
 ] as const;
 
+export function assertCanManageWorkforceSettings(
+  actor: { role: string } | null | undefined,
+) {
+  if (actor?.role !== "ADMIN") throw new Error("No autorizado.");
+  return actor;
+}
+
 export function assertWorkforcePolicy(input: EditableWorkforcePolicy) {
   try {
     new Intl.DateTimeFormat("en", { timeZone: input.companyTimezone }).format();

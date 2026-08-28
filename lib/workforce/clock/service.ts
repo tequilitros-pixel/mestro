@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { reconcileAttendanceForEmployment } from "@/lib/workforce/attendance/reconcile";
 import { signalTimesheetsForEmployment } from "@/lib/workforce/timesheet/service";
 import { resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
+import {
+  assertUnscheduledWorkPolicy,
+  shiftLinkProximityMilliseconds,
+} from "./policy";
 import { buildEffectiveClockStream, type ClockType } from "./effectiveStream";
 import {
   clockState,
@@ -89,7 +93,9 @@ async function authorizedBranch(
   });
   if (assignment) return true;
   const policy = await resolveWorkforcePolicy(at, tx);
-  const proximity = policy.shiftLinkProximityMinutes * 60_000;
+  const proximity = shiftLinkProximityMilliseconds(
+    policy.shiftLinkProximityMinutes,
+  );
   const shift = await tx.shift.findFirst({
     where: {
       employmentId,
@@ -144,7 +150,9 @@ async function matchingShift(
   startedAt: Date,
 ) {
   const policy = await resolveWorkforcePolicy(startedAt, tx);
-  const proximity = policy.shiftLinkProximityMinutes * 60_000;
+  const proximity = shiftLinkProximityMilliseconds(
+    policy.shiftLinkProximityMinutes,
+  );
   const candidates = await tx.shift.findMany({
     where: {
       employmentId,
@@ -349,12 +357,15 @@ export async function recordClockEvent(
     if (!(await authorizedBranch(tx, input.employmentId, input.branchId, now)))
       throw new Error("Sucursal no autorizada.");
     const policy = await resolveWorkforcePolicy(now, tx);
-    if (
-      input.type === "CLOCK_IN" &&
-      !policy.allowUnscheduledWork &&
-      !(await matchingShift(tx, input.employmentId, input.branchId, now))
-    )
-      throw new Error("El trabajo no programado está deshabilitado por política.");
+    const hasMatchingShift =
+      input.type !== "CLOCK_IN" ||
+      policy.allowUnscheduledWork ||
+      Boolean(await matchingShift(tx, input.employmentId, input.branchId, now));
+    assertUnscheduledWorkPolicy({
+      eventType: input.type,
+      allowUnscheduledWork: policy.allowUnscheduledWork,
+      hasMatchingShift,
+    });
     const stream = await effectiveFor(tx, input.employmentId);
     const open = stream.slice(
       stream.map((e) => e.type).lastIndexOf("CLOCK_OUT") + 1,

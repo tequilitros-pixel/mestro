@@ -66,6 +66,12 @@ Manager routes/actions require ADMIN. Employee access resolves only the Employee
 
 Formal additive migration: `20260829010000_add_workforce_overtime_v1`, applied only to verified DEV. It creates Workforce-native jornada, calculation and line structures with reconciliation constraints; it does not alter legacy overtime/payroll tables.
 
-Pure suite: 146 passing tests. Coverage includes exact limits, one minute overtime, DAY/NIGHT/MIXED, multiple days, exactly 540 minutes, 541 minutes, partial boundary split, 50-hour example, positive/negative Timesheet adjustment, ordering, jornada change/gap/overlap and minute reconciliation.
+Pure suite: 150 passing tests. Coverage includes exact limits, one minute overtime, DAY/NIGHT/MIXED, multiple days, exactly 540 minutes, 541 minutes, partial boundary split, 50-hour example, positive/negative Timesheet adjustment, ordering, jornada change/gap/overlap, policy consumers and minute reconciliation.
 
 DEV service validation covers OPEN preview, APPROVED final, stale preservation, effective policy resolution, ADMIN/non-admin, idempotent and concurrent finalization, one logical result and zero legacy writes. Desktop 1280×800 and mobile 390×844 QA verified totals, filters, cards, daily explanation and no document overflow. Existing PostgreSQL adapter SSL/deprecation warnings remain unrelated.
+
+The follow-up Settings gate also verified through the authenticated UI that a
+later persisted policy version does not mutate the policy identifier, jornada
+limit, weekly double band, or ordinary/double/triple minutes stored in an
+existing FINAL calculation. Final reads use the stored policy and daily line
+snapshots rather than reclassifying against current Settings.

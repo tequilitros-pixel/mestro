@@ -1,7 +1,12 @@
 import "server-only";
 import { Prisma, type WorkforcePolicyVersion } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { LEGAL_FIELDS, assertWorkforcePolicy, type EditableWorkforcePolicy } from "./rules";
+import {
+  LEGAL_FIELDS,
+  assertCanManageWorkforceSettings,
+  assertWorkforcePolicy,
+  type EditableWorkforcePolicy,
+} from "./rules";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -33,7 +38,7 @@ export async function createWorkforcePolicyVersion(
     confirmLegalChange: boolean;
   },
 ) {
-  if (actor.role !== "ADMIN") throw new Error("No autorizado.");
+  assertCanManageWorkforceSettings(actor);
   assertWorkforcePolicy(input);
   if (Number.isNaN(input.effectiveFrom.getTime())) throw new Error("Fecha efectiva inválida.");
   if (input.reason.trim().length < 5) throw new Error("La razón del cambio es obligatoria.");
