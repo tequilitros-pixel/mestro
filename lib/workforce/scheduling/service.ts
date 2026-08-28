@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { reconcileAttendanceForEmployment } from "@/lib/workforce/attendance/reconcile";
+import { resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
 import {
   dateOnly,
   effectiveAvailability,
@@ -48,16 +49,6 @@ function ensureReason(reason: string | null | undefined) {
   if (!value)
     throw new Error("La razón del cambio es obligatoria después de publicar.");
   return value;
-}
-
-async function thresholdForBranch(branchId: string) {
-  const [specific, global] = await Promise.all([
-    prisma.payrollSettings.findUnique({ where: { branchId } }),
-    prisma.payrollSettings.findUnique({ where: { id: "default" } }),
-  ]);
-  return Number(
-    specific?.weeklyHourThreshold ?? global?.weeklyHourThreshold ?? 48,
-  );
 }
 
 async function validateAssignedShift(
@@ -130,7 +121,7 @@ export async function getScheduleBoard(
   assertSchedulingBranchAccess(actor.role, actor.accessibleBranchIds, branchId);
   const start = dateOnly(weekStartInput),
     end = weekEnd(start);
-  const [branch, period, employments, requirements, threshold] =
+  const [branch, period, employments, requirements, workforcePolicy] =
     await Promise.all([
       prisma.branch.findUnique({ where: { id: branchId } }),
       prisma.schedulePeriod.findUnique({
@@ -186,10 +177,11 @@ export async function getScheduleBoard(
         where: { branchId, businessDate: { gte: start, lte: end } },
         orderBy: [{ businessDate: "asc" }, { startTime: "asc" }],
       }),
-      thresholdForBranch(branchId),
+      resolveWorkforcePolicy(start),
     ]);
   if (!branch) throw new Error("Sucursal no encontrada.");
-  const timezone = branch.timezone ?? "America/Mexico_City";
+  const timezone = branch.timezone ?? workforcePolicy.companyTimezone;
+  const threshold = workforcePolicy.scheduledHoursWarningMinutes / 60;
   const shifts = period?.shifts ?? [];
   const hours = scheduledHours(shifts);
   const availability = new Map<
@@ -274,8 +266,9 @@ export async function createOrUpdateShift(
       actor.accessibleBranchIds,
       period.branchId,
     );
-    const timezone = period.branch.timezone ?? "America/Mexico_City";
     const businessDate = dateOnly(input.businessDate);
+    const workforcePolicy = await resolveWorkforcePolicy(businessDate, tx);
+    const timezone = period.branch.timezone ?? workforcePolicy.companyTimezone;
     const { startAt, endAt } = shiftInstants({
       businessDate,
       startTime: input.startTime,
@@ -490,9 +483,13 @@ export async function publishSchedulePeriod(
     );
     if (period.status === "PUBLISHED" && period.publications[0])
       return { id: period.publications[0].id, idempotent: true };
+    const policy = await resolveWorkforcePolicy(period.periodStart, tx);
     const blockers: string[] = [];
-    for (const shift of period.shifts)
-      if (shift.employmentId)
+    for (const shift of period.shifts) {
+      if (!shift.employmentId) {
+        if (!policy.allowUnassignedShiftPublication)
+          blockers.push(`${shift.id}: UNASSIGNED_NOT_ALLOWED_BY_POLICY`);
+      } else {
         try {
           await validateAssignedShift(tx, {
             employmentId: shift.employmentId,
@@ -509,6 +506,25 @@ export async function publishSchedulePeriod(
             `${shift.id}: ${error instanceof Error ? error.message : "inválido"}`,
           );
         }
+        if (!policy.allowAvailabilityWarningPublication) {
+          const employment = await tx.employment.findUniqueOrThrow({
+            where: { id: shift.employmentId },
+            include: {
+              availabilityRules: true,
+              availabilityExceptions: { where: { date: shift.businessDate } },
+            },
+          });
+          const warning = availabilityWarning(
+            effectiveAvailability({
+              date: shift.businessDate,
+              rules: employment.availabilityRules,
+              exception: employment.availabilityExceptions[0],
+            }),
+          );
+          if (warning) blockers.push(`${shift.id}: ${warning}_NOT_ALLOWED_BY_POLICY`);
+        }
+      }
+    }
     if (blockers.length)
       throw new Error(`Publicación bloqueada: ${blockers.join("; ")}`);
     const version = (period.publications[0]?.version ?? 0) + 1;

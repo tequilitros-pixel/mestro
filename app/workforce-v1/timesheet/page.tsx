@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/Card";
 import { getCurrentUser } from "@/lib/auth";
 import { getOwnTimesheet } from "@/lib/workforce/timesheet/service";
 import { dateKey, formatMinutes, mondayOf } from "@/lib/workforce/timesheet/rules";
+import { previewOvertime } from "@/lib/workforce/overtime/service";
 
 const days = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 
@@ -38,6 +39,14 @@ export default async function EmployeeTimesheetPage({
   const displayedTotal = sheet.status === "APPROVED" || sheet.status === "LOCKED"
     ? sheet.approvedEffectiveMinutes ?? sheet.effectiveMinutes
     : sheet.effectiveMinutes;
+  let overtime: Awaited<ReturnType<typeof previewOvertime>> | null = null;
+  if (sheet.status === "APPROVED" || sheet.status === "LOCKED") {
+    try {
+      overtime = await previewOvertime(sheet.id);
+    } catch {
+      overtime = null;
+    }
+  }
 
   return (
     <section className="mx-auto max-w-2xl space-y-4">
@@ -59,6 +68,7 @@ export default async function EmployeeTimesheetPage({
         <p className="text-4xl font-black">{formatMinutes(displayedTotal)}</p>
         {sheet.requiresAdjustment ? <p className="font-bold text-error">Cambio histórico pendiente de ajuste administrativo.</p> : null}
       </Card>
+      {overtime ? <Card className="space-y-2"><div className="flex items-center justify-between"><h3 className="font-bold">Clasificación de overtime</h3><span className="rounded-full border px-2 py-1 text-xs font-bold">{overtime.mode}</span></div><div className="grid grid-cols-3 gap-2"><p><span className="text-xs">Ordinario</span><br /><strong>{formatMinutes(overtime.result.ordinaryMinutes)}</strong></p><p><span className="text-xs">Doble</span><br /><strong>{formatMinutes(overtime.result.doubleMinutes)}</strong></p><p><span className="text-xs">Triple</span><br /><strong>{formatMinutes(overtime.result.tripleMinutes)}</strong></p></div><p className="text-xs text-on-surface-variant">Clasificación de tiempo; no representa importe de pago.</p></Card> : null}
       <div className="space-y-2">
         {sheet.lines.map((line, index) => (
           <Card key={line.id}>

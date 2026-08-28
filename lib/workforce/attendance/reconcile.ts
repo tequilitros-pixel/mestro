@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_ATTENDANCE_POLICY, type AttendancePolicy } from "./policy";
 import { evaluateAttendance } from "./evaluate";
+import { resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
 
 type DbClient = Prisma.TransactionClient;
 const hash = (value: string) =>
@@ -111,12 +112,19 @@ export async function reconcileAttendanceForEmployment(
   employmentId: string,
   now = new Date(),
 ) {
+  const settings = await resolveWorkforcePolicy(now, tx);
   return reconcileWithClient(tx, {
     employmentId,
     start: new Date(now.getTime() - 31 * 86_400_000),
     end: new Date(now.getTime() + 2 * 86_400_000),
     now,
-    policy: DEFAULT_ATTENDANCE_POLICY,
+    policy: {
+      lateGraceMinutes: settings.lateGraceMinutes,
+      earlyDepartureGraceMinutes: settings.earlyDepartureGraceMinutes,
+      longBreakThresholdMinutes: settings.longBreakThresholdMinutes,
+      noShowThresholdMinutes: settings.noShowThresholdMinutes,
+      missingClockOutThresholdMinutes: settings.missingClockOutThresholdMinutes,
+    },
   });
 }
 
@@ -131,12 +139,22 @@ export async function reconcileAttendanceScope(input: {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       return await prisma.$transaction(
-        (tx) =>
-          reconcileWithClient(tx, {
+        async (tx) => {
+          const settings = input.policy
+            ? null
+            : await resolveWorkforcePolicy(input.start, tx);
+          return reconcileWithClient(tx, {
             ...input,
             now: input.now ?? new Date(),
-            policy: input.policy ?? DEFAULT_ATTENDANCE_POLICY,
-          }),
+            policy: input.policy ?? (settings ? {
+              lateGraceMinutes: settings.lateGraceMinutes,
+              earlyDepartureGraceMinutes: settings.earlyDepartureGraceMinutes,
+              longBreakThresholdMinutes: settings.longBreakThresholdMinutes,
+              noShowThresholdMinutes: settings.noShowThresholdMinutes,
+              missingClockOutThresholdMinutes: settings.missingClockOutThresholdMinutes,
+            } : DEFAULT_ATTENDANCE_POLICY),
+          });
+        },
         {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
           maxWait: 5_000,

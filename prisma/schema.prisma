@@ -113,22 +113,24 @@ model User {
   eventAddedLogs      EventAddedProductLog[] @relation("EventAddedLogBy")
 
   workforceEmployee                     Employee?
-  workforceSchedulePeriodsCreated       SchedulePeriod[]             @relation("WorkforceSchedulePeriodCreatedBy")
-  workforceShiftsCreated                Shift[]                      @relation("WorkforceShiftCreatedBy")
-  workforceShiftRevisionsChanged        ShiftRevision[]              @relation("WorkforceShiftRevisionChangedBy")
-  workforceSchedulePublications         SchedulePublication[]        @relation("WorkforceSchedulePublicationPublishedBy")
-  workforceStaffingRequirementsCreated  StaffingRequirement[]        @relation("WorkforceStaffingRequirementCreatedBy")
-  workforceClockCorrectionsRequested    ClockCorrection[]            @relation("WorkforceClockCorrectionRequestedBy")
-  workforceClockCorrectionsApproved     ClockCorrection[]            @relation("WorkforceClockCorrectionApprovedBy")
-  workforceClockCorrectionsRejected     ClockCorrection[]            @relation("WorkforceClockCorrectionRejectedBy")
-  workforceAttendanceExceptionsResolved AttendanceException[]        @relation("WorkforceAttendanceExceptionResolvedBy")
-  workforceTimesheetsReviewed           Timesheet[]                  @relation("WorkforceTimesheetReviewedBy")
-  workforceTimesheetsApproved           Timesheet[]                  @relation("WorkforceTimesheetApprovedBy")
-  workforceTimesheetsLocked             Timesheet[]                  @relation("WorkforceTimesheetLockedBy")
-  workforceTimesheetAdjustmentsCreated  TimesheetAdjustment[]        @relation("WorkforceTimesheetAdjustmentCreatedBy")
-  workforceTimesheetAdjustmentsApproved TimesheetAdjustment[]        @relation("WorkforceTimesheetAdjustmentApprovedBy")
-  workforcePayrollAdjustmentsCreated    WorkforcePayrollAdjustment[] @relation("WorkforcePayrollAdjustmentCreatedBy")
-  workforcePayrollAdjustmentsApproved   WorkforcePayrollAdjustment[] @relation("WorkforcePayrollAdjustmentApprovedBy")
+  workforceSchedulePeriodsCreated       SchedulePeriod[]               @relation("WorkforceSchedulePeriodCreatedBy")
+  workforceShiftsCreated                Shift[]                        @relation("WorkforceShiftCreatedBy")
+  workforceShiftRevisionsChanged        ShiftRevision[]                @relation("WorkforceShiftRevisionChangedBy")
+  workforceSchedulePublications         SchedulePublication[]          @relation("WorkforceSchedulePublicationPublishedBy")
+  workforceStaffingRequirementsCreated  StaffingRequirement[]          @relation("WorkforceStaffingRequirementCreatedBy")
+  workforceClockCorrectionsRequested    ClockCorrection[]              @relation("WorkforceClockCorrectionRequestedBy")
+  workforceClockCorrectionsApproved     ClockCorrection[]              @relation("WorkforceClockCorrectionApprovedBy")
+  workforceClockCorrectionsRejected     ClockCorrection[]              @relation("WorkforceClockCorrectionRejectedBy")
+  workforceAttendanceExceptionsResolved AttendanceException[]          @relation("WorkforceAttendanceExceptionResolvedBy")
+  workforceTimesheetsReviewed           Timesheet[]                    @relation("WorkforceTimesheetReviewedBy")
+  workforceTimesheetsApproved           Timesheet[]                    @relation("WorkforceTimesheetApprovedBy")
+  workforceTimesheetsLocked             Timesheet[]                    @relation("WorkforceTimesheetLockedBy")
+  workforceOvertimeCalculations         WorkforceOvertimeCalculation[] @relation("WorkforceOvertimeCalculatedBy")
+  workforcePolicyVersionsChanged        WorkforcePolicyVersion[]       @relation("WorkforcePolicyChangedBy")
+  workforceTimesheetAdjustmentsCreated  TimesheetAdjustment[]          @relation("WorkforceTimesheetAdjustmentCreatedBy")
+  workforceTimesheetAdjustmentsApproved TimesheetAdjustment[]          @relation("WorkforceTimesheetAdjustmentApprovedBy")
+  workforcePayrollAdjustmentsCreated    WorkforcePayrollAdjustment[]   @relation("WorkforcePayrollAdjustmentCreatedBy")
+  workforcePayrollAdjustmentsApproved   WorkforcePayrollAdjustment[]   @relation("WorkforcePayrollAdjustmentApprovedBy")
 }
 
 model UserSession {
@@ -2839,7 +2841,7 @@ model Employment {
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
-  employee               Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  employee               Employee                  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   payRates               PayRate[]
   branchAssignments      BranchAssignment[]
   availabilityRules      AvailabilityRule[]
@@ -2851,9 +2853,65 @@ model Employment {
   workSessions           WorkSession[]
   attendanceExceptions   AttendanceException[]
   timesheets             Timesheet[]
+  jornadaPolicies        EmploymentJornadaPolicy[]
   payrollLines           PayrollLine[]
 
   @@index([employeeId, status])
+}
+
+enum WorkforceJornadaType {
+  DAY
+  NIGHT
+  MIXED
+}
+
+model EmploymentJornadaPolicy {
+  id            String               @id @default(cuid())
+  employmentId  String
+  jornadaType   WorkforceJornadaType
+  effectiveFrom DateTime             @db.Date
+  effectiveTo   DateTime?            @db.Date
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@index([employmentId, effectiveFrom, effectiveTo])
+}
+
+model WorkforcePolicyVersion {
+  id                                  String   @id @default(cuid())
+  version                             Int      @unique
+  effectiveFrom                       DateTime @unique @db.Date
+  companyTimezone                     String   @default("America/Mexico_City")
+  payWeekStartsOn                     Int      @default(1)
+  payDay                              Int      @default(1)
+  scheduledHoursWarningMinutes        Int      @default(2880)
+  preventiveOvertimeWarningMinutes    Int      @default(2880)
+  allowUnassignedShiftPublication     Boolean  @default(true)
+  allowAvailabilityWarningPublication Boolean  @default(true)
+  allowUnscheduledWork                Boolean  @default(true)
+  shiftLinkProximityMinutes           Int      @default(720)
+  lateGraceMinutes                    Int      @default(5)
+  earlyDepartureGraceMinutes          Int      @default(5)
+  longBreakThresholdMinutes           Int      @default(60)
+  noShowThresholdMinutes              Int      @default(30)
+  missingClockOutThresholdMinutes     Int      @default(60)
+  legalDayOrdinaryLimitMinutes        Int      @default(480)
+  legalNightOrdinaryLimitMinutes      Int      @default(420)
+  legalMixedOrdinaryLimitMinutes      Int      @default(450)
+  legalWeeklyDoubleLimitMinutes       Int      @default(540)
+  legalPolicyCode                     String   @default("MX_OVERTIME_V1_2026")
+  changedById                         String?
+  changedAt                           DateTime @default(now())
+  changeReason                        String
+  criticalLegalChange                 Boolean  @default(false)
+  createdAt                           DateTime @default(now())
+
+  changedBy            User?                          @relation("WorkforcePolicyChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
+  overtimeCalculations WorkforceOvertimeCalculation[]
+
+  @@index([effectiveFrom, version])
 }
 
 model PayRate {
@@ -3240,13 +3298,14 @@ model Timesheet {
   createdAt                 DateTime        @default(now())
   updatedAt                 DateTime        @updatedAt
 
-  employment    Employment      @relation(fields: [employmentId], references: [id], onDelete: Restrict)
-  payrollPeriod PayrollPeriod   @relation(fields: [payrollPeriodId], references: [id], onDelete: Restrict)
-  reviewedBy    User?           @relation("WorkforceTimesheetReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
-  approvedBy    User?           @relation("WorkforceTimesheetApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  lockedBy      User?           @relation("WorkforceTimesheetLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
-  lines         TimesheetLine[]
-  payrollLine   PayrollLine?
+  employment          Employment                    @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  payrollPeriod       PayrollPeriod                 @relation(fields: [payrollPeriodId], references: [id], onDelete: Restrict)
+  reviewedBy          User?                         @relation("WorkforceTimesheetReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  approvedBy          User?                         @relation("WorkforceTimesheetApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  lockedBy            User?                         @relation("WorkforceTimesheetLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
+  lines               TimesheetLine[]
+  payrollLine         PayrollLine?
+  overtimeCalculation WorkforceOvertimeCalculation?
 
   @@unique([employmentId, periodStart, periodEnd])
   @@unique([employmentId, payrollPeriodId])
@@ -3276,6 +3335,7 @@ model TimesheetLine {
   timesheet        Timesheet                  @relation(fields: [timesheetId], references: [id], onDelete: Restrict)
   workSessionLinks TimesheetLineWorkSession[]
   adjustments      TimesheetAdjustment[]
+  overtimeLines    WorkforceOvertimeLine[]
 
   @@unique([timesheetId, businessDate])
 }
@@ -3310,6 +3370,60 @@ model TimesheetAdjustment {
   approvedBy    User?         @relation("WorkforceTimesheetAdjustmentApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@index([timesheetLineId, status])
+}
+
+enum WorkforceOvertimeCalculationStatus {
+  FINAL
+  STALE
+}
+
+model WorkforceOvertimeCalculation {
+  id                       String                             @id @default(cuid())
+  timesheetId              String                             @unique
+  timesheetVersion         Int
+  timesheetApprovedAt      DateTime
+  approvedMinutes          Int
+  ordinaryMinutes          Int
+  doubleMinutes            Int
+  tripleMinutes            Int
+  weeklyDoubleLimitMinutes Int
+  policyVersion            String
+  workforcePolicyVersionId String
+  sourceFingerprint        String
+  status                   WorkforceOvertimeCalculationStatus @default(FINAL)
+  calculatedById           String
+  calculatedAt             DateTime                           @default(now())
+  createdAt                DateTime                           @default(now())
+  updatedAt                DateTime                           @updatedAt
+
+  timesheet              Timesheet               @relation(fields: [timesheetId], references: [id], onDelete: Restrict)
+  calculatedBy           User                    @relation("WorkforceOvertimeCalculatedBy", fields: [calculatedById], references: [id], onDelete: Restrict)
+  workforcePolicyVersion WorkforcePolicyVersion  @relation(fields: [workforcePolicyVersionId], references: [id], onDelete: Restrict)
+  lines                  WorkforceOvertimeLine[]
+
+  @@index([status, calculatedAt])
+}
+
+model WorkforceOvertimeLine {
+  id                           String               @id @default(cuid())
+  calculationId                String
+  timesheetLineId              String
+  businessDate                 DateTime             @db.Date
+  jornadaType                  WorkforceJornadaType
+  ordinaryLimitMinutes         Int
+  approvedMinutes              Int
+  ordinaryMinutes              Int
+  doubleMinutes                Int
+  tripleMinutes                Int
+  weeklyOvertimeBeforeMinutes  Int
+  remainingDoubleBeforeMinutes Int
+  explanation                  String
+
+  calculation   WorkforceOvertimeCalculation @relation(fields: [calculationId], references: [id], onDelete: Restrict)
+  timesheetLine TimesheetLine                @relation(fields: [timesheetLineId], references: [id], onDelete: Restrict)
+
+  @@unique([calculationId, businessDate])
+  @@index([timesheetLineId])
 }
 
 model PayrollLine {

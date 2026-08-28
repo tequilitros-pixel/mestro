@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { reconcileAttendanceForEmployment } from "@/lib/workforce/attendance/reconcile";
 import { signalTimesheetsForEmployment } from "@/lib/workforce/timesheet/service";
+import { resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
 import { buildEffectiveClockStream, type ClockType } from "./effectiveStream";
 import {
   clockState,
@@ -87,13 +88,15 @@ async function authorizedBranch(
     },
   });
   if (assignment) return true;
+  const policy = await resolveWorkforcePolicy(at, tx);
+  const proximity = policy.shiftLinkProximityMinutes * 60_000;
   const shift = await tx.shift.findFirst({
     where: {
       employmentId,
       branchId,
       status: "PUBLISHED",
-      startAt: { lte: new Date(at.getTime() + 12 * 3600000) },
-      endAt: { gte: new Date(at.getTime() - 12 * 3600000) },
+      startAt: { lte: new Date(at.getTime() + proximity) },
+      endAt: { gte: new Date(at.getTime() - proximity) },
     },
   });
   return Boolean(shift);
@@ -140,14 +143,16 @@ async function matchingShift(
   branchId: string,
   startedAt: Date,
 ) {
+  const policy = await resolveWorkforcePolicy(startedAt, tx);
+  const proximity = policy.shiftLinkProximityMinutes * 60_000;
   const candidates = await tx.shift.findMany({
     where: {
       employmentId,
       branchId,
       status: "PUBLISHED",
       startAt: {
-        gte: new Date(startedAt.getTime() - 12 * 3600000),
-        lte: new Date(startedAt.getTime() + 12 * 3600000),
+        gte: new Date(startedAt.getTime() - proximity),
+        lte: new Date(startedAt.getTime() + proximity),
       },
     },
     include: { branch: true },
@@ -198,6 +203,9 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string) {
     const branch =
       shift?.branch ??
       (await tx.branch.findUniqueOrThrow({ where: { id: session.branchId } }));
+    const eventDate = session.startedAt ?? session.events[0].occurredAt;
+    const workforcePolicy = await resolveWorkforcePolicy(eventDate, tx);
+    const timezone = branch.timezone ?? workforcePolicy.companyTimezone;
     const id = `native_${session.key}`;
     const existing = await tx.workSession.findUnique({ where: { id } });
     await tx.workSession.upsert({
@@ -208,8 +216,8 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string) {
         businessDate:
           shift?.businessDate ??
           civilDate(
-            session.startedAt ?? session.events[0].occurredAt,
-            branch.timezone ?? "America/Mexico_City",
+            eventDate,
+            timezone,
           ),
         startedAt: session.startedAt,
         endedAt: session.endedAt,
@@ -227,8 +235,8 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string) {
         businessDate:
           shift?.businessDate ??
           civilDate(
-            session.startedAt ?? session.events[0].occurredAt,
-            branch.timezone ?? "America/Mexico_City",
+            eventDate,
+            timezone,
           ),
         startedAt: session.startedAt,
         endedAt: session.endedAt,
@@ -340,6 +348,13 @@ export async function recordClockEvent(
       throw new Error("Employment no activo.");
     if (!(await authorizedBranch(tx, input.employmentId, input.branchId, now)))
       throw new Error("Sucursal no autorizada.");
+    const policy = await resolveWorkforcePolicy(now, tx);
+    if (
+      input.type === "CLOCK_IN" &&
+      !policy.allowUnscheduledWork &&
+      !(await matchingShift(tx, input.employmentId, input.branchId, now))
+    )
+      throw new Error("El trabajo no programado está deshabilitado por política.");
     const stream = await effectiveFor(tx, input.employmentId);
     const open = stream.slice(
       stream.map((e) => e.type).lastIndexOf("CLOCK_OUT") + 1,
@@ -362,7 +377,7 @@ export async function recordClockEvent(
         type: input.type,
         deviceOccurredAt: now,
         serverReceivedAt: now,
-        timezone: branch.timezone ?? "America/Mexico_City",
+        timezone: branch.timezone ?? policy.companyTimezone,
         source: input.source,
         idempotencyKey: input.idempotencyKey,
       },

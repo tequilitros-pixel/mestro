@@ -106,11 +106,16 @@ async function recomputeTx(tx: Tx, timesheetId: string) {
     timesheet.periodEnd,
   );
   if (timesheet.status === "APPROVED" || timesheet.status === "LOCKED") {
-    if (timesheet.approvedSourceFingerprint !== facts.fingerprint)
+    if (timesheet.approvedSourceFingerprint !== facts.fingerprint) {
       await tx.timesheet.update({
         where: { id: timesheet.id },
         data: { requiresAdjustment: true, sourceFingerprint: facts.fingerprint },
       });
+      await tx.workforceOvertimeCalculation.updateMany({
+        where: { timesheetId: timesheet.id, status: "FINAL" },
+        data: { status: "STALE" },
+      });
+    }
     return tx.timesheet.findUniqueOrThrow({ where: { id: timesheet.id } });
   }
   const aggregates = aggregateWeek({
