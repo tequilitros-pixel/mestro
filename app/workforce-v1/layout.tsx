@@ -56,6 +56,12 @@ export default async function WorkforceEmployeeLayout({
           >
             Kiosk
           </Link>
+          <Link
+            className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
+            href="/workforce-v1/timesheet"
+          >
+            Mi timesheet
+          </Link>
         </nav>
       </header>
       {children}

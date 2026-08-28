@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { signalTimesheetsForEmployment } from "@/lib/workforce/timesheet/service";
 
 export async function decideAttendanceException(
   actor: { id: string; role: string },
@@ -17,13 +18,17 @@ export async function decideAttendanceException(
   });
   if (!item || item.status !== "OPEN")
     throw new Error("La excepción ya es final o no existe.");
-  return prisma.attendanceException.update({
-    where: { id: item.id },
-    data: {
-      status: input.decision,
-      resolvedById: actor.id,
-      resolvedAt: new Date(),
-      resolution: input.resolution.trim(),
-    },
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.attendanceException.update({
+      where: { id: item.id },
+      data: {
+        status: input.decision,
+        resolvedById: actor.id,
+        resolvedAt: new Date(),
+        resolution: input.resolution.trim(),
+      },
+    });
+    await signalTimesheetsForEmployment(tx, item.employmentId);
+    return updated;
   });
 }

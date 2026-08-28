@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { reconcileAttendanceForEmployment } from "@/lib/workforce/attendance/reconcile";
+import { signalTimesheetsForEmployment } from "@/lib/workforce/timesheet/service";
 import { buildEffectiveClockStream, type ClockType } from "./effectiveStream";
 import {
   clockState,
@@ -253,6 +254,7 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string) {
       throw new Error("No se reconstruye una sesión legacy.");
   }
   await reconcileAttendanceForEmployment(tx, employmentId);
+  await signalTimesheetsForEmployment(tx, employmentId);
   return { stream, sessions };
 }
 
