@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { reconcileAttendanceForEmployment } from "@/lib/workforce/attendance/reconcile";
 import {
   dateOnly,
   effectiveAvailability,
@@ -340,6 +341,8 @@ export async function createOrUpdateShift(
             changedById: actor.id,
           },
         });
+      if (published && input.employmentId)
+        await reconcileAttendanceForEmployment(tx, input.employmentId);
       return shift;
     }
     const current = await tx.shift.findUnique({
@@ -388,6 +391,13 @@ export async function createOrUpdateShift(
           changedById: actor.id,
         },
       });
+      const employmentIds = new Set(
+        [current.employmentId, input.employmentId].filter(
+          (id): id is string => Boolean(id),
+        ),
+      );
+      for (const employmentId of employmentIds)
+        await reconcileAttendanceForEmployment(tx, employmentId);
     }
     return tx.shift.findUniqueOrThrow({ where: { id: current.id } });
   }).catch((error) => {
@@ -454,6 +464,8 @@ export async function deleteOrCancelShift(
         changedById: actor.id,
       },
     });
+    if (shift.employmentId)
+      await reconcileAttendanceForEmployment(tx, shift.employmentId);
     return { deleted: false, cancelled: true };
   });
 }
@@ -539,6 +551,12 @@ export async function publishSchedulePeriod(
       where: { id: period.id },
       data: { status: "PUBLISHED", version: { increment: 1 } },
     });
+    for (const employmentId of new Set(
+      period.shifts
+        .map((shift) => shift.employmentId)
+        .filter((id): id is string => Boolean(id)),
+    ))
+      await reconcileAttendanceForEmployment(tx, employmentId);
     return { id: publication.id, idempotent: false };
   }).catch((error) => {
     if (

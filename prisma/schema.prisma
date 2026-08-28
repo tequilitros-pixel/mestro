@@ -1025,6 +1025,7 @@ model Branch {
   workforceClockEvents          ClockEvent[]
   workforceClockCorrections     ClockCorrection[]
   workforceSessions             WorkSession[]
+  workforceAttendanceExceptions AttendanceException[]
 
   eventAddedSource  EventAddedProduct[] @relation("EventAddedSourceBranch")
   eventAddedReturns EventAddedProduct[] @relation("EventAddedReturnBranch")
@@ -2766,18 +2767,24 @@ enum WorkforceMigrationStatus {
 
 enum AttendanceExceptionType {
   LATE
+  LATE_ARRIVAL
   EARLY_DEPARTURE
   MISSING_PUNCH
+  MISSING_CLOCK_IN
+  MISSING_CLOCK_OUT
   NO_SHOW
   UNSCHEDULED_WORK
   OVERTIME
   BREAK_ANOMALY
+  INCOMPLETE_BREAK
+  LONG_BREAK
 }
 
 enum AttendanceExceptionSeverity {
   INFO
   WARNING
   BLOCKING
+  CRITICAL
 }
 
 enum AttendanceExceptionStatus {
@@ -3161,28 +3168,43 @@ model WorkSessionClockEvent {
 }
 
 model AttendanceException {
-  id            String                      @id @default(cuid())
-  employmentId  String
-  shiftId       String?
-  workSessionId String?
-  type          AttendanceExceptionType
-  severity      AttendanceExceptionSeverity
-  status        AttendanceExceptionStatus   @default(OPEN)
-  blocking      Boolean                     @default(false)
-  detectedAt    DateTime                    @default(now())
-  resolvedById  String?
-  resolvedAt    DateTime?
-  resolution    String?
-  createdAt     DateTime                    @default(now())
-  updatedAt     DateTime                    @updatedAt
+  id                String                      @id @default(cuid())
+  employmentId      String
+  branchId          String
+  businessDate      DateTime                    @db.Date
+  shiftId           String?
+  workSessionId     String?
+  type              AttendanceExceptionType
+  severity          AttendanceExceptionSeverity
+  status            AttendanceExceptionStatus   @default(OPEN)
+  blocking          Boolean                     @default(false)
+  derivationKey     String
+  fingerprint       String                      @unique
+  derivationVersion Int                         @default(1)
+  scheduledStart    DateTime?
+  scheduledEnd      DateTime?
+  actualStart       DateTime?
+  actualEnd         DateTime?
+  differenceMinutes Int?
+  policySnapshot    Json
+  detectedAt        DateTime                    @default(now())
+  evaluatedAt       DateTime                    @default(now())
+  resolvedById      String?
+  resolvedAt        DateTime?
+  resolution        String?
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
 
   employment  Employment   @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch      Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
   shift       Shift?       @relation(fields: [shiftId], references: [id], onDelete: Restrict)
   workSession WorkSession? @relation(fields: [workSessionId], references: [id], onDelete: Restrict)
   resolvedBy  User?        @relation("WorkforceAttendanceExceptionResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([status, type])
+  @@index([branchId, businessDate, status])
   @@index([employmentId, detectedAt])
+  @@index([derivationKey])
   @@index([shiftId])
   @@index([workSessionId])
 }
