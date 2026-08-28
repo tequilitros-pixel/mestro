@@ -2,6 +2,8 @@ import { Card } from "@/components/ui/Card";
 import { requireAdmin } from "@/lib/auth";
 import { listWorkforcePolicies, resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
 import { createWorkforceSettingsVersionAction } from "@/app/actions/workforceSettings";
+import { createPayrollCategoryAction, setPayrollCategoryActiveAction } from "@/app/actions/workforcePayroll";
+import { prisma } from "@/lib/prisma";
 
 const field = "mt-1 min-h-11 w-full rounded-lg border border-outline-variant bg-surface px-3 py-2";
 const minuteField = (name: string, value: number) => <input required name={name} type="number" min="0" max="1440" defaultValue={value} className={field} />;
@@ -9,10 +11,11 @@ const toggle = (name: string, checked: boolean, label: string, help: string) => 
 
 export default async function WorkforceSettingsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
   await requireAdmin();
-  const [current, history, query] = await Promise.all([
+  const [current, history, query, payrollCategories] = await Promise.all([
     resolveWorkforcePolicy(new Date()),
     listWorkforcePolicies(),
     searchParams,
+    prisma.workforcePayrollCategory.findMany({ orderBy: [{ direction: "asc" }, { name: "asc" }] }),
   ]);
   return <section className="space-y-5">
     {query.saved ? <p role="status" className="rounded-xl bg-primary/10 p-3 font-semibold">{query.saved}</p> : null}
@@ -27,6 +30,7 @@ export default async function WorkforceSettingsPage({ searchParams }: { searchPa
       <Card className="space-y-3 border-secondary"><div><h3 className="text-lg font-black">Overtime · referencia legal protegida</h3><p className="text-sm text-on-surface-variant">Cambiar estos límites crea una nueva referencia legal, requiere confirmación y nunca reescribe cálculos finalizados.</p></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><label>DAY ordinario (min){minuteField("legalDayOrdinaryLimitMinutes", current.legalDayOrdinaryLimitMinutes)}</label><label>NIGHT ordinario (min){minuteField("legalNightOrdinaryLimitMinutes", current.legalNightOrdinaryLimitMinutes)}</label><label>MIXED ordinario (min){minuteField("legalMixedOrdinaryLimitMinutes", current.legalMixedOrdinaryLimitMinutes)}</label><label>Banda doble semanal (min){minuteField("legalWeeklyDoubleLimitMinutes", current.legalWeeklyDoubleLimitMinutes)}</label></div><label className="flex gap-3 rounded-lg bg-secondary/10 p-3"><input name="confirmLegalChange" type="checkbox" className="size-5" /><span>Confirmo que entiendo que un cambio legal afecta cálculos futuros desde la fecha efectiva.</span></label></Card>
       <Card className="space-y-3"><h3 className="text-lg font-black">Nueva versión</h3><div className="grid gap-3 sm:grid-cols-2"><label>Fecha efectiva<input required name="effectiveFrom" type="date" className={field} /></label><label>Razón del cambio<input required minLength={5} name="reason" className={field} placeholder="Describe el motivo operativo o legal" /></label></div><button className="min-h-12 w-full rounded-xl bg-primary px-4 font-black text-on-primary">Programar nueva versión</button></Card>
     </form>
+    <Card className="space-y-3"><div><h3 className="text-lg font-black">Payroll operativo</h3><p className="text-sm text-on-surface-variant">El día de pago se versiona arriba. Los conceptos son categorías controladas; no ejecutan fórmulas.</p></div><form action={createPayrollCategoryAction} className="grid gap-3 sm:grid-cols-[1fr_180px_auto]"><label>Nombre<input required minLength={2} name="name" className={field} placeholder="Bono de asistencia" /></label><label>Dirección<select name="direction" className={field}><option value="EARNING">Earning</option><option value="DEDUCTION">Deduction</option></select></label><button className="min-h-11 self-end rounded-lg bg-primary px-4 font-bold text-on-primary">Agregar categoría</button></form><div className="grid gap-2 sm:grid-cols-2">{payrollCategories.map((item)=><form action={setPayrollCategoryActiveAction} key={item.id} className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"><span>{item.direction === "EARNING" ? "+" : "−"} {item.name}{item.active ? "" : " · inactiva"}</span><input type="hidden" name="categoryId" value={item.id}/><input type="hidden" name="active" value={item.active ? "false" : "true"}/><button className="rounded-lg border px-2 py-1">{item.active ? "Desactivar" : "Activar"}</button></form>)}</div></Card>
     <Card className="space-y-3"><h3 className="text-lg font-black">Historial inmutable</h3>{history.map((item) => <div key={item.id} className="min-w-0 rounded-lg border p-3 text-sm"><div className="flex min-w-0 flex-wrap justify-between gap-2"><strong className="min-w-0 break-all">V{item.version} · {item.legalPolicyCode}</strong><span>{item.effectiveFrom.toISOString().slice(0, 10)}</span></div><p>{item.changeReason}</p><p className="break-words text-xs text-on-surface-variant">{item.changedBy ? `${item.changedBy.name} (@${item.changedBy.username})` : "Inicialización del sistema"} · {item.changedAt.toISOString()}{item.criticalLegalChange ? " · CAMBIO LEGAL" : ""}</p></div>)}</Card>
   </section>;
 }

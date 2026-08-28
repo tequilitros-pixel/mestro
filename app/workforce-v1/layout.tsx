@@ -62,6 +62,12 @@ export default async function WorkforceEmployeeLayout({
           >
             Mi timesheet
           </Link>
+          <Link
+            className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
+            href="/workforce-v1/payroll"
+          >
+            Mi pago
+          </Link>
         </nav>
       </header>
       {children}
