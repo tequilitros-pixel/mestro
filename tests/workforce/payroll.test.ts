@@ -35,6 +35,34 @@ test("component rounding is deterministic half-up to cents", () => {
   const result = calculatePayrollMoney([day("2030-06-03", "60.01", 1, 1, 1)]);
   assert.deepEqual([result.ordinaryPay.toFixed(2), result.doublePay.toFixed(2), result.triplePay.toFixed(2)], ["1.00", "2.00", "3.00"]);
 });
+test("fractional-cent components round half-up and reconcile without floating point", () => {
+  const result = calculatePayrollMoney([day("2030-06-03", "10.01", 1, 1, 1)]);
+  assert.deepEqual({ ordinary: result.ordinaryPay.toFixed(2), double: result.doublePay.toFixed(2), triple: result.triplePay.toFixed(2), gross: result.grossAmount.toFixed(2) },
+    { ordinary: "0.17", double: "0.33", triple: "0.50", gross: "1.00" });
+  assert.equal(result.operationalPayable.toFixed(2), "1.00");
+});
+test("approved zero-work source produces an explainable zero result", () => {
+  const result = calculatePayrollMoney([day("2030-06-03", "60", 0)]);
+  assert.equal(result.operationalPayable.toFixed(2), "0.00");
+  assert.equal(result.ordinaryMinutes, 0);
+});
+test("NIGHT finalized overtime minutes are priced without reclassification", () => {
+  const finalizedNight = day("2030-06-03", "60", 420, 120, 30);
+  const result = calculatePayrollMoney([finalizedNight]);
+  assert.deepEqual([result.ordinaryPay.toFixed(2), result.doublePay.toFixed(2), result.triplePay.toFixed(2)], ["420.00", "240.00", "90.00"]);
+});
+test("MIXED finalized overtime minutes are priced without reclassification", () => {
+  const finalizedMixed = day("2030-06-03", "60", 450, 90, 30);
+  const result = calculatePayrollMoney([finalizedMixed]);
+  assert.deepEqual([result.ordinaryPay.toFixed(2), result.doublePay.toFixed(2), result.triplePay.toFixed(2)], ["450.00", "180.00", "90.00"]);
+});
+test("branch identity cannot split canonical Employment-period payroll money", () => {
+  const branchA = { ...day("2030-06-03", "60", 480), branchId: "branch-a" };
+  const branchB = { ...day("2030-06-04", "60", 480), branchId: "branch-b" };
+  const result = calculatePayrollMoney([branchA, branchB]);
+  assert.equal(result.ordinaryMinutes, 960);
+  assert.equal(result.ordinaryPay.toFixed(2), "960.00");
+});
 test("money invariant is gross plus no hidden difference", () => {
   const result = calculatePayrollMoney([day("2030-06-03", "10", 60)], [{ direction: "EARNING", amount: "5" }, { direction: "DEDUCTION", amount: "3" }]);
   assert.equal(result.operationalPayable.toFixed(2), result.grossAmount.sub(result.deductionsAmount).toFixed(2));

@@ -25,7 +25,13 @@ async function sourceFacts(tx: Tx, timesheetId: string) {
       employment: { include: { employee: true, payRates: true } },
       payrollPeriod: true,
       overtimeCalculation: { include: { lines: { orderBy: { businessDate: "asc" } } } },
-      payrollLine: { include: { adjustments: true, rateSegments: true } },
+      payrollLine: { include: {
+        adjustments: true,
+        rateSegments: true,
+        retroAdjustments: { include: { createdBy: true }, orderBy: { createdAt: "desc" } },
+        approvedBy: true,
+        paidBy: true,
+      } },
     },
   });
   if (sheet.payrollLine && (["APPROVED", "PAID"] as string[]).includes(sheet.payrollLine.status)) {
@@ -207,8 +213,11 @@ export async function createRetroactivePayrollAdjustment(actor: PayrollActor, in
 }) {
   assertPayrollAdmin(actor);
   if (input.reason.trim().length < 5) throw new Error("La razón es obligatoria.");
-  const amount = new Prisma.Decimal(input.amount);
+  let amount: Prisma.Decimal;
+  try { amount = new Prisma.Decimal(input.amount); }
+  catch { throw new Error("Monto retroactivo inválido."); }
   if (amount.isZero()) throw new Error("El monto retroactivo no puede ser cero.");
+  if (!amount.isFinite() || amount.decimalPlaces() > 2) throw new Error("El monto debe expresarse en centavos.");
   return transaction(async (tx) => {
     const duplicate = await tx.workforcePayrollAdjustment.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (duplicate) return { adjustment: duplicate, idempotent: true };
@@ -247,8 +256,11 @@ export async function getPayrollBoard(inputDate: Date) {
     prisma.$transaction((tx) => sourceFacts(tx, sheet.id))));
   const rows = sheets.map((sheet, index) => ({ sheet, facts: facts[index] }));
   const policy = await prisma.workforcePolicyVersion.findFirstOrThrow({ where: { effectiveFrom: { lte: start } }, orderBy: { effectiveFrom: "desc" } });
-  const categories = await prisma.workforcePayrollCategory.findMany({ where: { active: true }, orderBy: [{ direction: "asc" }, { name: "asc" }] });
-  return { start, end, payDay: new Date(end.getTime() + ((policy.payDay + 7 - end.getUTCDay()) % 7) * 86_400_000), rows, categories };
+  const [categories, settlementPeriods] = await Promise.all([
+    prisma.workforcePayrollCategory.findMany({ where: { active: true }, orderBy: [{ direction: "asc" }, { name: "asc" }] }),
+    prisma.payrollPeriod.findMany({ where: { weekStart: { gte: start } }, orderBy: { weekStart: "asc" }, take: 12 }),
+  ]);
+  return { start, end, payDay: new Date(end.getTime() + ((policy.payDay + 7 - end.getUTCDay()) % 7) * 86_400_000), rows, categories, settlementPeriods };
 }
 
 export async function getEmployeePayrollStatements(userId: string) {
@@ -256,5 +268,16 @@ export async function getEmployeePayrollStatements(userId: string) {
     where: { employment: { employee: { userId } }, status: { in: ["APPROVED", "PAID"] } },
     include: { payrollPeriod: true, rateSegments: true, adjustments: true },
     orderBy: { payrollPeriod: { weekStart: "desc" } },
+  });
+}
+
+export async function getEmployeePayrollStatement(userId: string, payrollLineId: string) {
+  return prisma.payrollLine.findFirst({
+    where: {
+      id: payrollLineId,
+      employment: { employee: { userId } },
+      status: { in: ["APPROVED", "PAID"] },
+    },
+    include: { payrollPeriod: true, rateSegments: true, adjustments: true },
   });
 }

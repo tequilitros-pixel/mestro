@@ -5,7 +5,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import {
   addPayrollAdjustment, approvePayrollLine, approveReadyPayrollPeriod, calculatePayrollLine,
-  createPayrollCategory, markPayrollPaid, setPayrollCategoryActive,
+  createPayrollCategory, createRetroactivePayrollAdjustment, markPayrollPaid, setPayrollCategoryActive,
 } from "@/lib/workforce/payroll/service";
 
 const path = "/administration/workforce-v1/payroll";
@@ -42,6 +42,17 @@ export async function markPayrollPaidAction(form: FormData) {
   return run(() => markPayrollPaid(user, {
     payrollLineId: value(form, "payrollLineId"), expectedVersion: Number(value(form, "version")),
     idempotencyKey: value(form, "idempotencyKey"), reference: value(form, "reference"),
+  }), `${path}?week=${week}`);
+}
+export async function createRetroactivePayrollAdjustmentAction(form: FormData) {
+  const user = await actor(); const week = value(form, "week");
+  if (value(form, "confirmed") !== "yes")
+    return redirect(destination(`${path}?week=${week}`, "error", "Confirma que el ajuste no reescribirá el payroll histórico."));
+  return run(() => createRetroactivePayrollAdjustment(user, {
+    originalPayrollLineId: value(form, "payrollLineId"),
+    appliedPayrollPeriodId: value(form, "appliedPayrollPeriodId"),
+    amount: value(form, "amount"), reason: value(form, "reason"),
+    idempotencyKey: value(form, "idempotencyKey"),
   }), `${path}?week=${week}`);
 }
 export async function approveReadyPayrollPeriodAction(form: FormData) {

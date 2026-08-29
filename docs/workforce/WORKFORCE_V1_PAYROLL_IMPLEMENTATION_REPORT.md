@@ -67,26 +67,52 @@ queries are scoped by authenticated User → Employee and expose only own
 APPROVED/PAID statements. General Scheduling/Workforce boards expose no rate
 or payroll totals.
 
-## Migration, tests and QA
+## Migration and verification evidence
 
 Migration `20260830000000_add_workforce_payroll_v1` is additive, fail-closed
 against non-empty Workforce skeleton tables, and was applied only to verified
 DEV. It does not alter legacy PayrollEntry, PayrollAdjustment, OvertimeRecord
 or TimeClockEntry. Seven default categories were seeded.
 
-The 161-test suite covers Decimal components, rounding, money invariant,
-earnings, deductions, negative payable, unsupported types, currency mismatch,
-readiness, authorization, ownership, ordinary/double/triple classification and
-midweek rates. DEV service QA additionally verifies uniqueness, preserved
-manual adjustments, stale-version rejection, concurrent approval idempotency,
-Timesheet lock, frozen original after retro adjustment, PAID idempotency, own
-statement and zero legacy writes.
+Evidence is separated deliberately:
 
-Authenticated desktop 1280×800 QA verified period header, worksheet,
-calculation explanation, adjustments, approval/lock and payment. Mobile
-390×844 uses stacked employee cards and statement sections; manager, employee
-and Settings pages had no document overflow. The known development CSP/React
-Refresh log and PostgreSQL driver warnings remain unrelated.
+- **Payroll unit tests (16):** explicit 40h/9h/1h example, Mon–Wed $60 and
+  Thu–Sun $65 daily rate mapping, HALF_UP fractional-cent reconciliation,
+  zero-work approved input, NIGHT snapshot pricing, MIXED snapshot pricing,
+  multi-branch aggregation at Employment grain, money invariant, negative-pay
+  rejection, unsupported rate, mixed currency, readiness, missing/overlapping
+  rate helpers, ADMIN authorization and ownership predicate.
+- **Verified DEV service/integration script:** missing-rate and stale-source
+  blockers before calculation; two-process concurrent calculation producing one
+  canonical line; repeat calculation; reason validation; earning/deduction and
+  adjustment idempotency; non-admin denial for every management mutation;
+  stale/concurrent approval; Timesheet lock; frozen APPROVED and PAID snapshots;
+  retroactive reason/amount/admin/audit/idempotency checks; guessed-ID ownership
+  isolation; payment idempotency; and zero legacy PayrollEntry writes. The
+  synthetic records are allowlisted and cleaned after QA.
+- **Authenticated route QA:** normal DEV login was used. Anonymous manager and
+  employee routes redirected to login. A synthetic OPERATOR was redirected away
+  from the ADMIN payroll route. An ADMIN exercised the manager board, source
+  links, earning, deduction, approval, payment and retroactive form. The linked
+  employee saw only its PAID statement; READY manager data was absent.
+- **Desktop QA (1280×800):** period/status counts, worksheet, source/audit,
+  calculation, read-only APPROVED/PAID states and retroactive workflow passed;
+  document width equaled viewport width.
+- **Mobile QA (390×844):** employee cards, totals and stacked actions passed;
+  document width equaled viewport width (390px), with no horizontal overflow.
+
+The development PostgreSQL SSL/deprecation warnings are pre-existing and do
+not change payroll results.
+
+## Traceability and retroactive UX
+
+Manager detail exposes the source Timesheet status, approved/effective minutes,
+version and direct board link, followed by the FINAL Overtime ordinary/double/
+triple minutes, policy version and direct board link. Approval/payment actor and
+timestamps are visible. APPROVED and PAID hide ordinary adjustment controls and
+instead expose a confirmed, idempotent retroactive form plus immutable audit
+history. The period header reports Employees, READY, BLOCKED, APPROVED, PAID and
+total Operational Payable from the actual board scope.
 
 ## Deferred
 
