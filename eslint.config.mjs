@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Artefactos locales de auditoría, reconciliación y respaldos:
+    // no son código de la aplicación ni deben participar en lint.
+    ".tmp-*/**",
+    "fase3/**",
+    "_to_delete/**",
+    "prisma/migrations-archive-prebaseline-20260820/**",
   ]),
 ]);
 

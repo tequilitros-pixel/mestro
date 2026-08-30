@@ -97,3 +97,13 @@ _to_delete/
 .tmp-eventos/
 PLAN_REMEDIACION.md
 .tmp-git/
+revisar-estado-migraciones.mjs
+.tmp-anadidos/
+.tmp-baseline/
+fase1-diagnostico.mjs
+fase2a-capturar-rls.mjs
+fase2b-comparar-tablas.mjs
+fase3-probar-baseline.sh
+fase3-verificar-y-aplicar.mjs
+capturar-manifiesto.mjs
+construir-manifiestos.mjs

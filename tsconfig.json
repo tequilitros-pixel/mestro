@@ -30,6 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": [
-    "_to_delete","node_modules"]
+  "exclude": ["_to_delete", "node_modules", ".tmp-prisma-reconcile"]
 }
