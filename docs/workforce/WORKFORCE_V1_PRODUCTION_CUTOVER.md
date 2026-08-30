@@ -23,7 +23,7 @@ The previous Vercel production deployment remains the application rollback targe
 
 - Official employee surface: `/workforce` and descendants.
 - Official administration surface: `/administration/workforce` and descendants.
-- Certified `*-v1` implementations remain internal behind rewrites; direct V1 URLs redirect permanently to official URLs.
+- The certified implementation now lives directly on the official routes; direct `*-v1` URLs redirect permanently to those routes.
 - Legacy `/timeclock` and `/administration/schedule` UI routes redirect to Workforce.
 - Legacy offline `/api/timeclock/sync` returns HTTP 410 and performs no writes.
 - `/administration/personnel` remains only for users, permissions and notifications.
@@ -43,5 +43,29 @@ The bootstrap policy is effective from 1970-01-01 with certified defaults: atten
 
 ## Deployment and post-deploy record
 
-This section is finalized after migration, deploy, smoke tests and runtime/database inspection.
+- Production database received all 11 pending additive Workforce migrations. `prisma migrate status` reports all 13 repository migrations applied and current.
+- GitHub branches `workforce-v1-foundation`, `main` and the configured production branch `offline-sync-preview` were advanced without force-push.
+- Initial cutover commit: `735f444115ec972964f6a2170052202ed1cd58f7`.
+- Production-history integration: `39d2f6809cf9ce01eb693d491069671ab735be62`.
+- Authenticated production QA found that the original rewrite-based alias returned 404 after authorization. No Workforce records had been written. The implementation directories and internal links were moved to their canonical routes in `8e3f5c5` and `949eaac7c07afa9a82b396207d2251aa3d59bb46`.
+- Corrected Vercel production deployment: `dpl_GYiUDjrMaLB2An6JE3yCNjnuQEz4`, READY and aliased to `maestro-destiladora.space`.
+- Anonymous official routes redirect to login; the retired UI routes return 308 to their canonical destinations; `POST /api/timeclock/sync` returns 410 with no write.
 
+## Authenticated production QA
+
+A synthetic identity prefixed `WFCUTOVERQA` was created with an active Employment and HOME assignment to an existing active branch. No PayRate was invented. As an ADMIN it successfully opened the employee list/detail, availability, schedule, clock corrections, attendance, timesheets, overtime, payroll and settings surfaces. Payroll correctly reported one blocked employee with zero ready because the synthetic Employment lacked the required honest inputs.
+
+The same account was temporarily changed to OPERATOR. It successfully opened its own calendar, availability, clock, timesheet and payment-status pages, while `/administration/workforce` denied access and redirected to an allowed operational page. Anonymous access remained denied. No clock, scheduling, approval, payroll or settings mutation was submitted.
+
+Desktop QA at 1440x900 and mobile QA at 390x844 found no document-level overflow, broken navigation, 404 after the canonical-route correction, browser console error or missing empty state. Mobile date/time controls, selectors and actions remained contained; wide employee data stayed inside its intended horizontal scroll region.
+
+The QA visit produced one empty OPEN timesheet and seven zero-minute lines through the normal read flow. Cleanup removed those records, their otherwise-unused payroll period, the HOME assignment, Employment, Employee, session, branch scope and User using exact IDs and prefix guards. Post-cleanup counts are zero for native Employee, Employment, ClockEvent, WorkSession, Timesheet and PayrollLine. No `WFCUTOVERQA` identity remains.
+
+## Post-deploy invariants
+
+- Workforce policy: one bootstrap version, effective 1970-01-01, timezone `America/Mexico_City`, Monday week/pay day, certified attendance and overtime defaults.
+- Payroll categories: 7.
+- Legacy facts unchanged after migration, QA and cleanup: 28 `ScheduledShift`, 17 `TimeClockEntry`, 1 `OvertimeRecord`, 2 `PayrollEntry`.
+- Runtime inspection for the corrected deployment showed 515 HTTP 200 responses and one expected 307 in the sampled window, with no 4xx/5xx group.
+- Vercel reported two non-fatal PostgreSQL driver warnings: future `sslmode=require` semantic changes and deprecated concurrent `client.query()` behavior. They caused no failed request during QA and remain follow-up dependency/configuration work, not a cutover blocker.
+- Production has `WORKFORCE_V1_ENABLED=true` and does not have `WORKFORCE_CERTIFICATION_CLOCK` or any `WORKFORCE_E2E_*` variable.
