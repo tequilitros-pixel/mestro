@@ -5,7 +5,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { finalizeOvertime, setEmploymentJornadaPolicy } from "@/lib/workforce/overtime/service";
 
-const path = "/administration/workforce-v1/overtime";
+const path = "/administration/workforce/overtime";
 const value = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 const back = (form: FormData) => {
   const candidate = value(form, "returnTo");

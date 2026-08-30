@@ -127,7 +127,7 @@ export default async function AttendancePage({
               <p><strong>WorkSession:</strong> {date(item.actualStart)} – {date(item.actualEnd)} · {item.workSession?.workedMinutes ?? 0} min trabajados · {item.workSession?.breakMinutes ?? 0} min descanso.</p>
               <p><strong>Clock facts:</strong> {item.workSession?.clockEventLinks.map((link) => `${link.clockEvent.type} ${date(link.clockEvent.deviceOccurredAt)}`).join(" · ") || "Sin ClockEvent observado vinculado."}</p>
               {item.status === "OPEN" ? <>
-                <Link href="/administration/workforce-v1/clock-corrections" className="inline-block font-bold text-primary underline">Ir a correcciones de reloj</Link>
+                <Link href="/administration/workforce/clock-corrections" className="inline-block font-bold text-primary underline">Ir a correcciones de reloj</Link>
                 <form action={workforceAttendanceDecisionAction} className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                   <input type="hidden" name="exceptionId" value={item.id} />
                   <input required minLength={5} name="resolution" placeholder="Nota de resolución" className="min-h-11 rounded-lg border p-2" />

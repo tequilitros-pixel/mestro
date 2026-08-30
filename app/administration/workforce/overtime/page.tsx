@@ -12,7 +12,7 @@ export default async function WorkforceOvertimePage({ searchParams }: { searchPa
   const query = await searchParams;
   const week = query.week && /^\d{4}-\d{2}-\d{2}$/.test(query.week) ? mondayOf(new Date(`${query.week}T00:00:00.000Z`)) : mondayOf(new Date());
   const board = await getOvertimeBoard(week, query.search || undefined);
-  const route = `/administration/workforce-v1/overtime?week=${dateKey(board.start)}${query.search ? `&search=${encodeURIComponent(query.search)}` : ""}`;
+  const route = `/administration/workforce/overtime?week=${dateKey(board.start)}${query.search ? `&search=${encodeURIComponent(query.search)}` : ""}`;
   const rows = query.status ? board.rows.filter((row) => row.ok ? row.data.mode === query.status : query.status === "BLOCKED") : board.rows;
   return <section className="space-y-5">
     {query.saved ? <p role="status" className="rounded-xl bg-primary/10 p-3 font-semibold">{query.saved}</p> : null}

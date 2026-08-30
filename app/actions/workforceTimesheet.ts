@@ -8,7 +8,7 @@ import {
   lockTimesheet,
 } from "@/lib/workforce/timesheet/service";
 
-const path = "/administration/workforce-v1/timesheets";
+const path = "/administration/workforce/timesheets";
 const value = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 const actor = async () => {
   const user = await requireAdmin();

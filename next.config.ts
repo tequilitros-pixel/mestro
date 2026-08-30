@@ -71,20 +71,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  async rewrites() {
-    return [
-      { source: "/workforce", destination: "/workforce-v1" },
-      { source: "/workforce/:path*", destination: "/workforce-v1/:path*" },
-      {
-        source: "/administration/workforce",
-        destination: "/administration/workforce-v1",
-      },
-      {
-        source: "/administration/workforce/:path*",
-        destination: "/administration/workforce-v1/:path*",
-      },
-    ];
-  },
   // El adaptador y el pool dependen de clases CommonJS de node-postgres.
   // Se cargan con require nativo de Node para evitar que Turbopack altere
   // sus constructores al incluirlos en el bundle de componentes servidor.

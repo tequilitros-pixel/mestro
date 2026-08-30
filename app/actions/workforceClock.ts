@@ -15,10 +15,10 @@ import type { ClockType } from "@/lib/workforce/clock/effectiveStream";
 const value = (form: FormData, key: string) =>
   String(form.get(key) ?? "").trim();
 const safe = (path: string) =>
-  path.startsWith("/workforce-v1") ||
-  path.startsWith("/administration/workforce-v1")
+  path.startsWith("/workforce") ||
+  path.startsWith("/administration/workforce")
     ? path
-    : "/workforce-v1/clock";
+    : "/workforce/clock";
 async function actor() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -41,7 +41,7 @@ export async function workforceClockAction(form: FormData) {
       source: "PERSONAL",
       idempotencyKey: value(form, "idempotencyKey"),
     });
-    revalidatePath("/workforce-v1/clock");
+    revalidatePath("/workforce/clock");
     done(
       back,
       "saved",
@@ -92,7 +92,7 @@ export async function workforceCorrectionDecisionAction(form: FormData) {
       decision: value(form, "decision") as "APPROVED" | "REJECTED",
       rejectionReason: value(form, "rejectionReason"),
     });
-    revalidatePath("/administration/workforce-v1/clock-corrections");
+    revalidatePath("/administration/workforce/clock-corrections");
     done(back, "saved", "Decisión guardada.");
   } catch (error) {
     unstable_rethrow(error);

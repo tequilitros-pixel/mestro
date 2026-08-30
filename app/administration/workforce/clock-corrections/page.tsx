@@ -13,7 +13,7 @@ export default async function CorrectionsPage({
     searchParams,
     listPendingCorrections(),
   ]);
-  const back = "/administration/workforce-v1/clock-corrections";
+  const back = "/administration/workforce/clock-corrections";
   return (
     <section className="space-y-4">
       {query.saved ? (

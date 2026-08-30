@@ -92,7 +92,7 @@ export default async function KioskPage({
           <input
             type="hidden"
             name="returnTo"
-            value={`/workforce-v1/kiosk?branchId=${selectedBranch}`}
+            value={`/workforce/kiosk?branchId=${selectedBranch}`}
           />
           <input type="hidden" name="idempotencyKey" value={randomUUID()} />
           <input type="hidden" name="branchId" value={selectedBranch} />

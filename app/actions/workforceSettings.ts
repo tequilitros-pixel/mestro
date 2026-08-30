@@ -5,7 +5,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { createWorkforcePolicyVersion } from "@/lib/workforce/settings/service";
 
-const path = "/administration/workforce-v1/settings";
+const path = "/administration/workforce/settings";
 const text = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 const integer = (form: FormData, key: string) => Number(text(form, key));
 const checked = (form: FormData, key: string) => form.get(key) === "on";

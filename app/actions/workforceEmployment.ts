@@ -38,8 +38,8 @@ export async function createWorkforceEmployeeAction(formData: FormData) {
       payRate: Number.isFinite(rateAmount) && rateAmount > 0 ? { rateType: String(formData.get("rateType") ?? "HOURLY") as "HOURLY" | "DAILY" | "WEEKLY" | "SALARY", amount: rateAmount, currency: String(formData.get("currency") ?? "").toUpperCase(), effectiveFrom: dateValue(formData, "effectiveFrom") } : undefined,
     },
   });
-  revalidatePath("/administration/workforce-v1");
-  redirect(`/administration/workforce-v1/employees/${employee.id}`);
+  revalidatePath("/administration/workforce");
+  redirect(`/administration/workforce/employees/${employee.id}`);
 }
 
 export async function changeWorkforceHomeAction(formData: FormData) {
@@ -51,24 +51,24 @@ export async function changeWorkforceHomeAction(formData: FormData) {
   } catch (cause) {
     error = cause instanceof Error ? cause.message : "No fue posible cambiar la sucursal HOME.";
   }
-  if (error) redirect(`/administration/workforce-v1/employees/${employeeId}?error=${encodeURIComponent(error)}`);
-  revalidatePath(`/administration/workforce-v1/employees/${employeeId}`);
+  if (error) redirect(`/administration/workforce/employees/${employeeId}?error=${encodeURIComponent(error)}`);
+  revalidatePath(`/administration/workforce/employees/${employeeId}`);
 }
 
 export async function addWorkforceAllowedBranchAction(formData: FormData) {
   await authorize();
   await addBranchAssignment({ employmentId: String(formData.get("employmentId")), branchId: String(formData.get("branchId")), type: "ALLOWED", effectiveFrom: dateValue(formData, "effectiveFrom") });
-  revalidatePath(`/administration/workforce-v1/employees/${String(formData.get("employeeId"))}`);
+  revalidatePath(`/administration/workforce/employees/${String(formData.get("employeeId"))}`);
 }
 
 export async function changeWorkforcePayRateAction(formData: FormData) {
   await authorize();
   await changePayRate({ employmentId: String(formData.get("employmentId")), rateType: String(formData.get("rateType")) as "HOURLY" | "DAILY" | "WEEKLY" | "SALARY", amount: Number(formData.get("amount")), currency: String(formData.get("currency")).toUpperCase(), effectiveFrom: dateValue(formData, "effectiveFrom") });
-  revalidatePath(`/administration/workforce-v1/employees/${String(formData.get("employeeId"))}`);
+  revalidatePath(`/administration/workforce/employees/${String(formData.get("employeeId"))}`);
 }
 
 export async function changeWorkforceEmploymentStatusAction(formData: FormData) {
   await authorize();
   await changeEmploymentStatus({ employmentId: String(formData.get("employmentId")), status: String(formData.get("status")) as "ACTIVE" | "INACTIVE" | "TERMINATED", effectiveAt: dateValue(formData, "effectiveAt"), terminationReason: String(formData.get("terminationReason") ?? "") || null });
-  revalidatePath(`/administration/workforce-v1/employees/${String(formData.get("employeeId"))}`);
+  revalidatePath(`/administration/workforce/employees/${String(formData.get("employeeId"))}`);
 }

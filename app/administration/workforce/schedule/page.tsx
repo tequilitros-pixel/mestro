@@ -36,7 +36,7 @@ function time(value: Date, timezone: string) {
   }).format(value);
 }
 function returnTo(branchId: string, week: string, day?: string) {
-  return `/administration/workforce-v1/schedule?branch=${branchId}&week=${week}${day ? `&day=${day}` : ""}`;
+  return `/administration/workforce/schedule?branch=${branchId}&week=${week}${day ? `&day=${day}` : ""}`;
 }
 
 export default async function WorkforceSchedulePage({

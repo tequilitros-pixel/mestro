@@ -42,7 +42,7 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
     status,
     query.branch || undefined,
   );
-  const back = `/administration/workforce-v1/timesheets?week=${dateKey(board.start)}${query.search ? `&search=${encodeURIComponent(query.search)}` : ""}${query.branch ? `&branch=${encodeURIComponent(query.branch)}` : ""}${status ? `&status=${status}` : ""}`;
+  const back = `/administration/workforce/timesheets?week=${dateKey(board.start)}${query.search ? `&search=${encodeURIComponent(query.search)}` : ""}${query.branch ? `&branch=${encodeURIComponent(query.branch)}` : ""}${status ? `&status=${status}` : ""}`;
   return (
     <section className="space-y-4">
       {query.saved ? <p role="status" className="rounded-xl bg-primary/10 p-3 font-semibold">{query.saved}</p> : null}

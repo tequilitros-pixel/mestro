@@ -6,7 +6,7 @@ import { decideAttendanceException } from "@/lib/workforce/attendance/mutations"
 
 const value = (form: FormData, key: string) =>
   String(form.get(key) ?? "").trim();
-const attendancePath = "/administration/workforce-v1/attendance";
+const attendancePath = "/administration/workforce/attendance";
 
 export async function workforceAttendanceDecisionAction(form: FormData) {
   const actor = await requireAdmin();

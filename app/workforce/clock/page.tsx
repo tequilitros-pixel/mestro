@@ -44,7 +44,7 @@ export default async function ClockPage({
     BREAK_END: "Terminar descanso",
     CLOCK_OUT: "Registrar salida",
   }[primary];
-  const back = "/workforce-v1/clock";
+  const back = "/workforce/clock";
   return (
     <section className="mx-auto max-w-xl space-y-4">
       {query.saved ? (

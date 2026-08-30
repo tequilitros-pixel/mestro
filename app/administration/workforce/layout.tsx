@@ -13,7 +13,7 @@ export default async function WorkforceV1Layout({
   if (!workforceV1Enabled()) notFound();
   const pathname = (await headers()).get("x-pathname") ?? "";
   if (
-    pathname.startsWith("/administration/workforce-v1/schedule") ||
+    pathname.startsWith("/administration/workforce/schedule") ||
     pathname.startsWith("/administration/workforce/schedule")
   )
     await requireModuleAccess("/administration/schedule");

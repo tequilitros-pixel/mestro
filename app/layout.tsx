@@ -14,7 +14,7 @@ const OPERATOR_ALLOWED_PATHS = [
   "/milling",
   "/fermentation",
   "/distillation",
-  "/workforce-v1",
+  "/workforce",
 ];
 
 function matchesPath(pathname: string, path: string) {

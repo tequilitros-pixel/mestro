@@ -83,7 +83,7 @@ export default async function EmployeeTimesheetPage({
           </Card>
         ))}
       </div>
-      <Link href="/workforce-v1/clock" className="block min-h-12 rounded-xl border border-primary p-3 text-center font-bold text-primary">
+      <Link href="/workforce/clock" className="block min-h-12 rounded-xl border border-primary p-3 text-center font-bold text-primary">
         Reportar un problema de reloj
       </Link>
     </section>
