@@ -10,10 +10,11 @@ export type PermissionGroup = {
 
 /** Pantallas personales disponibles para cualquier usuario con sesión. */
 export const ALWAYS_AVAILABLE_PATHS = [
-  "/timeclock",
-  "/timeclock/calendar",
-  "/timeclock/availability",
-  "/timeclock/requests",
+  "/workforce",
+  "/workforce/availability",
+  "/workforce/clock",
+  "/workforce/timesheet",
+  "/workforce/payroll",
 ] as const;
 
 /** Acceso histórico para operadores que aún no tienen permisos configurados. */
@@ -102,21 +103,47 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     group: "Administración",
     modules: [
       { key: "/administration/inventory/products", label: "Productos" },
-      { key: "/administration/inventory/eventos", label: "Inventario de eventos (resumen)" },
-      { key: "/administration/inventory/event-packages", label: "Paquetes de eventos" },
-      { key: "/administration/inventory/equipment-kits", label: "Modalidades de equipo" },
+      {
+        key: "/administration/inventory/eventos",
+        label: "Inventario de eventos (resumen)",
+      },
+      {
+        key: "/administration/inventory/event-packages",
+        label: "Paquetes de eventos",
+      },
+      {
+        key: "/administration/inventory/equipment-kits",
+        label: "Modalidades de equipo",
+      },
       { key: "/administration/inventory/events", label: "Eventos" },
-      { key: "/administration/inventory/sucursales", label: "Inventario de sucursales · Resumen" },
-      { key: "/administration/inventory/sucursales/stock", label: "Inventario de sucursales · Stock actual" },
-      { key: "/administration/inventory/branch-entries", label: "Inventario de sucursales · Entradas y ajustes" },
-      { key: "/administration/inventory/sucursales/traspasos", label: "Inventario de sucursales · Traspasos" },
-      { key: "/administration/inventory/branch-counts", label: "Conteo semanal" },
+      {
+        key: "/administration/inventory/sucursales",
+        label: "Inventario de sucursales · Resumen",
+      },
+      {
+        key: "/administration/inventory/sucursales/stock",
+        label: "Inventario de sucursales · Stock actual",
+      },
+      {
+        key: "/administration/inventory/branch-entries",
+        label: "Inventario de sucursales · Entradas y ajustes",
+      },
+      {
+        key: "/administration/inventory/sucursales/traspasos",
+        label: "Inventario de sucursales · Traspasos",
+      },
+      {
+        key: "/administration/inventory/branch-counts",
+        label: "Conteo semanal",
+      },
     ],
   },
 ];
 
 const CONFIGURABLE_PERMISSION_KEYS = new Set(
-  PERMISSION_GROUPS.flatMap((group) => group.modules.map((module) => module.key)),
+  PERMISSION_GROUPS.flatMap((group) =>
+    group.modules.map((module) => module.key),
+  ),
 );
 
 export function isConfigurablePermissionKey(key: string): boolean {

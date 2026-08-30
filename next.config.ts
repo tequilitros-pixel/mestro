@@ -2,6 +2,89 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  async redirects() {
+    return [
+      {
+        source: "/workforce-v1/:path*",
+        destination: "/workforce/:path*",
+        permanent: true,
+      },
+      {
+        source: "/administration/workforce-v1/:path*",
+        destination: "/administration/workforce/:path*",
+        permanent: true,
+      },
+      {
+        source: "/timeclock",
+        destination: "/workforce/clock",
+        permanent: true,
+      },
+      {
+        source: "/timeclock/calendar",
+        destination: "/workforce",
+        permanent: true,
+      },
+      {
+        source: "/timeclock/availability",
+        destination: "/workforce/availability",
+        permanent: true,
+      },
+      {
+        source: "/timeclock/hours",
+        destination: "/workforce/timesheet",
+        permanent: true,
+      },
+      {
+        source: "/timeclock/history",
+        destination: "/workforce/timesheet",
+        permanent: true,
+      },
+      {
+        source: "/timeclock/requests",
+        destination: "/workforce/clock",
+        permanent: true,
+      },
+      {
+        source: "/timeclock/payroll",
+        destination: "/workforce/payroll",
+        permanent: true,
+      },
+      {
+        source: "/timeclock/kiosk",
+        destination: "/workforce/kiosk",
+        permanent: true,
+      },
+      {
+        source: "/timeclock/geofences",
+        destination: "/administration/workforce/settings",
+        permanent: true,
+      },
+      {
+        source: "/administration/schedule",
+        destination: "/administration/workforce/schedule",
+        permanent: true,
+      },
+      {
+        source: "/administration/personnel/timeclock",
+        destination: "/administration/workforce/clock-corrections",
+        permanent: true,
+      },
+    ];
+  },
+  async rewrites() {
+    return [
+      { source: "/workforce", destination: "/workforce-v1" },
+      { source: "/workforce/:path*", destination: "/workforce-v1/:path*" },
+      {
+        source: "/administration/workforce",
+        destination: "/administration/workforce-v1",
+      },
+      {
+        source: "/administration/workforce/:path*",
+        destination: "/administration/workforce-v1/:path*",
+      },
+    ];
+  },
   // El adaptador y el pool dependen de clases CommonJS de node-postgres.
   // Se cargan con require nativo de Node para evitar que Turbopack altere
   // sus constructores al incluirlos en el bundle de componentes servidor.

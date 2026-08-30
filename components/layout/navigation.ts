@@ -137,27 +137,24 @@ export const MAIN_MODULES: MainModule[] = [
     module: "pos",
   },
   {
-    href: "/timeclock",
-    label: "Horario",
-    shortLabel: "Horario",
+    href: "/workforce",
+    label: "Workforce",
+    shortLabel: "Workforce",
     icon: ClockIcon,
     iconVariant: "blue",
     module: "timeclock",
   },
   {
     href: "/administration/personnel",
-    label: "Personal",
-    shortLabel: "Personal",
+    label: "Usuarios y permisos",
+    shortLabel: "Usuarios",
     icon: UsersIcon,
     iconVariant: "purple",
     module: "personnel",
   },
 ];
 
-export const SUBMENUS: Record<
-  Exclude<AppModule, "home">,
-  SubMenuItem[]
-> = {
+export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
   production: [
     {
       href: "/plant",
@@ -466,65 +463,96 @@ export const SUBMENUS: Record<
 
   timeclock: [
     {
-      href: "/timeclock",
-      label: "Checador",
+      href: "/workforce",
+      label: "Mi horario",
       icon: ClockIcon,
       iconVariant: "blue",
       operatorAllowed: true,
     },
     {
-      href: "/timeclock/calendar",
-      label: "Calendario",
+      href: "/workforce/availability",
+      label: "Mi disponibilidad",
       icon: CalendarIcon,
       iconVariant: "amber",
       operatorAllowed: true,
     },
     {
-      href: "/timeclock/availability",
-      label: "Mi disponibilidad",
+      href: "/workforce/clock",
+      label: "Checador",
       icon: CalendarIcon,
       iconVariant: "green",
       operatorAllowed: true,
     },
     {
-      href: "/timeclock/requests",
-      label: "Solicitudes",
+      href: "/workforce/timesheet",
+      label: "Mis horas",
       icon: CalendarIcon,
       iconVariant: "purple",
       operatorAllowed: true,
     },
     {
-      href: "/administration/schedule",
+      href: "/workforce/payroll",
+      label: "Mi nómina",
+      icon: CalendarIcon,
+      iconVariant: "green",
+      operatorAllowed: true,
+    },
+    {
+      href: "/administration/workforce",
+      label: "Empleados",
+      icon: UsersIcon,
+      iconVariant: "purple",
+    },
+    {
+      href: "/administration/workforce/schedule",
       label: "Programar horarios",
       icon: CalendarIcon,
       iconVariant: "purple",
     },
     {
-      href: "/timeclock/payroll",
-      label: "Nómina",
+      href: "/administration/workforce/attendance",
+      label: "Asistencia",
+      icon: ListChecksIcon,
+      iconVariant: "amber",
+    },
+    {
+      href: "/administration/workforce/clock-corrections",
+      label: "Correcciones",
+      icon: ClockIcon,
+      iconVariant: "blue",
+    },
+    {
+      href: "/administration/workforce/timesheets",
+      label: "Timesheets",
+      icon: ListChecksIcon,
+      iconVariant: "cyan",
+    },
+    {
+      href: "/administration/workforce/overtime",
+      label: "Horas extra",
+      icon: ClockIcon,
+      iconVariant: "orange",
+    },
+    {
+      href: "/administration/workforce/payroll",
+      label: "Nómina operativa",
       icon: DollarIcon,
       iconVariant: "green",
     },
     {
-      href: "/timeclock/geofences",
-      label: "Geozona",
+      href: "/administration/workforce/settings",
+      label: "Configuración",
       icon: MapPinIcon,
-      iconVariant: "cyan",
+      iconVariant: "slate",
     },
   ],
 
   personnel: [
     {
       href: "/administration/personnel",
-      label: "Personal",
+      label: "Usuarios y permisos",
       icon: UsersIcon,
       iconVariant: "purple",
-    },
-    {
-      href: "/administration/personnel/timeclock",
-      label: "Turnos abiertos",
-      icon: ClockIcon,
-      iconVariant: "blue",
     },
     {
       href: "/administration/personnel/notifications",
@@ -556,6 +584,13 @@ export function getCurrentModule(pathname: string): AppModule {
     return "pos";
   }
 
+  if (
+    matchesRoute(pathname, "/workforce") ||
+    matchesRoute(pathname, "/administration/workforce")
+  ) {
+    return "timeclock";
+  }
+
   if (matchesRoute(pathname, "/administration/personnel")) {
     return "personnel";
   }
@@ -584,7 +619,7 @@ export function getCurrentModule(pathname: string): AppModule {
   ];
 
   const isProduction = productionPaths.some((path) =>
-    matchesRoute(pathname, path)
+    matchesRoute(pathname, path),
   );
 
   return isProduction ? "production" : "home";
@@ -618,7 +653,7 @@ export function formatRole(role: string) {
 export function isSubmenuItemVisible(
   role: string,
   moduleKeys: string[],
-  item: SubMenuItem
+  item: SubMenuItem,
 ): boolean {
   if (role === "ADMIN") return true;
 
@@ -636,7 +671,7 @@ export function isSubmenuItemVisible(
    */
   if (item.children) {
     return item.children.some((child) =>
-      isSubmenuItemVisible(role, moduleKeys, child)
+      isSubmenuItemVisible(role, moduleKeys, child),
     );
   }
 
@@ -657,7 +692,7 @@ export function isSubmenuItemVisible(
 export function isMainModuleVisible(
   role: string,
   moduleKeys: string[],
-  module: MainModule
+  module: MainModule,
 ): boolean {
   if (role === "ADMIN") return true;
 
@@ -671,9 +706,7 @@ export function isMainModuleVisible(
 
   const items = SUBMENUS[module.module as Exclude<AppModule, "home">] ?? [];
 
-  return items.some((item) =>
-    isSubmenuItemVisible(role, moduleKeys, item)
-  );
+  return items.some((item) => isSubmenuItemVisible(role, moduleKeys, item));
 }
 
 /** Ruta segura de un tab padre: abre el primer hijo realmente autorizado. */
@@ -684,7 +717,8 @@ export function getSubmenuItemDestination(
 ): string {
   if (!item.children) return item.href;
 
-  return item.children.find((child) =>
-    isSubmenuItemVisible(role, moduleKeys, child),
-  )?.href ?? item.href;
+  return (
+    item.children.find((child) => isSubmenuItemVisible(role, moduleKeys, child))
+      ?.href ?? item.href
+  );
 }

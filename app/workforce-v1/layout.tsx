@@ -15,56 +15,56 @@ export default async function WorkforceEmployeeLayout({
       <header className="mb-5 space-y-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-primary">
-            Workforce V1 · Mi espacio
+            Workforce · Mi espacio
           </p>
           <h1 className="text-2xl font-bold sm:text-3xl">Mi calendario</h1>
         </div>
         <nav className="flex gap-2 overflow-x-auto pb-1">
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/workforce-v1?view=today"
+            href="/workforce?view=today"
           >
             Hoy
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/workforce-v1?view=week"
+            href="/workforce?view=week"
           >
             Semana
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/workforce-v1?view=month"
+            href="/workforce?view=month"
           >
             Mes
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/workforce-v1/availability"
+            href="/workforce/availability"
           >
             Disponibilidad
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-on-primary"
-            href="/workforce-v1/clock"
+            href="/workforce/clock"
           >
             Reloj
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/workforce-v1/kiosk"
+            href="/workforce/kiosk"
           >
             Kiosk
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/workforce-v1/timesheet"
+            href="/workforce/timesheet"
           >
             Mi timesheet
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/workforce-v1/payroll"
+            href="/workforce/payroll"
           >
             Mi pago
           </Link>

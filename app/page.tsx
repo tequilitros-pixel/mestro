@@ -58,7 +58,7 @@ export default async function HomePage() {
       hour: "2-digit",
       hour12: false,
       timeZone: TIME_ZONE,
-    }).format(now)
+    }).format(now),
   );
 
   const greeting =
@@ -171,9 +171,7 @@ export default async function HomePage() {
             title="Producción de tequila"
             description="Lotes, cocción, molienda, fermentación y destilación."
             href="/plant"
-            status={
-              activeProcesses > 0 ? "Operando" : "Disponible"
-            }
+            status={activeProcesses > 0 ? "Operando" : "Disponible"}
             featured
           />
 
@@ -207,10 +205,10 @@ export default async function HomePage() {
 
           <ModuleCard
             icon={ClockIcon}
-            eyebrow="Checador y turnos"
-            title="Horario"
-            description="Registra tu entrada, salida y consulta tu calendario."
-            href="/timeclock"
+            eyebrow="Personal, horarios y nómina"
+            title="Workforce"
+            description="Consulta tu horario, disponibilidad, checador, horas y nómina operativa."
+            href="/workforce"
             status="Disponible"
           />
 
@@ -241,11 +239,7 @@ export default async function HomePage() {
               value={distillations.length}
               label="Destilaciones"
             />
-            <PlantStat
-              icon={PackageIcon}
-              value={lotsCount}
-              label="Lotes"
-            />
+            <PlantStat icon={PackageIcon} value={lotsCount} label="Lotes" />
           </div>
         </section>
       </div>
@@ -283,7 +277,7 @@ async function getExpiringBottles() {
 
 function buildAlerts(
   recordingStatus: Awaited<ReturnType<typeof getRecordingStatus>>,
-  expiringBottles: Awaited<ReturnType<typeof getExpiringBottles>>
+  expiringBottles: Awaited<ReturnType<typeof getExpiringBottles>>,
 ): Alert[] {
   const alerts: Alert[] = [];
 
@@ -318,8 +312,8 @@ function buildAlerts(
       0,
       Math.ceil(
         (bottle.expirationDate.getTime() - now.getTime()) /
-          (1000 * 60 * 60 * 24)
-      )
+          (1000 * 60 * 60 * 24),
+      ),
     );
 
     alerts.push({
@@ -373,9 +367,7 @@ function ModuleCard({
         {title}
       </h2>
 
-      <p className="mt-1 text-sm text-on-surface-variant">
-        {description}
-      </p>
+      <p className="mt-1 text-sm text-on-surface-variant">{description}</p>
 
       <span className="mt-3 w-fit rounded-full border border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wide text-tertiary-fixed-dim">
         {status}
@@ -396,9 +388,7 @@ function PlantStat({
   return (
     <div className="flex flex-col items-center rounded-xl border border-outline-variant bg-surface-container-low p-4 text-center">
       <Icon className="mb-2 h-5 w-5 text-on-surface-variant" />
-      <span className="text-xl font-semibold text-primary">
-        {value}
-      </span>
+      <span className="text-xl font-semibold text-primary">{value}</span>
       <span className="mt-0.5 font-mono text-[9px] uppercase tracking-wide text-on-surface-variant">
         {label}
       </span>
