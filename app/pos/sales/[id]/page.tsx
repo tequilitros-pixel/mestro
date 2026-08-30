@@ -44,7 +44,9 @@ export default async function PosReceiptPage({
 
   if (!sale) notFound();
 
-  if (user.role === "GERENTE" || user.role === "ENCARGADO") {
+  // RLS es defensa en profundidad; la autorización de la aplicación debe
+  // cubrir cualquier rol no administrador, incluidos roles actuales o futuros.
+  if (user.role !== "ADMIN") {
     const hasAccess = await prisma.userBranch.findFirst({
       where: { userId: user.id, branchId: sale.branchId },
     });
