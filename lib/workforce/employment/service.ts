@@ -95,7 +95,8 @@ export async function changePayRate(input: { employmentId: string; rateType: Wor
   assertNativeCurrency(input.currency);
   return prisma.$transaction(async (tx) => {
     const current = await tx.payRate.findMany({ where: { employmentId: input.employmentId, rateType: input.rateType, effectiveFrom: { lt: input.effectiveFrom }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: input.effectiveFrom } }] } });
-    await Promise.all(current.map((row) => tx.payRate.update({ where: { id: row.id }, data: { effectiveTo: input.effectiveFrom } })));
+    const previousInstant = new Date(input.effectiveFrom.getTime() - 1);
+    await Promise.all(current.map((row) => tx.payRate.update({ where: { id: row.id }, data: { effectiveTo: previousInstant } })));
     const history = await tx.payRate.findMany({ where: { employmentId: input.employmentId, rateType: input.rateType } });
     if (history.some((row) => rangesOverlap(row, { effectiveFrom: input.effectiveFrom, effectiveTo: null }))) throw new Error("La tarifa se traslapa con historia futura.");
     return tx.payRate.create({ data: input });

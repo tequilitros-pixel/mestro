@@ -37,11 +37,14 @@ export type ShiftCommand = {
   reason?: string | null;
 };
 
-function serializable<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>) {
+function serializable<T>(
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  timeout = 10_000,
+) {
   return prisma.$transaction(fn, {
     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     maxWait: 5_000,
-    timeout: 10_000,
+    timeout,
   });
 }
 function ensureReason(reason: string | null | undefined) {
@@ -254,6 +257,7 @@ export async function getScheduleBoard(
 export async function createOrUpdateShift(
   actor: SchedulingActor,
   input: ShiftCommand,
+  transactionTimeoutMs = 10_000,
 ) {
   return serializable(async (tx) => {
     const period = await tx.schedulePeriod.findUnique({
@@ -393,7 +397,7 @@ export async function createOrUpdateShift(
         await reconcileAttendanceForEmployment(tx, employmentId);
     }
     return tx.shift.findUniqueOrThrow({ where: { id: current.id } });
-  }).catch((error) => {
+  }, transactionTimeoutMs).catch((error) => {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2034"

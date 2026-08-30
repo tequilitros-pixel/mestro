@@ -14,8 +14,11 @@ import {
   reconstructWorkSessions,
   type ClockState,
 } from "./reconstruction";
+import { systemWorkforceClock, type WorkforceTimeProvider } from "./time";
 
 export type ClockActor = { id: string; role: string };
+export type ClockServiceContext = { clock: WorkforceTimeProvider; transactionTimeoutMs?: number };
+const defaultContext: ClockServiceContext = { clock: systemWorkforceClock };
 const sourceValues = new Set(["PERSONAL", "KIOSK"]);
 function civilDate(value: Date, timezone: string) {
   const text = new Intl.DateTimeFormat("en-CA", {
@@ -28,13 +31,14 @@ function civilDate(value: Date, timezone: string) {
 }
 async function serializable<T>(
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  timeout = 15_000,
 ) {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       return await prisma.$transaction(fn, {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         maxWait: 5000,
-        timeout: 15000,
+        timeout,
       });
     } catch (error) {
       if (
@@ -174,7 +178,7 @@ async function matchingShift(
     )[0] ?? null
   );
 }
-async function materialize(tx: Prisma.TransactionClient, employmentId: string) {
+async function materialize(tx: Prisma.TransactionClient, employmentId: string, context: ClockServiceContext = defaultContext) {
   const stream = await effectiveFor(tx, employmentId);
   const sessions = reconstructWorkSessions(stream);
   const desiredIds = new Set(sessions.map((session) => `native_${session.key}`));
@@ -233,7 +237,7 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string) {
         breakMinutes: session.breakMinutes,
         status: session.status,
         reconstructionVersion: { increment: 1 },
-        reconstructedAt: new Date(),
+        reconstructedAt: context.clock.now(),
       },
       create: {
         id,
@@ -253,7 +257,7 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string) {
         status: session.status,
         origin: "NATIVE_RECONSTRUCTED",
         reconstructionVersion: 1,
-        reconstructedAt: new Date(),
+        reconstructedAt: context.clock.now(),
       },
     });
     await tx.workSessionClockEvent.deleteMany({ where: { workSessionId: id } });
@@ -269,14 +273,14 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string) {
     if (existing?.origin === "LEGACY_IMPORTED")
       throw new Error("No se reconstruye una sesión legacy.");
   }
-  await reconcileAttendanceForEmployment(tx, employmentId);
+  await reconcileAttendanceForEmployment(tx, employmentId, context.clock.now());
   await signalTimesheetsForEmployment(tx, employmentId);
   return { stream, sessions };
 }
 
-export async function getClockDashboard(actor: ClockActor) {
+export async function getClockDashboard(actor: ClockActor, context: ClockServiceContext = defaultContext) {
   const employment = await resolveOwnActiveEmployment(actor);
-  const now = new Date();
+  const now = context.clock.now();
   const [branches, shifts] = await Promise.all([
     prisma.branchAssignment.findMany({
       where: {
@@ -326,6 +330,7 @@ export async function recordClockEvent(
     source: string;
     idempotencyKey: string;
   },
+  context: ClockServiceContext = defaultContext,
 ) {
   if (!sourceValues.has(input.source)) throw new Error("Fuente inválida.");
   if (!input.idempotencyKey || input.idempotencyKey.length > 100)
@@ -348,7 +353,7 @@ export async function recordClockEvent(
         throw new Error("Idempotency key reutilizada con otra operación.");
       return { event: duplicate, idempotent: true };
     }
-    const now = new Date();
+    const now = context.clock.now();
     const employment = await tx.employment.findUnique({
       where: { id: input.employmentId },
     });
@@ -393,9 +398,9 @@ export async function recordClockEvent(
         idempotencyKey: input.idempotencyKey,
       },
     });
-    await materialize(tx, input.employmentId);
+    await materialize(tx, input.employmentId, context);
     return { event, idempotent: false };
-  });
+  }, context.transactionTimeoutMs);
 }
 
 export async function requestCorrection(
@@ -409,6 +414,7 @@ export async function requestCorrection(
     proposedOccurredAt?: Date | null;
     reason: string;
   },
+  context: ClockServiceContext = defaultContext,
 ) {
   const employment = await resolveOwnActiveEmployment(actor);
   if (input.reason.trim().length < 5) throw new Error("Razón demasiado corta.");
@@ -433,7 +439,7 @@ export async function requestCorrection(
   if (input.type === "VOID_EVENT" && input.proposedOccurredAt)
     throw new Error("VOID_EVENT no acepta hora propuesta.");
   if (input.proposedOccurredAt) {
-    const delta = input.proposedOccurredAt.getTime() - Date.now();
+    const delta = input.proposedOccurredAt.getTime() - context.clock.now().getTime();
     if (delta > 5 * 60000 || delta < -31 * 86400000)
       throw new Error("Hora propuesta fuera de la ventana permitida.");
   }
@@ -488,6 +494,7 @@ export async function decideCorrection(
     decision: "APPROVED" | "REJECTED";
     rejectionReason?: string;
   },
+  context: ClockServiceContext = defaultContext,
 ) {
   if (actor.role !== "ADMIN")
     throw new Error("No autorizado.");
@@ -505,20 +512,20 @@ export async function decideCorrection(
           ? {
               status: "APPROVED",
               approvedById: actor.id,
-              approvedAt: new Date(),
+              approvedAt: context.clock.now(),
             }
           : {
               status: "REJECTED",
               rejectedById: actor.id,
-              rejectedAt: new Date(),
+              rejectedAt: context.clock.now(),
               rejectionReason:
                 input.rejectionReason?.trim() || "Rechazada por manager",
             },
     });
     if (input.decision === "APPROVED")
-      await materialize(tx, correction.employmentId);
+      await materialize(tx, correction.employmentId, context);
     return updated;
-  });
+  }, context.transactionTimeoutMs);
 }
 export async function listPendingCorrections() {
   return prisma.clockCorrection.findMany({
