@@ -249,8 +249,44 @@ export async function getScheduleBoard(
     coverage,
     hours,
     threshold,
+    publicationPolicy: {
+      allowUnassigned: workforcePolicy.allowUnassignedShiftPublication,
+      allowAvailabilityWarnings:
+        workforcePolicy.allowAvailabilityWarningPublication,
+    },
     availability,
     shiftWarnings,
+  };
+}
+
+export async function getPreviousWeekSchedulePreview(
+  actor: SchedulingActor,
+  branchId: string,
+  weekStartInput: Date,
+) {
+  assertSchedulingBranchAccess(actor.role, actor.accessibleBranchIds, branchId);
+  const targetStart = dateOnly(weekStartInput);
+  const sourceStart = new Date(targetStart.getTime() - 7 * 86_400_000);
+  const sourceEnd = weekEnd(sourceStart);
+  const period = await prisma.schedulePeriod.findUnique({
+    where: {
+      branchId_periodStart_periodEnd: {
+        branchId,
+        periodStart: sourceStart,
+        periodEnd: sourceEnd,
+      },
+    },
+    include: {
+      shifts: {
+        where: { status: { not: "CANCELLED" } },
+        include: { employment: { include: { employee: true } } },
+        orderBy: [{ businessDate: "asc" }, { startAt: "asc" }],
+      },
+    },
+  });
+  return {
+    weekStart: sourceStart,
+    shifts: period?.shifts ?? [],
   };
 }
 
@@ -752,8 +788,17 @@ export async function getPublicationValidation(
     }
   });
   for (const shift of board.period?.shifts ?? []) {
-    for (const warning of board.shiftWarnings.get(shift.id) ?? [])
-      warnings.push(`${shift.id}: ${warning}`);
+    for (const warning of board.shiftWarnings.get(shift.id) ?? []) {
+      if (
+        (warning === "UNASSIGNED" &&
+          !board.publicationPolicy.allowUnassigned) ||
+        ((warning === "UNAVAILABLE" ||
+          warning === "UNKNOWN_AVAILABILITY") &&
+          !board.publicationPolicy.allowAvailabilityWarnings)
+      )
+        blockers.push(`${shift.id}: ${warning}`);
+      else warnings.push(`${shift.id}: ${warning}`);
+    }
   }
   for (const item of board.coverage)
     if (item.status === "UNDERSTAFFED")
