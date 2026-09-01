@@ -63,8 +63,15 @@ export async function addWorkforceAllowedBranchAction(formData: FormData) {
 
 export async function changeWorkforcePayRateAction(formData: FormData) {
   await authorize();
-  await changePayRate({ employmentId: String(formData.get("employmentId")), rateType: String(formData.get("rateType")) as "HOURLY" | "DAILY" | "WEEKLY" | "SALARY", amount: Number(formData.get("amount")), currency: String(formData.get("currency")).toUpperCase(), effectiveFrom: dateValue(formData, "effectiveFrom") });
-  revalidatePath(`/administration/workforce/employees/${String(formData.get("employeeId"))}`);
+  const employeeId = String(formData.get("employeeId"));
+  let error: string | null = null;
+  try {
+    await changePayRate({ employmentId: String(formData.get("employmentId")), rateType: String(formData.get("rateType")) as "HOURLY" | "DAILY" | "WEEKLY" | "SALARY", amount: Number(formData.get("amount")), currency: String(formData.get("currency")).toUpperCase(), effectiveFrom: dateValue(formData, "effectiveFrom") });
+  } catch (cause) {
+    error = cause instanceof Error ? cause.message : "No fue posible cambiar la tarifa.";
+  }
+  if (error) redirect(`/administration/workforce/employees/${encodeURIComponent(employeeId)}?error=${encodeURIComponent(error)}`);
+  revalidatePath(`/administration/workforce/employees/${employeeId}`);
 }
 
 export async function changeWorkforceEmploymentStatusAction(formData: FormData) {
