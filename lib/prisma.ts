@@ -17,7 +17,17 @@ const globalForPrisma = globalThis as {
   prisma?: PrismaClient;
 };
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+function verifiedDatabaseUrl() {
+  const value = process.env.DATABASE_URL;
+  if (!value) throw new Error("DATABASE_URL no está configurada.");
+  const url = new URL(value);
+  // pg 9 dejará de tratar `require` como verificación completa. Fijarlo aquí
+  // mantiene validación de certificado aunque una integración regenere la URL.
+  url.searchParams.set("sslmode", "verify-full");
+  return url.toString();
+}
+
+const pool = new Pool({ connectionString: verifiedDatabaseUrl() });
 const adapter = new PrismaPg(pool);
 
 export const prisma =
