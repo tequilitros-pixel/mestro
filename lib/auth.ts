@@ -28,7 +28,9 @@ export async function requireAdmin() {
   const user = await getCurrentUser();
 
   if (!user || user.role !== "ADMIN") {
-    redirect("/cooking");
+    // /cooking puede requerir un permiso que el usuario no tenga y provocar
+    // un ciclo de redirecciones. El perfil es un destino autenticado seguro.
+    redirect(user ? "/profile" : "/login");
   }
 
   return user;
