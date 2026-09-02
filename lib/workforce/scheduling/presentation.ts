@@ -12,8 +12,9 @@ export function scheduleWarningLabel(code: string) {
 export function canPublishSchedule(input: {
   published: boolean;
   blockers: string[];
+  shiftCount?: number;
 }) {
-  return !input.published && input.blockers.length === 0;
+  return !input.published && input.blockers.length === 0 && input.shiftCount !== 0;
 }
 
 export function canCopyPreviousWeek(input: {

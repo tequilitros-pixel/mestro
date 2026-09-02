@@ -9,6 +9,10 @@ import {
 test("publication is available only for an unpublished week without blockers", () => {
   assert.equal(canPublishSchedule({ published: false, blockers: [] }), true);
   assert.equal(
+    canPublishSchedule({ published: false, blockers: [], shiftCount: 0 }),
+    false,
+  );
+  assert.equal(
     canPublishSchedule({ published: false, blockers: ["turno inválido"] }),
     false,
   );

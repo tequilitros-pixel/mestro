@@ -19,6 +19,7 @@ import {
   weekEnd,
   type ShiftWindow,
 } from "./rules";
+import { scheduleEligibleEmploymentWhere } from "./eligibility";
 
 export type SchedulingActor = {
   id: string;
@@ -158,16 +159,7 @@ export async function getScheduleBoard(
         },
       }),
       prisma.employment.findMany({
-        where: {
-          status: "ACTIVE",
-          branchAssignments: {
-            some: {
-              branchId,
-              effectiveFrom: { lte: end },
-              OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
-            },
-          },
-        },
+        where: scheduleEligibleEmploymentWhere(branchId, start, end),
         include: {
           employee: true,
           availabilityRules: true,
@@ -524,8 +516,13 @@ export async function publishSchedulePeriod(
     if (period.status === "PUBLISHED" && period.publications[0])
       return { id: period.publications[0].id, idempotent: true };
     const policy = await resolveWorkforcePolicy(period.periodStart, tx);
+    const activeShifts = period.shifts.filter(
+      (shift) => shift.status !== "CANCELLED",
+    );
+    if (!activeShifts.length)
+      throw new Error("Agrega al menos un turno antes de publicar.");
     const blockers: string[] = [];
-    for (const shift of period.shifts) {
+    for (const shift of activeShifts) {
       if (!shift.employmentId) {
         if (!policy.allowUnassignedShiftPublication)
           blockers.push(`${shift.id}: UNASSIGNED_NOT_ALLOWED_BY_POLICY`);
@@ -766,8 +763,12 @@ export async function getPublicationValidation(
   const board = await getScheduleBoard(actor, branchId, weekStartInput);
   const blockers: string[] = [];
   const warnings: string[] = [];
+  const activeShifts = (board.period?.shifts ?? []).filter(
+    (shift) => shift.status !== "CANCELLED",
+  );
+  if (!activeShifts.length) blockers.push("NO_SHIFTS");
   await serializable(async (tx) => {
-    for (const shift of board.period?.shifts ?? []) {
+    for (const shift of activeShifts) {
       if (!shift.employmentId) continue;
       try {
         await validateAssignedShift(tx, {
@@ -787,7 +788,7 @@ export async function getPublicationValidation(
       }
     }
   });
-  for (const shift of board.period?.shifts ?? []) {
+  for (const shift of activeShifts) {
     for (const warning of board.shiftWarnings.get(shift.id) ?? []) {
       if (
         (warning === "UNASSIGNED" &&
@@ -804,7 +805,7 @@ export async function getPublicationValidation(
     if (item.status === "UNDERSTAFFED")
       warnings.push(`${item.id}: COVERAGE_GAP`);
   return {
-    shiftCount: board.period?.shifts.length ?? 0,
+    shiftCount: activeShifts.length,
     employeeCount: new Set(
       (board.period?.shifts ?? [])
         .map((item) => item.employmentId)
