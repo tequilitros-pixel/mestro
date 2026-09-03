@@ -12,15 +12,13 @@ export default async function WorkforceV1Layout({
 }) {
   if (!workforceV1Enabled()) notFound();
   const pathname = (await headers()).get("x-pathname") ?? "";
-  if (
-    pathname.startsWith("/administration/workforce/schedule") ||
-    pathname.startsWith("/administration/workforce/schedule")
-  )
+  const isSchedule = pathname.startsWith("/administration/workforce/schedule");
+  if (isSchedule)
     await requireModuleAccess("/administration/schedule");
   else await requireAdmin();
   return (
-    <main className="mx-auto w-full max-w-7xl p-4 sm:p-6">
-      <header className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <main className={isSchedule ? "w-full p-2 lg:p-3" : "mx-auto w-full max-w-7xl p-4 sm:p-6"}>
+      <header className={isSchedule ? "sr-only" : "mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"}>
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-primary">
             Workforce · Administración
