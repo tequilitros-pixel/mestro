@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { PackageItemCalculationType } from "@prisma/client";
+import { requireModuleActionAccess } from "@/lib/auth";
 
+const EVENT_PACKAGES_PERMISSION = "/administration/inventory/event-packages";
 
 export type ActionResult =
   | { success: true; message: string; id?: string }
@@ -30,6 +32,7 @@ export async function createEventPackageAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireModuleActionAccess(EVENT_PACKAGES_PERMISSION);
     const name = formData.get("name")?.toString().trim() ?? "";
     const description = formData.get("description")?.toString().trim() || null;
     const pricePerPerson = readOptionalNumber(formData.get("pricePerPerson"));
@@ -77,6 +80,7 @@ export async function togglePackageActiveAction(
   isActive: boolean,
 ): Promise<ActionResult> {
   try {
+    await requireModuleActionAccess(EVENT_PACKAGES_PERMISSION);
     await prisma.eventPackage.update({
       where: { id: packageId },
       data: { isActive },
@@ -95,6 +99,7 @@ export async function addEventPackageItemAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireModuleActionAccess(EVENT_PACKAGES_PERMISSION);
     const packageId = formData.get("packageId")?.toString() ?? "";
     const productId = formData.get("productId")?.toString() ?? "";
     const calculationType = formData.get("calculationType")?.toString() ?? "";
@@ -157,6 +162,7 @@ export async function removeEventPackageItemAction(
   packageId: string,
 ): Promise<ActionResult> {
   try {
+    await requireModuleActionAccess(EVENT_PACKAGES_PERMISSION);
     await prisma.eventPackageItem.delete({ where: { id: itemId } });
 
     revalidatePath(`/administration/inventory/event-packages/${packageId}`);
@@ -173,6 +179,7 @@ export async function updateEventPackageItemAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireModuleActionAccess(EVENT_PACKAGES_PERMISSION);
     const calculationType = formData.get("calculationType")?.toString() ?? "";
     const quantity = readOptionalNumber(formData.get("quantity"));
     const guestsPerBlock = readOptionalNumber(formData.get("guestsPerBlock"));
@@ -217,6 +224,7 @@ export async function deleteEventPackageAction(
   packageId: string,
 ): Promise<ActionResult> {
   try {
+    await requireModuleActionAccess(EVENT_PACKAGES_PERMISSION);
     const eventCount = await prisma.serviceEvent.count({ where: { packageId } });
 
     if (eventCount > 0) {
@@ -243,6 +251,7 @@ export async function updateEventPackageAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireModuleActionAccess(EVENT_PACKAGES_PERMISSION);
     const name = formData.get("name")?.toString().trim() ?? "";
     const description = formData.get("description")?.toString().trim() || null;
     const pricePerPerson = readOptionalNumber(formData.get("pricePerPerson"));

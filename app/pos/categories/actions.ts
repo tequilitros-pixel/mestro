@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { requireAdminAction } from "@/lib/auth";
 
 export type PosActionResult =
   | { success: true; message: string; id?: string }
@@ -11,6 +12,7 @@ export async function createCategoryAction(
   formData: FormData,
 ): Promise<PosActionResult> {
   try {
+    await requireAdminAction();
     const name = formData.get("name")?.toString().trim() ?? "";
 
     if (!name) {
@@ -44,6 +46,7 @@ export async function updateCategoryAction(
   formData: FormData,
 ): Promise<PosActionResult> {
   try {
+    await requireAdminAction();
     const name = formData.get("name")?.toString().trim() ?? "";
 
     if (!name) {
@@ -69,6 +72,7 @@ export async function toggleCategoryActiveAction(
   active: boolean,
 ): Promise<PosActionResult> {
   try {
+    await requireAdminAction();
     await prisma.posCategory.update({
       where: { id: categoryId },
       data: { active },
@@ -87,6 +91,7 @@ export async function reorderCategoriesAction(
   orderedIds: string[],
 ): Promise<PosActionResult> {
   try {
+    await requireAdminAction();
     await prisma.$transaction(
       orderedIds.map((id, index) =>
         prisma.posCategory.update({ where: { id }, data: { position: index } }),
@@ -107,6 +112,7 @@ export async function moveProductToCategoryAction(
   categoryId: string,
 ): Promise<PosActionResult> {
   try {
+    await requireAdminAction();
     const category = await prisma.posCategory.findUnique({ where: { id: categoryId } });
 
     if (!category) {
@@ -132,6 +138,7 @@ export async function deleteCategoryAction(
   categoryId: string,
 ): Promise<PosActionResult> {
   try {
+    await requireAdminAction();
     const productCount = await prisma.posProduct.count({ where: { categoryId } });
 
     if (productCount > 0) {

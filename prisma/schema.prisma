@@ -135,6 +135,25 @@ model User {
   workforceTimesheetAdjustmentsApproved TimesheetAdjustment[]            @relation("WorkforceTimesheetAdjustmentApprovedBy")
   workforcePayrollAdjustmentsCreated    WorkforcePayrollAdjustment[]     @relation("WorkforcePayrollAdjustmentCreatedBy")
   workforcePayrollAdjustmentsApproved   WorkforcePayrollAdjustment[]     @relation("WorkforcePayrollAdjustmentApprovedBy")
+
+  registersCreated             Register[]               @relation("RegisterCreatedBy")
+  terminalsCreated             Terminal[]               @relation("TerminalCreatedBy")
+  terminalEnrollmentsCreated   TerminalEnrollment[]     @relation("TerminalEnrollmentCreatedBy")
+  cashSessionsOpened           CashSession[]            @relation("CashSessionOpenedBy")
+  cashSessionsClosed           CashSession[]            @relation("CashSessionClosedBy")
+  cashDeclarations             CashDeclaration[]        @relation("CashDeclarationActor")
+  cashMovementsV2              CashMovement[]           @relation("CashMovementActor")
+  catalogOverridesCreated      BranchProductOverride[]  @relation("BranchProductOverrideCreatedBy")
+  catalogOverridesUpdated      BranchProductOverride[]  @relation("BranchProductOverrideUpdatedBy")
+  pos2SalesCompleted           Pos2Sale[]               @relation("Pos2SaleCashier")
+  pos2PaymentsCaptured         Pos2Payment[]            @relation("Pos2PaymentActor")
+  pos2CancellationsCreated     SaleCancellation[]       @relation("SaleCancellationActor")
+  pos2ReturnsCreated           Pos2Return[]             @relation("Pos2ReturnActor")
+  pos2RefundsCreated           Pos2Refund[]             @relation("Pos2RefundActor")
+  adjustmentDefinitionsCreated AdjustmentDefinition[]  @relation("AdjustmentDefinitionCreatedBy")
+  adjustmentVersionsCreated    AdjustmentVersion[]     @relation("AdjustmentVersionCreatedBy")
+  orderAdjustmentsAuthorized   OrderAdjustment[]        @relation("OrderAdjustmentAuthorizedBy")
+  orderAdjustmentsBeneficiary  OrderAdjustment[]        @relation("OrderAdjustmentBeneficiary")
 }
 
 model UserSession {
@@ -1037,6 +1056,19 @@ model Branch {
 
   eventAddedSource  EventAddedProduct[] @relation("EventAddedSourceBranch")
   eventAddedReturns EventAddedProduct[] @relation("EventAddedReturnBranch")
+  registers                    Register[]
+  terminals                    Terminal[]
+  cashSessionsV2               CashSession[]
+  cashMovementsV2              CashMovement[]
+  catalogOverrides             BranchProductOverride[]
+  priceVersions                PriceVersion[]
+  pos2Orders                   Pos2Order[]
+  inventoryBalancesV2          InventoryBalance[]
+  inventoryMovementsV2         InventoryMovement[]
+  inventoryCountDeclarationsV2 InventoryCountDeclaration[]
+  pos2SalesV2                 Pos2Sale[]
+  pos2PaymentsV2              Pos2Payment[]
+  adjustmentVersions          AdjustmentVersion[]
 
   @@index([active])
   @@index([geofenceId])
@@ -1152,6 +1184,7 @@ model CashCut {
   safeEnvelope          CashSafeEnvelope?
   safeEnvelopeMovements CashSafeEnvelopeMovement[]
   denominations         CashCutDenomination[]
+  cashSession           CashSession?
   posSales              PosSale[]
 
   @@index([branchId])
@@ -1668,6 +1701,8 @@ model InventoryProduct {
 
   category                 String
   unit                     String
+  /// Canonical V2 ledger dimension. Null means not configured for Inventory V2.
+  inventoryBaseUnit        CatalogBaseUnit?
   /// Cómo se captura y muestra el producto. Nulo conserva compatibilidad histórica.
   handlingUnit             InventoryHandlingUnit?
   contentPerUnit           Decimal?               @db.Decimal(12, 3)
@@ -1696,6 +1731,9 @@ model InventoryProduct {
   eventItems        ServiceEventItem[]
   equipmentKitItems EquipmentKitItem[]
   posIngredientOf   PosVariantIngredient[]
+  inventoryBalances InventoryBalance[]
+  inventoryMovements InventoryMovement[]
+  inventoryCountDeclarations InventoryCountDeclaration[]
   liquorProduct     LiquorProduct?
   rawMaterialLinks  RawMaterial[]          @relation("RawMaterialInventoryLink")
 
@@ -1705,6 +1743,92 @@ model InventoryProduct {
   @@index([category])
   @@index([itemType])
   @@index([isActive])
+}
+
+enum InventoryMovementTypeV2 {
+  OPENING_BALANCE
+  RECEIPT
+  SALE_CONSUMPTION
+  SALE_REVERSAL
+  TRANSFER_OUT
+  TRANSFER_IN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  COUNT_CORRECTION
+  EVENT_LOAD
+  EVENT_RETURN
+}
+
+enum InventoryMovementSourceType {
+  LEGACY_OPENING
+  RECEIPT
+  MANUAL_ADJUSTMENT
+  COUNT
+  TRANSFER
+  SALE
+  RETURN
+  EVENT
+  RECIPE_CONSUMPTION
+  CANCELLATION
+}
+
+model InventoryBalance {
+  id String @id @default(cuid())
+  branchId String
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  inventoryProductId String
+  inventoryProduct InventoryProduct @relation(fields: [inventoryProductId], references: [id], onDelete: Restrict)
+  quantity Decimal @default(0) @db.Decimal(18, 6)
+  unit CatalogBaseUnit
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([branchId, inventoryProductId])
+  @@index([branchId])
+}
+
+model InventoryMovement {
+  id String @id @default(cuid())
+  branchId String
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  inventoryProductId String
+  inventoryProduct InventoryProduct @relation(fields: [inventoryProductId], references: [id], onDelete: Restrict)
+  movementType InventoryMovementTypeV2
+  quantityDelta Decimal @db.Decimal(18, 6)
+  unit CatalogBaseUnit
+  balanceBefore Decimal @db.Decimal(18, 6)
+  balanceAfter Decimal @db.Decimal(18, 6)
+  sourceType InventoryMovementSourceType
+  sourceId String
+  sourceLineId String?
+  actorId String
+  operationId String @db.Uuid
+  reasonCode String
+  metadata Json?
+  createdAt DateTime @default(now())
+  @@index([branchId, createdAt])
+  @@index([inventoryProductId, createdAt])
+  @@index([sourceType, sourceId])
+  @@index([operationId])
+  @@index([movementType, createdAt])
+}
+
+model InventoryCountDeclaration {
+  id String @id @default(cuid())
+  branchId String
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  inventoryProductId String
+  inventoryProduct InventoryProduct @relation(fields: [inventoryProductId], references: [id], onDelete: Restrict)
+  expectedQuantity Decimal @db.Decimal(18, 6)
+  declaredQuantity Decimal @db.Decimal(18, 6)
+  unit CatalogBaseUnit
+  movementId String? @unique
+  actorId String
+  operationId String @unique @db.Uuid
+  notes String?
+  createdAt DateTime @default(now())
+  @@index([branchId, createdAt])
+  @@index([inventoryProductId, createdAt])
 }
 
 enum InventoryItemType {
@@ -3601,8 +3725,13 @@ model WorkforcePayrollAdjustment {
 model PosCategory {
   id        String   @id @default(cuid())
   name      String
+  slug      String?  @unique
+  description String?
+  icon      String?
+  imageAlt  String?
   position  Int      @default(0)
   active    Boolean  @default(true)
+  version   Int      @default(1)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -3612,6 +3741,12 @@ model PosCategory {
   products PosProduct[]
 
   @@index([position])
+  @@index([active, position])
+}
+
+enum CatalogBaseUnit {
+  UNIT
+  ML
 }
 
 model PosProduct {
@@ -3619,10 +3754,20 @@ model PosProduct {
   categoryId String
   category   PosCategory @relation(fields: [categoryId], references: [id])
 
-  name     String
-  icon     String?
-  active   Boolean @default(true)
-  position Int     @default(0)
+  name             String
+  description      String?
+  sku              String? @unique
+  internalCode     String? @unique
+  barcode          String? @unique
+  icon             String?
+  imageAlt         String?
+  active           Boolean @default(true)
+  sellable         Boolean @default(true)
+  inventoryTracked Boolean @default(false)
+  baseUnit         CatalogBaseUnit @default(UNIT)
+  archivedAt       DateTime?
+  position         Int     @default(0)
+  version          Int     @default(1)
 
   // Marca productos sujetos a la política de límite mensual de
   // botellas por empleado (configurable en PosSettings). No aplica
@@ -3636,8 +3781,15 @@ model PosProduct {
   updatedAt DateTime @updatedAt
 
   variants PosProductVariant[]
+  branchOverrides BranchProductOverride[]
+  priceVersions PriceVersion[]
+  pos2OrderLines Pos2OrderLine[]
+  pos2SaleLines Pos2SaleLine[]
 
   @@index([categoryId])
+  @@index([active, sellable])
+  @@index([name])
+  @@index([categoryId, position])
 }
 
 model PosProductVariant {
@@ -3647,9 +3799,14 @@ model PosProductVariant {
 
   // "Único" cuando el producto no maneja variantes reales.
   name     String
+  sku      String? @unique
+  internalCode String? @unique
+  barcode  String? @unique
+  baseUnit CatalogBaseUnit @default(UNIT)
   price    Float
   position Int     @default(0)
   active   Boolean @default(true)
+  version  Int     @default(1)
 
   // Precio especial de empleado. Si es null, la venta a empleado
   // usa el descuento genérico (PosSettings.employeeDiscountPercent)
@@ -3661,8 +3818,99 @@ model PosProductVariant {
 
   ingredients PosVariantIngredient[]
   saleItems   PosSaleItem[]
+  priceVersions PriceVersion[]
+  pos2OrderLines Pos2OrderLine[]
+  pos2SaleLines Pos2SaleLine[]
 
   @@index([productId])
+  @@index([productId, active, position])
+  @@index([name])
+}
+
+enum BranchProductAvailability {
+  AVAILABLE
+  TEMPORARILY_UNAVAILABLE
+}
+
+model BranchProductOverride {
+  id           String                    @id @default(cuid())
+  branchId     String
+  branch       Branch                    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  productId    String
+  product      PosProduct                @relation(fields: [productId], references: [id], onDelete: Restrict)
+  enabled      Boolean                   @default(true)
+  visibleInPos Boolean                   @default(true)
+  availability BranchProductAvailability @default(AVAILABLE)
+  sortOrder    Int?
+  version      Int                       @default(1)
+  createdById  String
+  createdBy    User                      @relation("BranchProductOverrideCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById  String?
+  updatedBy    User?                     @relation("BranchProductOverrideUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@unique([branchId, productId])
+  @@index([branchId, enabled, visibleInPos])
+  @@index([productId])
+}
+
+enum PriceTargetType {
+  PRODUCT
+  VARIANT
+}
+
+enum PriceScope {
+  GLOBAL
+  BRANCH
+}
+
+/**
+ * An immutable, published POS 2.0 base-price version. Scheduling state is
+ * derived from validFrom/validTo; an early end is recorded separately.
+ */
+model PriceVersion {
+  id          String          @id @default(cuid())
+  targetType  PriceTargetType
+  targetKey   String
+  productId   String?
+  product     PosProduct?     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId   String?
+  variant     PosProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  scope       PriceScope
+  branchId    String?
+  branch      Branch?         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  branchKey   String
+  amount      Decimal         @db.Decimal(18, 2)
+  currency    String          @default("MXN")
+  taxIncluded Boolean         @default(true)
+  validFrom   DateTime
+  validTo     DateTime?
+  createdById String
+  operationId String          @unique @db.Uuid
+  createdAt   DateTime        @default(now())
+  termination PriceVersionTermination?
+  orderLines   Pos2OrderLine[]
+  saleLines    Pos2SaleLine[]
+
+  @@index([targetKey, branchKey, currency, validFrom])
+  @@index([productId, validFrom])
+  @@index([variantId, validFrom])
+  @@index([branchId, validFrom])
+}
+
+/** Append-only early termination; the published PriceVersion never changes. */
+model PriceVersionTermination {
+  id             String       @id @default(cuid())
+  priceVersionId String       @unique
+  priceVersion   PriceVersion @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  effectiveAt    DateTime
+  reason         String
+  createdById    String
+  operationId    String       @unique @db.Uuid
+  createdAt      DateTime     @default(now())
+
+  @@index([effectiveAt])
 }
 
 model PosVariantIngredient {
@@ -3674,10 +3922,17 @@ model PosVariantIngredient {
   inventoryProduct   InventoryProduct @relation(fields: [inventoryProductId], references: [id])
 
   quantity Decimal @db.Decimal(12, 3)
+  unit CatalogBaseUnit?
+  unitStatus RecipeIngredientUnitStatus @default(UNRESOLVED)
 
   @@unique([variantId, inventoryProductId])
   @@index([variantId])
   @@index([inventoryProductId])
+}
+
+enum RecipeIngredientUnitStatus {
+  RESOLVED
+  UNRESOLVED
 }
 
 enum PosSaleStatus {
@@ -3714,6 +3969,9 @@ enum PosBenefitReason {
 model PosSale {
   id       String @id @default(cuid())
   code     String @unique
+  // Hash canónico del payload asociado al id generado por el cliente.
+  // Null conserva compatibilidad con ventas anteriores a POS 2.0 phase 3A.
+  clientPayloadHash String?
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
 
@@ -4026,4 +4284,772 @@ enum EventAddedSourceType {
 enum EventAddedStatus {
   ACTIVO
   CANCELADO
+}
+
+/**
+ * POS 2.0 phase 3A infrastructure. These tables are additive and do not
+ * replace any legacy POS, inventory or cash model.
+ */
+enum OperationReceiptStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED_FINAL
+}
+
+model OperationReceipt {
+  operationId String                 @id @db.Uuid
+  command     String
+  payloadHash String
+  status      OperationReceiptStatus @default(IN_PROGRESS)
+  result      Json?
+  resultType  String?
+  resultId    String?
+  actorId     String?
+  branchId    String?
+  context     Json?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  completedAt DateTime?
+
+  @@index([command, createdAt])
+  @@index([actorId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([status, createdAt])
+}
+
+model AuditEvent {
+  id            String   @id @default(cuid())
+  actorId       String?
+  branchId      String?
+  terminalId    String?
+  action        String
+  entityType    String
+  entityId      String
+  operationId   String?  @db.Uuid
+  correlationId String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([operationId])
+  @@index([action, createdAt])
+}
+
+enum OutboxEventStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+model OutboxEvent {
+  id          String            @id @default(cuid())
+  topic       String
+  aggregate   String
+  aggregateId String
+  operationId String?           @db.Uuid
+  payload     Json
+  status      OutboxEventStatus @default(PENDING)
+  attempts    Int               @default(0)
+  createdAt   DateTime          @default(now())
+  availableAt DateTime          @default(now())
+  processedAt DateTime?
+  lastError   String?
+
+  @@index([status, availableAt, createdAt])
+  @@index([aggregate, aggregateId])
+  @@index([operationId])
+}
+
+enum CapabilityScope {
+  SELF
+  BRANCH
+  MULTI_BRANCH
+  GLOBAL
+}
+
+model Capability {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  grants CapabilityGrant[]
+}
+
+model CapabilityGrant {
+  id           String          @id @default(cuid())
+  capabilityId String
+  capability   Capability      @relation(fields: [capabilityId], references: [id], onDelete: Restrict)
+  userId       String?
+  role         UserRole?
+  scope        CapabilityScope
+  branchId     String?
+  constraints  Json?
+  validFrom    DateTime        @default(now())
+  validTo      DateTime?
+  createdAt    DateTime        @default(now())
+  createdById  String?
+
+  @@index([capabilityId, userId, validFrom, validTo])
+  @@index([capabilityId, role, validFrom, validTo])
+  @@index([branchId])
+}
+
+/** POS 2.0 phase 3B: logical cash register, independent from devices. */
+model Register {
+  id          String   @id @default(cuid())
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  code        String
+  name        String
+  active      Boolean  @default(true)
+  createdById String
+  createdBy   User     @relation("RegisterCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cashSessions CashSession[]
+  cashMovements CashMovement[]
+  pos2Orders Pos2Order[]
+  pos2Sales Pos2Sale[]
+
+  @@unique([branchId, code])
+  @@index([branchId])
+  @@index([active])
+}
+
+enum TerminalStatus {
+  ACTIVE
+  DISABLED
+  REVOKED
+}
+
+/** Authorized device. Register selection happens per CashSession. */
+model Terminal {
+  id                 String         @id @default(cuid())
+  branchId           String
+  branch             Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  name               String
+  deviceIdentifier   String?        @unique
+  credentialHash     String?
+  status             TerminalStatus @default(DISABLED)
+  enrolledAt         DateTime?
+  credentialIssuedAt DateTime?
+  lastSeenAt         DateTime?
+  createdById        String
+  createdBy          User           @relation("TerminalCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  enrollments     TerminalEnrollment[]
+  sessionsOpened  CashSession[]     @relation("CashSessionOpeningTerminal")
+  sessionsClosed  CashSession[]     @relation("CashSessionClosingTerminal")
+  declarations    CashDeclaration[]
+  pos2Orders      Pos2Order[]
+  pos2Sales       Pos2Sale[]
+  pos2Payments    Pos2Payment[]
+  pos2Cancellations SaleCancellation[]
+  pos2Returns Pos2Return[]
+  pos2Refunds Pos2Refund[]
+
+  @@index([branchId])
+  @@index([status])
+}
+
+model TerminalEnrollment {
+  id          String   @id @default(cuid())
+  terminalId  String
+  terminal    Terminal @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  createdById String
+  createdBy   User     @relation("TerminalEnrollmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+
+  @@index([terminalId, expiresAt])
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSING
+  CLOSED
+  CANCELLED
+}
+
+model CashSession {
+  id                String            @id @default(cuid())
+  branchId          String
+  branch            Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  registerId        String
+  register          Register          @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  openingTerminalId String
+  openingTerminal   Terminal          @relation("CashSessionOpeningTerminal", fields: [openingTerminalId], references: [id], onDelete: Restrict)
+  openedById        String
+  openedBy          User              @relation("CashSessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  openedAt          DateTime          @default(now())
+  status            CashSessionStatus @default(OPEN)
+  closingTerminalId String?
+  closingTerminal   Terminal?         @relation("CashSessionClosingTerminal", fields: [closingTerminalId], references: [id], onDelete: Restrict)
+  closedById        String?
+  closedBy          User?             @relation("CashSessionClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
+  closedAt          DateTime?
+  expectedCash      Decimal?          @db.Decimal(18, 2)
+  difference        Decimal?          @db.Decimal(18, 2)
+  cashCutId         String?           @unique
+  cashCut           CashCut?          @relation(fields: [cashCutId], references: [id], onDelete: Restrict)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  declarations CashDeclaration[]
+  movements    CashMovement[]
+  pos2Orders   Pos2Order[]
+  pos2Sales    Pos2Sale[]
+  cancellationCompensations SaleCancellation[]
+  refundCompensations Pos2Refund[]
+
+  @@index([registerId, status])
+  @@index([branchId, openedAt])
+  @@index([openedById])
+}
+
+enum Pos2OrderStatus {
+  OPEN
+  PAYMENT_PENDING
+  FINALIZED
+  VOIDED
+  EXPIRED
+}
+
+enum Pos2PricingExplanation {
+  GLOBAL_BASE_PRICE
+  BRANCH_OVERRIDE
+}
+
+enum AdjustmentKind {
+  PROMOTION
+  DISCOUNT
+  COURTESY
+}
+
+enum AdjustmentMechanic {
+  PERCENT_OFF
+  FIXED_AMOUNT_OFF
+  FIXED_BUNDLE_PRICE
+}
+
+enum AdjustmentScope {
+  GLOBAL
+  BRANCH
+}
+
+enum AdjustmentTargetType {
+  PRODUCT
+  VARIANT
+  CATEGORY
+  ENTIRE_ORDER
+}
+
+enum AdjustmentStacking {
+  STACKABLE
+  EXCLUSIVE
+}
+
+enum OrderAdjustmentStatus {
+  APPLIED
+  REVOKED
+}
+
+model AdjustmentDefinition {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  description String?
+  active Boolean @default(true)
+  createdById String
+  createdBy User @relation("AdjustmentDefinitionCreatedBy",fields:[createdById],references:[id],onDelete:Restrict)
+  createdAt DateTime @default(now())
+  versions AdjustmentVersion[]
+  @@index([active,name])
+}
+
+model AdjustmentVersion {
+  id String @id @default(cuid())
+  definitionId String
+  definition AdjustmentDefinition @relation(fields:[definitionId],references:[id],onDelete:Restrict)
+  version Int
+  kind AdjustmentKind
+  mechanic AdjustmentMechanic
+  scope AdjustmentScope
+  branchId String?
+  branch Branch? @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  targetType AdjustmentTargetType
+  targetId String?
+  percentage Decimal? @db.Decimal(7,4)
+  amount Decimal? @db.Decimal(18,2)
+  bundleQuantity Decimal? @db.Decimal(18,6)
+  priority Int @default(0)
+  stacking AdjustmentStacking @default(EXCLUSIVE)
+  excludedProductIds String[] @default([])
+  excludedCategoryIds String[] @default([])
+  requiresBeneficiary Boolean @default(false)
+  requiresAuthorization Boolean @default(false)
+  maxAmount Decimal? @db.Decimal(18,2)
+  validFrom DateTime
+  validTo DateTime?
+  weekdays Int[] @default([])
+  startMinute Int?
+  endMinute Int?
+  timezone String @default("America/Mexico_City")
+  createdById String
+  createdBy User @relation("AdjustmentVersionCreatedBy",fields:[createdById],references:[id],onDelete:Restrict)
+  operationId String @unique @db.Uuid
+  createdAt DateTime @default(now())
+  orderAdjustments OrderAdjustment[]
+  saleAdjustments SaleAdjustment[]
+  termination AdjustmentVersionTermination?
+  @@unique([definitionId,version])
+  @@index([kind,scope,branchId,validFrom,validTo,priority])
+  @@index([targetType,targetId])
+}
+
+model AdjustmentVersionTermination {
+  id String @id @default(cuid())
+  versionId String @unique
+  version AdjustmentVersion @relation(fields:[versionId],references:[id],onDelete:Restrict)
+  effectiveAt DateTime
+  reason String
+  actorId String
+  operationId String @unique @db.Uuid
+  createdAt DateTime @default(now())
+  @@index([effectiveAt])
+}
+
+model OrderAdjustment {
+  id String @id @default(cuid())
+  orderId String
+  order Pos2Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+  orderLineId String?
+  ruleVersionId String
+  ruleVersion AdjustmentVersion @relation(fields:[ruleVersionId],references:[id],onDelete:Restrict)
+  kind AdjustmentKind
+  amount Decimal @db.Decimal(18,2)
+  percentage Decimal? @db.Decimal(7,4)
+  reason String?
+  automatic Boolean @default(false)
+  beneficiaryId String?
+  beneficiary User? @relation("OrderAdjustmentBeneficiary",fields:[beneficiaryId],references:[id],onDelete:Restrict)
+  authorizedById String?
+  authorizedBy User? @relation("OrderAdjustmentAuthorizedBy",fields:[authorizedById],references:[id],onDelete:Restrict)
+  status OrderAdjustmentStatus @default(APPLIED)
+  operationId String @db.Uuid
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  revokedById String?
+  @@index([orderId,status,kind])
+  @@index([orderLineId,status])
+  @@index([operationId])
+}
+
+model SaleAdjustment {
+  id String @id @default(cuid())
+  saleId String
+  sale Pos2Sale @relation(fields:[saleId],references:[id],onDelete:Restrict)
+  saleLineId String?
+  saleLine Pos2SaleLine? @relation(fields:[saleLineId],references:[id],onDelete:Restrict)
+  orderAdjustmentId String
+  ruleVersionId String
+  ruleVersion AdjustmentVersion @relation(fields:[ruleVersionId],references:[id],onDelete:Restrict)
+  kind AdjustmentKind
+  ruleCodeSnapshot String
+  ruleNameSnapshot String
+  mechanic AdjustmentMechanic
+  amount Decimal @db.Decimal(18,2)
+  percentage Decimal? @db.Decimal(7,4)
+  reason String?
+  beneficiaryId String?
+  authorizedById String?
+  createdAt DateTime @default(now())
+  @@unique([saleId,orderAdjustmentId])
+  @@index([saleId,kind])
+  @@index([saleLineId])
+  @@index([ruleVersionId])
+}
+
+/** Mutable pre-sale cart. It has no financial, payment or inventory effect. */
+model Pos2Order {
+  id               String          @id @default(cuid())
+  orderNumber      String          @unique
+  branchId         String
+  branch           Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  registerId       String
+  register         Register        @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  terminalId       String
+  terminal         Terminal        @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+  cashSessionId    String
+  cashSession      CashSession     @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  createdById      String
+  lastModifiedById String
+  status           Pos2OrderStatus @default(OPEN)
+  currency         String          @default("MXN")
+  subtotal         Decimal         @default(0) @db.Decimal(18, 2)
+  discountTotal    Decimal         @default(0) @db.Decimal(18, 2)
+  total            Decimal         @default(0) @db.Decimal(18, 2)
+  pricingTimestamp DateTime
+  version          Int             @default(1)
+  expiresAt        DateTime?
+  finalizedAt      DateTime?
+  voidedAt         DateTime?
+  voidReason       String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  lines            Pos2OrderLine[]
+  sale             Pos2Sale?
+  adjustments      OrderAdjustment[]
+
+  @@index([branchId, status, createdAt])
+  @@index([registerId, status])
+  @@index([cashSessionId, status])
+  @@index([createdById, status])
+}
+
+enum Pos2SaleStatus {
+  COMPLETED
+  PARTIALLY_RETURNED
+  RETURNED
+  CANCELLED
+}
+
+enum Pos2PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+}
+
+enum Pos2PaymentStatus {
+  CAPTURED
+  VOIDED
+}
+
+/** Immutable financial fact created only by CompleteSale. */
+model Pos2Sale {
+  id              String         @id @default(cuid())
+  saleNumber      String         @unique
+  orderId         String         @unique
+  order           Pos2Order      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  branchId        String
+  branch          Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  registerId      String
+  register        Register       @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  terminalId      String
+  terminal        Terminal       @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+  cashSessionId   String
+  cashSession     CashSession    @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  cashierId       String
+  cashier         User           @relation("Pos2SaleCashier", fields: [cashierId], references: [id], onDelete: Restrict)
+  currency        String         @default("MXN")
+  subtotal        Decimal        @db.Decimal(18, 2)
+  discountTotal   Decimal        @db.Decimal(18, 2)
+  total           Decimal        @db.Decimal(18, 2)
+  status          Pos2SaleStatus @default(COMPLETED)
+  operationId     String         @unique @db.Uuid
+  completedAt     DateTime       @default(now())
+  createdAt       DateTime       @default(now())
+  lines           Pos2SaleLine[]
+  payments        Pos2Payment[]
+  cancellation    SaleCancellation?
+  returns         Pos2Return[]
+  refunds         Pos2Refund[]
+  adjustments     SaleAdjustment[]
+
+  @@index([branchId, completedAt])
+  @@index([registerId, completedAt])
+  @@index([cashSessionId, completedAt])
+}
+
+model Pos2SaleLine {
+  id                   String                 @id @default(cuid())
+  saleId               String
+  sale                 Pos2Sale               @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  orderLineId          String                 @unique
+  productId            String?
+  product              PosProduct?            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId            String?
+  variant              PosProductVariant?     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  productNameSnapshot  String
+  variantNameSnapshot  String?
+  skuSnapshot          String?
+  quantity             Decimal                @db.Decimal(18, 6)
+  unit                 CatalogBaseUnit
+  unitPrice            Decimal                @db.Decimal(18, 2)
+  lineSubtotal         Decimal                @db.Decimal(18, 2)
+  discountTotal        Decimal                @db.Decimal(18, 2)
+  lineTotal            Decimal                @db.Decimal(18, 2)
+  priceVersionId       String
+  priceVersion         PriceVersion           @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  pricingExplanation   Pos2PricingExplanation
+  taxIncluded          Boolean                @default(true)
+  position             Int
+  createdAt            DateTime               @default(now())
+
+  @@index([saleId, position])
+  @@index([productId])
+  @@index([variantId])
+  returnLines ReturnLine[]
+  adjustments SaleAdjustment[]
+}
+
+model Pos2Payment {
+  id             String            @id @default(cuid())
+  saleId         String
+  sale           Pos2Sale          @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  branchId       String
+  branch         Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  terminalId     String
+  terminal       Terminal          @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+  actorId        String
+  actor          User              @relation("Pos2PaymentActor", fields: [actorId], references: [id], onDelete: Restrict)
+  method         Pos2PaymentMethod
+  status         Pos2PaymentStatus @default(CAPTURED)
+  amount         Decimal           @db.Decimal(18, 2)
+  cashTendered   Decimal?          @db.Decimal(18, 2)
+  changeGiven    Decimal?          @db.Decimal(18, 2)
+  currency       String            @default("MXN")
+  reference      String?
+  position       Int
+  operationId    String            @db.Uuid
+  capturedAt     DateTime          @default(now())
+  createdAt      DateTime          @default(now())
+
+  @@unique([saleId, position])
+  @@index([branchId, capturedAt])
+  @@index([operationId])
+  reversals PaymentReversal[]
+  refundAllocations RefundAllocation[]
+}
+
+enum SaleCancellationReasonCode {
+  WRONG_ORDER
+  DUPLICATE
+  OPERATOR_ERROR
+  CUSTOMER_REQUEST
+  OTHER
+}
+enum ReturnReasonCode {
+  DEFECTIVE
+  WRONG_ITEM
+  CUSTOMER_RETURN
+  OTHER
+}
+enum RefundReasonCode {
+  RETURN
+  SERVICE_RECOVERY
+  PRICE_CORRECTION
+  OTHER
+}
+enum InventoryDisposition {
+  RESTOCK
+  DAMAGED
+  DISCARD
+}
+
+model SaleCancellation {
+  id String @id @default(cuid())
+  saleId String @unique
+  sale Pos2Sale @relation(fields:[saleId],references:[id],onDelete:Restrict)
+  reasonCode SaleCancellationReasonCode
+  reasonText String?
+  actorId String
+  actor User @relation("SaleCancellationActor",fields:[actorId],references:[id],onDelete:Restrict)
+  terminalId String
+  terminal Terminal @relation(fields:[terminalId],references:[id],onDelete:Restrict)
+  cashSessionId String?
+  cashSession CashSession? @relation(fields:[cashSessionId],references:[id],onDelete:Restrict)
+  operationId String @unique @db.Uuid
+  createdAt DateTime @default(now())
+  paymentReversals PaymentReversal[]
+  @@index([createdAt])
+}
+
+model PaymentReversal {
+  id String @id @default(cuid())
+  cancellationId String
+  cancellation SaleCancellation @relation(fields:[cancellationId],references:[id],onDelete:Restrict)
+  paymentId String @unique
+  payment Pos2Payment @relation(fields:[paymentId],references:[id],onDelete:Restrict)
+  method Pos2PaymentMethod
+  amount Decimal @db.Decimal(18,2)
+  currency String @default("MXN")
+  reference String?
+  createdAt DateTime @default(now())
+  @@index([cancellationId])
+}
+
+model Pos2Return {
+  id String @id @default(cuid())
+  saleId String
+  sale Pos2Sale @relation(fields:[saleId],references:[id],onDelete:Restrict)
+  reasonCode ReturnReasonCode
+  reasonText String?
+  actorId String
+  actor User @relation("Pos2ReturnActor",fields:[actorId],references:[id],onDelete:Restrict)
+  terminalId String
+  terminal Terminal @relation(fields:[terminalId],references:[id],onDelete:Restrict)
+  operationId String @unique @db.Uuid
+  createdAt DateTime @default(now())
+  lines ReturnLine[]
+  @@index([saleId,createdAt])
+}
+
+model ReturnLine {
+  id String @id @default(cuid())
+  returnId String
+  returnDocument Pos2Return @relation(fields:[returnId],references:[id],onDelete:Restrict)
+  saleLineId String
+  saleLine Pos2SaleLine @relation(fields:[saleLineId],references:[id],onDelete:Restrict)
+  quantity Decimal @db.Decimal(18,6)
+  unit CatalogBaseUnit
+  disposition InventoryDisposition
+  reasonText String?
+  createdAt DateTime @default(now())
+  @@unique([returnId,saleLineId])
+  @@index([saleLineId])
+}
+
+model Pos2Refund {
+  id String @id @default(cuid())
+  saleId String
+  sale Pos2Sale @relation(fields:[saleId],references:[id],onDelete:Restrict)
+  amount Decimal @db.Decimal(18,2)
+  currency String @default("MXN")
+  reasonCode RefundReasonCode
+  reasonText String?
+  actorId String
+  actor User @relation("Pos2RefundActor",fields:[actorId],references:[id],onDelete:Restrict)
+  terminalId String
+  terminal Terminal @relation(fields:[terminalId],references:[id],onDelete:Restrict)
+  cashSessionId String?
+  cashSession CashSession? @relation(fields:[cashSessionId],references:[id],onDelete:Restrict)
+  operationId String @unique @db.Uuid
+  createdAt DateTime @default(now())
+  allocations RefundAllocation[]
+  @@index([saleId,createdAt])
+}
+
+model RefundAllocation {
+  id String @id @default(cuid())
+  refundId String
+  refund Pos2Refund @relation(fields:[refundId],references:[id],onDelete:Restrict)
+  paymentId String
+  payment Pos2Payment @relation(fields:[paymentId],references:[id],onDelete:Restrict)
+  method Pos2PaymentMethod
+  amount Decimal @db.Decimal(18,2)
+  currency String @default("MXN")
+  reference String?
+  createdAt DateTime @default(now())
+  @@unique([refundId,paymentId])
+  @@index([paymentId])
+}
+
+model Pos2OrderLine {
+  id                 String                 @id @default(cuid())
+  orderId            String
+  order              Pos2Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  productId           String?
+  product             PosProduct?            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId           String?
+  variant             PosProductVariant?     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  targetKey           String
+  displayName         String
+  catalogVersion      Int
+  quantity            Decimal                @db.Decimal(18, 6)
+  unit                CatalogBaseUnit
+  unitPrice           Decimal                @db.Decimal(18, 2)
+  lineSubtotal        Decimal                @db.Decimal(18, 2)
+  discountTotal       Decimal                @default(0) @db.Decimal(18, 2)
+  lineTotal           Decimal                @db.Decimal(18, 2)
+  priceVersionId      String
+  priceVersion        PriceVersion           @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  pricingExplanation  Pos2PricingExplanation
+  position            Int
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([orderId, position])
+  @@index([productId])
+  @@index([variantId])
+  @@index([priceVersionId])
+}
+
+enum CashDeclarationType {
+  OPENING
+  CLOSING
+  RECOUNT
+}
+
+model CashDeclaration {
+  id             String              @id @default(cuid())
+  cashSessionId  String
+  cashSession    CashSession         @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  type           CashDeclarationType
+  amount         Decimal             @db.Decimal(18, 2)
+  actorId        String
+  actor          User                @relation("CashDeclarationActor", fields: [actorId], references: [id], onDelete: Restrict)
+  terminalId     String
+  terminal       Terminal            @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+  reason         String?
+  supersedesId   String?
+  supersedes     CashDeclaration?    @relation("CashDeclarationRecounts", fields: [supersedesId], references: [id], onDelete: Restrict)
+  recounts       CashDeclaration[]    @relation("CashDeclarationRecounts")
+  createdAt      DateTime            @default(now())
+
+  @@index([cashSessionId, createdAt])
+  @@index([supersedesId])
+}
+
+enum CashMovementType {
+  OPENING_FLOAT
+  SALE_CASH
+  CASH_IN
+  CASH_OUT
+  REFUND_CASH
+  SALE_CANCEL_REVERSAL
+  ADJUSTMENT
+  SAFE_TRANSFER
+}
+
+enum CashMovementDirection {
+  IN
+  OUT
+}
+
+model CashMovement {
+  id            String                @id @default(cuid())
+  cashSessionId String
+  cashSession   CashSession           @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  branchId      String
+  branch        Branch                @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  registerId    String
+  register      Register              @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  type          CashMovementType
+  direction     CashMovementDirection
+  amount        Decimal               @db.Decimal(18, 2)
+  sourceType    String?
+  sourceId      String?
+  actorId       String
+  actor         User                  @relation("CashMovementActor", fields: [actorId], references: [id], onDelete: Restrict)
+  operationId   String?               @unique @db.Uuid
+  metadata      Json?
+  createdAt     DateTime              @default(now())
+
+  @@index([cashSessionId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([operationId])
+  @@index([sourceType, sourceId])
 }

@@ -2,6 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { requireModuleActionAccess } from "@/lib/auth";
+
+const EQUIPMENT_KITS_PERMISSION = "/administration/inventory/equipment-kits";
 
 export type ActionResult =
   | { success: true; message: string; id?: string }
@@ -17,6 +20,7 @@ export async function createEquipmentKitAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireModuleActionAccess(EQUIPMENT_KITS_PERMISSION);
     const name = formData.get("name")?.toString().trim() ?? "";
     const description = formData.get("description")?.toString().trim() || null;
 
@@ -51,6 +55,7 @@ export async function addEquipmentKitItemAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireModuleActionAccess(EQUIPMENT_KITS_PERMISSION);
     const kitId = formData.get("kitId")?.toString() ?? "";
     const productId = formData.get("productId")?.toString() ?? "";
     const quantity = readOptionalNumber(formData.get("quantity"));
@@ -92,6 +97,7 @@ export async function removeEquipmentKitItemAction(
   kitId: string,
 ): Promise<ActionResult> {
   try {
+    await requireModuleActionAccess(EQUIPMENT_KITS_PERMISSION);
     await prisma.equipmentKitItem.delete({ where: { id: itemId } });
 
     revalidatePath(`/administration/inventory/equipment-kits/${kitId}`);

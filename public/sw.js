@@ -1,10 +1,11 @@
 // Al actualizar la interfaz, la versión invalida los recursos estáticos de
 // versiones anteriores antes de volver a servirlos desde caché.
-const CACHE_NAME = "maestro-shell-v2";
+const CACHE_NAME = "maestro-shell-v3";
 const STATIC_ASSETS = [
   "/manifest.json",
   "/icon-192.png",
   "/icon-512.png",
+  "/offline.html",
 ];
 
 self.addEventListener("install", (event) => {
@@ -37,16 +38,7 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(async () => {
-          return (await caches.match(request)) || (await caches.match("/")) || Response.error();
-        }),
+        .catch(async () => (await caches.match("/offline.html")) || Response.error()),
     );
     return;
   }

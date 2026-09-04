@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { prisma } from "@/lib/prisma";
+import { DomainError } from "@/lib/domain/errors";
+import { executeIdempotent } from "@/lib/pos2/idempotency";
+import { generateOperationId } from "@/lib/pos2/operationId";
+import { appendAuditEvent } from "@/lib/pos2/audit";
+const enabled=Boolean(process.env.PHASE3J_TEST_DATABASE_URL);
+test("POS 2.0 phase 3J replay and crash-window contract",{skip:!enabled,timeout:60_000},async t=>{const operationId=generateOperationId(),payload={orderId:"local-draft",quantity:"1"};let executions=0;const send=()=>executeIdempotent({operationId,command:"Phase3JLostResponse",payload,execute:async tx=>{executions+=1;await appendAuditEvent(tx,{action:"PHASE3J_SYNC_ACK",entityType:"LocalDraft",entityId:"local-draft",operationId,metadata:{quantity:"1"}});return{type:"SyncAck",id:"server-order",version:1};}});
+ await t.test("commit followed by lost response replays the original result",async()=>{const committed=await send();void committed;const replay=await send();assert.equal(replay.replayed,true);assert.equal(replay.result.id,"server-order");assert.equal(executions,1);assert.equal(await prisma.auditEvent.count({where:{operationId}}),1);});
+ await t.test("same operationId with changed canonical payload is rejected",async()=>{await assert.rejects(executeIdempotent({operationId,command:"Phase3JLostResponse",payload:{...payload,quantity:"2"},execute:async()=>({type:"bad",id:"bad"})}),(error:unknown)=>error instanceof DomainError&&error.code==="IDEMPOTENCY_KEY_REUSED");});
+ await prisma.$disconnect();});

@@ -1260,6 +1260,7 @@ function PaymentModal({
   const [error, setError] = useState<string | null>(null);
   const [authManagerId, setAuthManagerId] = useState("");
   const [authPin, setAuthPin] = useState("");
+  const [clientOperationId] = useState(() => crypto.randomUUID());
   const authReady = !needsAuthorization || (Boolean(authManagerId) && authPin.length === 4);
 
   const paid = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
@@ -1285,6 +1286,7 @@ function PaymentModal({
     setError(null);
 
     const salePayload = {
+      clientOperationId,
       branchId,
       discountAmount,
       discountReasonCode,
@@ -1330,7 +1332,7 @@ function PaymentModal({
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error ?? "No fue posible completar el cobro.");
+        setError(typeof data.error === "string" ? data.error : data.error?.message ?? "No fue posible completar el cobro.");
         setSubmitting(false);
         return;
       }

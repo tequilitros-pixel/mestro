@@ -22,6 +22,7 @@ async function main() {
   const ingredientIds = new Map<string, string>();
 
   for (const ingredient of INGREDIENTS) {
+    const inventoryBaseUnit = ingredient.unit === "ml" ? "ML" as const : ingredient.unit === "Pza" ? "UNIT" as const : null;
     // canBeSold: true en todos — así quedan disponibles como insumos
     // seleccionables al armar paquetes/kits de Eventos, además de
     // usarse como receta del Punto de Venta. isActive: true los deja
@@ -35,6 +36,7 @@ async function main() {
         category: ingredient.category,
         canBeSold: true,
         isActive: true,
+        inventoryBaseUnit,
       },
       create: {
         code: ingredient.code,
@@ -49,6 +51,7 @@ async function main() {
         mustReturn: false,
         minimumStock: 0,
         isActive: true,
+        inventoryBaseUnit,
       },
       select: { id: true, code: true },
     });
@@ -175,6 +178,7 @@ async function main() {
             create: variantDef.ingredients.map((ing) => ({
               inventoryProductId: ingredientIds.get(ing.ingredientCode)!,
               quantity: ing.quantity,
+              ...(() => { const legacyUnit = INGREDIENTS.find((item) => item.code === ing.ingredientCode)?.unit; return legacyUnit === "ml" ? { unit: "ML" as const, unitStatus: "RESOLVED" as const } : legacyUnit === "Pza" ? { unit: "UNIT" as const, unitStatus: "RESOLVED" as const } : {}; })(),
             })),
           },
         },

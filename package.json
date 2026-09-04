@@ -11,7 +11,8 @@
     "sync:liquor-recipes": "tsx scripts/sync-liquor-recipes.ts",
     "sync:liquor-steps": "tsx scripts/sync-liquor-steps.ts",
     "seed:pos-tequilitros": "tsx scripts/seed-pos-tequilitros.ts",
-    "cleanup:duplicate-tequilitros": "tsx scripts/cleanup-duplicate-tequilitros.ts"
+    "cleanup:duplicate-tequilitros": "tsx scripts/cleanup-duplicate-tequilitros.ts",
+    "certify:pos2": "tsx scripts/certify-pos2-pilot.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",

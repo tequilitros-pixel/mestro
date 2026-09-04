@@ -33,6 +33,25 @@ export async function requireAdmin() {
 
   return user;
 }
+
+export async function requireAdminAction() {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN") throw new Error("PERMISSION_DENIED");
+  return user;
+}
+
+export async function requireModuleActionAccess(moduleKey: string) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("PERMISSION_DENIED");
+  if (user.role === "ADMIN") return user;
+
+  const permission = await prisma.modulePermission.findUnique({
+    where: { userId_moduleKey: { userId: user.id, moduleKey } },
+    select: { id: true },
+  });
+  if (!permission) throw new Error("PERMISSION_DENIED");
+  return user;
+}
 export async function requireModuleAccess(moduleKey: string) {
   const user = await getCurrentUser();
 

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { InventoryEntryType } from "@prisma/client";
-import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { getAccessibleBranchIds, getCurrentUser, requireModuleActionAccess } from "@/lib/auth";
 import { isBranchAllowed } from "@/lib/branches/access";
 
 export type ActionResult =
@@ -20,6 +20,7 @@ export async function createInventoryEntryAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    await requireModuleActionAccess("/administration/inventory/branch-entries");
     const branchId = formData.get("branchId")?.toString() ?? "";
     const productId = formData.get("productId")?.toString() ?? "";
     const typeValue = formData.get("type")?.toString() ?? "";

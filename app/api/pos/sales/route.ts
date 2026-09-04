@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
-import { PaymentMethod, PosBenefitReason } from "@prisma/client";
+import { PaymentMethod, PosBenefitReason, Prisma } from "@prisma/client";
 import { getDiscountLimitsByRole, verifyManagerPin } from "@/lib/pos/discountLimits";
 import { getActiveDiscountRules } from "@/lib/pos/discountRules";
 import { setRlsContext, withRlsContext } from "@/lib/rls";
 import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
+import { hashPayload } from "@/lib/pos2/payloadHash";
+import { consumePosInventory } from "@/lib/pos/v1InventoryGuard";
+import { DomainError } from "@/lib/domain/errors";
+import { appendAuditEvent } from "@/lib/pos2/audit";
+import { appendOutboxEvent } from "@/lib/pos2/outbox";
+import { evaluateCapabilityShadow } from "@/lib/pos2/capabilities";
 
 const ROLES_QUE_PUEDEN_VENDER = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -135,6 +141,17 @@ export async function POST(request: NextRequest) {
     clientCreatedAt?: string;
   } = body;
 
+  if (clientOperationId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientOperationId)) {
+    return NextResponse.json({ error: "El identificador de operación no es válido." }, { status: 400 });
+  }
+
+  const salePayloadHash = hashPayload({
+    branchId, items, discountAmount: rawDiscountAmount, discountReason,
+    discountReasonCode, employeeBuyerId, payments,
+    authorization: authorization ? { managerId: authorization.managerId } : undefined,
+    clientCreatedAt,
+  });
+
   if (!branchId) {
     return NextResponse.json({ error: "Selecciona la sucursal." }, { status: 400 });
   }
@@ -157,6 +174,10 @@ export async function POST(request: NextRequest) {
     if (existing) {
       if (!(await hasBranchAccess(existing.branchId))) {
         return NextResponse.json({ error: "No autorizado en esta sucursal" }, { status: 403 });
+      }
+      if (existing.clientPayloadHash && existing.clientPayloadHash !== salePayloadHash) {
+        const error = new DomainError("IDEMPOTENCY_KEY_REUSED", { operationId: clientOperationId });
+        return NextResponse.json(error.toResponse(clientOperationId), { status: error.httpStatus });
       }
       return NextResponse.json(existing);
     }
@@ -498,12 +519,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "La fecha de la venta no es válida." }, { status: 400 });
   }
 
-  const sale = await prisma.$transaction(async (tx) => {
+  try {
+    const sale = await prisma.$transaction(async (tx) => {
     await setRlsContext(tx, user);
     const createdSale = await tx.posSale.create({
       data: {
         ...(clientOperationId ? { id: clientOperationId } : {}),
         code,
+        clientPayloadHash: clientOperationId ? salePayloadHash : null,
         branchId,
         cashCutId: openCashCut.id,
         soldById: user.id,
@@ -545,26 +568,17 @@ export async function POST(request: NextRequest) {
       include: { items: true, payments: true, branch: true },
     });
 
-    // Descuenta del inventario de la sucursal cada ingrediente de
-    // los productos compuestos vendidos (no aplica a cobros
-    // personalizados, que no tienen receta).
+    const inventoryRequirements: Array<{ productId: string; quantity: number }> = [];
     for (const item of resolvedItems) {
       if (!item.variantId) continue;
       const variant = variantsById.get(item.variantId);
       if (!variant) continue;
 
       for (const ingredient of variant.ingredients) {
-        await tx.inventoryEntry.create({
-          data: {
-            branchId,
-            productId: ingredient.inventoryProductId,
-            type: "VENTA_POS",
-            quantity: -(Number(ingredient.quantity) * item.quantity),
-            notes: `Venta POS ${code}`,
-          },
-        });
+        inventoryRequirements.push({ productId: ingredient.inventoryProductId, quantity: Number(ingredient.quantity) * item.quantity });
       }
     }
+    await consumePosInventory(tx, { branchId, saleCode: code, requirements: inventoryRequirements });
 
     // Suma los pagos de esta venta al corte de caja abierto de la
     // sucursal — así "Ventas" en el corte queda alimentado por el
@@ -586,8 +600,37 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    await appendAuditEvent(tx, {
+      actorId: user.id, branchId, action: "pos.sale.completed", entityType: "PosSale",
+      entityId: createdSale.id, operationId: clientOperationId, metadata: { code, total, itemCount: resolvedItems.length },
+    });
+    await evaluateCapabilityShadow(tx, {
+      actor: { id: user.id, role: user.role, branchIds: user.role === "ADMIN" ? null : [branchId] },
+      capability: "pos.sale.create", branchId, legacyAllowed: true,
+      entityType: "PosSale", entityId: createdSale.id,
+    });
+    await appendOutboxEvent(tx, {
+      topic: "pos.sale.completed", aggregate: "PosSale", aggregateId: createdSale.id,
+      operationId: clientOperationId, payload: { saleId: createdSale.id, branchId, code },
+    });
+
     return createdSale;
+  }).catch(async (error: unknown) => {
+    if (error instanceof DomainError) throw error;
+    if (clientOperationId && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const existing = await withRlsContext(user, (tx) => tx.posSale.findUnique({ where: { id: clientOperationId }, include: { items: true, payments: true, branch: true } }));
+      if (existing?.clientPayloadHash === salePayloadHash) return existing;
+      throw new DomainError("IDEMPOTENCY_KEY_REUSED", { operationId: clientOperationId });
+    }
+    throw error;
   });
 
-  return NextResponse.json(sale, { status: 201 });
+    return NextResponse.json(sale, { status: 201 });
+  } catch (error) {
+    if (error instanceof DomainError) {
+      return NextResponse.json(error.toResponse(clientOperationId), { status: error.httpStatus });
+    }
+    console.error("Error completing POS sale:", error);
+    return NextResponse.json({ error: "No fue posible completar el cobro." }, { status: 500 });
+  }
 }

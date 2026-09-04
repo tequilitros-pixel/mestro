@@ -21,28 +21,39 @@ export default function ScheduleTabs() {
   const [tab, setTab] = useState<Tab>("horario");
 
   return (
-    <div className="space-y-6">
-      <div className="inline-flex flex-wrap gap-1 rounded-2xl border border-outline-variant bg-surface-container p-1.5">
-        {TABS.map((t) => {
-          const Icon = t.icon;
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 border-b border-outline-variant pb-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">
+            Administración
+          </p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-on-surface">
+            Programar horarios
+          </h1>
+        </div>
 
-          return (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition ${
-                tab === t.key
-                  ? "bg-primary text-on-primary shadow"
-                  : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-              }`}
-            >
-              <AppIconBadge>
-                <Icon className="h-full w-full" />
-              </AppIconBadge>
-              {t.label}
-            </button>
-          );
-        })}
+        <div className="flex gap-1 overflow-x-auto" aria-label="Secciones de horarios">
+          {TABS.map((t) => {
+            const Icon = t.icon;
+
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                  tab === t.key
+                    ? "bg-primary text-on-primary"
+                    : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+                }`}
+              >
+                <AppIconBadge>
+                  <Icon className="h-full w-full" />
+                </AppIconBadge>
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {tab === "horario" && <ScheduleGrid />}

@@ -4,6 +4,9 @@ import { InventoryContentUnit, InventoryHandlingUnit, InventoryItemType } from "
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { PRODUCT_CATEGORIES } from "./categories";
+import { requireModuleActionAccess } from "@/lib/auth";
+
+const INVENTORY_PRODUCTS_PERMISSION = "/administration/inventory/products";
 
 export type CreateInventoryProductResult =
   | {
@@ -46,6 +49,7 @@ export async function createInventoryProductAction(
   formData: FormData,
 ): Promise<CreateInventoryProductResult> {
   try {
+    await requireModuleActionAccess(INVENTORY_PRODUCTS_PERMISSION);
     const code = formData.get("code")?.toString().trim().toUpperCase() ?? "";
     const name = formData.get("name")?.toString().trim() ?? "";
     const description =
@@ -172,6 +176,7 @@ export async function toggleProductActiveAction(
   isActive: boolean,
 ): Promise<{ success: true } | { success: false; error: string }> {
   try {
+    await requireModuleActionAccess(INVENTORY_PRODUCTS_PERMISSION);
     await prisma.inventoryProduct.update({
       where: { id: productId },
       data: { isActive },
@@ -192,6 +197,7 @@ export async function updateProductCategoryAction(
   category: string,
 ): Promise<{ success: true } | { success: false; error: string }> {
   try {
+    await requireModuleActionAccess(INVENTORY_PRODUCTS_PERMISSION);
     if (!PRODUCT_CATEGORIES.includes(category as (typeof PRODUCT_CATEGORIES)[number])) {
       return { success: false, error: "Selecciona una categoría válida." };
     }
@@ -218,6 +224,7 @@ export async function updateInventoryProductAction(
   formData: FormData,
 ): Promise<CreateInventoryProductResult> {
   try {
+    await requireModuleActionAccess(INVENTORY_PRODUCTS_PERMISSION);
     const name = formData.get("name")?.toString().trim() ?? "";
     const description = formData.get("description")?.toString().trim() || null;
     const category = formData.get("category")?.toString().trim() ?? "";
@@ -284,6 +291,7 @@ export async function deleteInventoryProductAction(
   productId: string,
 ): Promise<{ success: true } | { success: false; error: string }> {
   try {
+    await requireModuleActionAccess(INVENTORY_PRODUCTS_PERMISSION);
     const [packageUses, eventUses, kitUses, countUses, entryUses, posRecipeUses] = await Promise.all([
       prisma.eventPackageItem.count({ where: { productId } }),
       prisma.serviceEventItem.count({ where: { productId } }),

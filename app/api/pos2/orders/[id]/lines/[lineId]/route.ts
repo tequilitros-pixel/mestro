@@ -1,0 +1,7 @@
+import { NextResponse } from "next/server";
+import { getCurrentCommandActor } from "@/lib/pos2/currentActor";
+import { pos2ErrorResponse, requireOrderTerminal, requireTerminalRequest } from "@/lib/pos2/http";
+import { removeOrderLine, updateOrderLineQuantity } from "@/lib/pos2/orders/manageOrders";
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string; lineId: string }> }) { try { const terminalId = await requireTerminalRequest(request); const actor = await getCurrentCommandActor(); const body = await request.json(); const { id, lineId } = await context.params; await requireOrderTerminal(terminalId, id); const outcome = await updateOrderLineQuantity({ orderId: id, lineId, actor, operationId: String(body.operationId), quantity: String(body.quantity), expectedOrderVersion: Number(body.expectedOrderVersion) }); return NextResponse.json(outcome.result); } catch (error) { return pos2ErrorResponse(error); } }
+export async function DELETE(request: Request, context: { params: Promise<{ id: string; lineId: string }> }) { try { const terminalId = await requireTerminalRequest(request); const actor = await getCurrentCommandActor(); const body = await request.json(); const { id, lineId } = await context.params; await requireOrderTerminal(terminalId, id); const outcome = await removeOrderLine({ orderId: id, lineId, actor, operationId: String(body.operationId), expectedOrderVersion: Number(body.expectedOrderVersion) }); return NextResponse.json(outcome.result); } catch (error) { return pos2ErrorResponse(error); } }
