@@ -13,6 +13,10 @@
  * UTC, así que el resultado es el mismo sin importar dónde se ejecuten.
  */
 
+import { BUSINESS_TIME_ZONE } from "./dateTime";
+
+export { BUSINESS_TIME_ZONE } from "./dateTime";
+
 /** "YYYY-MM-DD" -> Date anclado a medianoche UTC. */
 export function parseDateOnly(dateStr: string): Date {
   return new Date(`${dateStr}T00:00:00.000Z`);
@@ -50,8 +54,6 @@ export function mondayOfWeek(dateStr: string): string {
 export function todayDateOnly(): string {
   return formatBusinessDateOnly(new Date());
 }
-
-export const BUSINESS_TIME_ZONE = "America/Mexico_City";
 
 /** Date -> fecha de calendario en la zona horaria del negocio. */
 export function formatBusinessDateOnly(date: Date): string {

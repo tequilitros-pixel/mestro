@@ -150,6 +150,26 @@ export function isConfigurablePermissionKey(key: string): boolean {
   return CONFIGURABLE_PERMISSION_KEYS.has(key);
 }
 
+/** Regla unica de acceso por modulo para UI, Server Actions y APIs. */
+export function canAccessModule(
+  role: string,
+  moduleKeys: readonly string[],
+  moduleKey: string,
+): boolean {
+  if (role === "ADMIN") return true;
+
+  const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);
+  if (
+    role === "OPERATOR" &&
+    !hasConfiguredPermissions &&
+    LEGACY_OPERATOR_PERMISSION_KEYS.some((key) => key === moduleKey)
+  ) {
+    return true;
+  }
+
+  return moduleKeys.includes(moduleKey);
+}
+
 export function getModuleKeyForPath(pathname: string): string | null {
   const allKeys = PERMISSION_GROUPS.flatMap((g) => g.modules.map((m) => m.key));
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   calculateCookingProgress,
+  formatDateTime,
   formatDuration,
   getCookingHealth,
   getTemperatureStatus,
@@ -42,4 +43,8 @@ test("formatea duraciones largas y evita valores negativos", () => {
   const start = new Date("2026-01-01T00:00:00Z");
   assert.equal(formatDuration(start, new Date("2026-01-02T02:15:00Z")), "1 d 2 h 15 min");
   assert.equal(formatDuration(start, new Date("2025-12-31T23:00:00Z")), "0 min");
+});
+
+test("muestra la hora de Cocimiento en la zona del negocio", () => {
+  assert.match(formatDateTime(new Date("2026-09-03T18:15:00.000Z")), /12:15/);
 });

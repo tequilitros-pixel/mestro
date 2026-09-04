@@ -26,7 +26,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     setSnapshot((current) => ({
       ...current,
       online: navigator.onLine,
-      pending: operations.length,
+      pending: operations.filter((operation) => operation.status === "pending").length,
       syncing: operations.some((operation) => operation.status === "syncing"),
       failed: operations.filter((operation) => operation.status === "failed").length,
       lastSyncedAt: localStorage.getItem("maestro:last-synced-at"),
