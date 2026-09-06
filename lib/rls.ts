@@ -2,14 +2,12 @@ import "server-only";
 
 import type { Prisma } from "@prisma/client";
 import { rawPrisma as prisma } from "@/lib/prisma";
+import { enforceRuntimeRole } from "@/lib/runtime-role";
 
 export type RlsUser = { id: string; role: string };
 
 export async function setRlsContext(tx: Prisma.TransactionClient, user: RlsUser | null) {
-  const [role] = await tx.$queryRaw<{ current_user: string; rolsuper: boolean; rolbypassrls: boolean }[]>`
-    SELECT current_user, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user
-  `;
-  if (!role || role.rolsuper || role.rolbypassrls || (process.env.NODE_ENV === "production" && role.current_user !== "maestro_runtime")) throw new Error("RUNTIME_DATABASE_ROLE_MUST_ENFORCE_RLS");
+  await enforceRuntimeRole(tx, process.env.NODE_ENV === "production");
   const identity = user ? await tx.user.findUnique({ where: { id: user.id }, select: { active: true, role: true } }) : null;
   const active = Boolean(identity?.active);
   await tx.$queryRaw`
