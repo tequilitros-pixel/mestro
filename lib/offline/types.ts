@@ -36,6 +36,7 @@ export type OfflineOperation = {
 };
 
 export type SyncSnapshot = {
+  syncError?: string | null;
   online: boolean;
   pending: number;
   syncing: boolean;

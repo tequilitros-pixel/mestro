@@ -22,21 +22,34 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
 
   const refresh = useCallback(async () => {
-    const operations = await listOperations();
-    setSnapshot((current) => ({
-      ...current,
-      online: navigator.onLine,
-      pending: operations.filter((operation) => operation.status === "pending").length,
-      syncing: operations.some((operation) => operation.status === "syncing"),
-      failed: operations.filter((operation) => operation.status === "failed").length,
-      lastSyncedAt: localStorage.getItem("maestro:last-synced-at"),
-    }));
+    try {
+      const operations = await listOperations();
+      const lastSyncedAt = localStorage.getItem("maestro:last-synced-at");
+      const next = {
+        online: navigator.onLine,
+        pending: operations.filter((operation) => operation.status === "pending").length,
+        syncing: operations.some((operation) => operation.status === "syncing"),
+        failed: operations.filter((operation) => operation.status === "failed").length,
+        lastSyncedAt: lastSyncedAt && Number.isFinite(new Date(lastSyncedAt).getTime()) ? lastSyncedAt : null,
+      };
+      setSnapshot((current) => ({ ...current, ...next }));
+    } catch (error) {
+      console.error("No fue posible leer el estado de sincronización", error);
+      setSnapshot((current) => ({ ...current, syncing: false, syncError: "No fue posible leer la cola local." }));
+    }
   }, []);
 
   const syncNow = useCallback(async () => {
-    await refresh();
-    await syncOfflineQueue();
-    await refresh();
+    setSnapshot((current) => ({ ...current, syncError: null }));
+    try {
+      await refresh();
+      await syncOfflineQueue();
+    } catch (error) {
+      console.error("No fue posible sincronizar la cola local", error);
+      setSnapshot((current) => ({ ...current, syncing: false, syncError: "No fue posible sincronizar la cola local." }));
+    } finally {
+      await refresh();
+    }
   }, [refresh]);
 
   useEffect(() => {
@@ -48,10 +61,14 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("maestro:queue-changed", handleChange);
     window.addEventListener("maestro:sync-finished", handleChange);
     const initialRefresh = window.setTimeout(() => {
-      void refresh().then(() => syncOfflineQueue());
-      if ("serviceWorker" in navigator) {
-        void navigator.serviceWorker.register("/sw.js", { scope: "/" });
-      }
+      void syncNow();
+      void (async () => {
+        try {
+          if ("serviceWorker" in navigator) await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        } catch (error) {
+          console.error("No fue posible registrar el modo offline", error);
+        }
+      })();
     }, 0);
 
     const interval = window.setInterval(() => void syncNow(), 30_000);
