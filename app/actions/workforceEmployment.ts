@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 import { assertWorkforceAdministrator } from "@/lib/workforce/employment/rules";
-import { addBranchAssignment, changeEmploymentStatus, changeHomeBranch, changePayRate, createEmployee } from "@/lib/workforce/employment/service";
+import { addBranchAssignment, changeEmploymentStatus, changeHomeBranch, changePayRate, createEmployee, rehireEmployee, updateEmployeeProfile, changeJornada, endAllowedBranch } from "@/lib/workforce/employment/service";
 
 async function authorize() {
   if (!workforceV1Enabled()) throw new Error("Workforce V1 no está habilitado.");
@@ -25,7 +25,10 @@ function dateValue(formData: FormData, key: string) {
 export async function createWorkforceEmployeeAction(formData: FormData) {
   await authorize();
   const rateAmount = Number(formData.get("rateAmount"));
-  const employee = await createEmployee({
+  let employee;
+  try {
+    if (String(formData.get("rateAmount") ?? "").trim() && (!Number.isFinite(rateAmount) || rateAmount <= 0)) throw new Error("La tarifa debe ser mayor que cero.");
+    employee = await createEmployee({
     displayName: String(formData.get("displayName") ?? ""),
     firstName: String(formData.get("firstName") ?? "") || null,
     lastName: String(formData.get("lastName") ?? "") || null,
@@ -35,13 +38,17 @@ export async function createWorkforceEmployeeAction(formData: FormData) {
       status: String(formData.get("status") ?? "ACTIVE") as "ACTIVE" | "INACTIVE" | "TERMINATED",
       startedAt: String(formData.get("startedAt") ?? "") ? dateValue(formData, "startedAt") : null,
       dataConfidence: String(formData.get("startedAt") ?? "") ? "KNOWN" : "LEGACY_UNKNOWN",
+      allowedBranchIds: formData.getAll("allowedBranchIds").map(String),
+      jornadaType: (String(formData.get("jornadaType") ?? "") || null) as "DAY" | "NIGHT" | "MIXED" | null,
       homeBranchId: String(formData.get("homeBranchId") ?? "") || null,
       effectiveFrom: dateValue(formData, "effectiveFrom"),
       payRate: Number.isFinite(rateAmount) && rateAmount > 0 ? { rateType: String(formData.get("rateType") ?? "HOURLY") as "HOURLY" | "DAILY" | "WEEKLY" | "SALARY", amount: rateAmount, currency: String(formData.get("currency") ?? "").toUpperCase(), effectiveFrom: dateValue(formData, "effectiveFrom") } : undefined,
     },
   });
-  revalidatePath("/administration/workforce");
-  redirect(`/administration/workforce/employees/${employee.id}`);
+  } catch (cause) { redirect(`/administration/workforce/employees/new?error=${encodeURIComponent(cause instanceof Error ? cause.message : "No fue posible crear el empleado.")}`); }
+  revalidatePath("/administration/workforce/employees");
+  const home = String(formData.get("homeBranchId") ?? "");
+  redirect(`/administration/workforce/employees/${employee.id}${home ? `?assignedBranch=${encodeURIComponent(home)}` : ""}`);
 }
 
 export async function changeWorkforceHomeAction(formData: FormData) {
@@ -67,12 +74,20 @@ export async function changeWorkforceHomeAction(formData: FormData) {
   redirect(`/administration/workforce/employees/${employeeId}?assignedBranch=${encodeURIComponent(branchId)}&assignedFrom=${effectiveFrom.toISOString().slice(0, 10)}`);
 }
 
-export async function addWorkforceAllowedBranchAction(formData: FormData) {
+async function change(formData: FormData, operation: () => Promise<unknown>) {
   await authorize();
-  await addBranchAssignment({ employmentId: String(formData.get("employmentId")), branchId: String(formData.get("branchId")), type: "ALLOWED", effectiveFrom: dateValue(formData, "effectiveFrom") });
-  revalidatePath(`/administration/workforce/employees/${String(formData.get("employeeId"))}`);
+  const id = String(formData.get("employeeId") ?? "");
+  let error = "";
+  try { await operation(); } catch (cause) { error = cause instanceof Error ? cause.message : "No fue posible guardar."; }
+  revalidatePath("/administration/workforce/employees");
+  revalidatePath(`/administration/workforce/employees/${id}`);
+  revalidatePath("/administration/workforce/schedule");
+  redirect(`/administration/workforce/employees/${encodeURIComponent(id)}?${error ? `error=${encodeURIComponent(error)}` : "saved=1"}`);
 }
 
+export async function addWorkforceAllowedBranchAction(formData: FormData) {
+  return change(formData, () => addBranchAssignment({ employmentId: String(formData.get("employmentId")), branchId: String(formData.get("branchId")), type: "ALLOWED", effectiveFrom: dateValue(formData, "effectiveFrom") }));
+}
 export async function changeWorkforcePayRateAction(formData: FormData) {
   await authorize();
   const employeeId = String(formData.get("employeeId"));
@@ -85,9 +100,18 @@ export async function changeWorkforcePayRateAction(formData: FormData) {
   if (error) redirect(`/administration/workforce/employees/${encodeURIComponent(employeeId)}?error=${encodeURIComponent(error)}`);
   revalidatePath(`/administration/workforce/employees/${employeeId}`);
 }
-
 export async function changeWorkforceEmploymentStatusAction(formData: FormData) {
-  await authorize();
-  await changeEmploymentStatus({ employmentId: String(formData.get("employmentId")), status: String(formData.get("status")) as "ACTIVE" | "INACTIVE" | "TERMINATED", effectiveAt: dateValue(formData, "effectiveAt"), terminationReason: String(formData.get("terminationReason") ?? "") || null });
-  revalidatePath(`/administration/workforce/employees/${String(formData.get("employeeId"))}`);
+  return change(formData, () => changeEmploymentStatus({ employmentId: String(formData.get("employmentId")), status: String(formData.get("status")) as "ACTIVE" | "INACTIVE" | "TERMINATED", effectiveAt: dateValue(formData, "effectiveAt"), terminationReason: String(formData.get("terminationReason") ?? "") || null }));
+}
+export async function updateWorkforceEmployeeAction(formData: FormData) {
+  return change(formData, () => updateEmployeeProfile({ employeeId: String(formData.get("employeeId")), displayName: String(formData.get("displayName") ?? "") }));
+}
+export async function rehireWorkforceEmployeeAction(formData: FormData) {
+  return change(formData, () => rehireEmployee({ employeeId: String(formData.get("employeeId")), startedAt: formData.get("startedAt") ? dateValue(formData, "startedAt") : null, dataConfidence: formData.get("startedAt") ? "KNOWN" : "LEGACY_UNKNOWN" }));
+}
+export async function changeWorkforceJornadaAction(formData: FormData) {
+  return change(formData, () => changeJornada({ employmentId: String(formData.get("employmentId")), jornadaType: String(formData.get("jornadaType")) as "DAY" | "NIGHT" | "MIXED", effectiveFrom: dateValue(formData, "effectiveFrom") }));
+}
+export async function endWorkforceAllowedBranchAction(formData: FormData) {
+  return change(formData, () => endAllowedBranch({ assignmentId: String(formData.get("assignmentId")), employmentId: String(formData.get("employmentId")), effectiveTo: dateValue(formData, "effectiveTo") }));
 }

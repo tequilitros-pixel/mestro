@@ -498,7 +498,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       operatorAllowed: true,
     },
     {
-      href: "/administration/workforce",
+      href: "/administration/workforce/employees",
       label: "Empleados",
       icon: UsersIcon,
       iconVariant: "purple",
@@ -511,7 +511,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
     },
     {
       href: "/administration/workforce/branches",
-      label: "Sucursales Workforce",
+      label: "Sucursales",
       icon: MapPinIcon,
       iconVariant: "cyan",
     },
