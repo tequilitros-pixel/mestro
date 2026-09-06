@@ -20,7 +20,6 @@ export type IdempotentOutcome<T extends StableResult> = {
 };
 
 export async function executeIdempotent<T extends StableResult>(params: {
-  client?: typeof prisma;
   operationId: string;
   command: string;
   payload: unknown;
@@ -32,7 +31,7 @@ export async function executeIdempotent<T extends StableResult>(params: {
   }
   const payloadHash = hashPayload(params.payload);
 
-  return (params.client ?? prisma).$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     const inserted = await tx.$queryRaw<Array<{ operationId: string }>>`
       INSERT INTO "OperationReceipt" (
         "operationId", "command", "payloadHash", "status", "actorId",
