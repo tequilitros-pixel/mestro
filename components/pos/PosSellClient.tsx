@@ -16,7 +16,6 @@ import {
 import { getProductVisual } from "@/lib/pos/productVisual";
 import { useToast } from "@/components/ui/Toast";
 import { enqueueOperation } from "@/lib/offline/queue";
-import { syncOfflineQueue } from "@/lib/offline/sync";
 
 type Variant = {
   id: string;
@@ -1260,6 +1259,8 @@ function PaymentModal({
   const [error, setError] = useState<string | null>(null);
   const [authManagerId, setAuthManagerId] = useState("");
   const [authPin, setAuthPin] = useState("");
+  const [clientOperationId] = useState(() => crypto.randomUUID());
+  const [clientCreatedAt] = useState(() => new Date().toISOString());
   const authReady = !needsAuthorization || (Boolean(authManagerId) && authPin.length === 4);
 
   const paid = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
@@ -1285,6 +1286,8 @@ function PaymentModal({
     setError(null);
 
     const salePayload = {
+      clientOperationId,
+      clientCreatedAt,
       branchId,
       discountAmount,
       discountReasonCode,
@@ -1309,13 +1312,17 @@ function PaymentModal({
         setSubmitting(false);
         return;
       }
-      await enqueueOperation({
-        id: crypto.randomUUID(),
-        kind: "pos.sale.create",
-        payload: salePayload,
-        createdAt: new Date().toISOString(),
-      });
-      onSuccess();
+      try {
+        await enqueueOperation({
+          id: clientOperationId,
+          kind: "pos.sale.create",
+          payload: salePayload,
+          createdAt: clientCreatedAt,
+        });
+        onSuccess();
+      } catch {
+        setError("No fue posible guardar la venta en este dispositivo. Conserva esta pantalla y reintenta.");
+      }
       setSubmitting(false);
       return;
     }
@@ -1330,7 +1337,7 @@ function PaymentModal({
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error ?? "No fue posible completar el cobro.");
+        setError(typeof data.error === "string" ? data.error : data.error?.message ?? "No fue posible completar el cobro.");
         setSubmitting(false);
         return;
       }
@@ -1340,9 +1347,12 @@ function PaymentModal({
       if (needsAuthorization) {
         setError("No fue posible verificar la autorización. Revisa tu conexión.");
       } else {
-        await enqueueOperation({ id: crypto.randomUUID(), kind: "pos.sale.create", payload: salePayload, createdAt: new Date().toISOString() });
-        await syncOfflineQueue();
-        onSuccess();
+        try {
+          await enqueueOperation({ id: clientOperationId, kind: "pos.sale.create", payload: salePayload, createdAt: clientCreatedAt });
+          onSuccess();
+        } catch {
+          setError("No fue posible guardar el cobro por confirmar. Conserva esta pantalla y reintenta la misma operación.");
+        }
       }
       setSubmitting(false);
     }

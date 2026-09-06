@@ -37,6 +37,20 @@ function mondayIndexedWeekday(dateStr: string) {
   return (jsDay + 6) % 7;
 }
 
+function calculatedDuration(startTime: string, endTime: string) {
+  const [startHour, startMinute] = startTime.split(":").map(Number);
+  const [endHour, endMinute] = endTime.split(":").map(Number);
+  if (![startHour, startMinute, endHour, endMinute].every(Number.isFinite)) return "—";
+
+  const start = startHour * 60 + startMinute;
+  let end = endHour * 60 + endMinute;
+  if (end <= start) end += 24 * 60;
+  const minutes = end - start;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder === 0 ? `${hours} h` : `${hours} h ${remainder} min`;
+}
+
 export default function ShiftModal({
   employees,
   branches,
@@ -91,6 +105,14 @@ export default function ShiftModal({
   const [moveUserId, setMoveUserId] = useState(initial.userId);
   const [moveDate, setMoveDate] = useState(initial.date);
   const [moving, setMoving] = useState(false);
+
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
 
   function toggleDuplicatePanel() {
     setShowDuplicate((v) => !v);
@@ -327,11 +349,21 @@ export default function ShiftModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-surface-dim/80 p-3 sm:p-6">
-      <div className="compact-modal-panel flex w-full max-w-lg flex-col overflow-hidden border border-outline-variant bg-surface-container">
+    <div
+      className="fixed inset-0 z-[100] flex justify-end bg-surface-dim/70"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="shift-panel-title"
+        className="flex h-full w-full max-w-[460px] flex-col overflow-hidden border-l border-outline-variant bg-surface-container shadow-2xl"
+      >
         <header className="compact-modal-header flex shrink-0 items-center justify-between border-b border-outline-variant">
-          <h2 className="text-lg font-bold text-on-surface">
-            {isEditing ? "Editar turno" : "Agregar turno"}
+          <h2 id="shift-panel-title" className="text-lg font-bold text-on-surface">
+            {isEditing ? "Editar turno" : "Nuevo turno"}
           </h2>
           <button
             onClick={onClose}
@@ -470,6 +502,13 @@ export default function ShiftModal({
                   </p>
                 )}
 
+                <div className="flex items-center justify-between rounded-lg border border-outline-variant bg-surface-container-high px-3 py-2.5">
+                  <span className="text-xs font-medium text-on-surface-variant">Horas calculadas</span>
+                  <strong className="font-mono text-sm text-on-surface">
+                    {calculatedDuration(startTime, endTime)}
+                  </strong>
+                </div>
+
                 <label className="block space-y-2">
                   <span className="text-sm font-semibold text-on-surface-variant">
                     Puesto / función (opcional)
@@ -501,7 +540,7 @@ export default function ShiftModal({
                 disabled={saving}
                 className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97] disabled:opacity-60 disabled:hover:scale-100"
               >
-                {saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Agregar turno"}
+                {saving ? "Guardando..." : isEditing ? "Guardar cambios" : "Guardar turno"}
               </button>
 
               <button
@@ -519,7 +558,7 @@ export default function ShiftModal({
                       className="inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-3 text-sm font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-on-surface"
                     >
                       <ClipboardIcon className="h-4 w-4" />
-                      Duplicar
+                      Copiar a otros días
                     </button>
                   )}
 
@@ -544,7 +583,7 @@ export default function ShiftModal({
 
             {isEditing && showDuplicate && (
               <div className="space-y-4 rounded-xl border border-outline-variant bg-background p-4">
-                <p className="text-sm font-semibold text-on-surface">Duplicar este turno a:</p>
+                <p className="text-sm font-semibold text-on-surface">Copiar este turno a:</p>
 
                 <div className="flex flex-wrap gap-2">
                   {weekDates.map((d, i) => {
@@ -585,7 +624,7 @@ export default function ShiftModal({
                   disabled={duplicating}
                   className="w-full rounded-xl bg-secondary/15 py-3 text-sm font-bold text-secondary transition duration-150 ease-out hover:opacity-90 hover:scale-[1.02] active:scale-[0.97] disabled:opacity-60"
                 >
-                  {duplicating ? "Duplicando..." : "Confirmar duplicado"}
+                  {duplicating ? "Copiando..." : "Aplicar"}
                 </button>
               </div>
             )}
@@ -746,7 +785,7 @@ export default function ShiftModal({
             )}
           </div>
         </div>
-      </div>
+      </aside>
     </div>
   );
 }

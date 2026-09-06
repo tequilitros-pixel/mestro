@@ -18,7 +18,7 @@ export default async function WorkforceCalendarPage({ searchParams }: { searchPa
   const actor={id:user.id,role:user.role};
   if (!await getOwnEmployeeOrNull(actor)) return <Card><h2 className="font-bold">Sin relación laboral vinculada</h2><p className="text-sm text-on-surface-variant">Tu identidad de acceso todavía no está asociada a un Employee activo. Solicita apoyo a administración.</p></Card>;
   const query = await searchParams;
-  const view = query.view === "month" ? "month" : query.view === "week" ? "week" : "today";
+  const view = query.view === "month" ? "month" : query.view === "today" ? "today" : "week";
   const anchor = dateOnly(query.date ?? new Date());
   const weekStart = new Date(anchor.getTime() - ((anchor.getUTCDay() + 6) % 7) * dayMs);
   const from = view === "today" ? anchor : view === "week" ? weekStart : new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));

@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
+import { contextualPrisma } from "@/lib/contextual-prisma";
 
 /*
  * Se importa "pg" como default y se desestructura Pool desde ahí
@@ -30,9 +31,11 @@ function verifiedDatabaseUrl() {
 const pool = new Pool({ connectionString: verifiedDatabaseUrl() });
 const adapter = new PrismaPg(pool);
 
-export const prisma =
+export const rawPrisma =
   globalForPrisma.prisma ?? new PrismaClient({ adapter });
 
+export const prisma = contextualPrisma(rawPrisma);
+
 if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+  globalForPrisma.prisma = rawPrisma;
 }

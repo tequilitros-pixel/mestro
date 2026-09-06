@@ -1,0 +1,10 @@
+export type CatalogVariantDto={id:string;name:string;sku:string|null;price:string|null;available:boolean};
+export type CatalogProductDto={id:string;name:string;sku:string|null;internalCode:string|null;barcode:string|null;icon:string|null;imageAlt:string|null;available:boolean;variants:CatalogVariantDto[];price:string|null};
+export type CatalogCategoryDto={id:string;name:string;icon:string|null;products:CatalogProductDto[]};
+export type PosContextDto={branchId:string;branchName:string;registerId:string;registerName:string;terminalId:string;terminalName:string;cashSessionId:string|null};
+export type AdjustmentRuleDto={id:string;kind:"DISCOUNT"|"COURTESY";name:string;requiresBeneficiary:boolean;requiresAuthorization:boolean};
+export type PersonDto={id:string;name:string};
+export type OrderLineDto={id:string;productId:string|null;variantId:string|null;displayName:string;quantity:string;unit:"UNIT"|"ML";unitPrice:string;lineSubtotal:string;discountTotal:string;lineTotal:string};
+export type OrderAdjustmentDto={id:string;kind:"PROMOTION"|"DISCOUNT"|"COURTESY";name:string;amount:string;automatic:boolean;beneficiaryId:string|null;reason:string|null};
+export type OrderDto={id:string;orderNumber:string;status:"OPEN"|"PAYMENT_PENDING"|"FINALIZED"|"VOIDED"|"EXPIRED";version:number;subtotal:string;discountTotal:string;total:string;createdAt:string;lines:OrderLineDto[];adjustments:OrderAdjustmentDto[]};
+export type SaleSummaryDto={id:string;saleNumber:string;total:string;status:string;completedAt:string;cashier:string;payments:Array<{method:string;amount:string}>};

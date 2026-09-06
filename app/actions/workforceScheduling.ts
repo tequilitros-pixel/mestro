@@ -59,7 +59,7 @@ async function run(
       target,
       "error",
       error instanceof Error
-        ? error.message
+        ? error.message.replace(/\s*\(OVERLAPPING_SHIFT\)$/, "")
         : "No fue posible completar la acción.",
     );
   }

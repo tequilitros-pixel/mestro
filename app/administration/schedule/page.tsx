@@ -14,22 +14,8 @@ export default async function SchedulePage() {
   }
 
   return (
-    <main className="min-h-screen bg-background px-4 py-8 text-on-surface sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl space-y-8">
-        <div>
-          <p className="font-mono text-xs font-black uppercase tracking-[0.35em] text-on-surface-variant">
-            Administración
-          </p>
-
-          <h1 className="mt-2 text-4xl font-bold text-on-surface">
-            Horarios
-          </h1>
-
-          <p className="mt-2 text-sm text-on-surface-variant">
-            Turnos, cobertura y plantillas por sucursal.
-          </p>
-        </div>
-
+    <main className="min-h-screen bg-background px-3 py-4 text-on-surface sm:px-5 lg:px-6">
+      <div className="mx-auto max-w-[1800px] space-y-4">
         <ScheduleTabs />
       </div>
     </main>

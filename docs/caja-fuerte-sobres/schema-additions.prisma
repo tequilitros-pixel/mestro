@@ -1,0 +1,161 @@
+// ============================================================
+// SOBRES EN CAJA FUERTE — bloques a pegar en prisma/schema.prisma
+// ============================================================
+// NO PEGAR TODAVÍA. Solo cuando Codex confirme que Fase 3 liberó
+// schema.prisma. Ver docs/caja-fuerte-sobres/DISENO.md para el
+// razonamiento completo detrás de cada decisión.
+//
+// Instrucciones de dónde va cada bloque:
+//
+// BLOQUE A — dentro de `model User { ... }`, junto a las otras
+// relaciones inversas de Caja fuerte (cerca de la línea 49,
+// `cashSafeMovementsBy CashSafeMovement[] @relation("CashSafeMovementBy")`):
+
+  cashSafeEnvelopesCreated   CashSafeEnvelope[]         @relation("CashSafeEnvelopeCreatedBy")
+  cashSafeEnvelopesReceived  CashSafeEnvelope[]         @relation("CashSafeEnvelopeReceivedBy")
+  cashSafeEnvelopeMovements  CashSafeEnvelopeMovement[] @relation("CashSafeEnvelopeMovementBy")
+
+// BLOQUE B — dentro de `model Branch { ... }`, junto a
+// `cashSafeMovements CashSafeMovement[]` (cerca de la línea 986):
+
+  cashSafeEnvelopes CashSafeEnvelope[]
+
+// BLOQUE C — dentro de `model CashCut { ... }`, junto a
+// `safeMovements CashSafeMovement[]` (cerca de la línea 1112):
+
+  safeEnvelope  CashSafeEnvelope?
+  // Nota: CashSafeEnvelopeMovement también puede referenciar un
+  // CashCut (movimiento de tipo INGRESO), por eso agrega también:
+  safeEnvelopeMovements CashSafeEnvelopeMovement[]
+
+// BLOQUE D — modelos nuevos completos. Pegar después de
+// `model CashSafeMovement { ... }` (cerca de la línea 1493, justo
+// antes de `model InventoryProduct`). CashSafeMovement se deja
+// intacto — sigue siendo el ledger legado, no se toca ni se migra.
+
+enum CashSafeEnvelopeStatus {
+  /// Generado al cerrar el corte. Aun NO confirmado como recibido
+  /// fisicamente en la caja fuerte de la sucursal. No suma al saldo
+  /// de "Caja fuerte" mientras este en este estado.
+  PENDIENTE
+  /// Recibido. saldo == monto original, sin retiros todavia.
+  EN_CAJA_FUERTE
+  /// Recibido, con retiro(s) parcial(es). 0 < saldo < original.
+  PARCIAL
+  /// saldo == 0. Retirado por completo. NUNCA se elimina: queda
+  /// para auditoria.
+  VACIO
+}
+
+enum CashSafeEnvelopeMovementType {
+  /// Creacion del sobre desde el cierre de un corte. Carga el
+  /// monto original como saldo inicial.
+  INGRESO
+  /// Confirmacion de llegada fisica a caja fuerte. Si el monto
+  /// contado difiere del original, genera ademas un AJUSTE_* con
+  /// nota automatica -- la diferencia nunca se oculta.
+  RECEPCION
+  /// Retiro parcial o total. Un retiro que deja saldo en 0 es
+  /// simplemente un RETIRO cuyo newBalance es 0.
+  RETIRO
+  /// Correccion administrativa que incrementa el saldo. Motivo
+  /// obligatorio, restringido por rol.
+  AJUSTE_POSITIVO
+  /// Correccion administrativa que reduce el saldo. Motivo
+  /// obligatorio, restringido por rol.
+  AJUSTE_NEGATIVO
+}
+
+/**
+ * Un sobre fisico de dinero, identificable, que nace en el cierre
+ * de un corte y vive para siempre (nunca se borra). La unidad
+ * principal de control de Caja fuerte -- el saldo de una sucursal
+ * se calcula sumando los sobres validos, nunca al reves.
+ *
+ * @@unique en cashCutId es la garantia de que un reintento del
+ * cierre de corte (doble clic, retry de red) jamas produce dos
+ * sobres para el mismo corte: la creacion usa upsert sobre este
+ * campo.
+ */
+model CashSafeEnvelope {
+  id       String @id @default(cuid())
+  /// Codigo legible unico, ej. HUE-20260819-001. Generado
+  /// automaticamente -- ver lib/cash-cuts/safeEnvelopes.ts.
+  code     String @unique
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  /// Un sobre por corte. Backbone de la idempotencia.
+  cashCutId String  @unique
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id])
+  /// Copiado de CashCut.date al crear el sobre -- denormalizado
+  /// a proposito para reportes rapidos sin join.
+  cutDate   DateTime
+
+  /// Nunca cambia una vez creado. La cantidad que se escribe en
+  /// el sobre fisico.
+  originalAmount Float
+  /// Se mueve con cada CashSafeEnvelopeMovement. Siempre debe
+  /// coincidir con newBalance del ultimo movimiento -- se valida
+  /// en el helper de dominio, no aqui.
+  currentBalance Float
+
+  status CashSafeEnvelopeStatus @default(PENDIENTE)
+
+  createdById String
+  createdBy   User     @relation("CashSafeEnvelopeCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  /// Cuando se confirma la llegada fisica a la caja fuerte.
+  receivedById     String?
+  receivedBy       User?     @relation("CashSafeEnvelopeReceivedBy", fields: [receivedById], references: [id])
+  receivedAt       DateTime?
+  /// Lo efectivamente contado al recibir. Si difiere de
+  /// originalAmount, el movimiento RECEPCION viene acompanado de
+  /// un AJUSTE_* automatico.
+  receivedAmount   Float?
+
+  movements CashSafeEnvelopeMovement[]
+
+  @@index([branchId])
+  @@index([status])
+  @@index([cutDate])
+}
+
+/**
+ * Ledger inmutable de un sobre. Una fila por cada cambio de
+ * saldo. NUNCA se edita ni se borra una fila existente -- toda
+ * correccion es una fila nueva de tipo AJUSTE_POSITIVO/NEGATIVO.
+ */
+model CashSafeEnvelopeMovement {
+  id         String                       @id @default(cuid())
+  envelopeId String
+  envelope   CashSafeEnvelope             @relation(fields: [envelopeId], references: [id])
+
+  type   CashSafeEnvelopeMovementType
+  /// Siempre positivo. El signo lo da `type`.
+  amount Float
+
+  previousBalance Float
+  newBalance      Float
+
+  /// Motivo. Obligatorio en el servidor para RETIRO y AJUSTE_*
+  /// (no se fuerza aqui a nivel de schema porque INGRESO/RECEPCION
+  /// pueden no necesitarlo).
+  notes String?
+
+  /// Referencia al corte de origen cuando aplica (tipicamente en
+  /// el movimiento INGRESO).
+  cashCutId String?
+  cashCut   CashCut? @relation(fields: [cashCutId], references: [id])
+
+  userId String
+  user   User   @relation("CashSafeEnvelopeMovementBy", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([envelopeId])
+  @@index([cashCutId])
+  @@index([type])
+}

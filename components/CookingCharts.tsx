@@ -11,6 +11,7 @@ import {
   ReferenceLine,
   Legend,
 } from "recharts";
+import { formatBusinessTime } from "@/lib/dateTime";
 
 type CookingEvent = {
   id: string;
@@ -51,10 +52,7 @@ export default function CookingCharts({ events }: { events: CookingEvent[] }) {
     const date = new Date(event.createdAt);
 
     return {
-      time: date.toLocaleTimeString("es-MX", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
+      time: formatBusinessTime(date),
       timestamp: date.getTime(),
       superior: event.temperatureTop,
       media: event.temperatureMiddle,

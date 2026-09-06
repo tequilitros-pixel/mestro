@@ -36,7 +36,7 @@ export default async function WorkforceSchedulePage({ searchParams }: { searchPa
       shiftCount: period.shifts.filter((shift) => shift.status !== "CANCELLED").length,
     })),
     employments: board.employments.map((employment) => ({
-      id: employment.id, name: employment.employee.displayName ?? "Sin nombre", hours: board.hours.get(employment.id) ?? 0,
+      id: employment.id, employeeId: employment.employeeId, name: employment.employee.displayName ?? "Sin nombre", hours: board.hours.get(employment.id) ?? 0,
       assignments: employment.branchAssignments.map((assignment) => ({ branchId: assignment.branchId, branchName: assignment.branch.name, type: assignment.type })),
     })),
     shifts: allShifts.map((shift) => ({
@@ -77,5 +77,5 @@ export default async function WorkforceSchedulePage({ searchParams }: { searchPa
         })),
     })),
   };
-  return <ScheduleExperience model={model} />;
+  return <ScheduleExperience key={`${model.weekStart}-${model.selectedBranchId}-${model.notice}-${model.error}`} model={model} />;
 }

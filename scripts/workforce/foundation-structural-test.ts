@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { Client, type QueryResult } from "pg";
 
-import { buildEffectiveClockStream } from "../../tests/workforce/effectiveClockStream";
+import { buildEffectiveClockStream } from "../../lib/workforce/clock/effectiveStream";
 
 const EXPECTED_HOST = "ep-red-lake-ats4n9i7.c-9.us-east-1.aws.neon.tech";
 const EXPECTED_DATABASE = "neondb";
@@ -314,8 +314,23 @@ async function main() {
     pass("Modify-time correction", "Observed 01:20-equivalent remains; correction preserves proposed 01:05-equivalent");
 
     const effectiveMissing = buildEffectiveClockStream(
-      [{ id: missingIn, type: "CLOCK_IN", occurredAt: new Date("2099-01-07T23:02:00Z") }],
-      [{ id: `${PREFIX}correction-missing`, status: "APPROVED", type: "ADD_MISSING_EVENT", proposedEventType: "CLOCK_OUT", proposedOccurredAt: new Date("2099-01-08T07:05:00Z") }],
+      [{
+        id: missingIn,
+        employmentId: ids.employmentA,
+        branchId: ids.branchA,
+        type: "CLOCK_IN",
+        occurredAt: new Date("2099-01-07T23:02:00Z"),
+      }],
+      [{
+        id: `${PREFIX}correction-missing`,
+        employmentId: ids.employmentA,
+        requestedAt: new Date("2099-01-08T07:06:00Z"),
+        status: "APPROVED",
+        type: "ADD_MISSING_EVENT",
+        branchId: ids.branchA,
+        proposedEventType: "CLOCK_OUT",
+        proposedOccurredAt: new Date("2099-01-08T07:05:00Z"),
+      }],
     );
     assert.deepEqual(effectiveMissing.map((event) => event.type), ["CLOCK_IN", "CLOCK_OUT"]);
     pass("Effective stream integration", "Approved corrections alter effective output without changing observations");

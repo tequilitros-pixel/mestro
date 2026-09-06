@@ -1,4 +1,4 @@
-import { HTMLAttributes } from "react";
+import { type ComponentPropsWithoutRef, type HTMLAttributes } from "react";
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   highlight?: boolean;
@@ -26,10 +26,18 @@ export function Card({ highlight = false, size = "standard", className = "", chi
   );
 }
 
-export function CardLabel({ children }: { children: React.ReactNode }) {
-  return <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">{children}</p>;
+export function CardLabel({ className = "", children, ...props }: ComponentPropsWithoutRef<"p">) {
+  return (
+    <p className={`mb-1 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant ${className}`} {...props}>
+      {children}
+    </p>
+  );
 }
 
-export function CardValue({ children }: { children: React.ReactNode }) {
-  return <p className="text-xl font-bold leading-6 text-on-surface sm:text-2xl">{children}</p>;
+export function CardValue({ className = "", children, ...props }: ComponentPropsWithoutRef<"p">) {
+  return (
+    <p className={`text-xl font-bold leading-6 text-on-surface sm:text-2xl ${className}`} {...props}>
+      {children}
+    </p>
+  );
 }

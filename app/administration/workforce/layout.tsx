@@ -31,6 +31,7 @@ export default async function WorkforceV1Layout({
           </p>
         </div>
         <nav className="flex gap-2 overflow-x-auto pb-1">
+          <Link className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold" href="/administration/workforce/branches">Sucursales</Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/administration/workforce"

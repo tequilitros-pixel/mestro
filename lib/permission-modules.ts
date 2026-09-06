@@ -29,7 +29,8 @@ export const LEGACY_OPERATOR_PERMISSION_KEYS = [
 export const ADMIN_ONLY_PATH_PREFIXES = [
   "/administration/personnel",
   "/administration/schedule",
-  "/administration/workforce/branches",
+  "/administration/workforce",
+  "/workforce/kiosk",
   "/timeclock/payroll",
   "/timeclock/geofences",
   "/pos/categories",
@@ -37,13 +38,29 @@ export const ADMIN_ONLY_PATH_PREFIXES = [
   "/pos/settings",
 ] as const;
 
+/** Pantallas administrativas exactas de Workforce; horario se delega aparte. */
+const ADMIN_ONLY_PATHS = [
+  "/administration/workforce",
+  "/administration/workforce/availability",
+  "/administration/workforce/attendance",
+  "/administration/workforce/clock-corrections",
+  "/administration/workforce/schedule",
+  "/administration/workforce/timesheets",
+  "/administration/workforce/overtime",
+  "/administration/workforce/payroll",
+  "/administration/workforce/settings",
+] as const;
+
 export function isAlwaysAvailablePath(pathname: string): boolean {
   return ALWAYS_AVAILABLE_PATHS.some((path) => pathname === path);
 }
 
 export function isAdminOnlyPath(pathname: string): boolean {
-  return ADMIN_ONLY_PATH_PREFIXES.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  return (
+    ADMIN_ONLY_PATHS.some((path) => pathname === path) ||
+    ADMIN_ONLY_PATH_PREFIXES.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    )
   );
 }
 
@@ -149,6 +166,26 @@ const CONFIGURABLE_PERMISSION_KEYS = new Set(
 
 export function isConfigurablePermissionKey(key: string): boolean {
   return CONFIGURABLE_PERMISSION_KEYS.has(key);
+}
+
+/** Regla unica de acceso por modulo para UI, Server Actions y APIs. */
+export function canAccessModule(
+  role: string,
+  moduleKeys: readonly string[],
+  moduleKey: string,
+): boolean {
+  if (role === "ADMIN") return true;
+
+  const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);
+  if (
+    role === "OPERATOR" &&
+    !hasConfiguredPermissions &&
+    LEGACY_OPERATOR_PERMISSION_KEYS.some((key) => key === moduleKey)
+  ) {
+    return true;
+  }
+
+  return moduleKeys.includes(moduleKey);
 }
 
 export function getModuleKeyForPath(pathname: string): string | null {

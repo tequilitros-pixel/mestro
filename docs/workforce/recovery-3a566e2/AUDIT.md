@@ -151,3 +151,12 @@ Documents conserva HEAD, rama y archivos; se verificó `stash@{0}: workforce-bra
 
 3A566E2 SAFELY RECOVERED: YES (delta Workforce selectivo; no certificación funcional de producción)
 READY FOR PRODUCTION MIGRATION: NO
+# Hardening follow-up — 2026-09-06
+
+The recovery audit below is retained as historical evidence, not overwritten. The current findings and 24-table RLS matrix are in [WORKFORCE_BRANCH_TEMPLATE_GEOFENCE_HARDENING.md](../WORKFORCE_BRANCH_TEMPLATE_GEOFENCE_HARDENING.md).
+
+Since recovery: permission metadata fixed; full suite 234/234, Workforce 204/204, real DEV runtime/service checks 17/17. DEV runtime role created without SUPERUSER/BYPASSRLS. Two additional transactional hardening migrations applied in DEV only; original rescue checksums unchanged. Active-branch enforcement, accuracy omission, kiosk attribution, duplicate branch/source checks and geographic exception lifecycle are corrected. TypeScript, focused ESLint, Prisma and local production-style build passed. Nine POS2 migrations are traced by exact checksum to the Documents merge; they are irrelevant to the targeted additive Workforce SQL, not permission to reset/synchronize the mixed DEV schema.
+
+**READY FOR PRODUCTION MIGRATION: NO** until the actual production app's non-BYPASS runtime connection is confirmed/configured and the coordinated rollout is approved. Runtime now rejects privileged database roles rather than silently bypassing isolation. No push, deploy or production migration has been performed. See the follow-up report for scope and remaining release checks.
+
+---

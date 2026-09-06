@@ -2,6 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getAccessibleBranchIds, requireModuleActionAccess } from "@/lib/auth";
+import { isBranchAllowed } from "@/lib/branches/access";
+
+const INVENTORY_COUNTS_PERMISSION = "/administration/inventory/branch-counts";
+
+async function authorizeCountBranch(branchId: string) {
+  await requireModuleActionAccess(INVENTORY_COUNTS_PERMISSION);
+  const allowedBranchIds = await getAccessibleBranchIds();
+  if (!isBranchAllowed(allowedBranchIds, branchId)) throw new Error("PERMISSION_DENIED");
+}
 
 export type ActionResult =
   | { success: true; message: string; id?: string }
@@ -17,6 +27,7 @@ export async function createInventoryCountAction(
     if (!branchId) {
       return { success: false, error: "Selecciona una sucursal." };
     }
+    await authorizeCountBranch(branchId);
 
     if (!countDateRaw) {
       return { success: false, error: "La fecha del conteo es obligatoria." };
@@ -93,6 +104,12 @@ export async function updateCountItemQuantityAction(
   quantityCounted: number,
 ): Promise<ActionResult> {
   try {
+    const scopedItem = await prisma.inventoryCountItem.findUnique({
+      where: { id: itemId },
+      select: { countId: true, count: { select: { branchId: true } } },
+    });
+    if (!scopedItem || scopedItem.countId !== countId) throw new Error("PERMISSION_DENIED");
+    await authorizeCountBranch(scopedItem.count.branchId);
     if (quantityCounted < 0) {
       return { success: false, error: "La cantidad no puede ser negativa." };
     }
@@ -115,6 +132,9 @@ export async function closeInventoryCountAction(
   countId: string,
 ): Promise<ActionResult> {
   try {
+    const scopedCount = await prisma.inventoryCount.findUnique({ where: { id: countId }, select: { branchId: true } });
+    if (!scopedCount) return { success: false, error: "Conteo no encontrado." };
+    await authorizeCountBranch(scopedCount.branchId);
     const count = await prisma.inventoryCount.findUnique({
       where: { id: countId },
       include: { items: { include: { product: true } } },

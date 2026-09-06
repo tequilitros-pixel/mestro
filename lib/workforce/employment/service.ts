@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma, type BranchAssignmentType, type DataConfidence, type EmploymentStatus, type WorkforceRateType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { assertActiveBranch } from "@/lib/workforce/branchLifecycle";
 import { assertNativeCurrency, assertValidRange, rangesOverlap } from "./rules";
 
 export type CreateEmployeeInput = {
@@ -59,6 +60,9 @@ export async function createEmployee(input: CreateEmployeeInput) {
   if (!displayName) throw new Error("El nombre visible es obligatorio.");
   if (input.employment?.payRate) assertNativeCurrency(input.employment.payRate.currency);
   return prisma.$transaction(async (tx) => {
+    for (const branchId of new Set([input.employment?.homeBranchId, ...(input.employment?.allowedBranchIds ?? [])].filter((id): id is string => Boolean(id)))) {
+      await assertActiveBranch(tx, branchId);
+    }
     const employee = await tx.employee.create({ data: { displayName, firstName: input.firstName?.trim() || null, lastName: input.lastName?.trim() || null, employeeNumber: input.employeeNumber?.trim() || null, userId: input.userId || null, active: input.active ?? true } });
     if (!input.employment) return employee;
     const employment = await tx.employment.create({ data: { employeeId: employee.id, status: input.employment.status, startedAt: input.employment.startedAt ?? null, dataConfidence: input.employment.dataConfidence } });
@@ -73,6 +77,7 @@ export async function createEmployee(input: CreateEmployeeInput) {
 export async function addBranchAssignment(input: { employmentId: string; branchId: string; type: BranchAssignmentType; effectiveFrom: Date; effectiveTo?: Date | null }) {
   assertValidRange({ effectiveFrom: input.effectiveFrom, effectiveTo: input.effectiveTo ?? null });
   return prisma.$transaction(async (tx) => {
+    await assertActiveBranch(tx, input.branchId);
     const existing = await tx.branchAssignment.findMany({ where: { employmentId: input.employmentId, type: input.type } });
     const candidate = { effectiveFrom: input.effectiveFrom, effectiveTo: input.effectiveTo ?? null };
     if (input.type === "HOME" && existing.some((row) => rangesOverlap(row, candidate))) throw new Error("Ya existe una asignación HOME vigente en ese rango.");
@@ -82,6 +87,7 @@ export async function addBranchAssignment(input: { employmentId: string; branchI
 
 export async function changeHomeBranch(input: { employmentId: string; branchId: string; effectiveFrom: Date }) {
   return prisma.$transaction(async (tx) => {
+    await assertActiveBranch(tx, input.branchId);
     const current = await tx.branchAssignment.findMany({ where: { employmentId: input.employmentId, type: "HOME", effectiveFrom: { lt: input.effectiveFrom }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: input.effectiveFrom } }] } });
     await Promise.all(current.map((row) => tx.branchAssignment.update({ where: { id: row.id }, data: { effectiveTo: input.effectiveFrom } })));
     const overlaps = await tx.branchAssignment.findMany({ where: { employmentId: input.employmentId, type: "HOME" } });

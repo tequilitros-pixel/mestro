@@ -1,3 +1,5 @@
+import { formatBusinessDateTime } from "@/lib/dateTime";
+
 export type CookingTemperatureReading = {
   temperatureTop: number | null;
   temperatureMiddle: number | null;
@@ -168,10 +170,7 @@ export function formatNumber(
 }
 
 export function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatBusinessDateTime(date);
 }
 
 export function formatDuration(start: Date, end: Date) {

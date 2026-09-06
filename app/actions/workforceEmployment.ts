@@ -2,11 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 import { assertWorkforceAdministrator } from "@/lib/workforce/employment/rules";
 import { addBranchAssignment, changeEmploymentStatus, changeHomeBranch, changePayRate, createEmployee } from "@/lib/workforce/employment/service";
-import { applyScheduleTemplate } from "@/lib/workforce/scheduling/service";
 
 async function authorize() {
   if (!workforceV1Enabled()) throw new Error("Workforce V1 no está habilitado.");
@@ -46,7 +45,7 @@ export async function createWorkforceEmployeeAction(formData: FormData) {
 }
 
 export async function changeWorkforceHomeAction(formData: FormData) {
-  const user = await authorize();
+  await authorize();
   const employeeId = String(formData.get("employeeId"));
   const branchId = String(formData.get("branchId"));
   const employmentId = String(formData.get("employmentId"));
@@ -56,15 +55,7 @@ export async function changeWorkforceHomeAction(formData: FormData) {
   try {
     await changeHomeBranch({ employmentId, branchId, effectiveFrom });
     assignmentSaved = true;
-    const branch = await import("@/lib/prisma").then(({ prisma }) => prisma.branch.findUnique({
-      where: { id: branchId },
-      select: { templateApplyMode: true, defaultScheduleTemplateId: true },
-    }));
-    if (branch?.templateApplyMode === "AUTO_CREATE_DRAFT" && branch.defaultScheduleTemplateId) {
-      const monday = new Date(effectiveFrom);
-      monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
-      await applyScheduleTemplate({ id: user.id, role: user.role, accessibleBranchIds: await getAccessibleBranchIds() }, { templateId: branch.defaultScheduleTemplateId, employmentIds: [employmentId], weekStart: monday });
-    }
+
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Error desconocido.";
     error = assignmentSaved
@@ -73,7 +64,7 @@ export async function changeWorkforceHomeAction(formData: FormData) {
   }
   if (error) redirect(`/administration/workforce/employees/${employeeId}?error=${encodeURIComponent(error)}${assignmentSaved ? `&assignedBranch=${encodeURIComponent(branchId)}` : ""}`);
   revalidatePath(`/administration/workforce/employees/${employeeId}`);
-  redirect(`/administration/workforce/employees/${employeeId}?assignedBranch=${encodeURIComponent(branchId)}`);
+  redirect(`/administration/workforce/employees/${employeeId}?assignedBranch=${encodeURIComponent(branchId)}&assignedFrom=${effectiveFrom.toISOString().slice(0, 10)}`);
 }
 
 export async function addWorkforceAllowedBranchAction(formData: FormData) {

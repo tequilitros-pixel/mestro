@@ -123,8 +123,18 @@ function formatCurrency(value: number) {
 function formatWeekRange(weekStart: string) {
   const start = parseDateOnly(weekStart);
   const end = parseDateOnly(addDaysToDateOnly(weekStart, 6));
-  const fmt = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long", timeZone: "UTC" });
-  return `${fmt.format(start)} – ${fmt.format(end)}`;
+  const startFmt = new Intl.DateTimeFormat("es-MX", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+  const endFmt = new Intl.DateTimeFormat("es-MX", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  return `${startFmt.format(start)} – ${endFmt.format(end)}`;
 }
 
 function getMostRecentMonday() {
@@ -136,9 +146,9 @@ function ShiftBlock({ shift, onClick }: { shift: Shift; onClick: () => void }) {
     return (
       <button
         onClick={onClick}
-        className="w-full rounded-xl bg-[#3a3a3d] px-2.5 py-2.5 text-center transition duration-150 ease-out hover:scale-[1.02] hover:brightness-110 active:scale-[0.98]"
+        className="group/shift w-full rounded-md border border-outline-variant bg-surface-container-high px-2 py-2 text-left transition hover:border-outline"
       >
-        <p className="text-[11px] font-black uppercase tracking-widest text-white/90">Descanso</p>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Descanso</p>
       </button>
     );
   }
@@ -149,34 +159,33 @@ function ShiftBlock({ shift, onClick }: { shift: Shift; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-xl px-2.5 py-2 text-left transition duration-150 ease-out hover:scale-[1.02] hover:brightness-110 active:scale-[0.98]"
-      style={{ backgroundColor: color, border: "1px solid rgba(255,255,255,0.25)" }}
+      className="group/shift relative w-full rounded-md border border-outline-variant bg-surface-container-high px-2.5 py-2 text-left transition hover:border-outline hover:bg-surface-container-highest"
+      style={{ borderLeftColor: color, borderLeftWidth: 3 }}
     >
-      <p className="text-xs font-black leading-tight text-white">
+      <span className="absolute right-1.5 top-1 text-[10px] tracking-wider text-on-surface-variant opacity-0 transition group-hover/shift:opacity-100">
+        •••
+      </span>
+      <p className="truncate pr-5 text-[11px] font-bold leading-tight text-on-surface">
+        {shift.event?.name ?? shift.branch?.name ?? "Sin sucursal"}
+      </p>
+      <p className="mt-1 whitespace-nowrap font-mono text-[11px] font-semibold leading-tight text-on-surface">
         {shift.startTime ? formatTime12(shift.startTime) : "—"}
         {" – "}
         {shift.endTime ? formatTime12(shift.endTime) : "—"}
       </p>
-      {shift.event ? (
-        <>
-          <p className="flex items-center gap-1 truncate text-[11px] font-semibold leading-tight text-white/90">
-            <PartyIcon className="h-3 w-3 shrink-0" />
-            {shift.event.name}
-          </p>
-          {shift.event.location && (
-            <p className="flex items-center gap-1 truncate text-[10px] leading-tight text-white/75">
-              <MapPinIcon className="h-2.5 w-2.5 shrink-0" />
-              {shift.event.location}
-            </p>
-          )}
-        </>
-      ) : (
-        <p className="truncate text-[11px] font-semibold leading-tight text-white/90">
-          {shift.branch?.name ?? "Sin sucursal"}
+      {shift.startTime && shift.endTime && (
+        <p className="mt-1 text-[10px] font-medium text-on-surface-variant">
+          {formatHours(shiftHours(shift.startTime, shift.endTime))}
+        </p>
+      )}
+      {shift.event?.location && (
+        <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-on-surface-variant">
+          <MapPinIcon className="h-2.5 w-2.5 shrink-0" />
+          {shift.event.location}
         </p>
       )}
       {shift.position && (
-        <p className="truncate text-[10px] leading-tight text-white/75">{shift.position}</p>
+        <p className="mt-1 truncate text-[10px] leading-tight text-on-surface-variant">{shift.position}</p>
       )}
     </button>
   );
@@ -392,6 +401,8 @@ export default function ScheduleGrid() {
   const [showAvailability, setShowAvailability] = useState(true);
   const [mobileDayIndex, setMobileDayIndex] = useState(0);
   const [copying, setCopying] = useState(false);
+  const [branchFilter, setBranchFilter] = useState("all");
+  const [employeeFilter, setEmployeeFilter] = useState("all");
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [showUseTemplate, setShowUseTemplate] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState<{
@@ -490,11 +501,27 @@ export default function ScheduleGrid() {
 
   const todayStr = todayDateOnly();
 
+  const visibleEmployees = useMemo(() => {
+    if (!data) return [];
+    return employeeFilter === "all"
+      ? data.employees
+      : data.employees.filter((employee) => employee.id === employeeFilter);
+  }, [data, employeeFilter]);
+
+  const visibleShifts = useMemo(() => {
+    if (!data) return [];
+    return data.shifts.filter((shift) => {
+      const matchesEmployee = employeeFilter === "all" || shift.userId === employeeFilter;
+      const matchesBranch = branchFilter === "all" || shift.branchId === branchFilter;
+      return matchesEmployee && matchesBranch;
+    });
+  }, [branchFilter, data, employeeFilter]);
+
   const shiftsByCell = useMemo(() => {
     const map = new Map<string, Shift[]>();
     if (!data) return map;
 
-    for (const s of data.shifts) {
+    for (const s of visibleShifts) {
       const key = `${s.userId}|${formatDateOnly(new Date(s.date))}`;
       const list = map.get(key) ?? [];
       list.push(s);
@@ -502,13 +529,13 @@ export default function ScheduleGrid() {
     }
 
     return map;
-  }, [data]);
+  }, [data, visibleShifts]);
 
   const employeeTotals = useMemo(() => {
     const map = new Map<string, { hours: number; turnos: number }>();
     if (!data) return map;
 
-    for (const s of data.shifts) {
+    for (const s of visibleShifts) {
       if (s.type !== "TURNO" || !s.startTime || !s.endTime) continue;
       const current = map.get(s.userId) ?? { hours: 0, turnos: 0 };
       current.hours += shiftHours(s.startTime, s.endTime);
@@ -517,18 +544,18 @@ export default function ScheduleGrid() {
     }
 
     return map;
-  }, [data]);
+  }, [data, visibleShifts]);
 
   const summary = useMemo(() => {
     if (!data) return null;
 
-    const rateByUser = new Map(data.employees.map((e) => [e.id, e.hourlyRate]));
+    const rateByUser = new Map(visibleEmployees.map((e) => [e.id, e.hourlyRate]));
     const peopleSet = new Set<string>();
     let totalHours = 0;
     let totalShifts = 0;
     let totalCost = 0;
 
-    for (const s of data.shifts) {
+    for (const s of visibleShifts) {
       if (s.type !== "TURNO" || !s.startTime || !s.endTime) continue;
 
       const hours = shiftHours(s.startTime, s.endTime);
@@ -541,7 +568,7 @@ export default function ScheduleGrid() {
     }
 
     return { totalHours, totalShifts, peopleCount: peopleSet.size, totalCost };
-  }, [data]);
+  }, [data, visibleEmployees, visibleShifts]);
 
   /**
    * Traslapes y "dos sucursales a la vez" se revisan por empleado y por
@@ -553,10 +580,10 @@ export default function ScheduleGrid() {
     const list: Alert[] = [];
     if (!data) return list;
 
-    const employeeNames = new Map(data.employees.map((e) => [e.id, e.name]));
+    const employeeNames = new Map(visibleEmployees.map((e) => [e.id, e.name]));
 
     const byEmployeeDay = new Map<string, Shift[]>();
-    for (const s of data.shifts) {
+    for (const s of visibleShifts) {
       if (s.type !== "TURNO" || !s.startTime || !s.endTime) continue;
       const key = `${s.userId}|${formatDateOnly(new Date(s.date))}`;
       const list2 = byEmployeeDay.get(key) ?? [];
@@ -585,7 +612,7 @@ export default function ScheduleGrid() {
       }
     }
 
-    for (const employee of data.employees) {
+    for (const employee of visibleEmployees) {
       const totals = employeeTotals.get(employee.id);
       if (totals && totals.hours > data.weeklyHourThreshold) {
         list.push({
@@ -599,7 +626,7 @@ export default function ScheduleGrid() {
     }
 
     return list;
-  }, [data, employeeTotals]);
+  }, [data, employeeTotals, visibleEmployees, visibleShifts]);
 
   const alertCellKeys = useMemo(() => {
     const set = new Set<string>();
@@ -621,46 +648,67 @@ export default function ScheduleGrid() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-4 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-3 rounded-lg border border-outline-variant bg-surface-container p-3">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setWeekStart((prev) => addDaysToDateOnly(prev, -7))}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-outline-variant text-on-surface-variant transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] hover:border-primary/40 hover:text-primary"
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-outline-variant text-on-surface-variant transition hover:border-outline hover:text-on-surface"
             aria-label="Semana anterior"
           >
             <ChevronLeftIcon className="h-4 w-4" />
           </button>
 
-          <div className="min-w-[220px] text-center">
-            <p className="font-mono text-[10px] font-black uppercase tracking-[0.25em] text-on-surface-variant">
-              Semana
-            </p>
-            <p className="font-semibold text-on-surface">{formatWeekRange(weekStart)}</p>
+          <div className="min-w-[190px] px-1 text-center">
+            <p className="text-sm font-semibold text-on-surface">{formatWeekRange(weekStart)}</p>
           </div>
 
           <button
             onClick={() => setWeekStart((prev) => addDaysToDateOnly(prev, 7))}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-outline-variant text-on-surface-variant transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] hover:border-primary/40 hover:text-primary"
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-outline-variant text-on-surface-variant transition hover:border-outline hover:text-on-surface"
             aria-label="Semana siguiente"
           >
             <ChevronRightIcon className="h-4 w-4" />
           </button>
 
-          {weekStart !== getMostRecentMonday() && (
-            <button
-              onClick={() => setWeekStart(getMostRecentMonday())}
-              className="ml-1 rounded-xl border border-outline-variant px-3 py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-on-surface"
-            >
-              Hoy
-            </button>
-          )}
-        </div>
+          <button
+            onClick={() => setWeekStart(getMostRecentMonday())}
+            disabled={weekStart === getMostRecentMonday()}
+            className="rounded-md border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-40"
+          >
+            Hoy
+          </button>
 
-        {data && (
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-xs font-semibold text-on-surface-variant"><input type="checkbox" checked={showAvailability} onChange={(e) => setShowAvailability(e.target.checked)} /> Mostrar disponibilidad</label>
+          {data && (
+            <>
+            <div className="mx-1 hidden h-6 w-px bg-outline-variant lg:block" />
+            <label className="sr-only" htmlFor="branch-filter">Filtrar por sucursal</label>
+            <select
+              id="branch-filter"
+              value={branchFilter}
+              onChange={(event) => setBranchFilter(event.target.value)}
+              className="h-8 min-w-[180px] rounded-md border border-outline-variant bg-background px-2.5 text-xs font-semibold text-on-surface outline-none"
+            >
+              <option value="all">Todas las sucursales</option>
+              {data.branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>{branch.name}</option>
+              ))}
+            </select>
+
+            <label className="sr-only" htmlFor="employee-filter">Filtrar por empleado</label>
+            <select
+              id="employee-filter"
+              value={employeeFilter}
+              onChange={(event) => setEmployeeFilter(event.target.value)}
+              className="h-8 min-w-[170px] rounded-md border border-outline-variant bg-background px-2.5 text-xs font-semibold text-on-surface outline-none"
+            >
+              <option value="all">Todos los empleados</option>
+              {data.employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>{employee.name}</option>
+              ))}
+            </select>
+
             <span
-              className={`w-fit rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${
+              className={`ml-auto w-fit rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
                 data.status === "PUBLISHED"
                   ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
                   : "bg-secondary/15 text-secondary"
@@ -669,10 +717,18 @@ export default function ScheduleGrid() {
               {data.status === "PUBLISHED" ? "Publicado" : "Borrador"}
             </span>
 
+            </>
+          )}
+        </div>
+
+        {data && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-outline-variant pt-3">
+            <label className="mr-auto flex items-center gap-2 text-xs font-medium text-on-surface-variant"><input type="checkbox" checked={showAvailability} onChange={(e) => setShowAvailability(e.target.checked)} /> Disponibilidad</label>
+
             <button
               onClick={handleCopyPrevious}
               disabled={copying}
-              className="inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold text-on-surface-variant transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] hover:border-primary/40 hover:text-primary disabled:opacity-60 disabled:hover:scale-100"
+              className="inline-flex items-center gap-1.5 rounded-md border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-60"
             >
               <ClipboardIcon className="h-4 w-4" />
               {copying ? "Copiando..." : "Copiar semana anterior"}
@@ -681,7 +737,7 @@ export default function ScheduleGrid() {
             <button
               onClick={() => setShowSaveTemplate(true)}
               disabled={data.shifts.length === 0}
-              className="inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold text-on-surface-variant transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] hover:border-primary/40 hover:text-primary disabled:opacity-40 disabled:hover:scale-100"
+              className="inline-flex items-center gap-1.5 rounded-md border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-40"
             >
               <BookIcon className="h-4 w-4" />
               Guardar como plantilla
@@ -689,7 +745,7 @@ export default function ScheduleGrid() {
 
             <button
               onClick={() => setEventModal({ mode: "create", date: todayStr })}
-              className="inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold text-on-surface-variant transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] hover:border-primary/40 hover:text-primary"
+              className="inline-flex items-center gap-1.5 rounded-md border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface"
             >
               <PartyIcon className="h-4 w-4" />
               Nuevo evento
@@ -698,7 +754,7 @@ export default function ScheduleGrid() {
             <button
               onClick={handlePublishToggle}
               disabled={publishing}
-              className={`rounded-xl px-4 py-2.5 text-sm font-bold transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60 disabled:hover:scale-100 ${
+              className={`rounded-md px-3 py-1.5 text-xs font-bold transition disabled:opacity-60 ${
                 data.status === "PUBLISHED"
                   ? "border border-outline-variant text-on-surface-variant hover:border-secondary/40 hover:text-secondary"
                   : "bg-primary text-on-primary hover:opacity-90"
@@ -721,6 +777,16 @@ export default function ScheduleGrid() {
       )}
 
       {alerts.length > 0 && <AlertsPanel alerts={alerts} />}
+
+      {summary && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-outline-variant px-1 py-2 text-xs text-on-surface-variant">
+          <span><strong className="font-semibold text-on-surface">{visibleEmployees.length}</strong> empleados</span>
+          <span><strong className="font-semibold text-on-surface">{formatHours(summary.totalHours)}</strong> programadas</span>
+          <span><strong className="font-semibold text-on-surface">{summary.totalShifts}</strong> turnos</span>
+          {alerts.length > 0 && <span className="text-error"><strong>{alerts.length}</strong> conflictos</span>}
+          <span className="ml-auto hidden sm:inline">Costo estimado: <strong className="font-semibold text-on-surface">{formatCurrency(summary.totalCost)}</strong></span>
+        </div>
+      )}
 
       {!loading && data && data.shifts.length === 0 && (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-outline-variant bg-surface-container p-8 text-center">
@@ -759,7 +825,7 @@ export default function ScheduleGrid() {
               dayIndex={mobileDayIndex}
               onSelectDay={setMobileDayIndex}
               todayStr={todayStr}
-              employees={data.employees}
+              employees={visibleEmployees}
               employeeTotals={employeeTotals}
               overtimeEmployeeIds={overtimeEmployeeIds}
               shiftsByCell={shiftsByCell}
@@ -771,12 +837,12 @@ export default function ScheduleGrid() {
             />
           </div>
 
-          <div className="hidden overflow-x-auto rounded-2xl border border-outline-variant bg-surface-container md:block">
+          <div className="hidden max-h-[calc(100vh-220px)] overflow-auto rounded-lg border border-outline-variant bg-surface-container md:block">
             <div
-              className="grid min-w-[1080px]"
-              style={{ gridTemplateColumns: "220px repeat(7, minmax(148px, 1fr))" }}
+              className="grid min-w-[1260px]"
+              style={{ gridTemplateColumns: "220px repeat(7, minmax(135px, 1fr)) 90px" }}
             >
-              <div className="sticky left-0 z-20 border-b border-r border-outline-variant bg-surface-container-high px-4 py-3">
+              <div className="sticky left-0 top-0 z-30 border-b border-r border-outline-variant bg-surface-container-high px-3 py-2.5">
                 <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
                   Empleado
                 </p>
@@ -787,7 +853,7 @@ export default function ScheduleGrid() {
                 return (
                   <div
                     key={i}
-                    className={`border-b border-outline-variant px-3 py-3 text-center ${
+                    className={`sticky top-0 z-20 border-b border-r border-outline-variant px-3 py-2 text-center ${
                       isToday ? "bg-primary/[0.06]" : "bg-surface-container-high"
                     }`}
                   >
@@ -803,19 +869,23 @@ export default function ScheduleGrid() {
                 );
               })}
 
-              {data.employees.length === 0 && (
-                <div className="col-span-8 p-8 text-center text-sm text-on-surface-variant">
+              <div className="sticky right-0 top-0 z-30 border-b border-l border-outline-variant bg-surface-container-high px-3 py-2.5 text-center">
+                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Total</p>
+              </div>
+
+              {visibleEmployees.length === 0 && (
+                <div className="col-span-9 p-8 text-center text-sm text-on-surface-variant">
                   No hay personal activo para programar.
                 </div>
               )}
 
-              {data.employees.map((employee) => {
+              {visibleEmployees.map((employee) => {
                 const totals = employeeTotals.get(employee.id) ?? { hours: 0, turnos: 0 };
 
                 return (
                   <Fragment key={employee.id}>
-                    <div className="sticky left-0 z-10 flex items-center gap-3 border-b border-r border-outline-variant bg-surface-container px-4 py-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-black text-primary ring-1 ring-primary/30">
+                    <div className="sticky left-0 z-10 flex min-h-[74px] items-center gap-2.5 border-b border-r border-outline-variant bg-surface-container px-3 py-2">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary ring-1 ring-primary/20">
                         {getInitials(employee.name)}
                       </span>
                       <div className="min-w-0">
@@ -823,14 +893,14 @@ export default function ScheduleGrid() {
                           {employee.name}
                         </p>
                         <p
-                          className={`flex items-center gap-1 text-xs ${
+                          className={`mt-0.5 flex items-center gap-1 text-[10px] ${
                             overtimeEmployeeIds.has(employee.id)
                               ? "font-semibold text-secondary"
                               : "text-on-surface-variant"
                           }`}
                         >
                           {overtimeEmployeeIds.has(employee.id) && <AlertIcon className="h-3 w-3" />}
-                          {formatHours(totals.hours)} · {totals.turnos} turno{totals.turnos === 1 ? "" : "s"}
+                          {totals.turnos} turno{totals.turnos === 1 ? "" : "s"}
                         </p>
                       </div>
                     </div>
@@ -845,7 +915,7 @@ export default function ScheduleGrid() {
                       return (
                         <div
                           key={i}
-                          className={`group min-h-[64px] space-y-1.5 border-b px-2 py-2 ${
+                          className={`group min-h-[74px] space-y-1.5 border-b border-r px-1.5 py-1.5 ${
                             hasAlert
                               ? "border-outline-variant bg-error/[0.06] ring-1 ring-inset ring-error/40"
                               : "border-outline-variant"
@@ -872,48 +942,25 @@ export default function ScheduleGrid() {
 
                           <button
                             onClick={() => setModal({ mode: "create", userId: employee.id, date: dateStr })}
-                            className="flex w-full items-center justify-center rounded-lg border border-dashed border-outline-variant/60 py-1.5 text-outline opacity-0 transition hover:border-primary/40 hover:text-primary group-hover:opacity-100"
+                            className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-outline-variant/60 py-1.5 text-[10px] font-medium text-on-surface-variant opacity-40 transition hover:border-primary/40 hover:text-primary group-hover:opacity-100 focus:opacity-100"
                             aria-label="Agregar turno"
                           >
                             <PlusIcon className="h-3.5 w-3.5" />
+                            <span>{cellShifts.length === 0 ? "Agregar turno" : "Agregar otro"}</span>
                           </button>
                         </div>
                       );
                     })}
+
+                    <div className={`sticky right-0 z-10 flex min-h-[74px] items-center justify-center border-b border-l border-outline-variant bg-surface-container px-2 text-sm font-bold ${overtimeEmployeeIds.has(employee.id) ? "text-secondary" : "text-on-surface"}`}>
+                      {formatHours(totals.hours)}
+                    </div>
                   </Fragment>
                 );
               })}
             </div>
           </div>
 
-          {summary && (
-            <div className="grid grid-cols-2 gap-3 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:grid-cols-4">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
-                  Horas totales
-                </p>
-                <p className="mt-1 text-xl font-bold text-on-surface">{formatHours(summary.totalHours)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
-                  Turnos
-                </p>
-                <p className="mt-1 text-xl font-bold text-on-surface">{summary.totalShifts}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
-                  Empleados programados
-                </p>
-                <p className="mt-1 text-xl font-bold text-on-surface">{summary.peopleCount}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
-                  Costo estimado
-                </p>
-                <p className="mt-1 text-xl font-bold text-on-surface">{formatCurrency(summary.totalCost)}</p>
-              </div>
-            </div>
-          )}
         </>
       ) : null}
 

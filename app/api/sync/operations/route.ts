@@ -9,20 +9,25 @@ import {
   MillingStatus,
 } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
+import { canUserAccessModule } from "@/lib/moduleAccess";
 import { prisma } from "@/lib/prisma";
+import { getProductionOperationModuleKey } from "@/lib/offline/production";
 import type { OfflineOperation } from "@/lib/offline/types";
 
 type Payload = Record<string, string | number | boolean | null | undefined>;
-type SyncUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
-
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user || !user.active) return fail("Sesión no autorizada", 401);
-  if (!(await canUseProduction(user))) return fail("Sin permiso para Producción", 403);
 
   const operation = (await request.json().catch(() => null)) as OfflineOperation | null;
   if (!operation?.id || !operation.createdAt || !operation.payload) {
     return fail("Operación inválida", 400);
+  }
+
+  const moduleKey = getProductionOperationModuleKey(operation.kind);
+  if (!moduleKey) return fail("Tipo de operación no compatible", 400);
+  if (!(await canUserAccessModule(user, moduleKey))) {
+    return fail("Sin permiso para el módulo solicitado", 403);
   }
 
   const createdAt = new Date(operation.createdAt);
@@ -52,13 +57,6 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ success: true });
-}
-
-async function canUseProduction(user: SyncUser) {
-  if (user.role === "ADMIN" || user.role === "OPERATOR") return true;
-  return Boolean(await prisma.modulePermission.findUnique({
-    where: { userId_moduleKey: { userId: user.id, moduleKey: "production" } },
-  }));
 }
 
 async function syncCookingEvent(id: string, createdAt: Date, payload: Payload) {

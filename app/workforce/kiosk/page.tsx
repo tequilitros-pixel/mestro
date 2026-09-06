@@ -1,3 +1,4 @@
+import { workforceGeolocationEnabled } from "@/lib/workforce/geolocation-release";
 import { randomUUID } from "node:crypto";
 import { Card } from "@/components/ui/Card";
 import { prisma } from "@/lib/prisma";
@@ -90,7 +91,7 @@ export default async function KioskPage({
           </button>
         </form>
         {selectedBranch ? (
-        <KioskClockForm branchId={selectedBranch} requiresLocation={Boolean(selectedBranchRecord?.geofenceEnabled && selectedBranchRecord.geofenceId && (policy.requireGeolocationClockIn || policy.requireGeolocationClockOut))} idempotencyKey={randomUUID()} employees={employees.filter((employee) => employee.employments.length === 1).map((employee) => ({ id: employee.userId ?? "", name: employee.displayName ?? "Empleado" }))} />
+        <KioskClockForm branchId={selectedBranch} requiresLocation={Boolean(workforceGeolocationEnabled && selectedBranchRecord?.geofenceEnabled && selectedBranchRecord.geofenceId && (policy.requireGeolocationClockIn || policy.requireGeolocationClockOut))} idempotencyKey={randomUUID()} employees={employees.filter((employee) => employee.employments.length === 1).map((employee) => ({ id: employee.userId ?? "", name: employee.displayName ?? "Empleado" }))} />
         ) : (
           <p className="text-sm text-on-surface-variant">
             Selecciona una sucursal antes de mostrar empleados.
