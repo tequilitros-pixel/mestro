@@ -14,13 +14,13 @@ import { resolveSaleInventory } from "./recipe";
 import { validateFrozenAdjustments } from "@/lib/pos2/adjustments/service";
 
 type Fault = "AFTER_SALE" | "AFTER_ADJUSTMENTS" | "AFTER_PAYMENTS" | "AFTER_FIRST_INVENTORY" | "BEFORE_FINALIZE";
-type Input = { orderId: string; expectedOrderVersion: number; cashSessionId: string; terminalId: string; payments: PaymentInput[]; actor: CommandActor; operationId: string; faultInjectionForTest?: Fault };
+type Input = { client?: import("@prisma/client").PrismaClient; orderId: string; expectedOrderVersion: number; cashSessionId: string; terminalId: string; payments: PaymentInput[]; actor: CommandActor; operationId: string; faultInjectionForTest?: Fault };
 
 function inject(input: Input, point: Fault) { if (input.faultInjectionForTest === point && process.env.NODE_ENV !== "production") throw new Error(`TEST_FAILURE_${point}`); }
 
 export async function completeSale(input: Input) {
   const payload = { orderId: input.orderId, expectedOrderVersion: input.expectedOrderVersion, cashSessionId: input.cashSessionId, terminalId: input.terminalId, payments: input.payments };
-  return executeIdempotent({ operationId: input.operationId, command: "CompleteSale", payload, receiptContext: { actorId: input.actor.id }, execute: async (tx) => {
+  return executeIdempotent({ client: input.client, operationId: input.operationId, command: "CompleteSale", payload, receiptContext: { actorId: input.actor.id }, execute: async (tx) => {
     const order = await lockOrder(tx, input.orderId);
     requireActorBranch(input.actor, order.branchId);
     await requireCapability(tx, input.actor, "pos.sale.complete", order.branchId);
