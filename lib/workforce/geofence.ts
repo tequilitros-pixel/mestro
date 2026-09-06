@@ -51,7 +51,12 @@ export function evaluateGeofence(
   }
 
   if (location?.failure) {
-    return { result: location.failure, checkedAt };
+    // JSON from a Server Action is untrusted even when TypeScript narrows it.
+    // Only failures may come from the device; success is calculated below.
+    const result = location.failure === "PERMISSION_DENIED" || location.failure === "UNAVAILABLE"
+      ? location.failure
+      : "UNAVAILABLE";
+    return { result, checkedAt };
   }
 
   if (!location?.sample) {

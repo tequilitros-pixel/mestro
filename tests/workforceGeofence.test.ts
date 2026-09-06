@@ -1,11 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluateGeofence, geofenceDecision, requiresLocation } from "@/lib/workforce/geofence";
+import type { LocationInput } from "@/lib/workforce/geofence";
 
 const branch = {
   geofenceEnabled: true,
   geofence: { latitude: 20, longitude: -103, radius: 100 },
 };
+
+test("untrusted JSON cannot declare INSIDE or NOT_REQUIRED as a failure", () => {
+  for (const failure of ["INSIDE", "NOT_REQUIRED", "OUTSIDE", "unknown"]) {
+    const input = JSON.parse(JSON.stringify({ failure })) as LocationInput;
+    const result = evaluateGeofence(branch, input, true, 50);
+    assert.equal(result.result, "UNAVAILABLE");
+    assert.equal(geofenceDecision(result.result, "BLOCK").allow, false);
+  }
+});
 
 test("geofence accepts inside and exact-boundary readings", () => {
   const inside = evaluateGeofence(branch, { sample: { latitude: 20, longitude: -103, accuracyMeters: 10 } }, true, 50);
