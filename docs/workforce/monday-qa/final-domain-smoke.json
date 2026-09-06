@@ -1,0 +1,14 @@
+[
+  {
+    "path": "/administration/workforce/branches",
+    "status": 200
+  },
+  {
+    "path": "/administration/workforce",
+    "status": 200
+  },
+  {
+    "path": "/administration/workforce/schedule",
+    "status": 200
+  }
+]

@@ -1,0 +1,59 @@
+{
+  "prefix": "monday_prod_1eb99d06",
+  "adminId": "cmtq0s56h000094tw1g2xt14i",
+  "userId": "cmtq0s5cq000194tw6lkyr8dl",
+  "branches": [
+    {
+      "id": "cmtq0s5jy000294twqju677d6",
+      "name": "QA Horarios 1eb99d06 A",
+      "code": "QAM_1eb99d06_A",
+      "address": null,
+      "active": true,
+      "color": null,
+      "timezone": "America/Mexico_City",
+      "geofenceId": null,
+      "geofenceEnabled": false,
+      "templateApplyMode": "ASK_BEFORE_APPLY",
+      "defaultScheduleTemplateId": null,
+      "createdAt": "2026-09-06T16:22:11.998Z",
+      "updatedAt": "2026-09-06T16:22:11.998Z"
+    },
+    {
+      "id": "cmtq0s5n5000394twcizwwqeg",
+      "name": "QA Horarios 1eb99d06 B",
+      "code": "QAM_1eb99d06_B",
+      "address": null,
+      "active": true,
+      "color": null,
+      "timezone": "America/Mexico_City",
+      "geofenceId": null,
+      "geofenceEnabled": false,
+      "templateApplyMode": "ASK_BEFORE_APPLY",
+      "defaultScheduleTemplateId": null,
+      "createdAt": "2026-09-06T16:22:12.113Z",
+      "updatedAt": "2026-09-06T16:22:12.113Z"
+    }
+  ],
+  "employees": [
+    {
+      "id": "cmtq0s5vq000494tw415vwlhc",
+      "name": "QA Horarios Uno"
+    },
+    {
+      "id": "cmtq0s6dv000794twj61qps3w",
+      "name": "QA Horarios Dos"
+    },
+    {
+      "id": "cmtq0s6v9000a94twcojxxo53",
+      "name": "QA Horarios Tres"
+    }
+  ],
+  "employmentIds": [
+    "cmtq0s5yi000594twlhgs5zkq",
+    "cmtq0s6gn000894twn8m4b4no",
+    "cmtq0s6y1000b94twqrchl6z0"
+  ],
+  "templateId": "cmtq0s79c000d94tw8vao3hgn",
+  "retiredAt": "2026-09-06T16:58:26.324Z",
+  "historyRetained": true
+}
