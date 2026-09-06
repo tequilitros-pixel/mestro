@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Card } from "@/components/ui/Card";
 import { prisma } from "@/lib/prisma";
-import { workforceKioskClockAction } from "@/app/actions/workforceClock";
+import { resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
+import { KioskClockForm } from "./KioskClockForm";
 
 export default async function KioskPage({
   searchParams,
@@ -13,10 +14,10 @@ export default async function KioskPage({
   }>;
 }) {
   const query = await searchParams;
-  const branches = await prisma.branch.findMany({
+  const [branches, policy] = await Promise.all([prisma.branch.findMany({
     where: { active: true },
     orderBy: { name: "asc" },
-  });
+  }), resolveWorkforcePolicy(new Date())]);
   const selectedBranch = branches.some((branch) => branch.id === query.branchId)
     ? query.branchId
     : null;
@@ -44,6 +45,7 @@ export default async function KioskPage({
       orderBy: { displayName: "asc" },
     })
     : [];
+  const selectedBranchRecord = branches.find((branch) => branch.id === selectedBranch);
   return (
     <section className="mx-auto max-w-xl space-y-4">
       {query.saved ? (
@@ -62,7 +64,7 @@ export default async function KioskPage({
       <Card>
         <h2 className="text-2xl font-black">Kiosk Workforce V1</h2>
         <p className="text-sm text-on-surface-variant">
-          Identificación por PIN existente. Sin GPS y sólo online.
+          Identificación por PIN existente. Sólo online.
         </p>
       </Card>
       <Card>
@@ -88,46 +90,7 @@ export default async function KioskPage({
           </button>
         </form>
         {selectedBranch ? (
-        <form action={workforceKioskClockAction} className="space-y-3">
-          <input
-            type="hidden"
-            name="returnTo"
-            value={`/workforce/kiosk?branchId=${selectedBranch}`}
-          />
-          <input type="hidden" name="idempotencyKey" value={randomUUID()} />
-          <input type="hidden" name="branchId" value={selectedBranch} />
-          <label className="block font-semibold">
-            Empleado
-            <select
-              required
-              name="userId"
-              className="mt-1 w-full rounded-xl border p-4"
-            >
-              <option value="">Selecciona</option>
-              {employees
-                .filter((e) => e.employments.length === 1)
-                .map((e) => (
-                  <option key={e.id} value={e.userId ?? ""}>
-                    {e.displayName}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <label className="block font-semibold">
-            PIN
-            <input
-              required
-              name="pin"
-              inputMode="numeric"
-              pattern="[0-9]{4}"
-              maxLength={4}
-              className="mt-1 w-full rounded-xl border p-4 text-center text-2xl tracking-[0.5em]"
-            />
-          </label>
-          <button className="min-h-16 w-full rounded-xl bg-primary p-4 text-xl font-black text-on-primary">
-            Registrar estado siguiente
-          </button>
-        </form>
+        <KioskClockForm branchId={selectedBranch} requiresLocation={Boolean(selectedBranchRecord?.geofenceEnabled && selectedBranchRecord.geofenceId && (policy.requireGeolocationClockIn || policy.requireGeolocationClockOut))} idempotencyKey={randomUUID()} employees={employees.filter((employee) => employee.employments.length === 1).map((employee) => ({ id: employee.userId ?? "", name: employee.displayName ?? "Empleado" }))} />
         ) : (
           <p className="text-sm text-on-surface-variant">
             Selecciona una sucursal antes de mostrar empleados.

@@ -1,0 +1,271 @@
+diff --git a/app/actions/workforceScheduling.ts b/app/actions/workforceScheduling.ts
+index 1206cde..ab03b55 100644
+--- a/app/actions/workforceScheduling.ts
++++ b/app/actions/workforceScheduling.ts
+@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
+ import { getAccessibleBranchIds, requireModuleAccess } from "@/lib/auth";
+ import { workforceV1Enabled } from "@/lib/workforce/config";
+ import {
++  applyScheduleTemplate,
+   copyPreviousScheduleWeek,
+   createOrUpdateShift,
+   deleteOrCancelShift,
+@@ -164,6 +165,19 @@ export async function copyWorkforcePreviousWeekGroupAction(formData: FormData) {
+     return `${copied} turnos copiados; ${skipped} omitidos.`;
+   });
+ }
++
++export async function applyWorkforceScheduleTemplateAction(formData: FormData) {
++  await run(formData, async (current) => {
++    const result = await applyScheduleTemplate(current, {
++      templateId: value(formData, "templateId"),
++      employmentIds: formData.getAll("employmentId").map(String),
++      weekStart: date(formData, "weekStart"),
++    });
++    revalidatePath("/administration/workforce/schedule");
++    revalidatePath("/workforce");
++    return `${result.created} turnos borrador creados desde la plantilla.`;
++  });
++}
+ export async function saveWorkforceCoverageAction(formData: FormData) {
+   await run(formData, async (current) => {
+     await upsertStaffingRequirement(current, {
+diff --git a/app/administration/workforce/schedule/ScheduleExperience.tsx b/app/administration/workforce/schedule/ScheduleExperience.tsx
+index 2a0af9f..2beeb43 100644
+--- a/app/administration/workforce/schedule/ScheduleExperience.tsx
++++ b/app/administration/workforce/schedule/ScheduleExperience.tsx
+@@ -3,6 +3,7 @@
+ import { useEffect, useMemo, useRef, useState } from "react";
+ import Link from "next/link";
+ import {
++  applyWorkforceScheduleTemplateAction,
+   copyWorkforcePreviousWeekGroupAction,
+   deleteWorkforceShiftAction,
+   publishWorkforceScheduleAction,
+@@ -33,6 +34,7 @@ export type ScheduleViewModel = {
+   availability: { key: string; state: "AVAILABLE" | "UNAVAILABLE" | "UNKNOWN"; startTime: string | null; endTime: string | null }[];
+   coverage: { id: string; branchId: string; branchName: string; date: string; start: string; end: string; required: number; scheduled: number; gap: number; status: string }[];
+   previousWeek: { weekStart: string; branches: { branchId: string; shifts: { id: string; employeeName: string; dayOffset: number; start: string; end: string }[] }[] };
++  templates: { id: string; name: string; branchId: string; branchName: string; blocks: { dayOfWeek: number; start: string; end: string; breakMinutes: number }[] }[];
+ };
+ 
+ const dayNames = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+@@ -66,6 +68,7 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
+   const [search, setSearch] = useState("");
+   const [editor, setEditor] = useState<{ shift?: Shift; employmentId: string; branchId: string; date: string; duplicate?: boolean } | null>(null);
+   const [confirm, setConfirm] = useState<"copy" | "publish" | null>(null);
++  const [templateOpen, setTemplateOpen] = useState(false);
+   const availability = useMemo(() => new Map(model.availability.map((item) => [item.key, item])), [model.availability]);
+   const activeShifts = model.shifts.filter((shift) => !shift.cancelled);
+   const visibleShifts = activeShifts.filter((shift) => !model.selectedBranchId || shift.branchId === model.selectedBranchId);
+@@ -103,6 +106,7 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
+         <form className="contents"><input type="hidden" name="week" value={model.weekStart} /><select aria-label="Sucursal" name="branch" defaultValue={model.selectedBranchId ?? "all"} onChange={(event) => event.currentTarget.form?.requestSubmit()} className={`${field} w-auto min-w-44`}><option value="all">Todas las sucursales</option>{model.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></form>
+         <div className="flex items-center rounded-lg border border-outline-variant bg-surface"><a aria-label="Semana anterior" className="p-2 hover:bg-surface-container" href={href(model.selectedBranchId, addDays(model.weekStart, -7))}><Icon name="left" /></a><a className="border-x border-outline-variant px-3 py-2 text-xs font-semibold hover:bg-surface-container" href={href(model.selectedBranchId, currentWeekStart())}>Esta semana</a><a aria-label="Semana siguiente" className="p-2 hover:bg-surface-container" href={href(model.selectedBranchId, addDays(model.weekStart, 7))}><Icon name="right" /></a></div>
+         <button className={`${secondary} hidden xl:inline-flex`} disabled={!previousBranches.length} onClick={() => setConfirm("copy")}><Icon name="copy" /><span className="ml-2">Copiar anterior</span></button>
++        <button className={`${secondary} hidden xl:inline-flex`} disabled={!model.templates.length} onClick={() => setTemplateOpen(true)}><Icon name="copy" /><span className="ml-2">Aplicar plantilla</span></button>
+         <button className={primary} onClick={() => openNew(null, selectedDay)}><Icon name="plus" /><span className="ml-2">Nuevo turno</span></button>
+         <button className={secondary} disabled={!publishablePeriods.length} onClick={() => setConfirm("publish")}><Icon name="publish" /><span className="ml-2">Publicar</span></button>
+       </div>
+@@ -137,6 +141,7 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
+ 
+     {editor && <ShiftDialog editor={editor} model={model} target={target} onClose={() => setEditor(null)} onDuplicate={(shift) => setEditor({ shift, employmentId: shift.employmentId ?? "", branchId: shift.branchId, date: shift.date, duplicate: true })} />}
+     {confirm && <ConfirmDialog kind={confirm} model={model} target={target} periods={publishablePeriods} previousBranches={previousBranches} onClose={() => setConfirm(null)} />}
++    {templateOpen && <TemplateDialog model={model} target={target} onClose={() => setTemplateOpen(false)} />}
+   </section>;
+ }
+ 
+@@ -184,4 +189,23 @@ function ConfirmDialog({ kind, model, target, periods, previousBranches, onClose
+   return <Modal title={publish ? "Publicar horarios" : "Copiar semana anterior"} onClose={onClose}><p className="text-sm text-on-surface-variant">{publish ? "La publicación es independiente por sucursal para conservar su historial y validación." : "Se copiarán los turnos a borradores de esta semana."}</p><div className="mt-3 space-y-2">{branches.map((item) => <div key={item.branchId} className="flex items-center justify-between gap-3 rounded-lg bg-surface-container px-3 py-2 text-sm"><span><strong>{model.branches.find((branch) => branch.id === item.branchId)?.name}</strong><span className="ml-2 text-xs text-on-surface-variant">{item.count} turnos</span></span>{publish && <form action={publishWorkforceScheduleAction} onSubmit={onClose}><input type="hidden" name="returnTo" value={target} /><input type="hidden" name="periodId" value={periods.find((period) => period.branchId === item.branchId)?.id} /><button className={primary}>Publicar</button></form>}</div>)}</div>{publish ? <button type="button" className={`${secondary} mt-4 w-full`} onClick={onClose}>Cerrar</button> : <form action={copyWorkforcePreviousWeekGroupAction} onSubmit={onClose} className="mt-4 flex gap-2"><input type="hidden" name="returnTo" value={target} /><input type="hidden" name="weekStart" value={model.weekStart} />{branches.map((item) => <input key={item.branchId} type="hidden" name="branchId" value={item.branchId} />)}<button type="button" className={`${secondary} flex-1`} onClick={onClose}>Volver</button><button className={`${primary} flex-1`}>Copiar turnos</button></form>}</Modal>;
+ }
+ 
++function TemplateDialog({ model, target, onClose }: { model: ScheduleViewModel; target: string; onClose: () => void }) {
++  const available = model.templates.filter((template) => !model.selectedBranchId || template.branchId === model.selectedBranchId);
++  const [templateId, setTemplateId] = useState(available[0]?.id ?? "");
++  const template = available.find((item) => item.id === templateId);
++  const eligible = model.employments.filter((employment) =>
++    employment.assignments.some((assignment) => assignment.branchId === template?.branchId),
++  );
++  return <Modal title="Aplicar plantilla" onClose={onClose}>
++    <form action={applyWorkforceScheduleTemplateAction} onSubmit={onClose} className="space-y-4">
++      <input type="hidden" name="returnTo" value={target} />
++      <input type="hidden" name="weekStart" value={model.weekStart} />
++      <label className="block text-sm font-semibold">Plantilla<select required name="templateId" value={templateId} onChange={(event) => setTemplateId(event.target.value)} className={`${field} mt-1`}>{available.map((item) => <option key={item.id} value={item.id}>{item.branchName} · {item.name}</option>)}</select></label>
++      {template && <div className="rounded-lg border border-outline-variant bg-surface-container p-3"><p className="mb-2 text-xs font-black uppercase tracking-wide text-on-surface-variant">Vista previa · nunca publica automáticamente</p><div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">{Array.from({ length: 7 }, (_, day) => { const blocks = template.blocks.filter((block) => block.dayOfWeek === day); return <div key={day} className="rounded-md bg-surface p-2"><strong>{dayNames[day]}</strong>{blocks.length ? blocks.map((block, index) => <p key={`${day}-${index}`}>{block.start}–{block.end}{block.breakMinutes ? ` · ${block.breakMinutes}m` : ""}</p>) : <p className="text-on-surface-variant">Descanso</p>}</div>; })}</div></div>}
++      <fieldset><legend className="mb-2 text-sm font-semibold">Empleados</legend><div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-outline-variant p-2">{eligible.map((employment) => <label key={employment.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface-container"><input type="checkbox" name="employmentId" value={employment.id} />{employment.name}</label>)}{!eligible.length && <p className="p-2 text-sm text-on-surface-variant">No hay empleados asignados a esta sucursal.</p>}</div></fieldset>
++      <div className="flex gap-2"><button type="button" className={`${secondary} flex-1`} onClick={onClose}>Cancelar</button><button disabled={!template || !eligible.length} className={`${primary} flex-1`}>Crear borradores</button></div>
++    </form>
++  </Modal>;
++}
++
+ function Coverage({ model, target }: { model: ScheduleViewModel; target: string }) { const branchId = model.selectedBranchId ?? model.branches[0]?.id ?? ""; return <div className="border-t border-outline-variant p-3"><form action={saveWorkforceCoverageAction} className="grid gap-2 sm:grid-cols-6"><select aria-label="Sucursal de cobertura" name="branchId" defaultValue={branchId} className={field}>{model.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select><input type="hidden" name="returnTo" value={target} /><input aria-label="Día de cobertura" required name="businessDate" type="date" min={model.weekStart} max={model.weekEnd} defaultValue={model.selectedDay} className={field} /><input aria-label="Desde" required name="startTime" type="time" defaultValue="18:00" className={field} /><input aria-label="Hasta" required name="endTime" type="time" defaultValue="23:00" className={field} /><input aria-label="Personas necesarias" required name="requiredCount" type="number" min="1" defaultValue="1" className={field} /><button className={secondary}>Guardar</button></form><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{model.coverage.map((item) => <div key={item.id} className="rounded-lg bg-surface-container p-2 text-xs"><strong>{item.branchName} · {dateLabel(item.date, { weekday: "short", day: "numeric" })}</strong><p className="text-on-surface-variant">{item.start}–{item.end} · {item.scheduled}/{item.required}</p></div>)}</div></div>; }
+diff --git a/app/administration/workforce/schedule/page.tsx b/app/administration/workforce/schedule/page.tsx
+index b76c0cb..362fa46 100644
+--- a/app/administration/workforce/schedule/page.tsx
++++ b/app/administration/workforce/schedule/page.tsx
+@@ -62,6 +62,20 @@ export default async function WorkforceSchedulePage({ searchParams }: { searchPa
+         })),
+       })),
+     },
++    templates: board.templates.map((template) => ({
++      id: template.id,
++      name: template.name,
++      branchId: template.branchId!,
++      branchName: template.branch?.name ?? "Sucursal",
++      blocks: template.shifts
++        .filter((block) => block.type === "TURNO" && block.startTime && block.endTime)
++        .map((block) => ({
++          dayOfWeek: block.dayOfWeek,
++          start: block.startTime!,
++          end: block.endTime!,
++          breakMinutes: block.breakMinutes,
++        })),
++    })),
+   };
+   return <ScheduleExperience model={model} />;
+ }
+diff --git a/lib/workforce/scheduling/service.ts b/lib/workforce/scheduling/service.ts
+index c89d89c..4c3a6b2 100644
+--- a/lib/workforce/scheduling/service.ts
++++ b/lib/workforce/scheduling/service.ts
+@@ -1,6 +1,7 @@
+ import "server-only";
+ import { Prisma } from "@prisma/client";
+ import { prisma } from "@/lib/prisma";
++import { setRlsContext } from "@/lib/rls";
+ import { reconcileAttendanceForEmployment } from "@/lib/workforce/attendance/reconcile";
+ import { resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
+ import {
+@@ -282,7 +283,7 @@ export async function getGlobalScheduleBoard(
+         };
+   const previousStart = new Date(start.getTime() - 7 * 86_400_000);
+   const previousEnd = weekEnd(previousStart);
+-  const [periods, previousPeriods, employments, requirements, workforcePolicy] =
++  const [periods, previousPeriods, employments, requirements, workforcePolicy, templates] =
+     await Promise.all([
+       prisma.schedulePeriod.findMany({
+         where: {
+@@ -348,6 +349,14 @@ export async function getGlobalScheduleBoard(
+         orderBy: [{ businessDate: "asc" }, { startTime: "asc" }],
+       }),
+       resolveWorkforcePolicy(start),
++      prisma.scheduleTemplate.findMany({
++        where: { active: true, branchId: { in: accessibleBranchIds } },
++        include: {
++          branch: { select: { id: true, name: true } },
++          shifts: { orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }] },
++        },
++        orderBy: [{ branch: { name: "asc" } }, { name: "asc" }],
++      }),
+     ]);
+ 
+   const allShifts = periods.flatMap((period) => period.shifts);
+@@ -424,6 +433,7 @@ export async function getGlobalScheduleBoard(
+     availability,
+     shiftWarnings,
+     companyTimezone: workforcePolicy.companyTimezone,
++    templates,
+   };
+ }
+ 
+@@ -921,6 +931,100 @@ export async function copyPreviousScheduleWeek(
+   });
+ }
+ 
++export async function applyScheduleTemplate(
++  actor: SchedulingActor,
++  input: {
++    templateId: string;
++    employmentIds: string[];
++    weekStart: Date;
++  },
++) {
++  const employmentIds = [...new Set(input.employmentIds.filter(Boolean))];
++  if (!employmentIds.length) throw new Error("Selecciona al menos un empleado.");
++  return serializable(async (tx) => {
++    await setRlsContext(tx, actor);
++    const template = await tx.scheduleTemplate.findUnique({
++      where: { id: input.templateId },
++      include: {
++        branch: true,
++        shifts: { orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }] },
++      },
++    });
++    if (!template?.active || !template.branchId || !template.branch)
++      throw new Error("Plantilla no disponible para una sucursal.");
++    assertSchedulingBranchAccess(
++      actor.role,
++      actor.accessibleBranchIds,
++      template.branchId,
++    );
++    const periodStart = dateOnly(input.weekStart);
++    const periodEnd = weekEnd(periodStart);
++    const period = await tx.schedulePeriod.upsert({
++      where: {
++        branchId_periodStart_periodEnd: {
++          branchId: template.branchId,
++          periodStart,
++          periodEnd,
++        },
++      },
++      update: {},
++      create: {
++        branchId: template.branchId,
++        periodStart,
++        periodEnd,
++        createdById: actor.id,
++      },
++      include: { publications: { select: { id: true } } },
++    });
++    if (period.status !== "DRAFT" || period.publications.length)
++      throw new Error("No se puede aplicar una plantilla sobre una semana publicada.");
++    const blocks = template.shifts.filter(
++      (block) => block.type === "TURNO" && block.startTime && block.endTime,
++    );
++    if (!blocks.length) throw new Error("La plantilla no contiene turnos.");
++    const workforcePolicy = await resolveWorkforcePolicy(periodStart, tx);
++    const timezone = template.branch.timezone ?? workforcePolicy.companyTimezone;
++    let created = 0;
++    for (const employmentId of employmentIds) {
++      for (const block of blocks) {
++        const businessDate = new Date(
++          periodStart.getTime() + block.dayOfWeek * 86_400_000,
++        );
++        const { startAt, endAt } = shiftInstants({
++          businessDate,
++          startTime: block.startTime!,
++          endTime: block.endTime!,
++          timezone,
++        });
++        await validateAssignedShift(tx, {
++          employmentId,
++          branchId: template.branchId,
++          businessDate,
++          startAt,
++          endAt,
++          periodStart,
++          periodEnd,
++        });
++        await tx.shift.create({
++          data: {
++            schedulePeriodId: period.id,
++            employmentId,
++            branchId: template.branchId,
++            businessDate,
++            startAt,
++            endAt,
++            expectedBreakMinutes: block.breakMinutes,
++            status: "DRAFT",
++            createdById: actor.id,
++          },
++        });
++        created += 1;
++      }
++    }
++    return { created, periodId: period.id, branchId: template.branchId };
++  }, 20_000);
++}
++
+ export async function upsertStaffingRequirement(
+   actor: SchedulingActor,
+   input: {
+

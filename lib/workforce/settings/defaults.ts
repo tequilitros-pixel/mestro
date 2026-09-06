@@ -9,6 +9,11 @@ export type WorkforcePolicyValues = {
   allowUnassignedShiftPublication: boolean;
   allowAvailabilityWarningPublication: boolean;
   allowUnscheduledWork: boolean;
+  requireGeolocationClockIn: boolean;
+  requireGeolocationClockOut: boolean;
+  geofenceOutsideBehavior: "BLOCK" | "ALLOW_WITH_EXCEPTION";
+  requireOutsideGeofenceReview: boolean;
+  maximumGpsAccuracyMeters: number;
   shiftLinkProximityMinutes: number;
   lateGraceMinutes: number;
   earlyDepartureGraceMinutes: number;
@@ -33,6 +38,11 @@ export const DEFAULT_WORKFORCE_POLICY: Readonly<WorkforcePolicyValues> = Object.
   allowUnassignedShiftPublication: true,
   allowAvailabilityWarningPublication: true,
   allowUnscheduledWork: true,
+  requireGeolocationClockIn: true,
+  requireGeolocationClockOut: true,
+  geofenceOutsideBehavior: "ALLOW_WITH_EXCEPTION",
+  requireOutsideGeofenceReview: true,
+  maximumGpsAccuracyMeters: 100,
   shiftLinkProximityMinutes: 720,
   lateGraceMinutes: 5,
   earlyDepartureGraceMinutes: 5,

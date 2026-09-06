@@ -11,6 +11,7 @@ import {
   resolveOwnActiveEmployment,
 } from "@/lib/workforce/clock/service";
 import type { ClockType } from "@/lib/workforce/clock/effectiveStream";
+import type { LocationInput } from "@/lib/workforce/geofence";
 
 const value = (form: FormData, key: string) =>
   String(form.get(key) ?? "").trim();
@@ -29,6 +30,16 @@ function done(path: string, key: "saved" | "error", message: string): never {
   const separator = destination.includes("?") ? "&" : "?";
   redirect(`${destination}${separator}${key}=${encodeURIComponent(message)}`);
 }
+function location(form: FormData): LocationInput {
+  const raw = value(form, "location");
+  if (!raw) return { failure: "UNAVAILABLE" };
+  try {
+    const parsed = JSON.parse(raw) as LocationInput;
+    return parsed ?? { failure: "UNAVAILABLE" };
+  } catch {
+    return { failure: "UNAVAILABLE" };
+  }
+}
 export async function workforceClockAction(form: FormData) {
   const current = await actor();
   const back = value(form, "returnTo");
@@ -40,6 +51,7 @@ export async function workforceClockAction(form: FormData) {
       type: value(form, "type") as ClockType,
       source: "PERSONAL",
       idempotencyKey: value(form, "idempotencyKey"),
+      location: location(form),
     });
     revalidatePath("/workforce/clock");
     done(
@@ -155,6 +167,7 @@ export async function workforceKioskClockAction(form: FormData) {
         type,
         source: "KIOSK",
         idempotencyKey: value(form, "idempotencyKey"),
+        location: location(form),
       },
     );
     done(

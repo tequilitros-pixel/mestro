@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { setRlsContext } from "@/lib/rls";
 import { reconcileAttendanceForEmployment } from "@/lib/workforce/attendance/reconcile";
 import { resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
 import {
@@ -282,7 +283,7 @@ export async function getGlobalScheduleBoard(
         };
   const previousStart = new Date(start.getTime() - 7 * 86_400_000);
   const previousEnd = weekEnd(previousStart);
-  const [periods, previousPeriods, employments, requirements, workforcePolicy] =
+  const [periods, previousPeriods, employments, requirements, workforcePolicy, templates] =
     await Promise.all([
       prisma.schedulePeriod.findMany({
         where: {
@@ -348,6 +349,14 @@ export async function getGlobalScheduleBoard(
         orderBy: [{ businessDate: "asc" }, { startTime: "asc" }],
       }),
       resolveWorkforcePolicy(start),
+      prisma.scheduleTemplate.findMany({
+        where: { active: true, branchId: { in: accessibleBranchIds } },
+        include: {
+          branch: { select: { id: true, name: true } },
+          shifts: { orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }] },
+        },
+        orderBy: [{ branch: { name: "asc" } }, { name: "asc" }],
+      }),
     ]);
 
   const allShifts = periods.flatMap((period) => period.shifts);
@@ -424,6 +433,7 @@ export async function getGlobalScheduleBoard(
     availability,
     shiftWarnings,
     companyTimezone: workforcePolicy.companyTimezone,
+    templates,
   };
 }
 
@@ -919,6 +929,100 @@ export async function copyPreviousScheduleWeek(
     }
     return { copied, skipped, idempotent: false };
   });
+}
+
+export async function applyScheduleTemplate(
+  actor: SchedulingActor,
+  input: {
+    templateId: string;
+    employmentIds: string[];
+    weekStart: Date;
+  },
+) {
+  const employmentIds = [...new Set(input.employmentIds.filter(Boolean))];
+  if (!employmentIds.length) throw new Error("Selecciona al menos un empleado.");
+  return serializable(async (tx) => {
+    await setRlsContext(tx, actor);
+    const template = await tx.scheduleTemplate.findUnique({
+      where: { id: input.templateId },
+      include: {
+        branch: true,
+        shifts: { orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }] },
+      },
+    });
+    if (!template?.active || !template.branchId || !template.branch)
+      throw new Error("Plantilla no disponible para una sucursal.");
+    assertSchedulingBranchAccess(
+      actor.role,
+      actor.accessibleBranchIds,
+      template.branchId,
+    );
+    const periodStart = dateOnly(input.weekStart);
+    const periodEnd = weekEnd(periodStart);
+    const period = await tx.schedulePeriod.upsert({
+      where: {
+        branchId_periodStart_periodEnd: {
+          branchId: template.branchId,
+          periodStart,
+          periodEnd,
+        },
+      },
+      update: {},
+      create: {
+        branchId: template.branchId,
+        periodStart,
+        periodEnd,
+        createdById: actor.id,
+      },
+      include: { publications: { select: { id: true } } },
+    });
+    if (period.status !== "DRAFT" || period.publications.length)
+      throw new Error("No se puede aplicar una plantilla sobre una semana publicada.");
+    const blocks = template.shifts.filter(
+      (block) => block.type === "TURNO" && block.startTime && block.endTime,
+    );
+    if (!blocks.length) throw new Error("La plantilla no contiene turnos.");
+    const workforcePolicy = await resolveWorkforcePolicy(periodStart, tx);
+    const timezone = template.branch.timezone ?? workforcePolicy.companyTimezone;
+    let created = 0;
+    for (const employmentId of employmentIds) {
+      for (const block of blocks) {
+        const businessDate = new Date(
+          periodStart.getTime() + block.dayOfWeek * 86_400_000,
+        );
+        const { startAt, endAt } = shiftInstants({
+          businessDate,
+          startTime: block.startTime!,
+          endTime: block.endTime!,
+          timezone,
+        });
+        await validateAssignedShift(tx, {
+          employmentId,
+          branchId: template.branchId,
+          businessDate,
+          startAt,
+          endAt,
+          periodStart,
+          periodEnd,
+        });
+        await tx.shift.create({
+          data: {
+            schedulePeriodId: period.id,
+            employmentId,
+            branchId: template.branchId,
+            businessDate,
+            startAt,
+            endAt,
+            expectedBreakMinutes: block.breakMinutes,
+            status: "DRAFT",
+            createdById: actor.id,
+          },
+        });
+        created += 1;
+      }
+    }
+    return { created, periodId: period.id, branchId: template.branchId };
+  }, 20_000);
 }
 
 export async function upsertStaffingRequirement(

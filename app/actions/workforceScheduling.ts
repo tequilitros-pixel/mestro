@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getAccessibleBranchIds, requireModuleAccess } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 import {
+  applyScheduleTemplate,
   copyPreviousScheduleWeek,
   createOrUpdateShift,
   deleteOrCancelShift,
@@ -162,6 +163,19 @@ export async function copyWorkforcePreviousWeekGroupAction(formData: FormData) {
     }
     revalidatePath("/administration/workforce/schedule");
     return `${copied} turnos copiados; ${skipped} omitidos.`;
+  });
+}
+
+export async function applyWorkforceScheduleTemplateAction(formData: FormData) {
+  await run(formData, async (current) => {
+    const result = await applyScheduleTemplate(current, {
+      templateId: value(formData, "templateId"),
+      employmentIds: formData.getAll("employmentId").map(String),
+      weekStart: date(formData, "weekStart"),
+    });
+    revalidatePath("/administration/workforce/schedule");
+    revalidatePath("/workforce");
+    return `${result.created} turnos borrador creados desde la plantilla.`;
   });
 }
 export async function saveWorkforceCoverageAction(formData: FormData) {

@@ -62,6 +62,20 @@ export default async function WorkforceSchedulePage({ searchParams }: { searchPa
         })),
       })),
     },
+    templates: board.templates.map((template) => ({
+      id: template.id,
+      name: template.name,
+      branchId: template.branchId!,
+      branchName: template.branch?.name ?? "Sucursal",
+      blocks: template.shifts
+        .filter((block) => block.type === "TURNO" && block.startTime && block.endTime)
+        .map((block) => ({
+          dayOfWeek: block.dayOfWeek,
+          start: block.startTime!,
+          end: block.endTime!,
+          breakMinutes: block.breakMinutes,
+        })),
+    })),
   };
   return <ScheduleExperience model={model} />;
 }

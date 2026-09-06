@@ -2,15 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 import { assertWorkforceAdministrator } from "@/lib/workforce/employment/rules";
 import { addBranchAssignment, changeEmploymentStatus, changeHomeBranch, changePayRate, createEmployee } from "@/lib/workforce/employment/service";
+import { applyScheduleTemplate } from "@/lib/workforce/scheduling/service";
 
 async function authorize() {
   if (!workforceV1Enabled()) throw new Error("Workforce V1 no está habilitado.");
   const user = await getCurrentUser();
   assertWorkforceAdministrator(user);
+  if (!user) throw new Error("No autorizado");
+  return user;
 }
 
 function dateValue(formData: FormData, key: string) {
@@ -43,16 +46,34 @@ export async function createWorkforceEmployeeAction(formData: FormData) {
 }
 
 export async function changeWorkforceHomeAction(formData: FormData) {
-  await authorize();
+  const user = await authorize();
   const employeeId = String(formData.get("employeeId"));
+  const branchId = String(formData.get("branchId"));
+  const employmentId = String(formData.get("employmentId"));
+  const effectiveFrom = dateValue(formData, "effectiveFrom");
   let error: string | null = null;
+  let assignmentSaved = false;
   try {
-    await changeHomeBranch({ employmentId: String(formData.get("employmentId")), branchId: String(formData.get("branchId")), effectiveFrom: dateValue(formData, "effectiveFrom") });
+    await changeHomeBranch({ employmentId, branchId, effectiveFrom });
+    assignmentSaved = true;
+    const branch = await import("@/lib/prisma").then(({ prisma }) => prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { templateApplyMode: true, defaultScheduleTemplateId: true },
+    }));
+    if (branch?.templateApplyMode === "AUTO_CREATE_DRAFT" && branch.defaultScheduleTemplateId) {
+      const monday = new Date(effectiveFrom);
+      monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+      await applyScheduleTemplate({ id: user.id, role: user.role, accessibleBranchIds: await getAccessibleBranchIds() }, { templateId: branch.defaultScheduleTemplateId, employmentIds: [employmentId], weekStart: monday });
+    }
   } catch (cause) {
-    error = cause instanceof Error ? cause.message : "No fue posible cambiar la sucursal HOME.";
+    const message = cause instanceof Error ? cause.message : "Error desconocido.";
+    error = assignmentSaved
+      ? `Sucursal HOME guardada; la plantilla no se aplicó: ${message}`
+      : `No fue posible cambiar la sucursal HOME: ${message}`;
   }
-  if (error) redirect(`/administration/workforce/employees/${employeeId}?error=${encodeURIComponent(error)}`);
+  if (error) redirect(`/administration/workforce/employees/${employeeId}?error=${encodeURIComponent(error)}${assignmentSaved ? `&assignedBranch=${encodeURIComponent(branchId)}` : ""}`);
   revalidatePath(`/administration/workforce/employees/${employeeId}`);
+  redirect(`/administration/workforce/employees/${employeeId}?assignedBranch=${encodeURIComponent(branchId)}`);
 }
 
 export async function addWorkforceAllowedBranchAction(formData: FormData) {

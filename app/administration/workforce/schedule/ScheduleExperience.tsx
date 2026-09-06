@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  applyWorkforceScheduleTemplateAction,
   copyWorkforcePreviousWeekGroupAction,
   deleteWorkforceShiftAction,
   publishWorkforceScheduleAction,
@@ -33,6 +34,7 @@ export type ScheduleViewModel = {
   availability: { key: string; state: "AVAILABLE" | "UNAVAILABLE" | "UNKNOWN"; startTime: string | null; endTime: string | null }[];
   coverage: { id: string; branchId: string; branchName: string; date: string; start: string; end: string; required: number; scheduled: number; gap: number; status: string }[];
   previousWeek: { weekStart: string; branches: { branchId: string; shifts: { id: string; employeeName: string; dayOffset: number; start: string; end: string }[] }[] };
+  templates: { id: string; name: string; branchId: string; branchName: string; blocks: { dayOfWeek: number; start: string; end: string; breakMinutes: number }[] }[];
 };
 
 const dayNames = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -66,6 +68,7 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
   const [search, setSearch] = useState("");
   const [editor, setEditor] = useState<{ shift?: Shift; employmentId: string; branchId: string; date: string; duplicate?: boolean } | null>(null);
   const [confirm, setConfirm] = useState<"copy" | "publish" | null>(null);
+  const [templateOpen, setTemplateOpen] = useState(false);
   const availability = useMemo(() => new Map(model.availability.map((item) => [item.key, item])), [model.availability]);
   const activeShifts = model.shifts.filter((shift) => !shift.cancelled);
   const visibleShifts = activeShifts.filter((shift) => !model.selectedBranchId || shift.branchId === model.selectedBranchId);
@@ -103,6 +106,7 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
         <form className="contents"><input type="hidden" name="week" value={model.weekStart} /><select aria-label="Sucursal" name="branch" defaultValue={model.selectedBranchId ?? "all"} onChange={(event) => event.currentTarget.form?.requestSubmit()} className={`${field} w-auto min-w-44`}><option value="all">Todas las sucursales</option>{model.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></form>
         <div className="flex items-center rounded-lg border border-outline-variant bg-surface"><a aria-label="Semana anterior" className="p-2 hover:bg-surface-container" href={href(model.selectedBranchId, addDays(model.weekStart, -7))}><Icon name="left" /></a><a className="border-x border-outline-variant px-3 py-2 text-xs font-semibold hover:bg-surface-container" href={href(model.selectedBranchId, currentWeekStart())}>Esta semana</a><a aria-label="Semana siguiente" className="p-2 hover:bg-surface-container" href={href(model.selectedBranchId, addDays(model.weekStart, 7))}><Icon name="right" /></a></div>
         <button className={`${secondary} hidden xl:inline-flex`} disabled={!previousBranches.length} onClick={() => setConfirm("copy")}><Icon name="copy" /><span className="ml-2">Copiar anterior</span></button>
+        <button className={`${secondary} hidden xl:inline-flex`} disabled={!model.templates.length} onClick={() => setTemplateOpen(true)}><Icon name="copy" /><span className="ml-2">Aplicar plantilla</span></button>
         <button className={primary} onClick={() => openNew(null, selectedDay)}><Icon name="plus" /><span className="ml-2">Nuevo turno</span></button>
         <button className={secondary} disabled={!publishablePeriods.length} onClick={() => setConfirm("publish")}><Icon name="publish" /><span className="ml-2">Publicar</span></button>
       </div>
@@ -137,6 +141,7 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
 
     {editor && <ShiftDialog editor={editor} model={model} target={target} onClose={() => setEditor(null)} onDuplicate={(shift) => setEditor({ shift, employmentId: shift.employmentId ?? "", branchId: shift.branchId, date: shift.date, duplicate: true })} />}
     {confirm && <ConfirmDialog kind={confirm} model={model} target={target} periods={publishablePeriods} previousBranches={previousBranches} onClose={() => setConfirm(null)} />}
+    {templateOpen && <TemplateDialog model={model} target={target} onClose={() => setTemplateOpen(false)} />}
   </section>;
 }
 
@@ -182,6 +187,25 @@ function ShiftDialog({ editor, model, target, onClose, onDuplicate }: { editor: 
 function ConfirmDialog({ kind, model, target, periods, previousBranches, onClose }: { kind: "copy" | "publish"; model: ScheduleViewModel; target: string; periods: ScheduleViewModel["periods"]; previousBranches: ScheduleViewModel["previousWeek"]["branches"]; onClose: () => void }) {
   const publish = kind === "publish"; const branches = publish ? periods.map((period) => ({ branchId: period.branchId, count: period.shiftCount })) : previousBranches.map((item) => ({ branchId: item.branchId, count: item.shifts.length }));
   return <Modal title={publish ? "Publicar horarios" : "Copiar semana anterior"} onClose={onClose}><p className="text-sm text-on-surface-variant">{publish ? "La publicación es independiente por sucursal para conservar su historial y validación." : "Se copiarán los turnos a borradores de esta semana."}</p><div className="mt-3 space-y-2">{branches.map((item) => <div key={item.branchId} className="flex items-center justify-between gap-3 rounded-lg bg-surface-container px-3 py-2 text-sm"><span><strong>{model.branches.find((branch) => branch.id === item.branchId)?.name}</strong><span className="ml-2 text-xs text-on-surface-variant">{item.count} turnos</span></span>{publish && <form action={publishWorkforceScheduleAction} onSubmit={onClose}><input type="hidden" name="returnTo" value={target} /><input type="hidden" name="periodId" value={periods.find((period) => period.branchId === item.branchId)?.id} /><button className={primary}>Publicar</button></form>}</div>)}</div>{publish ? <button type="button" className={`${secondary} mt-4 w-full`} onClick={onClose}>Cerrar</button> : <form action={copyWorkforcePreviousWeekGroupAction} onSubmit={onClose} className="mt-4 flex gap-2"><input type="hidden" name="returnTo" value={target} /><input type="hidden" name="weekStart" value={model.weekStart} />{branches.map((item) => <input key={item.branchId} type="hidden" name="branchId" value={item.branchId} />)}<button type="button" className={`${secondary} flex-1`} onClick={onClose}>Volver</button><button className={`${primary} flex-1`}>Copiar turnos</button></form>}</Modal>;
+}
+
+function TemplateDialog({ model, target, onClose }: { model: ScheduleViewModel; target: string; onClose: () => void }) {
+  const available = model.templates.filter((template) => !model.selectedBranchId || template.branchId === model.selectedBranchId);
+  const [templateId, setTemplateId] = useState(available[0]?.id ?? "");
+  const template = available.find((item) => item.id === templateId);
+  const eligible = model.employments.filter((employment) =>
+    employment.assignments.some((assignment) => assignment.branchId === template?.branchId),
+  );
+  return <Modal title="Aplicar plantilla" onClose={onClose}>
+    <form action={applyWorkforceScheduleTemplateAction} onSubmit={onClose} className="space-y-4">
+      <input type="hidden" name="returnTo" value={target} />
+      <input type="hidden" name="weekStart" value={model.weekStart} />
+      <label className="block text-sm font-semibold">Plantilla<select required name="templateId" value={templateId} onChange={(event) => setTemplateId(event.target.value)} className={`${field} mt-1`}>{available.map((item) => <option key={item.id} value={item.id}>{item.branchName} · {item.name}</option>)}</select></label>
+      {template && <div className="rounded-lg border border-outline-variant bg-surface-container p-3"><p className="mb-2 text-xs font-black uppercase tracking-wide text-on-surface-variant">Vista previa · nunca publica automáticamente</p><div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">{Array.from({ length: 7 }, (_, day) => { const blocks = template.blocks.filter((block) => block.dayOfWeek === day); return <div key={day} className="rounded-md bg-surface p-2"><strong>{dayNames[day]}</strong>{blocks.length ? blocks.map((block, index) => <p key={`${day}-${index}`}>{block.start}–{block.end}{block.breakMinutes ? ` · ${block.breakMinutes}m` : ""}</p>) : <p className="text-on-surface-variant">Descanso</p>}</div>; })}</div></div>}
+      <fieldset><legend className="mb-2 text-sm font-semibold">Empleados</legend><div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-outline-variant p-2">{eligible.map((employment) => <label key={employment.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface-container"><input type="checkbox" name="employmentId" value={employment.id} />{employment.name}</label>)}{!eligible.length && <p className="p-2 text-sm text-on-surface-variant">No hay empleados asignados a esta sucursal.</p>}</div></fieldset>
+      <div className="flex gap-2"><button type="button" className={`${secondary} flex-1`} onClick={onClose}>Cancelar</button><button disabled={!template || !eligible.length} className={`${primary} flex-1`}>Crear borradores</button></div>
+    </form>
+  </Modal>;
 }
 
 function Coverage({ model, target }: { model: ScheduleViewModel; target: string }) { const branchId = model.selectedBranchId ?? model.branches[0]?.id ?? ""; return <div className="border-t border-outline-variant p-3"><form action={saveWorkforceCoverageAction} className="grid gap-2 sm:grid-cols-6"><select aria-label="Sucursal de cobertura" name="branchId" defaultValue={branchId} className={field}>{model.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select><input type="hidden" name="returnTo" value={target} /><input aria-label="Día de cobertura" required name="businessDate" type="date" min={model.weekStart} max={model.weekEnd} defaultValue={model.selectedDay} className={field} /><input aria-label="Desde" required name="startTime" type="time" defaultValue="18:00" className={field} /><input aria-label="Hasta" required name="endTime" type="time" defaultValue="23:00" className={field} /><input aria-label="Personas necesarias" required name="requiredCount" type="number" min="1" defaultValue="1" className={field} /><button className={secondary}>Guardar</button></form><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{model.coverage.map((item) => <div key={item.id} className="rounded-lg bg-surface-container p-2 text-xs"><strong>{item.branchName} · {dateLabel(item.date, { weekday: "short", day: "numeric" })}</strong><p className="text-on-surface-variant">{item.start}–{item.end} · {item.scheduled}/{item.required}</p></div>)}</div></div>; }

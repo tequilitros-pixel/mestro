@@ -29,6 +29,7 @@ export const LEGACY_OPERATOR_PERMISSION_KEYS = [
 export const ADMIN_ONLY_PATH_PREFIXES = [
   "/administration/personnel",
   "/administration/schedule",
+  "/administration/workforce/branches",
   "/timeclock/payroll",
   "/timeclock/geofences",
   "/pos/categories",

@@ -510,6 +510,12 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       iconVariant: "purple",
     },
     {
+      href: "/administration/workforce/branches",
+      label: "Sucursales Workforce",
+      icon: MapPinIcon,
+      iconVariant: "cyan",
+    },
+    {
       href: "/administration/workforce/attendance",
       label: "Asistencia",
       icon: ListChecksIcon,

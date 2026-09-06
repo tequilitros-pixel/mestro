@@ -58,6 +58,7 @@ model User {
   scheduledShifts           ScheduledShift[]           @relation("ScheduledShifts")
   scheduleWeeksPublished    ScheduleWeek[]             @relation("ScheduleWeekPublishedBy")
   geofenceAlerts            GeofenceAlert[]
+  legacyWorkforceSettingsUpdated WorkforceSettings[] @relation("WorkforceSettingsUpdatedBy")
   salaryRates               SalaryRate[]               @relation("SalaryRateOwner")
   salaryRatesCreated        SalaryRate[]               @relation("SalaryRateCreatedBy")
 
@@ -127,6 +128,7 @@ model User {
   workforceTimesheetsLocked             Timesheet[]                      @relation("WorkforceTimesheetLockedBy")
   workforceOvertimeCalculations         WorkforceOvertimeCalculation[]   @relation("WorkforceOvertimeCalculatedBy")
   workforcePolicyVersionsChanged        WorkforcePolicyVersion[]         @relation("WorkforcePolicyChangedBy")
+  workforceGeolocationEvidenceReviewed  ClockGeolocationEvidence[]       @relation("WorkforceGeolocationEvidenceReviewedBy")
   workforcePayrollLinesApproved         PayrollLine[]                    @relation("WorkforcePayrollLineApprovedBy")
   workforcePayrollLinesPaid             PayrollLine[]                    @relation("WorkforcePayrollLinePaidBy")
   workforcePayrollCategoriesCreated     WorkforcePayrollCategory[]       @relation("WorkforcePayrollCategoryCreatedBy")
@@ -1001,6 +1003,11 @@ model Branch {
    */
   geofenceId       String?
   geofence         Geofence?        @relation(fields: [geofenceId], references: [id])
+  /// Off by default for existing branches; the relation alone never enforces location.
+  geofenceEnabled           Boolean           @default(false)
+  templateApplyMode         TemplateApplyMode @default(ASK_BEFORE_APPLY)
+  defaultScheduleTemplateId String?           @unique
+  defaultScheduleTemplate   ScheduleTemplate? @relation("WorkforceBranchDefaultScheduleTemplate", fields: [defaultScheduleTemplateId], references: [id], onDelete: SetNull)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   counts           InventoryCount[]
@@ -1034,6 +1041,7 @@ model Branch {
   workforceClockCorrections     ClockCorrection[]
   workforceSessions             WorkSession[]
   workforceAttendanceExceptions AttendanceException[]
+  workforceGeolocationEvidence  ClockGeolocationEvidence[]
 
   eventAddedSource  EventAddedProduct[] @relation("EventAddedSourceBranch")
   eventAddedReturns EventAddedProduct[] @relation("EventAddedReturnBranch")
@@ -1057,6 +1065,38 @@ model Geofence {
   updatedAt DateTime @updatedAt
 
   branches Branch[]
+}
+
+enum TemplateApplyMode {
+  ASK_BEFORE_APPLY
+  AUTO_CREATE_DRAFT
+  DO_NOT_APPLY
+}
+
+enum GeofenceValidationResult {
+  INSIDE
+  OUTSIDE
+  UNAVAILABLE
+  PERMISSION_DENIED
+  LOW_ACCURACY
+  NOT_REQUIRED
+}
+
+enum GeofenceReviewStatus {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum GeofenceOutsideBehavior {
+  BLOCK
+  ALLOW_WITH_EXCEPTION
+}
+
+enum ClockActionType {
+  CLOCK_IN
+  CLOCK_OUT
 }
 
 /**
@@ -2047,6 +2087,7 @@ model TimeClockEntry {
   closedManuallyBy User?                  @relation("TimeClockClosedBy", fields: [closedManuallyById], references: [id])
   scheduledShift   ScheduledShift?        @relation(fields: [scheduledShiftId], references: [id], onDelete: SetNull)
   geofenceAlerts   GeofenceAlert[]
+  legacyGeolocationEvidence ClockGeolocationEvidence[]
   editRequests     TimeClockEditRequest[]
 
   @@index([userId])
@@ -2376,6 +2417,7 @@ model ScheduleTemplate {
   id          String  @id @default(cuid())
   name        String
   description String?
+  active      Boolean @default(true)
 
   /// Sucursal principal de la plantilla, solo informativo/filtro (los
   /// turnos dentro de la plantilla pueden tener su propia sucursal).
@@ -2388,7 +2430,8 @@ model ScheduleTemplate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  shifts ScheduleTemplateShift[]
+  shifts           ScheduleTemplateShift[]
+  defaultForBranch Branch?                 @relation("WorkforceBranchDefaultScheduleTemplate")
 
   @@index([branchId])
 }
@@ -2411,6 +2454,7 @@ model ScheduleTemplateShift {
 
   startTime String?
   endTime   String?
+  breakMinutes Int @default(0)
   position  String?
   notes     String?
 
@@ -2787,6 +2831,7 @@ enum AttendanceExceptionType {
   BREAK_ANOMALY
   INCOMPLETE_BREAK
   LONG_BREAK
+  OUTSIDE_GEOFENCE
 }
 
 enum AttendanceExceptionSeverity {
@@ -2895,6 +2940,11 @@ model WorkforcePolicyVersion {
   allowUnassignedShiftPublication     Boolean  @default(true)
   allowAvailabilityWarningPublication Boolean  @default(true)
   allowUnscheduledWork                Boolean  @default(true)
+  requireGeolocationClockIn           Boolean  @default(true)
+  requireGeolocationClockOut          Boolean  @default(true)
+  geofenceOutsideBehavior             GeofenceOutsideBehavior @default(ALLOW_WITH_EXCEPTION)
+  requireOutsideGeofenceReview        Boolean  @default(true)
+  maximumGpsAccuracyMeters            Int      @default(100)
   shiftLinkProximityMinutes           Int      @default(720)
   lateGraceMinutes                    Int      @default(5)
   earlyDepartureGraceMinutes          Int      @default(5)
@@ -3125,9 +3175,55 @@ model ClockEvent {
   branch           Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
   targetedBy       ClockCorrection[]
   workSessionLinks WorkSessionClockEvent[]
+  geolocationEvidence ClockGeolocationEvidence?
 
   @@index([employmentId, deviceOccurredAt])
   @@index([branchId, serverReceivedAt])
+}
+
+/// Privacy-minimized evidence for one immutable clock observation.
+/// Exact employee coordinates are deliberately not retained.
+model ClockGeolocationEvidence {
+  id                    String                    @id @default(cuid())
+  /// Compatibility-only link created by the initial DEV migration; Workforce V1 never writes it.
+  timeClockId           String?
+  action                ClockActionType?
+  clockEventId          String?                   @unique
+  branchId              String?
+  result                GeofenceValidationResult
+  distanceMeters        Int?
+  accuracyMeters        Float?
+  checkedAt             DateTime
+  reviewStatus          GeofenceReviewStatus     @default(NOT_REQUIRED)
+  attendanceExceptionId String?                   @unique
+  reviewedById          String?
+  reviewedAt            DateTime?
+  createdAt             DateTime                  @default(now())
+
+  timeClock           TimeClockEntry?      @relation(fields: [timeClockId], references: [id], onDelete: Cascade)
+  clockEvent          ClockEvent?          @relation(fields: [clockEventId], references: [id], onDelete: Restrict)
+  branch              Branch?              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  attendanceException AttendanceException? @relation(fields: [attendanceExceptionId], references: [id], onDelete: SetNull)
+  reviewedBy          User?                @relation("WorkforceGeolocationEvidenceReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([result, checkedAt])
+  @@index([reviewStatus, checkedAt])
+  @@index([branchId, checkedAt])
+  @@unique([timeClockId, action])
+}
+
+/// Compatibility shell for the first additive migration. Runtime policy lives only in WorkforcePolicyVersion.
+model WorkforceSettings {
+  id                         String                   @id @default("default")
+  requireGeolocationClockIn  Boolean                  @default(true)
+  requireGeolocationClockOut Boolean                  @default(true)
+  outsideBehavior            GeofenceOutsideBehavior @default(ALLOW_WITH_EXCEPTION)
+  requireOutsideReview       Boolean                  @default(true)
+  maximumAccuracyMeters      Int                      @default(100)
+  updatedById                String?
+  updatedAt                  DateTime                 @updatedAt
+
+  updatedBy User? @relation("WorkforceSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 }
 
 model ClockCorrection {
@@ -3264,6 +3360,7 @@ model AttendanceException {
   branch      Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
   shift       Shift?       @relation(fields: [shiftId], references: [id], onDelete: Restrict)
   workSession WorkSession? @relation(fields: [workSessionId], references: [id], onDelete: Restrict)
+  geolocationEvidence ClockGeolocationEvidence?
   resolvedBy  User?        @relation("WorkforceAttendanceExceptionResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([status, type])
