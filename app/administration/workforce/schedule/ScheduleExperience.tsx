@@ -10,6 +10,7 @@ import {
   saveWorkforceCoverageAction,
   saveWorkforceShiftAction,
 } from "@/app/actions/workforceScheduling";
+import { initialShiftBranch, shiftBranchOptions } from "@/lib/workforce/scheduling/shiftBranchSelection";
 import { scheduleWarningLabel } from "@/lib/workforce/scheduling/presentation";
 
 type Branch = { id: string; name: string; color: string | null; timezone: string | null };
@@ -83,7 +84,7 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
   const unassignedShifts = visibleShifts.filter((shift) => !shift.employmentId);
   const periodByBranch = new Map(model.periods.map((period) => [period.branchId, period]));
   const target = href(model.selectedBranchId, model.weekStart, selectedDay);
-  const defaultBranch = (employment?: Employment) => model.selectedBranchId ?? employment?.assignments.find((item) => item.type === "HOME")?.branchId ?? employment?.assignments[0]?.branchId ?? model.branches[0]?.id ?? "";
+  const defaultBranch = (employment?: Employment) => initialShiftBranch(model.branches, model.selectedBranchId, employment);
   const publishablePeriods = model.periods.filter((period) => period.shiftCount > 0 && !period.published && (!model.selectedBranchId || period.branchId === model.selectedBranchId));
   const previousBranches = model.previousWeek.branches.filter((item) => item.shifts.length > 0 && (!model.selectedBranchId || item.branchId === model.selectedBranchId));
 
@@ -172,18 +173,24 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 function ShiftDialog({ editor, model, target, onClose, onDuplicate }: { editor: { shift?: Shift; employmentId: string; branchId: string; date: string; duplicate?: boolean }; model: ScheduleViewModel; target: string; onClose: () => void; onDuplicate: (shift: Shift) => void }) {
+  const [employmentId, setEmploymentId] = useState(editor.employmentId);
   const [branchId, setBranchId] = useState(editor.branchId);
+  const employment = model.employments.find(item => item.id === employmentId);
+  const eligibleBranches = employmentId && !employment ? [] : shiftBranchOptions(model.branches, employment);
+  const missingAssignment = Boolean(employmentId && !eligibleBranches.length);
+  const validBranch = eligibleBranches.some(branch => branch.id === branchId);
   const shift = editor.shift; const isEdit = Boolean(shift && !editor.duplicate); const sourcePeriod = shift ? model.periods.find((period) => period.id === shift.periodId) : null; const selectedPeriod = model.periods.find((period) => period.branchId === branchId); const postPublish = Boolean(sourcePeriod?.lastPublishedAt || selectedPeriod?.lastPublishedAt);
   return <Modal title={isEdit ? "Editar turno" : editor.duplicate ? "Duplicar turno" : "Nuevo turno"} onClose={onClose}><form action={saveWorkforceShiftAction}  className="space-y-3">
     <input type="hidden" name="periodId" value={shift?.periodId ?? selectedPeriod?.id ?? ""} /><input type="hidden" name="weekStart" value={model.weekStart} />{isEdit && <><input type="hidden" name="shiftId" value={shift!.id} /><input type="hidden" name="expectedVersion" value={shift!.version} /></>}<input type="hidden" name="returnTo" value={target} />
-    <label className="block text-sm font-semibold">Empleado<select aria-label="Empleado" name="employmentId" defaultValue={editor.employmentId} className={`${field} mt-1`}><option value="">Sin asignar</option>{model.employments.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select></label>
-    <label className="block text-sm font-semibold">Sucursal<select aria-label="Sucursal" name="branchId" value={branchId} onChange={(event) => setBranchId(event.target.value)} className={`${field} mt-1`}>{model.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
+    <label className="block text-sm font-semibold">Empleado<select aria-label="Empleado" name="employmentId" value={employmentId} onChange={(event) => { const id = event.target.value; setEmploymentId(id); setBranchId(initialShiftBranch(model.branches, branchId, model.employments.find(item => item.id === id))); }} className={`${field} mt-1`}><option value="">Sin asignar</option>{model.employments.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select></label>
+    <label className="block text-sm font-semibold">Sucursal<select aria-label="Sucursal" name="branchId" value={branchId} onChange={(event) => setBranchId(event.target.value)} className={`${field} mt-1`} required><option value="">Seleccionar sucursal</option>{eligibleBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
+    {missingAssignment && <p role="alert" className="text-sm text-error">Asigna primero una sucursal a este empleado.{employment && <> <Link className="underline" href={`/administration/workforce/employees/${employment.employeeId}`}>Asignar sucursal</Link></>}</p>}
     <label className="block text-sm font-semibold">Fecha<input required name="businessDate" type="date" min={model.weekStart} max={model.weekEnd} defaultValue={editor.date} className={`${field} mt-1`} /></label>
     <div className="grid grid-cols-2 gap-3"><label className="text-sm font-semibold">Hora de entrada<input required name="startTime" type="time" defaultValue={shift?.start ?? "09:00"} className={`${field} mt-1`} /></label><label className="text-sm font-semibold">Hora de salida<input required name="endTime" type="time" defaultValue={shift?.end ?? "17:00"} className={`${field} mt-1`} /></label></div>
     <label className="block text-sm font-semibold">Descanso<input name="expectedBreakMinutes" type="number" min="0" max="480" defaultValue={shift?.breakMinutes ?? 30} className={`${field} mt-1`} /><span className="mt-1 block text-xs font-normal text-on-surface-variant">Minutos</span></label>
     {postPublish && <label className="block text-sm font-semibold">Motivo del cambio<input required name="reason" maxLength={200} placeholder="Ej. cambio solicitado por la persona" className={`${field} mt-1`} /></label>}
     {shift?.warnings.length ? <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">{shift.warnings.map((warning) => <p key={warning}>{scheduleWarningLabel(warning)}</p>)}</div> : null}
-    <div className="flex gap-2"><button type="button" className={`${secondary} flex-1`} onClick={onClose}>Cancelar</button><button className={`${primary} flex-1`}>{isEdit ? "Guardar cambios" : "Guardar turno"}</button></div>
+    <div className="flex gap-2"><button type="button" className={`${secondary} flex-1`} onClick={onClose}>Cancelar</button><button disabled={!validBranch || missingAssignment} className={`${primary} flex-1`}>{isEdit ? "Guardar cambios" : "Guardar turno"}</button></div>
   </form>{isEdit && <div className="mt-3 grid grid-cols-2 gap-2"><button className={secondary} onClick={() => onDuplicate(shift!)}><Icon name="copy" /><span className="ml-2">Duplicar</span></button><form action={deleteWorkforceShiftAction} ><input type="hidden" name="shiftId" value={shift!.id} /><input type="hidden" name="expectedVersion" value={shift!.version} /><input type="hidden" name="returnTo" value={target} />{postPublish && <input required name="reason" aria-label="Motivo para retirar" placeholder="Motivo para retirar" className={`${field} mb-2`} />}<button className="min-h-9 w-full rounded-lg border border-error/30 px-3 py-2 text-sm font-bold text-error">{postPublish ? "Retirar turno" : "Eliminar"}</button></form></div>}</Modal>;
 }
 
