@@ -7,9 +7,15 @@ const globalForPrisma = globalThis as {
 };
 
 function verifiedDatabaseUrl() {
-  const value = process.env.DATABASE_URL;
+  const value = process.env.MAESTRO_RUNTIME_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!value) throw new Error("DATABASE_URL no está configurada.");
+  if (process.env.VERCEL === "1" && !process.env.MAESTRO_RUNTIME_DATABASE_URL) {
+    throw new Error("MAESTRO_RUNTIME_DATABASE_URL no está configurada.");
+  }
   const url = new URL(value);
+  if (process.env.VERCEL === "1" && url.username !== "maestro_scheduler_login_377326ac" && url.username !== "maestro_runtime") {
+    throw new Error("RUNTIME_CONNECTION_PRINCIPAL_MUST_BE_RESTRICTED");
+  }
   // pg 9 dejará de tratar `require` como verificación completa. Fijarlo aquí
   // mantiene validación de certificado aunque una integración regenere la URL.
   url.searchParams.set("sslmode", "verify-full");
