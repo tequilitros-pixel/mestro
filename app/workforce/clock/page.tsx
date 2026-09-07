@@ -1,3 +1,5 @@
+import { ClockStatus } from "./ClockStatus";
+import { clockEventLabels, clockSuccess } from "./presentation";
 import { randomUUID } from "node:crypto";
 import { Card } from "@/components/ui/Card";
 import { getCurrentUser } from "@/lib/auth";
@@ -59,7 +61,7 @@ export default async function ClockPage({
     <section className="mx-auto max-w-xl space-y-4">
       {query.saved ? (
         <p role="status" className="rounded-xl bg-primary/10 p-3 font-semibold">
-          {query.saved}
+          {query.saved === "Evento registrado." || query.saved === "Operación ya registrada." ? clockSuccess(dashboard.lastEvent?.type) : query.saved}
         </p>
       ) : null}
       {query.error ? (
@@ -71,9 +73,7 @@ export default async function ClockPage({
         </p>
       ) : null}
       <Card className="space-y-3 text-center">
-        <p className="text-sm text-on-surface-variant">Estado actual</p>
-        <h2 className="text-3xl font-black">{dashboard.state}</h2>
-        <p>{dashboard.employment.employee.displayName}</p>
+        <ClockStatus events={dashboard.displayEvents.map(event=>({type:event.type,occurredAt:event.occurredAt.toISOString(),branchId:event.branchId}))} name={dashboard.employment.employee.displayName??"Empleado"} branches={availableBranches.map(item=>({id:item.id,name:item.name,timezone:item.timezone}))} serverNow={dashboard.displayNow.getTime()} state={dashboard.state}/>
         {dashboard.shifts[0] ? (
           <p className="rounded-lg bg-surface-container p-3 text-sm">
             Turno publicado · {dashboard.shifts[0].branch.name}
@@ -89,7 +89,7 @@ export default async function ClockPage({
             })}
           </p>
         ) : (
-          <p className="rounded-lg bg-secondary/10 p-3 text-sm">
+          <p className="border-t border-outline-variant pt-3 text-xs text-on-surface-variant">
             Sin turno publicado cercano · trabajo no programado permitido con
             advertencia.
           </p>
@@ -153,7 +153,7 @@ export default async function ClockPage({
                   <option
                     value={dashboard.lastEvent.originalClockEventId ?? ""}
                   >
-                    {dashboard.lastEvent.type} ·{" "}
+                    {clockEventLabels[dashboard.lastEvent.type]??"Evento"} ·{" "}
                     {dashboard.lastEvent.occurredAt.toISOString()}
                   </option>
                 ) : null}
@@ -166,10 +166,10 @@ export default async function ClockPage({
                 name="proposedEventType"
                 className="mt-1 w-full rounded-lg border p-3"
               >
-                <option value="CLOCK_IN">CLOCK_IN</option>
-                <option value="BREAK_START">BREAK_START</option>
-                <option value="BREAK_END">BREAK_END</option>
-                <option value="CLOCK_OUT">CLOCK_OUT</option>
+                <option value="CLOCK_IN">Entrada</option>
+                <option value="BREAK_START">Inicio de descanso</option>
+                <option value="BREAK_END">Fin de descanso</option>
+                <option value="CLOCK_OUT">Salida</option>
               </select>
             </label>
             <label className="block text-sm">

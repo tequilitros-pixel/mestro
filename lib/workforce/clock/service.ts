@@ -327,6 +327,8 @@ export async function getClockDashboard(actor: ClockActor, context: ClockService
     shifts,
     state,
     lastEvent: stream.at(-1) ?? null,
+    displayEvents: stream,
+    displayNow: now,
     locationPolicy: {
       requireGeolocationClockIn: workforceGeolocationEnabled && locationPolicy.requireGeolocationClockIn,
       requireGeolocationClockOut: workforceGeolocationEnabled && locationPolicy.requireGeolocationClockOut,
