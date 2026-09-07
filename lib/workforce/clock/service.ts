@@ -1,4 +1,3 @@
-import { workforceGeolocationEnabled } from "@/lib/workforce/geolocation-release";
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -190,6 +189,7 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string, c
   const stream = await effectiveFor(tx, employmentId);
   const sessions = reconstructWorkSessions(stream);
   const desiredIds = new Set(sessions.map((session) => `native_${session.key}`));
+  const sessionBusinessDates: Date[] = [];
   const staleSessions = await tx.workSession.findMany({
     where: {
       employmentId,
@@ -226,6 +226,9 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string, c
     const eventDate = session.startedAt ?? session.events[0].occurredAt;
     const workforcePolicy = await resolveWorkforcePolicy(eventDate, tx);
     const timezone = branch.timezone ?? workforcePolicy.companyTimezone;
+    const sessionBusinessDate =
+      shift?.businessDate ?? civilDate(eventDate, timezone);
+    sessionBusinessDates.push(sessionBusinessDate);
     const id = `native_${session.key}`;
     const existing = await tx.workSession.findUnique({ where: { id } });
     await tx.workSession.upsert({
@@ -233,12 +236,7 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string, c
       update: {
         branchId: session.branchId,
         shiftId: shift?.id ?? null,
-        businessDate:
-          shift?.businessDate ??
-          civilDate(
-            eventDate,
-            timezone,
-          ),
+        businessDate: sessionBusinessDate,
         startedAt: session.startedAt,
         endedAt: session.endedAt,
         workedMinutes: session.workedMinutes,
@@ -252,12 +250,7 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string, c
         employmentId,
         branchId: session.branchId,
         shiftId: shift?.id ?? null,
-        businessDate:
-          shift?.businessDate ??
-          civilDate(
-            eventDate,
-            timezone,
-          ),
+        businessDate: sessionBusinessDate,
         startedAt: session.startedAt,
         endedAt: session.endedAt,
         workedMinutes: session.workedMinutes,
@@ -282,7 +275,7 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string, c
       throw new Error("No se reconstruye una sesión legacy.");
   }
   await reconcileAttendanceForEmployment(tx, employmentId, context.clock.now());
-  await signalTimesheetsForEmployment(tx, employmentId);
+  await signalTimesheetsForEmployment(tx, employmentId, sessionBusinessDates);
   return { stream, sessions };
 }
 
@@ -325,13 +318,13 @@ export async function getClockDashboard(actor: ClockActor, context: ClockService
     employment,
     branches: branches.map((a) => a.branch),
     shifts,
-    state,
-    lastEvent: stream.at(-1) ?? null,
     displayEvents: stream,
     displayNow: now,
+    state,
+    lastEvent: stream.at(-1) ?? null,
     locationPolicy: {
-      requireGeolocationClockIn: workforceGeolocationEnabled && locationPolicy.requireGeolocationClockIn,
-      requireGeolocationClockOut: workforceGeolocationEnabled && locationPolicy.requireGeolocationClockOut,
+      requireGeolocationClockIn: locationPolicy.requireGeolocationClockIn,
+      requireGeolocationClockOut: locationPolicy.requireGeolocationClockOut,
     },
   };
 }
@@ -405,9 +398,9 @@ export async function recordClockEvent(
       include: { geofence: true },
     });
     const requiresGeolocation = input.type === "CLOCK_IN"
-      ? workforceGeolocationEnabled && policy.requireGeolocationClockIn
+      ? policy.requireGeolocationClockIn
       : input.type === "CLOCK_OUT"
-        ? workforceGeolocationEnabled && policy.requireGeolocationClockOut
+        ? policy.requireGeolocationClockOut
         : false;
     const geolocation = evaluateGeofence(
       branch,

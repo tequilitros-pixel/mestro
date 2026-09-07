@@ -10,11 +10,21 @@ export type TimesheetActor = {
   role: string;
   accessibleBranchIds: string[] | null;
 };
+type TargetBusinessDate = Date;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const signedMinutes = (type: string, minutes: number) =>
   type === "REMOVE_PAYABLE_TIME" ? -minutes : minutes;
 const transaction = <T>(fn: (tx: Tx) => Promise<T>) =>
   prisma.$transaction(fn, { maxWait: 5_000, timeout: 20_000 });
+
+function periodStartKeys(dates: TargetBusinessDate[]) {
+  const unique = new Map<string, Date>();
+  for (const date of dates) {
+    const start = mondayOf(date);
+    unique.set(dateKey(start), start);
+  }
+  return [...unique.values()];
+}
 
 function assertMonday(start: Date) {
   if (start.getUTCDay() !== 1) throw new Error("El periodo debe iniciar en lunes.");
@@ -230,9 +240,25 @@ export async function ensureAndRecomputeTimesheet(employmentId: string, inputDat
   });
 }
 
-export async function signalTimesheetsForEmployment(tx: Tx, employmentId: string) {
-  const sheets = await tx.timesheet.findMany({ where: { employmentId } });
-  for (const sheet of sheets) await recomputeTx(tx, sheet.id);
+export async function signalTimesheetsForEmployment(
+  tx: Tx,
+  employmentId: string,
+  businessDates?: TargetBusinessDate[],
+) {
+  const sheetCache = await tx.timesheet.findMany({ where: { employmentId } });
+  const byPeriod = new Map(sheetCache.map((sheet) => [dateKey(sheet.periodStart), sheet]));
+  if (!businessDates?.length) {
+    for (const sheet of sheetCache) await recomputeTx(tx, sheet.id);
+    return;
+  }
+  for (const periodStart of periodStartKeys(businessDates)) {
+    const key = dateKey(periodStart);
+    const existing = byPeriod.get(key);
+    const sheet = existing
+      ? existing
+      : await ensureTimesheetTx(tx, employmentId, periodStart);
+    await recomputeTx(tx, sheet.id);
+  }
 }
 
 export async function addTimesheetAdjustment(
