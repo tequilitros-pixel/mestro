@@ -12,6 +12,7 @@ import { appendOutboxEvent } from "@/lib/pos2/outbox";
 import { validatePayments, type PaymentInput } from "./paymentDomain";
 import { resolveSaleInventory } from "./recipe";
 import { validateFrozenAdjustments } from "@/lib/pos2/adjustments/service";
+import { backfillLegacyOpeningBalanceForCompleteSale } from "@/lib/pos2/inventory/legacyBridge";
 
 type Fault = "AFTER_SALE" | "AFTER_ADJUSTMENTS" | "AFTER_PAYMENTS" | "AFTER_FIRST_INVENTORY" | "BEFORE_FINALIZE";
 type Input = { orderId: string; expectedOrderVersion: number; cashSessionId: string; terminalId: string; payments: PaymentInput[]; actor: CommandActor; operationId: string; faultInjectionForTest?: Fault };
@@ -67,7 +68,10 @@ export async function completeSale(input: Input) {
     for (const payment of payments) await tx.pos2Payment.create({ data: { saleId: sale.id, branchId: order.branchId, terminalId: input.terminalId, actorId: input.actor.id, method: payment.method as Pos2PaymentMethod, amount: payment.amount.toDecimal(), cashTendered: payment.tendered?.toDecimal() ?? null, changeGiven: payment.change?.toDecimal() ?? null, reference: payment.reference?.trim() || null, position: payment.position, operationId: input.operationId } });
     inject(input, "AFTER_PAYMENTS");
     const inventory = await resolveSaleInventory(tx, sale.id, order.lines);
-    if (inventory.length) await applyInventoryBatchInTransaction(tx, { branchId: order.branchId, movements: inventory, actorId: input.actor.id, operationId: input.operationId, failAfterFirstMovementForTest: input.faultInjectionForTest === "AFTER_FIRST_INVENTORY" });
+    if (inventory.length) {
+      await backfillLegacyOpeningBalanceForCompleteSale({ tx, branchId: order.branchId, actor: input.actor, operationId: input.operationId, capturedAt: at, migrationVersion: "POS2_COMPLETE_SALE_LEGACY_BOOTSTRAP", movements: inventory.map((movement) => ({ inventoryProductId: movement.inventoryProductId, unit: movement.unit })) });
+      await applyInventoryBatchInTransaction(tx, { branchId: order.branchId, movements: inventory, actorId: input.actor.id, operationId: input.operationId, failAfterFirstMovementForTest: input.faultInjectionForTest === "AFTER_FIRST_INVENTORY" });
+    }
     const cash = payments.filter((payment) => payment.method === "CASH").reduce((sum, payment) => sum.plus(payment.amount.toDecimal()), new Prisma.Decimal(0));
     if (cash.greaterThan(0)) await tx.cashMovement.create({ data: { cashSessionId: session.id, branchId: order.branchId, registerId: order.registerId, type: "SALE_CASH", direction: "IN", amount: cash, sourceType: "SALE", sourceId: sale.id, actorId: input.actor.id, operationId: input.operationId, metadata: { saleNumber: sale.saleNumber } } });
     inject(input, "BEFORE_FINALIZE");
