@@ -15,6 +15,7 @@ import {
   assertUnscheduledWorkPolicy,
   shiftLinkProximityMilliseconds,
 } from "./policy";
+import { localBusinessDate } from "../timesheet/rules";
 import { buildEffectiveClockStream, type ClockType } from "./effectiveStream";
 import {
   clockState,
@@ -27,15 +28,6 @@ export type ClockActor = { id: string; role: string };
 export type ClockServiceContext = { clock: WorkforceTimeProvider; transactionTimeoutMs?: number };
 const defaultContext: ClockServiceContext = { clock: systemWorkforceClock };
 const sourceValues = new Set(["PERSONAL", "KIOSK"]);
-function civilDate(value: Date, timezone: string) {
-  const text = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(value);
-  return new Date(`${text}T00:00:00.000Z`);
-}
 async function serializable<T>(
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
   timeout = 15_000,
@@ -227,7 +219,7 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string, c
     const workforcePolicy = await resolveWorkforcePolicy(eventDate, tx);
     const timezone = branch.timezone ?? workforcePolicy.companyTimezone;
     const sessionBusinessDate =
-      shift?.businessDate ?? civilDate(eventDate, timezone);
+      shift?.businessDate ?? localBusinessDate(eventDate, timezone);
     sessionBusinessDates.push(sessionBusinessDate);
     const id = `native_${session.key}`;
     const existing = await tx.workSession.findUnique({ where: { id } });
@@ -319,6 +311,7 @@ export async function getClockDashboard(actor: ClockActor, context: ClockService
     branches: branches.map((a) => a.branch),
     shifts,
     displayEvents: stream,
+    companyTimezone: locationPolicy.companyTimezone,
     displayNow: now,
     state,
     lastEvent: stream.at(-1) ?? null,
@@ -386,6 +379,8 @@ export async function recordClockEvent(
       stream.map((e) => e.type).lastIndexOf("CLOCK_OUT") + 1,
     );
     const state = clockState(open);
+    if (!open.some((event) => event.type === "CLOCK_IN") && input.type === "CLOCK_OUT")
+      throw new Error("CLOCK_OUT requiere una entrada activa válida.");
     if (!(
       (state === "NO_SESSION" && input.type === "CLOCK_IN") ||
       (state === "CLOCKED_IN" &&
@@ -433,7 +428,7 @@ export async function recordClockEvent(
         data: {
           employmentId: input.employmentId,
           branchId: input.branchId,
-          businessDate: civilDate(now, branch.timezone ?? policy.companyTimezone),
+          businessDate: localBusinessDate(now, branch.timezone ?? policy.companyTimezone),
           type: "OUTSIDE_GEOFENCE",
           severity: "WARNING",
           blocking: false,

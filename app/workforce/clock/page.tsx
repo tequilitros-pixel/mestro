@@ -57,6 +57,7 @@ export default async function ClockPage({
     : primary === "CLOCK_OUT"
       ? dashboard.locationPolicy.requireGeolocationClockOut
       : false;
+  const dashboardTimezone = dashboard.companyTimezone ?? "America/Mexico_City";
   return (
     <section className="mx-auto max-w-xl space-y-4">
       {query.saved ? (
@@ -73,7 +74,21 @@ export default async function ClockPage({
         </p>
       ) : null}
       <Card className="space-y-3 text-center">
-        <ClockStatus events={dashboard.displayEvents.map(event=>({type:event.type,occurredAt:event.occurredAt.toISOString(),branchId:event.branchId}))} name={dashboard.employment.employee.displayName??"Empleado"} branches={availableBranches.map(item=>({id:item.id,name:item.name,timezone:item.timezone}))} serverNow={dashboard.displayNow.getTime()} state={dashboard.state}/>
+        <ClockStatus
+          events={dashboard.displayEvents.map((event) => ({
+            type: event.type,
+            occurredAt: event.occurredAt.toISOString(),
+            branchId: event.branchId,
+          }))}
+          name={dashboard.employment.employee.displayName ?? "Empleado"}
+          branches={availableBranches.map((item) => ({
+            id: item.id,
+            name: item.name,
+            timezone: item.timezone ?? dashboardTimezone,
+          }))}
+          serverNow={dashboard.displayNow.getTime()}
+          state={dashboard.state}
+        />
         {dashboard.shifts[0] ? (
           <p className="rounded-lg bg-surface-container p-3 text-sm">
             Turno publicado · {dashboard.shifts[0].branch.name}
