@@ -14,7 +14,6 @@ export type ShiftWindow = {
 };
 export type SchedulingBlocker =
   | "INACTIVE_EMPLOYMENT"
-  | "UNAUTHORIZED_BRANCH"
   | "OVERLAPPING_SHIFT"
   | "INVALID_WINDOW"
   | "OUTSIDE_PERIOD";
@@ -176,7 +175,6 @@ export function validateShiftFacts(input: {
   periodStart: Date;
   periodEnd: Date;
   employmentStatus?: string;
-  branchAuthorized?: boolean;
   overlaps?: boolean;
 }) {
   const blockers: SchedulingBlocker[] = [];
@@ -191,7 +189,6 @@ export function validateShiftFacts(input: {
   else {
     if (input.employmentStatus !== "ACTIVE")
       blockers.push("INACTIVE_EMPLOYMENT");
-    if (!input.branchAuthorized) blockers.push("UNAUTHORIZED_BRANCH");
     if (input.overlaps) blockers.push("OVERLAPPING_SHIFT");
   }
   return { blockers, warnings };

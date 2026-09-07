@@ -6,17 +6,17 @@ const worker={assignments:[{branchId:"center",type:"HOME"}]};
 test("aggregate filter never becomes a shift branch",()=>{
  for(const filter of [null,"all"]){assert.equal(initialShiftBranch(branches,filter),"");assert.equal(initialShiftBranch(branches,filter,worker),"center");}
 });
-test("changing employee replaces an unauthorized default with their real HOME",()=>{
- assert.equal(initialShiftBranch(branches,"bar",worker),"center");
- assert.deepEqual(shiftBranchOptions(branches,worker),[{id:"center"}]);
+test("HOME Centro does not prevent selecting Veliz",()=>{
+ assert.equal(initialShiftBranch(branches,"bar",worker),"bar");
+ assert.deepEqual(shiftBranchOptions(branches),branches);
 });
 test("selected real ALLOWED branch is preserved",()=>{
  const employee={assignments:[...worker.assignments,{branchId:"bar",type:"ALLOWED"}]};
  assert.equal(initialShiftBranch(branches,"bar",employee),"bar");
 });
-test("unassigned employee or assignments to inactive/inaccessible branches cannot pick a branch",()=>{
+test("employee without HOME can select any active branch",()=>{
  for(const employee of [{assignments:[]},{assignments:[{branchId:"inactive",type:"HOME"}]}]){
-  assert.deepEqual(shiftBranchOptions(branches,employee),[]);
-  assert.equal(initialShiftBranch(branches,"bar",employee),"");
+  assert.deepEqual(shiftBranchOptions(branches),branches);
+  assert.equal(initialShiftBranch(branches,"bar",employee),"bar");
  }
 });

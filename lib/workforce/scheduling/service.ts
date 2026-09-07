@@ -73,16 +73,8 @@ async function validateAssignedShift(
 ) {
   const employment = await tx.employment.findUnique({
     where: { id: input.employmentId },
-    include: { branchAssignments: true, employee: true },
+    include: { employee: true },
   });
-  const branchAuthorized = Boolean(
-    employment?.branchAssignments.some(
-      (item) =>
-        item.branchId === input.branchId &&
-        item.effectiveFrom <= input.startAt &&
-        (!item.effectiveTo || item.effectiveTo >= input.endAt),
-    ),
-  );
   const baseFacts = validateShiftFacts({
     shift: {
       employmentId: input.employmentId,
@@ -94,7 +86,6 @@ async function validateAssignedShift(
     periodStart: input.periodStart,
     periodEnd: input.periodEnd,
     employmentStatus: employment?.status,
-    branchAuthorized,
     overlaps: false,
   });
   if (baseFacts.blockers.length)
@@ -166,7 +157,7 @@ export async function getScheduleBoard(
         },
       }),
       prisma.employment.findMany({
-        where: scheduleEligibleEmploymentWhere(branchId, start, end),
+        where: scheduleEligibleEmploymentWhere(),
         include: {
           employee: true,
           availabilityRules: true,
