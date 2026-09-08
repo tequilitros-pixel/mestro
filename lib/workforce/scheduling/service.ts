@@ -1,6 +1,8 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { assertActiveBranch } from "@/lib/workforce/branchLifecycle";
+import { setRlsContext } from "@/lib/rls";
 import { reconcileAttendanceForEmployment } from "@/lib/workforce/attendance/reconcile";
 import { resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
 import {
@@ -19,6 +21,7 @@ import {
   weekEnd,
   type ShiftWindow,
 } from "./rules";
+import { scheduleEligibleEmploymentWhere } from "./eligibility";
 
 export type SchedulingActor = {
   id: string;
@@ -27,6 +30,7 @@ export type SchedulingActor = {
 };
 export type ShiftCommand = {
   periodId: string;
+  branchId?: string;
   shiftId?: string;
   expectedVersion?: number;
   employmentId: string | null;
@@ -39,7 +43,7 @@ export type ShiftCommand = {
 
 function serializable<T>(
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
-  timeout = 10_000,
+  timeout = 30_000,
 ) {
   return prisma.$transaction(fn, {
     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -69,16 +73,8 @@ async function validateAssignedShift(
 ) {
   const employment = await tx.employment.findUnique({
     where: { id: input.employmentId },
-    include: { branchAssignments: true },
+    include: { employee: true },
   });
-  const branchAuthorized = Boolean(
-    employment?.branchAssignments.some(
-      (item) =>
-        item.branchId === input.branchId &&
-        item.effectiveFrom <= input.startAt &&
-        (!item.effectiveTo || item.effectiveTo >= input.endAt),
-    ),
-  );
   const baseFacts = validateShiftFacts({
     shift: {
       employmentId: input.employmentId,
@@ -90,7 +86,6 @@ async function validateAssignedShift(
     periodStart: input.periodStart,
     periodEnd: input.periodEnd,
     employmentStatus: employment?.status,
-    branchAuthorized,
     overlaps: false,
   });
   if (baseFacts.blockers.length)
@@ -104,7 +99,11 @@ async function validateAssignedShift(
       endAt: { gt: input.startAt },
     },
   });
-  if (overlap) throw new Error("Bloqueado: OVERLAPPING_SHIFT");
+  if (overlap) {
+    const branch = await tx.branch.findUniqueOrThrow({ where: { id: overlap.branchId } });
+    const time = (date: Date) => new Intl.DateTimeFormat("es-MX", { timeZone: branch.timezone ?? "America/Mexico_City", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
+    throw new Error(`${employment?.employee.displayName ?? "El empleado"} ya tiene un turno en ${branch.name} de ${time(overlap.startAt)} a ${time(overlap.endAt)}. (OVERLAPPING_SHIFT)`);
+  }
   return employment!;
 }
 
@@ -158,16 +157,7 @@ export async function getScheduleBoard(
         },
       }),
       prisma.employment.findMany({
-        where: {
-          status: "ACTIVE",
-          branchAssignments: {
-            some: {
-              branchId,
-              effectiveFrom: { lte: end },
-              OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
-            },
-          },
-        },
+        where: scheduleEligibleEmploymentWhere(),
         include: {
           employee: true,
           availabilityRules: true,
@@ -249,6 +239,11 @@ export async function getScheduleBoard(
     coverage,
     hours,
     threshold,
+    publicationPolicy: {
+      allowUnassigned: workforcePolicy.allowUnassignedShiftPublication,
+      allowAvailabilityWarnings:
+        workforcePolicy.allowAvailabilityWarningPublication,
+    },
     availability,
     shiftWarnings,
   };
@@ -460,19 +455,46 @@ export async function getPreviousWeekSchedulePreview(
 export async function createOrUpdateShift(
   actor: SchedulingActor,
   input: ShiftCommand,
-  transactionTimeoutMs = 10_000,
+  transactionTimeoutMs = 30_000,
 ) {
   return serializable(async (tx) => {
-    const period = await tx.schedulePeriod.findUnique({
+    const sourcePeriod = await tx.schedulePeriod.findUnique({
       where: { id: input.periodId },
       include: { branch: true, publications: { select: { id: true } } },
     });
-    if (!period) throw new Error("Semana no encontrada.");
+    if (!sourcePeriod) throw new Error("Semana no encontrada.");
     assertSchedulingBranchAccess(
       actor.role,
       actor.accessibleBranchIds,
-      period.branchId,
+      sourcePeriod.branchId,
     );
+    const targetBranchId = input.branchId || sourcePeriod.branchId;
+    await assertActiveBranch(tx, sourcePeriod.branchId);
+    await assertActiveBranch(tx, targetBranchId);
+    assertSchedulingBranchAccess(
+      actor.role,
+      actor.accessibleBranchIds,
+      targetBranchId,
+    );
+    const period = targetBranchId === sourcePeriod.branchId
+      ? sourcePeriod
+      : await tx.schedulePeriod.upsert({
+          where: {
+            branchId_periodStart_periodEnd: {
+              branchId: targetBranchId,
+              periodStart: sourcePeriod.periodStart,
+              periodEnd: sourcePeriod.periodEnd,
+            },
+          },
+          update: {},
+          create: {
+            branchId: targetBranchId,
+            periodStart: sourcePeriod.periodStart,
+            periodEnd: sourcePeriod.periodEnd,
+            createdById: actor.id,
+          },
+          include: { branch: true, publications: { select: { id: true } } },
+        });
     const businessDate = dateOnly(input.businessDate);
     const workforcePolicy = await resolveWorkforcePolicy(businessDate, tx);
     const timezone = period.branch.timezone ?? workforcePolicy.companyTimezone;
@@ -482,6 +504,8 @@ export async function createOrUpdateShift(
       endTime: input.endTime,
       timezone,
     });
+    if (!Number.isInteger(input.expectedBreakMinutes) || input.expectedBreakMinutes < 0 || input.expectedBreakMinutes >= (endAt.getTime() - startAt.getTime()) / 60000)
+      throw new Error("El descanso debe ser menor que la duración del turno y no puede ser negativo.");
     if (input.employmentId)
       await validateAssignedShift(tx, {
         employmentId: input.employmentId,
@@ -509,7 +533,10 @@ export async function createOrUpdateShift(
         throw new Error(`Bloqueado: ${facts.blockers.join(", ")}`);
     }
     const published =
-      period.publications.length > 0 || period.status === "PUBLISHED";
+      sourcePeriod.publications.length > 0 ||
+      sourcePeriod.status === "PUBLISHED" ||
+      period.publications.length > 0 ||
+      period.status === "PUBLISHED";
     if (!input.shiftId) {
       const reason = published ? ensureReason(input.reason) : null;
       const shift = await tx.shift.create({
@@ -543,6 +570,7 @@ export async function createOrUpdateShift(
         });
       if (published && input.employmentId)
         await reconcileAttendanceForEmployment(tx, input.employmentId);
+      if (published) await tx.schedulePeriod.update({ where: { id: period.id }, data: { status: "DRAFT" } });
       return shift;
     }
     const current = await tx.shift.findUnique({
@@ -552,7 +580,7 @@ export async function createOrUpdateShift(
         publicationLinks: { select: { id: true } },
       },
     });
-    if (!current || current.schedulePeriodId !== period.id)
+    if (!current || current.schedulePeriodId !== sourcePeriod.id)
       throw new Error("Turno no encontrado.");
     if (current.version !== input.expectedVersion)
       throw new Error(
@@ -561,6 +589,8 @@ export async function createOrUpdateShift(
     const result = await tx.shift.updateMany({
       where: { id: current.id, version: input.expectedVersion },
       data: {
+        schedulePeriodId: period.id,
+        branchId: period.branchId,
         employmentId: input.employmentId,
         businessDate,
         startAt,
@@ -599,6 +629,7 @@ export async function createOrUpdateShift(
       for (const employmentId of employmentIds)
         await reconcileAttendanceForEmployment(tx, employmentId);
     }
+    if (published) await tx.schedulePeriod.updateMany({ where: { id: { in: [sourcePeriod.id, period.id] } }, data: { status: "DRAFT" } });
     return tx.shift.findUniqueOrThrow({ where: { id: current.id } });
   }, transactionTimeoutMs).catch((error) => {
     if (
@@ -666,6 +697,7 @@ export async function deleteOrCancelShift(
     });
     if (shift.employmentId)
       await reconcileAttendanceForEmployment(tx, shift.employmentId);
+    await tx.schedulePeriod.update({ where: { id: shift.schedulePeriodId }, data: { status: "DRAFT" } });
     return { deleted: false, cancelled: true };
   });
 }
@@ -691,8 +723,13 @@ export async function publishSchedulePeriod(
     if (period.status === "PUBLISHED" && period.publications[0])
       return { id: period.publications[0].id, idempotent: true };
     const policy = await resolveWorkforcePolicy(period.periodStart, tx);
+    const activeShifts = period.shifts.filter(
+      (shift) => shift.status !== "CANCELLED",
+    );
+    if (!activeShifts.length)
+      throw new Error("Agrega al menos un turno antes de publicar.");
     const blockers: string[] = [];
-    for (const shift of period.shifts) {
+    for (const shift of activeShifts) {
       if (!shift.employmentId) {
         if (!policy.allowUnassignedShiftPublication)
           blockers.push(`${shift.id}: UNASSIGNED_NOT_ALLOWED_BY_POLICY`);
@@ -754,7 +791,7 @@ export async function publishSchedulePeriod(
           endAt: shift.endAt,
           expectedBreakMinutes: shift.expectedBreakMinutes,
           status: shift.status === "CANCELLED" ? "CANCELLED" : "PUBLISHED",
-          reason: "Publicación inicial de semana",
+          reason: version === 1 ? "Publicación inicial de semana" : "Publicación de cambios",
           changedById: actor.id,
         },
       });
@@ -781,7 +818,7 @@ export async function publishSchedulePeriod(
     ))
       await reconcileAttendanceForEmployment(tx, employmentId);
     return { id: publication.id, idempotent: false };
-  }).catch((error) => {
+  }, 60_000).catch((error) => {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       (error.code === "P2002" || error.code === "P2034")
@@ -820,6 +857,7 @@ export async function copyPreviousScheduleWeek(
       include: { shifts: true, branch: true },
     });
     if (!target) throw new Error("Semana destino no encontrada.");
+    await assertActiveBranch(tx, target.branchId);
     assertSchedulingBranchAccess(
       actor.role,
       actor.accessibleBranchIds,
@@ -885,6 +923,102 @@ export async function copyPreviousScheduleWeek(
   });
 }
 
+export async function applyScheduleTemplate(
+  actor: SchedulingActor,
+  input: {
+    templateId: string;
+    employmentIds: string[];
+    weekStart: Date;
+  },
+) {
+  const employmentIds = [...new Set(input.employmentIds.filter(Boolean))];
+  if (!employmentIds.length) throw new Error("Selecciona al menos un empleado.");
+  return serializable(async (tx) => {
+    await setRlsContext(tx, actor);
+    const template = await tx.scheduleTemplate.findUnique({
+      where: { id: input.templateId },
+      include: {
+        branch: true,
+        shifts: { orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }] },
+      },
+    });
+    if (!template?.active || !template.branchId || !template.branch)
+      throw new Error("Plantilla no disponible para una sucursal.");
+    await assertActiveBranch(tx, template.branchId);
+    assertSchedulingBranchAccess(
+      actor.role,
+      actor.accessibleBranchIds,
+      template.branchId,
+    );
+    const periodStart = dateOnly(input.weekStart);
+    if (periodStart.getUTCDay() !== 1) throw new Error("Selecciona el lunes de la semana.");
+    const periodEnd = weekEnd(periodStart);
+    const period = await tx.schedulePeriod.upsert({
+      where: {
+        branchId_periodStart_periodEnd: {
+          branchId: template.branchId,
+          periodStart,
+          periodEnd,
+        },
+      },
+      update: {},
+      create: {
+        branchId: template.branchId,
+        periodStart,
+        periodEnd,
+        createdById: actor.id,
+      },
+      include: { publications: { select: { id: true } } },
+    });
+    if (period.status !== "DRAFT" || period.publications.length)
+      throw new Error("No se puede aplicar una plantilla sobre una semana publicada.");
+    const blocks = template.shifts.filter(
+      (block) => block.type === "TURNO" && block.startTime && block.endTime,
+    );
+    if (!blocks.length) throw new Error("La plantilla no contiene turnos.");
+    const workforcePolicy = await resolveWorkforcePolicy(periodStart, tx);
+    const timezone = template.branch.timezone ?? workforcePolicy.companyTimezone;
+    let created = 0;
+    for (const employmentId of employmentIds) {
+      for (const block of blocks) {
+        const businessDate = new Date(
+          periodStart.getTime() + block.dayOfWeek * 86_400_000,
+        );
+        const { startAt, endAt } = shiftInstants({
+          businessDate,
+          startTime: block.startTime!,
+          endTime: block.endTime!,
+          timezone,
+        });
+        await validateAssignedShift(tx, {
+          employmentId,
+          branchId: template.branchId,
+          businessDate,
+          startAt,
+          endAt,
+          periodStart,
+          periodEnd,
+        });
+        await tx.shift.create({
+          data: {
+            schedulePeriodId: period.id,
+            employmentId,
+            branchId: template.branchId,
+            businessDate,
+            startAt,
+            endAt,
+            expectedBreakMinutes: block.breakMinutes,
+            status: "DRAFT",
+            createdById: actor.id,
+          },
+        });
+        created += 1;
+      }
+    }
+    return { created, periodId: period.id, branchId: template.branchId };
+  }, 60_000);
+}
+
 export async function upsertStaffingRequirement(
   actor: SchedulingActor,
   input: {
@@ -933,8 +1067,12 @@ export async function getPublicationValidation(
   const board = await getScheduleBoard(actor, branchId, weekStartInput);
   const blockers: string[] = [];
   const warnings: string[] = [];
+  const activeShifts = (board.period?.shifts ?? []).filter(
+    (shift) => shift.status !== "CANCELLED",
+  );
+  if (!activeShifts.length) blockers.push("NO_SHIFTS");
   await serializable(async (tx) => {
-    for (const shift of board.period?.shifts ?? []) {
+    for (const shift of activeShifts) {
       if (!shift.employmentId) continue;
       try {
         await validateAssignedShift(tx, {
@@ -954,15 +1092,24 @@ export async function getPublicationValidation(
       }
     }
   });
-  for (const shift of board.period?.shifts ?? []) {
-    for (const warning of board.shiftWarnings.get(shift.id) ?? [])
-      warnings.push(`${shift.id}: ${warning}`);
+  for (const shift of activeShifts) {
+    for (const warning of board.shiftWarnings.get(shift.id) ?? []) {
+      if (
+        (warning === "UNASSIGNED" &&
+          !board.publicationPolicy.allowUnassigned) ||
+        ((warning === "UNAVAILABLE" ||
+          warning === "UNKNOWN_AVAILABILITY") &&
+          !board.publicationPolicy.allowAvailabilityWarnings)
+      )
+        blockers.push(`${shift.id}: ${warning}`);
+      else warnings.push(`${shift.id}: ${warning}`);
+    }
   }
   for (const item of board.coverage)
     if (item.status === "UNDERSTAFFED")
       warnings.push(`${item.id}: COVERAGE_GAP`);
   return {
-    shiftCount: board.period?.shifts.length ?? 0,
+    shiftCount: activeShifts.length,
     employeeCount: new Set(
       (board.period?.shifts ?? [])
         .map((item) => item.employmentId)

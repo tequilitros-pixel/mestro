@@ -2109,6 +2109,7 @@ model ScheduledShift {
   /// Nulo cuando type = DESCANSO (día libre, no tiene sucursal).
   branchId String?
   date     DateTime
+  breakMinutes Int      @default(0)
 
   /// TURNO = turno normal de trabajo. DESCANSO = día libre, sin
   /// sucursal ni horas.
@@ -2376,6 +2377,7 @@ model ScheduleTemplate {
   id          String  @id @default(cuid())
   name        String
   description String?
+  active      Boolean @default(true)
 
   /// Sucursal principal de la plantilla, solo informativo/filtro (los
   /// turnos dentro de la plantilla pueden tener su propia sucursal).
@@ -2409,8 +2411,9 @@ model ScheduleTemplateShift {
   branchId String?
   type     ShiftType @default(TURNO)
 
-  startTime String?
-  endTime   String?
+  startTime    String?
+  endTime      String?
+  breakMinutes Int     @default(0)
   position  String?
   notes     String?
 
