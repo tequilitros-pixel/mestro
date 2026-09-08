@@ -115,25 +115,32 @@ async function recomputeTx(tx: Tx, timesheetId: string) {
     timesheet.periodStart,
     timesheet.periodEnd,
   );
-  if (timesheet.status === "APPROVED" || timesheet.status === "LOCKED") {
-    if (timesheet.approvedSourceFingerprint !== facts.fingerprint) {
-      await tx.timesheet.update({
-        where: { id: timesheet.id },
-        data: { requiresAdjustment: true, sourceFingerprint: facts.fingerprint },
-      });
-      await tx.workforceOvertimeCalculation.updateMany({
-        where: { timesheetId: timesheet.id, status: "FINAL" },
-        data: { status: "STALE" },
-      });
-    }
-    return tx.timesheet.findUniqueOrThrow({ where: { id: timesheet.id } });
-  }
   const aggregates = aggregateWeek({
     periodStart: timesheet.periodStart,
     sessions: facts.sessions,
     shifts: facts.shifts,
     issues: facts.issues,
   });
+  if (timesheet.status === "APPROVED" || timesheet.status === "LOCKED") {
+    if (timesheet.sourceFingerprint !== facts.fingerprint) {
+      await tx.timesheet.update({
+        where: { id: timesheet.id },
+        data: {
+          requiresAdjustment: true,
+          sourceFingerprint: facts.fingerprint,
+          reviewedById: null,
+          reviewedAt: null,
+          version: { increment: 1 },
+        },
+      });
+      await tx.workforceOvertimeCalculation.updateMany({
+        where: { timesheetId: timesheet.id, status: "FINAL" },
+        data: { status: "STALE" },
+      });
+    } else {
+      return tx.timesheet.findUniqueOrThrow({ where: { id: timesheet.id } });
+    }
+  }
   for (const day of aggregates) {
     const existing = timesheet.lines.find(
       (line) => dateKey(line.businessDate) === dateKey(day.businessDate),
@@ -213,6 +220,34 @@ async function recomputeTx(tx: Tx, timesheetId: string) {
       sourceFingerprint: facts.fingerprint,
       version: { increment: 1 },
     },
+  });
+}
+
+export async function requestTimesheetReview(
+  actor: TimesheetActor,
+  input: { timesheetId: string; expectedVersion: number; reason: string },
+) {
+  if (actor.role !== "ADMIN") throw new Error("No autorizado.");
+  if (input.reason.trim().length < 5) throw new Error("Razón obligatoria.");
+  return transaction(async (tx) => {
+    const sheet = await tx.timesheet.findUniqueOrThrow({
+      where: { id: input.timesheetId },
+      include: { lines: true },
+    });
+    if (sheet.version !== input.expectedVersion) throw new Error("STALE_VERSION");
+    if (sheet.status !== "APPROVED") throw new Error("Timesheet no reenviable.");
+    if (!sheet.requiresAdjustment) throw new Error("Timesheet no requiere revisión.");
+    await recomputeTx(tx, sheet.id);
+    const updated = await tx.timesheet.update({
+      where: { id: sheet.id },
+      data: {
+        status: "REVIEW",
+        reviewedById: actor.id,
+        reviewedAt: new Date(),
+        version: { increment: 1 },
+      },
+    });
+    return { timesheet: updated };
   });
 }
 
@@ -326,7 +361,21 @@ export async function approveTimesheet(
       throw new Error("Timesheet bloqueado por integridad de tiempo.");
     const updated = await tx.timesheet.update({
       where: { id: sheet.id },
-      data: { status: "APPROVED", approvedById: actor.id, approvedAt: new Date(), approvalIdempotencyKey: input.idempotencyKey, approvedSourceFingerprint: sheet.sourceFingerprint, approvedBaseMinutes: sheet.baseWorkedMinutes, approvedAdjustmentMinutes: sheet.adjustmentMinutes, approvedEffectiveMinutes: sheet.effectiveMinutes, approvedIssuesSnapshot: issues.map((issue) => ({ type: issue.type, businessDate: dateKey(issue.businessDate), status: issue.status })), version: { increment: 1 } },
+      data: {
+        status: "APPROVED",
+        requiresAdjustment: false,
+        reviewedById: actor.id,
+        reviewedAt: new Date(),
+        approvedById: sheet.approvedById ?? actor.id,
+        approvedAt: sheet.approvedAt ?? new Date(),
+        approvalIdempotencyKey: input.idempotencyKey,
+        approvedSourceFingerprint: sheet.sourceFingerprint,
+        approvedBaseMinutes: sheet.baseWorkedMinutes,
+        approvedAdjustmentMinutes: sheet.adjustmentMinutes,
+        approvedEffectiveMinutes: sheet.effectiveMinutes,
+        approvedIssuesSnapshot: issues.map((issue) => ({ type: issue.type, businessDate: dateKey(issue.businessDate), status: issue.status })),
+        version: { increment: 1 },
+      },
     });
     return { timesheet: updated, idempotent: false };
   });

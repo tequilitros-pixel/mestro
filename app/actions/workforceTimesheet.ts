@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth";
 import {
   addTimesheetAdjustment,
   approveTimesheet,
+  requestTimesheetReview,
   lockTimesheet,
 } from "@/lib/workforce/timesheet/service";
 
@@ -69,4 +70,20 @@ export async function workforceTimesheetLockAction(form: FormData) {
     finish(back, "error", error instanceof Error ? error.message : "No se pudo bloquear.");
   }
   finish(back, "saved", "Timesheet bloqueado.");
+}
+
+export async function workforceTimesheetRequestReviewAction(form: FormData) {
+  const back = value(form, "returnTo");
+  try {
+    await requestTimesheetReview(await actor(), {
+      timesheetId: value(form, "timesheetId"),
+      expectedVersion: Number(value(form, "expectedVersion")),
+      reason: value(form, "reason"),
+    });
+    revalidatePath(path);
+  } catch (error) {
+    unstable_rethrow(error);
+    finish(back, "error", error instanceof Error ? error.message : "No se pudo enviar a revisión.");
+  }
+  finish(back, "saved", "Timesheet enviado a revisión.");
 }
