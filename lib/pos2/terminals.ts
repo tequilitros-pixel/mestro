@@ -25,6 +25,28 @@ export async function createTerminalEnrollment(input: { actor: CommandActor; bra
   return { terminal, enrollmentToken: rawToken };
 }
 
+export async function rotateTerminalCredential(input: { actor: CommandActor; terminalId: string; deviceIdentifier?: string }) {
+  const rawCredential = secret();
+  const terminal = await prisma.$transaction(async (tx) => {
+    const current = await tx.terminal.findUniqueOrThrow({ where: { id: input.terminalId } });
+    requireActorBranch(input.actor, current.branchId);
+    await requireCapability(tx, input.actor, "terminal.manage", current.branchId);
+    const rotated = await tx.terminal.update({
+      where: { id: current.id },
+      data: {
+        deviceIdentifier: input.deviceIdentifier?.trim() || current.deviceIdentifier,
+        credentialHash: digest(rawCredential),
+        status: "ACTIVE",
+        credentialIssuedAt: new Date(),
+        lastSeenAt: new Date(),
+      },
+    });
+    await appendAuditEvent(tx, { actorId: input.actor.id, branchId: rotated.branchId, action: "terminal.credential_rotated", entityType: "Terminal", entityId: rotated.id });
+    return rotated;
+  });
+  return { terminal: { id: terminal.id, branchId: terminal.branchId, name: terminal.name, status: terminal.status }, credential: rawCredential };
+}
+
 export async function enrollTerminal(input: { enrollmentToken: string; deviceIdentifier: string }) {
   const credential = secret();
   return prisma.$transaction(async (tx) => {

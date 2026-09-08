@@ -21,7 +21,7 @@ export default async function Pos2CashAdministrationPage() {
         <input name="name" required placeholder="Caja 1" className="w-full rounded-lg border p-2" />
         <button className="rounded-lg bg-primary px-4 py-2 text-on-primary">Crear caja</button>
       </form>
-      <TerminalEnrollmentForm branches={branches} />
+      <TerminalEnrollmentForm branches={branches} terminals={terminals.map((terminal) => ({ id: terminal.id, branchId: terminal.branchId, branchName: terminal.branch.name, name: terminal.name, status: terminal.status }))} />
     </section>
     <section><h2 className="mb-3 text-lg font-semibold">Registers</h2><div className="space-y-2">{registers.map((register) => <div key={register.id} className="flex items-center justify-between rounded-lg border p-3"><span>{register.branch.name} · {register.code} · {register.name}</span><form action={toggleRegisterAction}><input type="hidden" name="registerId" value={register.id}/><input type="hidden" name="active" value={String(!register.active)}/><button className="text-sm underline">{register.active ? "Desactivar" : "Activar"}</button></form></div>)}</div></section>
     <section><h2 className="mb-3 text-lg font-semibold">Terminales</h2><div className="space-y-2">{terminals.map((terminal) => <div key={terminal.id} className="flex items-center justify-between rounded-lg border p-3"><span>{terminal.branch.name} · {terminal.name} · {terminal.status}</span>{terminal.status !== "REVOKED" && <form action={revokeTerminalAction}><input type="hidden" name="terminalId" value={terminal.id}/><button className="text-sm text-error underline">Revocar</button></form>}</div>)}</div></section>

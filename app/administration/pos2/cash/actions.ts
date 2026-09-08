@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdminAction } from "@/lib/auth";
 import { createRegister, updateRegister } from "@/lib/pos2/registers";
-import { createTerminalEnrollment, revokeTerminal } from "@/lib/pos2/terminals";
+import { createTerminalEnrollment, revokeTerminal, rotateTerminalCredential } from "@/lib/pos2/terminals";
 
 async function adminActor() {
   const user = await requireAdminAction();
@@ -20,11 +20,18 @@ export async function toggleRegisterAction(formData: FormData) {
   revalidatePath("/administration/pos2/cash");
 }
 
-export type EnrollmentState = { token?: string; terminalName?: string; error?: string };
+export type EnrollmentState = { token?: string; credential?: string; terminalName?: string; error?: string };
 
 export async function createTerminalAction(_: EnrollmentState, formData: FormData): Promise<EnrollmentState> {
   try {
-    const result = await createTerminalEnrollment({ actor: await adminActor(), branchId: String(formData.get("branchId") ?? ""), name: String(formData.get("name") ?? "") });
+    const actor = await adminActor();
+    const terminalId = String(formData.get("terminalId") ?? "");
+    if (terminalId) {
+      const result = await rotateTerminalCredential({ actor, terminalId, deviceIdentifier: String(formData.get("deviceIdentifier") ?? "") });
+      revalidatePath("/administration/pos2/cash");
+      return { credential: result.credential, terminalName: result.terminal.name };
+    }
+    const result = await createTerminalEnrollment({ actor, branchId: String(formData.get("branchId") ?? ""), name: String(formData.get("name") ?? "") });
     revalidatePath("/administration/pos2/cash");
     return { token: result.enrollmentToken, terminalName: result.terminal.name };
   } catch { return { error: "No fue posible crear la terminal." }; }
