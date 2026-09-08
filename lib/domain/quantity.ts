@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 
-export type QuantityUnit = "UNIT" | "ML";
+export type QuantityUnit = "UNIT" | "ML" | "G";
 type DecimalInput = Prisma.Decimal | string | bigint;
 
 const SCALE = 6;

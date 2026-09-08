@@ -40,10 +40,11 @@ export async function captureInitialInventoryCount(input: {
     let declared = counted;
     if (input.captureUnit === "PRESENTATION") {
       const multiplier = product.contentUnit ? contentMultipliers[product.contentUnit] : null;
-      if (!product.normalizedContentPerUnit || !multiplier) throw new DomainError("VALIDATION_ERROR", { field: "captureUnit" });
+      const normalizedContentPerUnit = product.normalizedContentPerUnit;
+      if (!normalizedContentPerUnit || !multiplier) throw new DomainError("VALIDATION_ERROR", { field: "captureUnit" });
       const normalizedContentUnit = product.contentUnit === "PIEZAS" ? "UNIT" : ["G", "KG"].includes(product.contentUnit) ? "G" : "ML";
       if (product.inventoryBaseUnit !== (normalizedContentUnit as CatalogBaseUnit)) throw new DomainError("INVENTORY_UNIT_MISMATCH", { inventoryProductId: product.id });
-      declared = counted.times(product.normalizedContentPerUnit);
+      declared = counted.times(normalizedContentPerUnit);
     }
 
     const balance = await tx.inventoryBalance.upsert({ where: { branchId_inventoryProductId: { branchId: input.branchId, inventoryProductId: product.id } }, create: { branchId: input.branchId, inventoryProductId: product.id, quantity: new Prisma.Decimal(0), unit: product.inventoryBaseUnit }, update: {} });
