@@ -254,6 +254,23 @@ body {
 .module-drawer { animation: module-drawer-in 180ms cubic-bezier(.2,.8,.2,1) both; transform-origin: left center; }
 @keyframes module-drawer-in { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
 
+@media (max-width: 639px) {
+  /* Las pestañas de Caldera y Cocimiento deben seguir siendo navegables
+     sin recortar controles en un viewport estrecho. */
+  .caldera-cocimiento-tabs [role="tablist"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-x: visible;
+  }
+
+  .caldera-cocimiento-tabs [role="tab"] {
+    min-width: 0;
+    width: 100%;
+    white-space: normal;
+    text-align: center;
+  }
+}
+
 @media (pointer: coarse) {
   .shell-icon-button { min-height: 2.75rem; min-width: 2.75rem; }
 }

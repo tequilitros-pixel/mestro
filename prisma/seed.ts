@@ -49,6 +49,16 @@ const EQUIPMENT: EquipmentSeed[] = [
     active: true,
   },
   {
+    name: "Caldera 1",
+    type: EquipmentType.CALDERA,
+    status: EquipmentStatus.DISPONIBLE,
+    capacity: 1000,
+    currentLoad: 0,
+    unit: "L",
+    location: "Caldera",
+    active: true,
+  },
+  {
     name: "Desgarradora",
     type: EquipmentType.DESGARRADORA,
     status: EquipmentStatus.DISPONIBLE,

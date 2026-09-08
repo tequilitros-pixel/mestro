@@ -29,8 +29,8 @@ export const LEGACY_OPERATOR_PERMISSION_KEYS = [
 export const ADMIN_ONLY_PATH_PREFIXES = [
   "/administration/personnel",
   "/administration/schedule",
-  "/administration/workforce",
-  "/workforce/kiosk",
+  "/administration/workforce/employees",
+  "/administration/workforce/branches",
   "/timeclock/payroll",
   "/timeclock/geofences",
   "/pos/categories",
@@ -71,6 +71,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "/plant", label: "Planta" },
       { key: "/lots", label: "Lotes" },
       { key: "/cooking", label: "Cocción" },
+      { key: "/boiler", label: "Caldera" },
       { key: "/milling", label: "Molienda" },
       { key: "/fermentation", label: "Fermentación" },
       { key: "/distillation", label: "Destilación" },

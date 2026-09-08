@@ -925,7 +925,7 @@ const EQUIPMENT_TYPE_INFO: Record<
   ALAMBIQUE: { icon: <StillIcon />, newHref: "/distillation/new" },
   BOMBA: { icon: <GlassWaterIcon />, newHref: "/plant" },
   TANQUE: { icon: <PackageIcon />, newHref: "/plant" },
-  CALDERA: { icon: <FlameIcon />, newHref: "/plant" },
+  CALDERA: { icon: <FlameIcon />, newHref: "/boiler" },
   OTRO: { icon: <ToolboxIcon />, newHref: "/plant" },
 };
 

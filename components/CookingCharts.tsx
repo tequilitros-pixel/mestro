@@ -1,144 +1,16 @@
- "use client";
+"use client";
 
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-  ReferenceLine,
-  Legend,
-} from "recharts";
+import { CartesianGrid, Line, LineChart, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatBusinessTime } from "@/lib/dateTime";
+import type { ReactElement } from "react";
 
-type CookingEvent = {
-  id: string;
-  type: string;
-  createdAt: Date | string;
-  temperatureTop: number | null;
-  temperatureMiddle: number | null;
-  temperatureBottom: number | null;
-  liters?: number | null;
-  temperature?: number | null;
-  ph?: number | null;
-  brix?: number | null;
-  notes?: string | null;
-};
+type CookingEvent = { id: string; type: string; createdAt: Date | string; temperatureTop: number | null; temperatureMiddle: number | null; temperatureBottom: number | null };
+type SteamInterval = { id: string; state: string; startedAt: Date | string; endedAt: Date | string | null; pressureReadings: Array<{ occurredAt: Date | string; canonicalPsi: unknown }> };
 
-type ChartData = {
-  time: string;
-  timestamp: number;
-  superior: number | null;
-  media: number | null;
-  inferior: number | null;
-};
-
-const eventLabels: Record<string, string> = {
-  AUMENTAR_VAPOR: "+VAPOR",
-  BAJAR_VAPOR: "−VAPOR",
-  SUSPENDER_VAPOR: "PAUSA",
-  MIELES_AMARGAS: "AMARGAS",
-  MIELES_DULCES: "DULCES",
-  OBSERVACION: "NOTA",
-  FIN_COCCION: "FIN",
-};
-
-export default function CookingCharts({ events }: { events: CookingEvent[] }) {
-  const temperatureEvents = events.filter((event) => event.type === "TEMPERATURA");
-
-  const data: ChartData[] = temperatureEvents.map((event) => {
-    const date = new Date(event.createdAt);
-
-    return {
-      time: formatBusinessTime(date),
-      timestamp: date.getTime(),
-      superior: event.temperatureTop,
-      media: event.temperatureMiddle,
-      inferior: event.temperatureBottom,
-    };
-  });
-
-  const importantEvents = events
-    .filter((event) => event.type !== "TEMPERATURA" && data.length > 0)
-    .map((event) => {
-      const eventTime = new Date(event.createdAt).getTime();
-
-      const closestPoint = data.reduce((closest, point) => {
-        const currentDiff = Math.abs(point.timestamp - eventTime);
-        const closestDiff = Math.abs(closest.timestamp - eventTime);
-        return currentDiff < closestDiff ? point : closest;
-      }, data[0]);
-
-      return {
-        ...event,
-        chartTime: closestPoint.time,
-        chartY:
-          closestPoint.superior ??
-          closestPoint.media ??
-          closestPoint.inferior ??
-          0,
-      };
-    });
-
-  if (data.length === 0) {
-    return (
-      <section className="mt-4 rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5">
-        <h2 className="mb-1 text-sm font-semibold">Gráficas de cocción</h2>
-        <p className="text-on-surface-variant">
-          Aún no hay temperaturas registradas para graficar.
-        </p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="mt-4 rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5">
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <h2 className="text-sm font-semibold">Gráficas de cocción</h2>
-        <p className="text-xs text-on-surface-variant">Temperatura por hora</p>
-      </div>
-
-      <div className="rounded-xl bg-surface-container-high p-3">
-        <div className="h-64 sm:h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 35, right: 30, left: 10, bottom: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" />
-              <XAxis dataKey="time" stroke="var(--color-outline)" />
-              <YAxis stroke="var(--color-outline)" unit="°C" domain={["dataMin - 5", "dataMax + 5"]} />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--color-surface-container-high)",
-                  border: "1px solid var(--color-outline-variant)",
-                  borderRadius: "12px",
-                  color: "var(--color-on-surface)",
-                }}
-              />
-              <Legend />
-{importantEvents.map((event) => (
-  <ReferenceLine
-    key={event.id}
-    x={event.chartTime}
-    stroke="var(--color-secondary)"
-    strokeDasharray="4 4"
-    label={{
-      value: eventLabels[event.type] ?? "•",
-      position: "top",
-      fill: "var(--color-secondary)",
-      fontSize: 11,
-      fontWeight: 700,
-    }}
-  />
-))}
-
-              <Line type="monotone" dataKey="inferior" name="Inferior" stroke="var(--color-on-surface-variant)" strokeDasharray="2 3" strokeWidth={2.5} dot connectNulls />
-              <Line type="monotone" dataKey="media" name="Media" stroke="var(--color-outline)" strokeDasharray="6 3" strokeWidth={2.5} dot connectNulls />
-              <Line type="monotone" dataKey="superior" name="Superior" stroke="var(--color-on-surface)" strokeWidth={2.5} dot connectNulls />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </section>
-  );
+export default function CookingCharts({ events, steamIntervals = [] }: { events: CookingEvent[]; steamIntervals?: SteamInterval[] }) {
+  const data = events.filter((event) => event.type === "TEMPERATURA").map((event) => ({ timestamp: new Date(event.createdAt).getTime(), superior: event.temperatureTop, media: event.temperatureMiddle, inferior: event.temperatureBottom }));
+  const pressure = steamIntervals.flatMap((interval) => interval.pressureReadings.map((reading) => ({ timestamp: new Date(reading.occurredAt).getTime(), psi: Number(reading.canonicalPsi), interval: interval.id }))).sort((a, b) => a.timestamp - b.timestamp);
+  return <section className="mt-4 space-y-4 rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5"><div><h2 className="text-sm font-semibold">Gráficas de cocción</h2><p className="text-xs text-on-surface-variant">Los puntos usan su hora real; no se interpolan eventos con la temperatura más cercana.</p></div>{data.length > 0 && <Chart title="Temperatura por hora"><LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}><CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" /><XAxis type="number" dataKey="timestamp" domain={["dataMin", "dataMax"]} tickFormatter={(value) => formatBusinessTime(value)} stroke="var(--color-outline)" /><YAxis unit="°C" stroke="var(--color-outline)" /><Tooltip labelFormatter={(value) => formatBusinessTime(Number(value))} /><Legend /><Line type="monotone" dataKey="inferior" name="Inferior" stroke="var(--color-on-surface-variant)" dot /><Line type="monotone" dataKey="media" name="Media" stroke="var(--color-outline)" dot /><Line type="monotone" dataKey="superior" name="Superior" stroke="var(--color-on-surface)" dot /></LineChart></Chart>}{pressure.length > 0 && <Chart title="Presión de vapor (PSI)"><LineChart data={pressure} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}><CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" /><XAxis type="number" dataKey="timestamp" domain={["dataMin", "dataMax"]} tickFormatter={(value) => formatBusinessTime(value)} stroke="var(--color-outline)" /><YAxis unit=" PSI" stroke="var(--color-outline)" /><Tooltip labelFormatter={(value) => formatBusinessTime(Number(value))} /><Line type="stepAfter" dataKey="psi" name="PSI canónico" stroke="var(--color-primary)" strokeWidth={2.5} dot /></LineChart></Chart>}{steamIntervals.length > 0 && <div className="rounded-xl bg-surface-container-high p-4"><h3 className="text-sm font-semibold">Franjas de vapor</h3><div className="mt-3 space-y-2">{steamIntervals.map((interval) => <div key={interval.id} className="flex items-center justify-between gap-3 text-sm"><span className="font-semibold">{interval.state === "INYECTANDO" ? "Inyectando" : "Sin inyección"}</span><span className="text-on-surface-variant">{formatBusinessTime(interval.startedAt)} — {interval.endedAt ? formatBusinessTime(interval.endedAt) : "activa"}</span></div>)}</div></div>}{data.length === 0 && pressure.length === 0 && <p className="text-on-surface-variant">Aún no hay temperaturas o presiones registradas para graficar.</p>}</section>;
 }
+
+function Chart({ title, children }: { title: string; children: ReactElement }) { return <div className="rounded-xl bg-surface-container-high p-3"><p className="mb-2 text-xs font-semibold">{title}</p><div className="h-64 sm:h-72"><ResponsiveContainer width="100%" height="100%">{children}</ResponsiveContainer></div></div>; }
