@@ -22,7 +22,7 @@ export async function closeCashSession(input: {
   try { declared = Money.nonNegative(input.declaredCash); envelope = Money.nonNegative(input.envelopeAmount ?? "0"); } catch { throw new DomainError("VALIDATION_ERROR", { field: "cash" }); }
   if (envelope.compare(declared) > 0) throw new DomainError("VALIDATION_ERROR", { field: "envelopeAmount" });
   const payload = { cashSessionId: input.cashSessionId, terminalId: input.terminalId, actorId: input.actor.id, declaredCash: declared.toString(), envelopeAmount: envelope.toString() };
-  return executeIdempotent({ operationId: input.operationId, command: "CloseCashSession", payload, receiptContext: { actorId: input.actor.id }, execute: async (tx) => {
+  return executeIdempotent({ operationId: input.operationId, command: "CloseCashSession", payload, receiptContext: { actorId: input.actor.id }, transactionOptions: { maxWait: 5000, timeout: 20000 }, execute: async (tx) => {
     const session = await lockCashSession(tx, input.cashSessionId);
     requireActorBranch(input.actor, session.branchId);
     await requireCapability(tx, input.actor, "cash.session.close", session.branchId);

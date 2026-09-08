@@ -21,7 +21,7 @@ function inject(input: Input, point: Fault) { if (input.faultInjectionForTest ==
 
 export async function completeSale(input: Input) {
   const payload = { orderId: input.orderId, expectedOrderVersion: input.expectedOrderVersion, cashSessionId: input.cashSessionId, terminalId: input.terminalId, payments: input.payments };
-  return executeIdempotent({ operationId: input.operationId, command: "CompleteSale", payload, receiptContext: { actorId: input.actor.id }, execute: async (tx) => {
+  return executeIdempotent({ operationId: input.operationId, command: "CompleteSale", payload, receiptContext: { actorId: input.actor.id }, transactionOptions: { maxWait: 5000, timeout: 20000 }, execute: async (tx) => {
     const order = await lockOrder(tx, input.orderId);
     requireActorBranch(input.actor, order.branchId);
     await requireCapability(tx, input.actor, "pos.sale.complete", order.branchId);

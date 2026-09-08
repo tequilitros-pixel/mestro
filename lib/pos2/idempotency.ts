@@ -24,6 +24,11 @@ export async function executeIdempotent<T extends StableResult>(params: {
   command: string;
   payload: unknown;
   receiptContext?: ReceiptContext;
+  transactionOptions?: {
+    maxWait?: number;
+    timeout?: number;
+    isolationLevel?: Prisma.TransactionIsolationLevel;
+  };
   execute: (tx: Prisma.TransactionClient) => Promise<T>;
 }): Promise<IdempotentOutcome<T>> {
   if (!isUuidV7(params.operationId)) {
@@ -75,5 +80,5 @@ export async function executeIdempotent<T extends StableResult>(params: {
       },
     });
     return { result, replayed: false, receipt };
-  });
+  }, params.transactionOptions);
 }
