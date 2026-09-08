@@ -27,7 +27,7 @@ export async function listEmployees() {
   const now = new Date();
   return prisma.employee.findMany({
     include: {
-      user: { select: { id: true, username: true } },
+      user: { select: { id: true, username: true, active: true } },
       employments: {
         orderBy: { createdAt: "desc" },
         include: {
@@ -44,7 +44,7 @@ export async function getEmployee(id: string) {
   return prisma.employee.findUnique({
     where: { id },
     include: {
-      user: { select: { id: true, username: true, name: true } },
+      user: { select: { id: true, username: true, name: true, active: true } },
       employments: {
         orderBy: { createdAt: "desc" },
         include: {

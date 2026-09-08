@@ -56,7 +56,7 @@ export async function changeWorkforceHomeAction(formData: FormData) {
   const employeeId = String(formData.get("employeeId"));
   const branchId = String(formData.get("branchId"));
   const employmentId = String(formData.get("employmentId"));
-  const effectiveFrom = dateValue(formData, "effectiveFrom");
+  const effectiveFrom = formData.get("quick") ? new Date() : dateValue(formData, "effectiveFrom");
   let error: string | null = null;
   let assignmentSaved = false;
   try {
@@ -88,12 +88,22 @@ async function change(formData: FormData, operation: () => Promise<unknown>) {
 export async function addWorkforceAllowedBranchAction(formData: FormData) {
   return change(formData, () => addBranchAssignment({ employmentId: String(formData.get("employmentId")), branchId: String(formData.get("branchId")), type: "ALLOWED", effectiveFrom: dateValue(formData, "effectiveFrom") }));
 }
+export async function toggleWorkforceAllowedBranchAction(formData: FormData) {
+  return change(formData, () => {
+    const enabled = String(formData.get("enabled") ?? "");
+    const employmentId = String(formData.get("employmentId") ?? "");
+    const branchId = String(formData.get("branchId") ?? "");
+    if (enabled === "true") return addBranchAssignment({ employmentId, branchId, type: "ALLOWED", effectiveFrom: new Date() });
+    if (enabled === "false") return endAllowedBranch({ assignmentId: String(formData.get("assignmentId") ?? ""), employmentId, effectiveTo: new Date() });
+    throw new Error("Estado de sucursal inválido.");
+  });
+}
 export async function changeWorkforcePayRateAction(formData: FormData) {
   await authorize();
   const employeeId = String(formData.get("employeeId"));
   let error: string | null = null;
   try {
-    await changePayRate({ employmentId: String(formData.get("employmentId")), rateType: String(formData.get("rateType")) as "HOURLY" | "DAILY" | "WEEKLY" | "SALARY", amount: Number(formData.get("amount")), currency: String(formData.get("currency")).toUpperCase(), effectiveFrom: dateValue(formData, "effectiveFrom") });
+    await changePayRate({ employmentId: String(formData.get("employmentId")), rateType: String(formData.get("rateType")) as "HOURLY" | "DAILY" | "WEEKLY" | "SALARY", amount: Number(formData.get("amount")), currency: String(formData.get("currency")).toUpperCase(), effectiveFrom: formData.get("quick") ? new Date() : dateValue(formData, "effectiveFrom") });
   } catch (cause) {
     error = cause instanceof Error ? cause.message : "No fue posible cambiar la tarifa.";
   }
