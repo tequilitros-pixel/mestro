@@ -1,64 +1,73 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { PrismaClient, Prisma } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { INGREDIENTS, PRODUCTS } from "../lib/pos/tequilitrosSeedData";
-import { appendAuditEvent } from "../lib/pos2/audit";
-import { appendOutboxEvent } from "../lib/pos2/outbox";
 
 const connectionString = process.env.DATABASE_URL;
-if (!connectionString) throw new Error("DATABASE_URL is required.");
 const actorId = process.env.POS2_RECIPE_SYNC_ACTOR_ID;
+if (!connectionString) throw new Error("DATABASE_URL is required.");
 if (!actorId) throw new Error("POS2_RECIPE_SYNC_ACTOR_ID is required for an auditable change.");
 const apply = process.argv.includes("--apply");
 const pool = new Pool({ connectionString });
-const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
+const quote = (value: unknown) => `'${String(value).replaceAll("'", "''")}'`;
+const json = (value: Record<string, unknown>) => `${quote(JSON.stringify(value))}::jsonb`;
+const sourceToPos2Code = new Map([["EXTRA-PENAFIEL", "POS-ING-TORONJA-REF"]]);
+const existingPos2Recipes = [
+  {
+    name: "4/100",
+    variants: [{ name: "Único", ingredients: [
+      { ingredientCode: "POS-ING-TORONJA-REF", quantity: 120 },
+      { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
+      { ingredientCode: "POS-ING-LIMON", quantity: 60 },
+    ] }],
+  },
+] as const;
 
-function resolution(sourceUnit: string, sourceQuantity: number, product: { normalizedContentPerUnit: Prisma.Decimal | null; contentUnit: string | null }) {
-  if (sourceUnit === "ml") return { unit: "ML", quantity: new Prisma.Decimal(sourceQuantity) };
-  if (sourceUnit === "g") return { unit: "G", quantity: new Prisma.Decimal(sourceQuantity) };
-  if (sourceUnit === "Pza") return { unit: "UNIT", quantity: new Prisma.Decimal(sourceQuantity) };
-  if (sourceUnit === "bolsa" && product.contentUnit === "KG" && product.normalizedContentPerUnit) return { unit: "G", quantity: new Prisma.Decimal(sourceQuantity).times(product.normalizedContentPerUnit) };
+function resolution(sourceUnit: string, sourceQuantity: number, normalizedContentPerUnit: string | null, contentUnit: string | null) {
+  if (sourceUnit === "ml") return { unit: "ML", quantity: sourceQuantity.toString() };
+  if (sourceUnit === "g") return { unit: "G", quantity: sourceQuantity.toString() };
+  if (sourceUnit === "Pza") return { unit: "UNIT", quantity: sourceQuantity.toString() };
+  if (sourceUnit === "bolsa" && contentUnit === "KG" && normalizedContentPerUnit) return { unit: "G", quantity: (sourceQuantity * Number(normalizedContentPerUnit)).toString() };
+  if (sourceUnit === "botella" && contentUnit && normalizedContentPerUnit) return { unit: contentUnit, quantity: (sourceQuantity * Number(normalizedContentPerUnit)).toString() };
   return null;
 }
 
 async function main() {
-  const expected = new Map<string, { sourceUnit: string; quantity: number; code: string }>();
-  for (const product of PRODUCTS) for (const variant of product.variants) for (const ingredient of variant.ingredients) expected.set(`${product.name}\u0000${variant.name}\u0000${ingredient.ingredientCode}`, { sourceUnit: INGREDIENTS.find((item) => item.code === ingredient.ingredientCode)?.unit ?? "", quantity: ingredient.quantity, code: ingredient.ingredientCode });
+  const rows = (await pool.query(`SELECT p."id" AS "productId",p."name" AS "productName",p."inventoryTracked",v."id" AS "variantId",v."name" AS "variantName",i."id" AS "ingredientId",i."inventoryProductId",i."quantity"::text AS "currentQuantity",i."unit" AS "currentUnit",i."unitStatus" AS "currentStatus",ip."code",ip."name" AS "inventoryName",ip."inventoryBaseUnit",ip."normalizedContentPerUnit"::text AS "normalizedContentPerUnit",ip."contentUnit" FROM "PosProduct" p JOIN "PosProductVariant" v ON v."productId"=p."id" JOIN "PosVariantIngredient" i ON i."variantId"=v."id" JOIN "InventoryProduct" ip ON ip."id"=i."inventoryProductId" WHERE p."active"=true AND p."sellable"=true AND v."active"=true ORDER BY p."name",v."position",i."id"`)).rows;
+  const statements: string[] = [];
   const report: Array<{ product: string; variant: string; status: string; blockers: string[] }> = [];
-  await prisma.$transaction(async (tx) => {
-    const operationId = randomUUID();
-    for (const productDef of PRODUCTS) {
-      const product = await tx.posProduct.findFirst({ where: { name: productDef.name }, include: { variants: { where: { active: true }, include: { ingredients: { include: { inventoryProduct: true } } } } } });
-      if (!product) throw new Error(`Missing POS product: ${productDef.name}`);
-      if (product.inventoryTracked !== true) { if (apply) await tx.posProduct.update({ where: { id: product.id }, data: { inventoryTracked: true } }); if (apply) await appendAuditEvent(tx, { actorId, action: "POS2_PRODUCT_INVENTORY_TRACKING_ENABLED", entityType: "PosProduct", entityId: product.id, operationId, metadata: { product: product.name } }); }
-      for (const variantDef of productDef.variants) {
-        const variant = product.variants.find((item) => item.name === variantDef.name);
-        if (!variant) throw new Error(`Missing POS variant: ${productDef.name} / ${variantDef.name}`);
-        const blockers: string[] = [];
-        const expectedIds = new Set<string>();
-        for (const ingredientDef of variantDef.ingredients) {
-          const source = expected.get(`${productDef.name}\u0000${variantDef.name}\u0000${ingredientDef.ingredientCode}`)!;
-          const inventoryProduct = await tx.inventoryProduct.findUnique({ where: { code: source.code } });
-          if (!inventoryProduct) throw new Error(`Missing inventory product: ${source.code}`);
-          expectedIds.add(inventoryProduct.id);
-          const resolved = resolution(source.sourceUnit, source.quantity, inventoryProduct);
-          if (resolved && apply && inventoryProduct.inventoryBaseUnit !== resolved.unit) await tx.inventoryProduct.update({ where: { id: inventoryProduct.id }, data: { inventoryBaseUnit: resolved.unit as never } });
-          if (!resolved) { blockers.push(`${inventoryProduct.name}: no existe equivalencia física para ${source.sourceUnit}`); continue; }
-          const current = variant.ingredients.find((item) => item.inventoryProductId === inventoryProduct.id);
-          if (!current) throw new Error(`Missing recipe ingredient row: ${productDef.name} / ${variantDef.name} / ${source.code}`);
-          if (apply && (current.unit !== resolved.unit || current.unitStatus !== "RESOLVED" || current.quantity.toString() !== resolved.quantity.toString())) { await tx.posVariantIngredient.update({ where: { id: current.id }, data: { quantity: resolved.quantity, unit: resolved.unit as never, unitStatus: "RESOLVED" } }); await appendAuditEvent(tx, { actorId, action: "POS2_RECIPE_INGREDIENT_CONFIGURED", entityType: "PosVariantIngredient", entityId: current.id, operationId, metadata: { product: productDef.name, variant: variantDef.name, inventoryProductCode: source.code, sourceUnit: source.sourceUnit, quantity: resolved.quantity.toFixed(6), unit: resolved.unit } }); }
-        }
-        const extras = variant.ingredients.filter((item) => !expectedIds.has(item.inventoryProductId));
-        if (extras.length) blockers.push(`ingredientes no definidos por fuente: ${extras.length}`);
-        if (blockers.length) report.push({ product: productDef.name, variant: variantDef.name, status: "FAIL", blockers }); else report.push({ product: productDef.name, variant: variantDef.name, status: "PASS", blockers: [] });
+  const operationId = randomUUID();
+  for (const productDef of [...PRODUCTS, ...existingPos2Recipes]) {
+    const productRows = rows.filter((row) => row.productName === productDef.name);
+    const product = productRows[0];
+    if (!product || new Set(productRows.map((row) => row.productId)).size !== 1) throw new Error(`Expected one active POS product: ${productDef.name}`);
+    if (!product.inventoryTracked && apply) { statements.push(`UPDATE "PosProduct" SET "inventoryTracked"=true,"updatedAt"=NOW() WHERE "id"=${quote(product.productId)}`); statements.push(`INSERT INTO "AuditEvent" ("id","actorId","action","entityType","entityId","operationId","metadata") VALUES (${quote(randomUUID())},${quote(actorId)},'POS2_PRODUCT_INVENTORY_TRACKING_ENABLED','PosProduct',${quote(product.productId)},${quote(operationId)},${json({ product: product.name })})`); }
+    for (const variantDef of productDef.variants) {
+      const variantRows = productRows.filter((row) => row.variantName === variantDef.name);
+      if (!variantRows.length) throw new Error(`Missing POS variant: ${productDef.name} / ${variantDef.name}`);
+      const expectedIds = new Set<string>();
+      const blockers: string[] = [];
+      for (const ingredientDef of variantDef.ingredients) {
+        const source = INGREDIENTS.find((item) => item.code === ingredientDef.ingredientCode);
+        if (!source) throw new Error(`Missing versioned ingredient source: ${ingredientDef.ingredientCode}`);
+        const pos2Code = sourceToPos2Code.get(source.code) ?? source.code;
+        const row = variantRows.find((item) => item.code === pos2Code);
+        if (!row) throw new Error(`Missing recipe ingredient row: ${productDef.name} / ${variantDef.name} / ${source.code}`);
+        expectedIds.add(row.inventoryProductId);
+        const resolved = resolution(source.unit, ingredientDef.quantity, row.normalizedContentPerUnit, row.contentUnit);
+        if (!resolved) { blockers.push(`${row.inventoryName}: falta equivalencia física para ${source.unit}`); continue; }
+        if (apply && row.inventoryBaseUnit !== resolved.unit) { statements.push(`UPDATE "InventoryProduct" SET "inventoryBaseUnit"=${quote(resolved.unit)}::"CatalogBaseUnit","updatedAt"=NOW() WHERE "id"=${quote(row.inventoryProductId)}`); statements.push(`INSERT INTO "AuditEvent" ("id","actorId","action","entityType","entityId","operationId","metadata") VALUES (${quote(randomUUID())},${quote(actorId)},'POS2_INVENTORY_BASE_UNIT_CONFIGURED','InventoryProduct',${quote(row.inventoryProductId)},${quote(operationId)},${json({ sourceCode: source.code, pos2Code, unit: resolved.unit, sourceUnit: source.unit })})`); }
+        if (apply && (row.currentUnit !== resolved.unit || row.currentStatus !== "RESOLVED" || row.currentQuantity !== resolved.quantity)) { statements.push(`UPDATE "PosVariantIngredient" SET "quantity"=${quote(resolved.quantity)},"unit"=${quote(resolved.unit)}::"CatalogBaseUnit","unitStatus"='RESOLVED'::"RecipeIngredientUnitStatus" WHERE "id"=${quote(row.ingredientId)}`); statements.push(`INSERT INTO "AuditEvent" ("id","actorId","action","entityType","entityId","operationId","metadata") VALUES (${quote(randomUUID())},${quote(actorId)},'POS2_RECIPE_INGREDIENT_CONFIGURED','PosVariantIngredient',${quote(row.ingredientId)},${quote(operationId)},${json({ product: productDef.name, variant: variantDef.name, sourceCode: source.code, pos2Code, sourceUnit: source.unit, quantity: resolved.quantity, unit: resolved.unit })})`); }
       }
+      const extras = variantRows.filter((row) => !expectedIds.has(row.inventoryProductId));
+      if (extras.length) blockers.push(`ingredientes no definidos por fuente: ${extras.length}`);
+      report.push({ product: productDef.name, variant: variantDef.name, status: blockers.length ? "FAIL" : "PASS", blockers });
     }
-    if (apply) { await appendAuditEvent(tx, { actorId, action: "POS2_RECIPE_CONFIGURATION_SYNCHRONIZED", entityType: "Pos2RecipeConfiguration", entityId: operationId, operationId, metadata: { variants: report.length, pass: report.filter((item) => item.status === "PASS").length, fail: report.filter((item) => item.status === "FAIL").length } }); await appendOutboxEvent(tx, { topic: "pos2.recipe-configuration.synchronized", aggregate: "Pos2RecipeConfiguration", aggregateId: operationId, operationId, payload: { variants: report.length, pass: report.filter((item) => item.status === "PASS").length, fail: report.filter((item) => item.status === "FAIL").length } }); }
-  });
-  console.log(JSON.stringify({ apply, count: report.length, pass: report.filter((item) => item.status === "PASS").length, fail: report.filter((item) => item.status === "FAIL").length, blockers: report.filter((item) => item.status === "FAIL") }, null, 2));
-  if (report.some((item) => item.status === "FAIL")) process.exitCode = 2;
+  }
+  const payload = { variants: report.length, pass: report.filter((item) => item.status === "PASS").length, fail: report.filter((item) => item.status === "FAIL").length };
+  if (apply) { statements.push(`INSERT INTO "AuditEvent" ("id","actorId","action","entityType","entityId","operationId","metadata") VALUES (${quote(randomUUID())},${quote(actorId)},'POS2_RECIPE_CONFIGURATION_SYNCHRONIZED','Pos2RecipeConfiguration',${quote(operationId)},${quote(operationId)},${json(payload)})`); statements.push(`INSERT INTO "OutboxEvent" ("id","topic","aggregate","aggregateId","operationId","payload") VALUES (${quote(randomUUID())},'pos2.recipe-configuration.synchronized','Pos2RecipeConfiguration',${quote(operationId)},${quote(operationId)},${json(payload)})`); await pool.query(["BEGIN", ...statements, "COMMIT"].join(";")); }
+  console.log(JSON.stringify({ apply, ...payload, blockers: report.filter((item) => item.status === "FAIL") }, null, 2));
+  if (payload.fail) process.exitCode = 2;
 }
 
-main().catch((error) => { console.error(error instanceof Error ? error.message : error); process.exitCode = 1; }).finally(async () => { await prisma.$disconnect(); await pool.end(); });
+main().catch((error) => { console.error(error instanceof Error ? error.message : error); process.exitCode = 1; }).finally(() => pool.end());
