@@ -2,6 +2,7 @@ import { getAccessibleBranchIds, requireModuleAccess } from "@/lib/auth";
 import { dateOnly } from "@/lib/workforce/availability/rules";
 import { dateKey, DAY_MS } from "@/lib/workforce/scheduling/rules";
 import { getGlobalScheduleBoard, type SchedulingActor } from "@/lib/workforce/scheduling/service";
+import { scheduleShiftVisualState } from "@/lib/workforce/scheduling/presentation";
 import { ScheduleExperience, type ScheduleViewModel } from "./ScheduleExperience";
 
 function monday(value?: string) {
@@ -25,6 +26,7 @@ export default async function WorkforceSchedulePage({ searchParams }: { searchPa
   }).format(value);
   const previousStart = new Date(start.getTime() - 7 * DAY_MS);
   const allShifts = board.periods.flatMap((period) => period.shifts);
+  const periodById = new Map(board.periods.map((period) => [period.id, period]));
   const model: ScheduleViewModel = {
     selectedBranchId: requestedBranch,
     branches: board.branches.map(({ id, name, color, timezone }) => ({ id, name, color, timezone })),
@@ -41,6 +43,7 @@ export default async function WorkforceSchedulePage({ searchParams }: { searchPa
     })),
     shifts: allShifts.map((shift) => ({
       id: shift.id, periodId: shift.schedulePeriodId, branchId: shift.branchId, branchName: shift.branch.name, branchColor: shift.branch.color,
+      visualState: scheduleShiftVisualState({ published: periodById.get(shift.schedulePeriodId)?.status === "PUBLISHED", hasPublication: Boolean(periodById.get(shift.schedulePeriodId)?.publications.length) }),
       employmentId: shift.employmentId, employeeName: shift.employment?.employee.displayName ?? null, date: dateKey(shift.businessDate),
       start: formatTime(shift.startAt, shift.branchId), end: formatTime(shift.endAt, shift.branchId), breakMinutes: shift.expectedBreakMinutes,
       version: shift.version, cancelled: shift.status === "CANCELLED", warnings: board.shiftWarnings.get(shift.id) ?? [],
