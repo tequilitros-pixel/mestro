@@ -254,6 +254,209 @@ export async function getScheduleBoard(
   };
 }
 
+export async function getGlobalScheduleBoard(
+  actor: SchedulingActor,
+  branchId: string | null,
+  weekStartInput: Date,
+) {
+  const start = dateOnly(weekStartInput);
+  const end = weekEnd(start);
+  const branches = await listSchedulingBranches(actor);
+  const accessibleBranchIds = branches.map((branch) => branch.id);
+  if (branchId) {
+    assertSchedulingBranchAccess(actor.role, actor.accessibleBranchIds, branchId);
+    if (!accessibleBranchIds.includes(branchId))
+      throw new Error("Sucursal no encontrada.");
+  }
+
+  const employmentScope = { status: "ACTIVE" as const };
+  const previousStart = new Date(start.getTime() - 7 * 86_400_000);
+  const previousEnd = weekEnd(previousStart);
+  const [periods, previousPeriods, employments, requirements, workforcePolicy, templates] =
+    await Promise.all([
+      prisma.schedulePeriod.findMany({
+        where: {
+          branchId: { in: accessibleBranchIds },
+          periodStart: start,
+          periodEnd: end,
+        },
+        include: {
+          branch: true,
+          publications: { orderBy: { version: "desc" }, take: 1 },
+          shifts: {
+            include: {
+              employment: { include: { employee: true } },
+              branch: true,
+              revisions: {
+                include: { changedBy: { select: { name: true } } },
+                orderBy: { revisionNumber: "desc" },
+              },
+            },
+            orderBy: [{ businessDate: "asc" }, { startAt: "asc" }],
+          },
+        },
+        orderBy: { branch: { name: "asc" } },
+      }),
+      prisma.schedulePeriod.findMany({
+        where: {
+          branchId: { in: accessibleBranchIds },
+          periodStart: previousStart,
+          periodEnd: previousEnd,
+        },
+        include: {
+          shifts: {
+            where: { status: { not: "CANCELLED" } },
+            include: { employment: { include: { employee: true } } },
+            orderBy: [{ businessDate: "asc" }, { startAt: "asc" }],
+          },
+        },
+      }),
+      prisma.employment.findMany({
+        where: employmentScope,
+        include: {
+          employee: true,
+          availabilityRules: true,
+          availabilityExceptions: { where: { date: { gte: start, lte: end } } },
+          branchAssignments: {
+            where: {
+              branchId: { in: accessibleBranchIds },
+              effectiveFrom: { lte: end },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
+            },
+            include: { branch: true },
+            orderBy: [{ type: "asc" }, { effectiveFrom: "desc" }],
+          },
+        },
+        orderBy: { employee: { displayName: "asc" } },
+      }),
+      prisma.staffingRequirement.findMany({
+        where: {
+          branchId: { in: branchId ? [branchId] : accessibleBranchIds },
+          businessDate: { gte: start, lte: end },
+        },
+        include: { branch: true },
+        orderBy: [{ businessDate: "asc" }, { startTime: "asc" }],
+      }),
+      resolveWorkforcePolicy(start),
+      prisma.scheduleTemplate.findMany({
+        where: { active: true, branchId: { in: accessibleBranchIds } },
+        include: {
+          branch: { select: { id: true, name: true } },
+          shifts: { orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }] },
+        },
+        orderBy: [{ branch: { name: "asc" } }, { name: "asc" }],
+      }),
+    ]);
+
+  const allShifts = periods.flatMap((period) => period.shifts);
+  const hours = scheduledHours(allShifts);
+  const availability = new Map<
+    string,
+    ReturnType<typeof effectiveAvailability>
+  >();
+  for (const employment of employments)
+    for (let index = 0; index < 7; index++) {
+      const day = new Date(start.getTime() + index * 86_400_000);
+      const exception = employment.availabilityExceptions.find(
+        (item) => dateKey(item.date) === dateKey(day),
+      );
+      availability.set(
+        `${employment.id}|${dateKey(day)}`,
+        effectiveAvailability({
+          date: day,
+          rules: employment.availabilityRules,
+          exception,
+        }),
+      );
+    }
+
+  const threshold = workforcePolicy.scheduledHoursWarningMinutes / 60;
+  const shiftWarnings = new Map<string, string[]>();
+  for (const shift of allShifts) {
+    const warnings: string[] = [];
+    if (!shift.employmentId) warnings.push("UNASSIGNED");
+    else {
+      const state = availability.get(
+        `${shift.employmentId}|${dateKey(shift.businessDate)}`,
+      );
+      if (state) {
+        const warning = availabilityWarning(state);
+        if (warning) warnings.push(warning);
+      }
+      if (overtimeRisk(hours.get(shift.employmentId) ?? 0, threshold).risk)
+        warnings.push("OVERTIME_RISK");
+    }
+    shiftWarnings.set(shift.id, warnings);
+  }
+  const coverage = requirements.map((requirement) => {
+    const timezone =
+      requirement.branch.timezone ?? workforcePolicy.companyTimezone;
+    const window = shiftInstants({
+      businessDate: requirement.businessDate,
+      startTime: requirement.startTime,
+      endTime: requirement.endTime,
+      timezone,
+    });
+    return {
+      ...requirement,
+      ...calculateCoverage(
+        { ...window, requiredCount: requirement.requiredCount },
+        allShifts.filter(
+          (shift) => shift.branchId === requirement.branchId,
+        ) as ShiftWindow[],
+      ),
+    };
+  });
+
+  return {
+    branches,
+    start,
+    end,
+    periods,
+    previousPeriods,
+    employments,
+    requirements,
+    coverage,
+    hours,
+    threshold,
+    availability,
+    shiftWarnings,
+    companyTimezone: workforcePolicy.companyTimezone,
+    templates,
+  };
+}
+
+export async function getPreviousWeekSchedulePreview(
+  actor: SchedulingActor,
+  branchId: string,
+  weekStartInput: Date,
+) {
+  assertSchedulingBranchAccess(actor.role, actor.accessibleBranchIds, branchId);
+  const targetStart = dateOnly(weekStartInput);
+  const sourceStart = new Date(targetStart.getTime() - 7 * 86_400_000);
+  const sourceEnd = weekEnd(sourceStart);
+  const period = await prisma.schedulePeriod.findUnique({
+    where: {
+      branchId_periodStart_periodEnd: {
+        branchId,
+        periodStart: sourceStart,
+        periodEnd: sourceEnd,
+      },
+    },
+    include: {
+      shifts: {
+        where: { status: { not: "CANCELLED" } },
+        include: { employment: { include: { employee: true } } },
+        orderBy: [{ businessDate: "asc" }, { startAt: "asc" }],
+      },
+    },
+  });
+  return {
+    weekStart: sourceStart,
+    shifts: period?.shifts ?? [],
+  };
+}
+
 export async function createOrUpdateShift(
   actor: SchedulingActor,
   input: ShiftCommand,
