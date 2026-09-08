@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { evaluateCapability, PHASE3A_CAPABILITIES, type CapabilityKey } from "@/lib/pos2/capabilityPolicy";
 import { resolveBranchCatalog } from "@/lib/pos2/catalog/resolveBranchCatalog";
@@ -7,6 +7,7 @@ import { resolvePricesBatch } from "@/lib/pos2/pricing/resolvePrice";
 import Pos2CashierApp from "@/components/pos2/Pos2CashierApp";
 import type { AdjustmentRuleDto, CatalogCategoryDto, PosContextDto } from "@/lib/pos2/ui/types";
 import { isPos2ContextEnabled, readPos2RolloutConfig } from "@/lib/pos2/certification/rollout";
+import { getPosAccessibleBranchIds } from "@/lib/pos2/currentActor";
 
 export const dynamic = "force-dynamic";
 
@@ -39,9 +40,9 @@ async function loadCatalog(branchId: string): Promise<CatalogCategoryDto[]> {
 export default async function Pos2Page() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const branchIds = await getAccessibleBranchIds();
+  const branchIds = await getPosAccessibleBranchIds();
   const branches = await prisma.branch.findMany({
-    where: { active: true, ...(branchIds ? { id: { in: branchIds } } : {}) },
+    where: { active: true, id: { in: branchIds } },
     orderBy: { name: "asc" },
     include: {
       registers: { where: { active: true }, orderBy: { name: "asc" } },
