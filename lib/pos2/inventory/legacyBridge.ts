@@ -36,15 +36,19 @@ export async function backfillLegacyOpeningBalanceForCompleteSale(input: {
       branchId: input.branchId,
       inventoryProductId: { in: [...requested.keys()] },
     },
-    select: { inventoryProductId: true, unit: true },
+    select: { id: true, inventoryProductId: true, quantity: true, unit: true },
   });
-  const existingBalanceByProductId = new Map(existingBalances.map((item) => [item.inventoryProductId, item.unit]));
+  const existingBalanceByProductId = new Map(existingBalances.map((item) => [item.inventoryProductId, item]));
 
   for (const [inventoryProductId, unit] of requested.entries()) {
     const existing = existingBalanceByProductId.get(inventoryProductId);
     if (existing) {
-      if (existing !== unit) throw new DomainError("INVENTORY_UNIT_MISMATCH", { inventoryProductId, expected: existing, received: unit });
-      continue;
+      if (existing.unit !== unit) throw new DomainError("INVENTORY_UNIT_MISMATCH", { inventoryProductId, expected: existing.unit, received: unit });
+      const firstMovement = await input.tx.inventoryMovement.findFirst({
+        where: { branchId: input.branchId, inventoryProductId },
+        select: { id: true },
+      });
+      if (firstMovement || !existing.quantity.isZero()) continue;
     }
     toSync.push({ inventoryProductId, unit });
   }
@@ -52,9 +56,6 @@ export async function backfillLegacyOpeningBalanceForCompleteSale(input: {
   const synced = [] as Array<{ inventoryProductId: string; legacyBalance: string }>;
   for (const item of toSync) {
     const legacy = await getLegacyBalance(input.branchId, item.inventoryProductId);
-    if (legacy.isZero()) {
-      continue;
-    }
     if (legacy.isNegative()) {
       throw new DomainError("INVENTORY_BALANCE_MISMATCH", { inventoryProductId: item.inventoryProductId, legacyBalance: legacy.toFixed(6), branchId: input.branchId, reason: "Legacy balance is negative and cannot be synchronized." });
     }
@@ -63,15 +64,23 @@ export async function backfillLegacyOpeningBalanceForCompleteSale(input: {
     const after = legacy;
     const sourceId = `${input.migrationVersion}:${input.operationId}:${item.inventoryProductId}`;
     try {
-      await input.tx.inventoryBalance.create({
-        data: {
-          branchId: input.branchId,
-          inventoryProductId: item.inventoryProductId,
-          quantity: legacy,
-          unit: item.unit,
-          version: 1,
-        },
-      });
+      const existing = existingBalanceByProductId.get(item.inventoryProductId);
+      if (existing) {
+        await input.tx.inventoryBalance.update({
+          where: { id: existing.id },
+          data: { quantity: legacy, unit: item.unit, version: { increment: 1 } },
+        });
+      } else {
+        await input.tx.inventoryBalance.create({
+          data: {
+            branchId: input.branchId,
+            inventoryProductId: item.inventoryProductId,
+            quantity: legacy,
+            unit: item.unit,
+            version: 1,
+          },
+        });
+      }
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         const current = await input.tx.inventoryBalance.findUnique({
