@@ -13,7 +13,8 @@ function fixture() {
     { id: "no-home", status: "ACTIVE", branchAssignments: [] },
     { id: "home-centro", status: "ACTIVE", branchAssignments: [{ branchId: "centro", type: "HOME" }] },
   ];
-  type Row = Record<string, any>;
+  // The in-memory Prisma fixture intentionally mirrors dynamic query payloads.
+  type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   const shifts: Row[] = [];
   const periods = branches.map(branch => ({ id: branch.id, branchId: branch.id, branch, periodStart: new Date("2026-09-07"), periodEnd: new Date("2026-09-13"), status: "DRAFT", publications: [] }));
   const template = { active: true, branchId: "veliz", branch: branches[1], shifts: [0, 1, 3, 4, 5].map(dayOfWeek => ({ dayOfWeek, type: "TURNO", startTime: dayOfWeek >= 4 ? "17:00" : "10:00", endTime: dayOfWeek >= 4 ? "01:00" : "18:00", breakMinutes: 30 })) };
@@ -37,7 +38,7 @@ function fixture() {
   };
   const source = new URL("../../lib/workforce/scheduling/service.ts", import.meta.url);
   const realRequire = createRequire(source);
-  const module = { exports: {} as Row };
+  const moduleExports = { exports: {} as Row };
   const require = (id: string) => {
     if (id === "server-only") return {};
     if (id === "@/lib/prisma") return { prisma: { $transaction: (fn: (tx: unknown) => unknown) => fn(tx) } };
@@ -53,10 +54,10 @@ function fixture() {
     return realRequire(id);
   };
   const code = ts.transpileModule(readFileSync(source, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
-  runInNewContext(code, { exports: module.exports, require, Date, Set });
+  runInNewContext(code, { exports: moduleExports.exports, require, Date, Set });
   const actor = { id: "admin", role: "ADMIN", accessibleBranchIds: [] };
   const input = { periodId: "centro", branchId: "veliz", employmentId: "no-home", businessDate: new Date("2026-09-07"), startTime: "10:00", endTime: "18:00", expectedBreakMinutes: 30 };
-  return { service: module.exports, actor, input, shifts, employees, branches };
+  return { service: moduleExports.exports, actor, input, shifts, employees, branches };
 }
 
 test("active employee without HOME and HOME Centro can create in Veliz; move and cross-branch overlap", async () => {

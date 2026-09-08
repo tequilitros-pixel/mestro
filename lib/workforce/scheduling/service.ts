@@ -264,19 +264,7 @@ export async function getGlobalScheduleBoard(
       throw new Error("Sucursal no encontrada.");
   }
 
-  const employmentScope =
-    actor.role === "ADMIN"
-      ? { status: "ACTIVE" as const }
-      : {
-          status: "ACTIVE" as const,
-          branchAssignments: {
-            some: {
-              branchId: { in: accessibleBranchIds },
-              effectiveFrom: { lte: end },
-              OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
-            },
-          },
-        };
+  const employmentScope = { status: "ACTIVE" as const };
   const previousStart = new Date(start.getTime() - 7 * 86_400_000);
   const previousEnd = weekEnd(previousStart);
   const [periods, previousPeriods, employments, requirements, workforcePolicy, templates] =

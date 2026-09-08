@@ -42,11 +42,11 @@ test("desktop grid exposes branch, time, break and persistent add actions", () =
   assert.doesNotMatch(experience, /opacity-0 focus:opacity-100 group-hover:opacity-100/);
 });
 
-test("Scheduler exposes search, weekly totals and employees without a branch", () => {
+test("Scheduler exposes search and weekly totals without assignment blockers", () => {
   assert.match(experience, /Buscar empleado/);
   assert.match(experience, /h programadas/);
-  assert.match(experience, /Sin sucursal/);
-  assert.match(experience, /Asignar sucursal/);
+  assert.doesNotMatch(experience, /Sin sucursal/);
+  assert.doesNotMatch(experience, /Asignar sucursal/);
 });
 
 test("mobile uses a day selector and branch-grouped shift cards", () => {

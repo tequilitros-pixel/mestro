@@ -74,13 +74,7 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
   const activeShifts = model.shifts.filter((shift) => !shift.cancelled);
   const visibleShifts = activeShifts.filter((shift) => !model.selectedBranchId || shift.branchId === model.selectedBranchId);
   const normalizedSearch = search.trim().toLocaleLowerCase("es-MX");
-  const visibleEmployments = model.employments.filter((employment) => {
-    const matchesSearch = !normalizedSearch || employment.name.toLocaleLowerCase("es-MX").includes(normalizedSearch);
-    const matchesBranch = !model.selectedBranchId || employment.assignments.some((assignment) => assignment.branchId === model.selectedBranchId) || visibleShifts.some((shift) => shift.employmentId === employment.id);
-    return matchesSearch && matchesBranch;
-  });
-  const assigned = visibleEmployments.filter((employment) => employment.assignments.length > 0);
-  const withoutBranch = visibleEmployments.filter((employment) => employment.assignments.length === 0);
+  const visibleEmployments = model.employments.filter((employment) => !normalizedSearch || employment.name.toLocaleLowerCase("es-MX").includes(normalizedSearch));
   const unassignedShifts = visibleShifts.filter((shift) => !shift.employmentId);
   const periodByBranch = new Map(model.periods.map((period) => [period.branchId, period]));
   const target = href(model.selectedBranchId, model.weekStart, selectedDay);
@@ -94,9 +88,14 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
   }
   function openEdit(shift: Shift) { setEditor({ shift, employmentId: shift.employmentId ?? "", branchId: shift.branchId, date: shift.date }); }
   const totalHours = visibleShifts.reduce((sum, shift) => sum + Math.max(0, minutes(shift.start, shift.end) - shift.breakMinutes), 0) / 60;
-  const publicationLabel = model.selectedBranchId
-    ? (periodByBranch.get(model.selectedBranchId)?.published ? "Publicado" : "Sin publicar")
-    : model.periods.length && model.periods.every((period) => period.published) ? "Publicado" : model.periods.some((period) => period.published) ? "Publicación parcial" : "Sin publicar";
+  const scopedPeriods = model.selectedBranchId
+    ? model.periods.filter((period) => period.branchId === model.selectedBranchId)
+    : model.periods;
+  const publicationLabel = scopedPeriods.some((period) => period.shiftCount > 0)
+    ? scopedPeriods.some((period) => !period.published)
+      ? "Cambios pendientes"
+      : "Publicado"
+    : "Sin publicar";
 
   return <section className="w-full min-w-0 space-y-2 pb-20 lg:pb-4">
     {(model.notice || model.error) && <div role={model.error ? "alert" : "status"} className={`mx-2 rounded-lg border px-3 py-2 text-sm font-semibold lg:mx-4 ${model.error ? "border-error/30 bg-error/10 text-error" : "border-primary/30 bg-primary/10"}`}>{model.error ?? model.notice}</div>}
@@ -114,8 +113,8 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
       <div className="mt-2 flex items-center gap-2 lg:hidden"><label className="relative flex-1"><span className="sr-only">Buscar empleado</span><span className="pointer-events-none absolute left-3 top-2.5 text-on-surface-variant"><Icon name="search" /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar empleado" className={`${field} pl-9`} /></label></div>
     </header>
 
-    <details className="mx-2 rounded-lg border border-outline-variant px-3 py-2 lg:hidden"><summary className="text-xs font-semibold">Estado por sucursal</summary><div className="mt-2 flex flex-wrap gap-2">{model.branches.map((branch) => { const period = periodByBranch.get(branch.id); return <span key={branch.id} className="rounded-lg border border-outline-variant px-2 py-1 text-xs"><strong>{branch.name}</strong> · {period?.published ? "Publicado" : period?.lastPublishedAt ? "Cambios pendientes" : "Sin publicar"}</span>; })}</div></details>
-    <div className="mx-2 hidden flex-wrap gap-2 lg:mx-4 lg:flex" aria-label="Publicación por sucursal">{model.branches.map((branch) => { const period = periodByBranch.get(branch.id); return <span key={branch.id} className="rounded-lg border border-outline-variant px-2 py-1 text-xs"><strong>{branch.name}</strong> · {period?.published ? "Publicado" : period?.lastPublishedAt ? "Cambios pendientes" : "Sin publicar"}</span>; })}</div>
+    <details className="mx-2 rounded-lg border border-outline-variant px-3 py-2 lg:hidden"><summary className="text-xs font-semibold">Estado por sucursal</summary><div className="mt-2 flex flex-wrap gap-2">{model.branches.map((branch) => { const period = periodByBranch.get(branch.id); const status = period?.published ? "Publicado" : period?.shiftCount ? "Cambios pendientes" : "Sin publicar"; return <span key={branch.id} className="rounded-lg border border-outline-variant px-2 py-1 text-xs"><strong>{branch.name}</strong> · {status}</span>; })}</div></details>
+    <div className="mx-2 hidden flex-wrap gap-2 lg:mx-4 lg:flex" aria-label="Publicación por sucursal">{model.branches.map((branch) => { const period = periodByBranch.get(branch.id); const status = period?.published ? "Publicado" : period?.shiftCount ? "Cambios pendientes" : "Sin publicar"; return <span key={branch.id} className="rounded-lg border border-outline-variant px-2 py-1 text-xs"><strong>{branch.name}</strong> · {status}</span>; })}</div>
     {!model.employments.length ? <EmptyWorkforce /> : <>
       <nav aria-label="Días de la semana" className="flex gap-1 overflow-x-auto px-2 pb-1 lg:hidden">{dates.map((date, index) => <button key={date} onClick={() => setSelectedDay(date)} aria-current={selectedDay === date ? "date" : undefined} className={`min-w-[58px] rounded-lg border px-2 py-1.5 text-center text-[11px] font-bold ${selectedDay === date ? "border-primary bg-primary text-on-primary" : "border-outline-variant bg-surface"}`}>{dayNames[index]}<span className="block text-base">{new Date(`${date}T00:00:00Z`).getUTCDate()}</span></button>)}</nav>
 
@@ -125,7 +124,7 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
             <div className="sticky left-0 z-30 flex items-center gap-2 bg-surface-container-low p-2"><strong className="text-sm">Equipo</strong><label className="relative ml-auto w-28 xl:w-36"><span className="sr-only">Buscar empleado</span><span className="pointer-events-none absolute left-2 top-2 text-on-surface-variant"><Icon name="search" /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar" className="w-full rounded-md border border-outline-variant bg-surface py-1.5 pl-7 pr-2 text-xs outline-none focus:border-primary" /></label></div>
             {dates.map((date, index) => { const shifts = visibleShifts.filter((shift) => shift.date === date); const people = new Set(shifts.map((shift) => shift.employmentId).filter(Boolean)).size; const hours = shifts.reduce((sum, shift) => sum + Math.max(0, minutes(shift.start, shift.end) - shift.breakMinutes), 0) / 60; return <div key={date} className="border-l border-outline-variant p-2"><strong className="text-sm">{dayNames[index]} {dateLabel(date, { day: "numeric", month: "numeric" })}</strong><p className="text-[10px] text-on-surface-variant">{hours.toFixed(hours % 1 ? 1 : 0)} h · {people} {people === 1 ? "persona" : "personas"}</p></div>; })}
           </div>
-          {[...assigned, ...withoutBranch].map((employee, index) => <EmployeeRow key={employee.id} employee={employee} dates={dates} shifts={visibleShifts} availability={availability} branches={model.branches} selectedDay={selectedDay} threshold={model.threshold} sectionStart={index === assigned.length && withoutBranch.length > 0} onAdd={openNew} onEdit={openEdit} />)}
+          {visibleEmployments.map((employee) => <EmployeeRow key={employee.id} employee={employee} dates={dates} shifts={visibleShifts} availability={availability} branches={model.branches} selectedDay={selectedDay} threshold={model.threshold} onAdd={openNew} onEdit={openEdit} />)}
           {!visibleEmployments.length && <div className="p-8 text-center text-sm text-on-surface-variant">No hay empleados que coincidan con este filtro.</div>}
         </div>
       </div>
@@ -138,7 +137,7 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
 
       {unassignedShifts.length > 0 && <details className="mx-2 rounded-xl border border-amber-400/50 bg-amber-50/60 p-3 dark:bg-amber-950/20 lg:mx-4"><summary className="cursor-pointer text-sm font-bold">{unassignedShifts.length} turnos sin empleado</summary><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{unassignedShifts.map((shift) => <ShiftCard key={shift.id} shift={shift} branches={model.branches} onEdit={openEdit} />)}</div></details>}
 
-      <footer className="sticky bottom-0 z-20 mx-2 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl border border-outline-variant bg-surface/95 px-4 py-2 text-xs shadow-lg backdrop-blur lg:mx-4"><strong>{visibleEmployments.length} empleados</strong><span>{visibleShifts.length} turnos</span><span>{totalHours.toFixed(1)} h programadas</span>{withoutBranch.length > 0 && <Link href="/administration/workforce" className="ml-auto font-bold text-primary">{withoutBranch.length} sin sucursal · Asignar</Link>}</footer>
+      <footer className="sticky bottom-0 z-20 mx-2 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl border border-outline-variant bg-surface/95 px-4 py-2 text-xs shadow-lg backdrop-blur lg:mx-4"><strong>{visibleEmployments.length} empleados</strong><span>{visibleShifts.length} turnos</span><span>{totalHours.toFixed(1)} h programadas</span></footer>
       <details className="mx-2 rounded-xl border border-outline-variant bg-surface lg:mx-4"><summary className="cursor-pointer px-4 py-2 text-xs font-bold">Cobertura del equipo</summary><Coverage model={model} target={target} /></details>
     </>}
 
@@ -150,11 +149,11 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
 
 function Avatar({ name }: { name: string }) { return <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/10 text-[11px] font-black text-primary">{initials(name)}</span>; }
 
-function EmployeeRow({ employee, dates, shifts, availability, branches, selectedDay, threshold, sectionStart, onAdd, onEdit }: { employee: Employment; dates: string[]; shifts: Shift[]; availability: Map<string, ScheduleViewModel["availability"][number]>; branches: Branch[]; selectedDay: string; threshold: number; sectionStart: boolean; onAdd: (employmentId: string | null, date: string) => void; onEdit: (shift: Shift) => void }) {
-  return <>{sectionStart && <div className="sticky left-0 z-10 border-b border-t border-outline-variant bg-surface-container px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-on-surface-variant">Sin sucursal</div>}<div className="grid grid-cols-[11rem_repeat(7,minmax(7rem,1fr))] border-b border-outline-variant last:border-b-0">
-    <div className="sticky left-0 z-10 flex min-h-[62px] items-center gap-2 bg-surface px-2 py-1.5"><Avatar name={employee.name} /><div className="min-w-0"><p className="truncate text-sm font-bold">{employee.name}</p><p className={`text-xs ${employee.hours >= threshold ? "font-bold text-error" : "text-on-surface-variant"}`}>{employee.hours.toFixed(1)} h {employee.hours >= threshold ? "⚠" : ""}</p>{!employee.assignments.length && <Link href={`/administration/workforce/employees/${employee.employeeId}`} className="text-[10px] font-bold text-primary">Asignar sucursal</Link>}</div><button aria-label={`Agregar turno para ${employee.name}`} className="ml-auto rounded-md p-1.5 text-primary hover:bg-primary/10" onClick={() => onAdd(employee.id, selectedDay)}><Icon name="plus" /></button></div>
+function EmployeeRow({ employee, dates, shifts, availability, branches, selectedDay, threshold, onAdd, onEdit }: { employee: Employment; dates: string[]; shifts: Shift[]; availability: Map<string, ScheduleViewModel["availability"][number]>; branches: Branch[]; selectedDay: string; threshold: number; onAdd: (employmentId: string | null, date: string) => void; onEdit: (shift: Shift) => void }) {
+  return <div className="grid grid-cols-[11rem_repeat(7,minmax(7rem,1fr))] border-b border-outline-variant last:border-b-0">
+    <div className="sticky left-0 z-10 flex min-h-[62px] items-center gap-2 bg-surface px-2 py-1.5"><Avatar name={employee.name} /><div className="min-w-0"><p className="truncate text-sm font-bold">{employee.name}</p><p className={`text-xs ${employee.hours >= threshold ? "font-bold text-error" : "text-on-surface-variant"}`}>{employee.hours.toFixed(1)} h {employee.hours >= threshold ? "⚠" : ""}</p></div><button aria-label={`Agregar turno para ${employee.name}`} className="ml-auto rounded-md p-1.5 text-primary hover:bg-primary/10" onClick={() => onAdd(employee.id, selectedDay)}><Icon name="plus" /></button></div>
     {dates.map((date) => { const cellShifts = shifts.filter((shift) => shift.employmentId === employee.id && shift.date === date); const state = availability.get(`${employee.id}|${date}`); return <div key={date} className={`min-h-[62px] border-l border-outline-variant p-1 ${state?.state === "UNAVAILABLE" ? "bg-[repeating-linear-gradient(135deg,transparent,transparent_6px,color-mix(in_srgb,currentColor_4%,transparent)_6px,color-mix(in_srgb,currentColor_4%,transparent)_12px)]" : ""}`}><div className="space-y-0.5">{cellShifts.map((shift) => <ShiftCard key={shift.id} shift={shift} branches={branches} onEdit={onEdit} />)}</div>{state?.state === "UNAVAILABLE" && !cellShifts.length && <p className="text-[9px] text-on-surface-variant">No disponible</p>}<button className="mt-0.5 flex w-full items-center justify-center rounded-md px-1 py-1 text-xs font-bold text-primary hover:bg-primary/10" onClick={() => onAdd(employee.id, date)}>+ Agregar</button></div>; })}
-  </div></>;
+  </div>;
 }
 
 function ShiftCard({ shift, branches, onEdit }: { shift: Shift; branches: Branch[]; onEdit: (shift: Shift) => void }) {
