@@ -9,6 +9,13 @@ export function scheduleWarningLabel(code: string) {
   return SCHEDULE_WARNING_LABELS[code] ?? "Requiere atención";
 }
 
+export type ScheduleShiftVisualState = "PUBLISHED" | "DRAFT" | "CHANGES_PENDING";
+
+export function scheduleShiftVisualState(input: { published: boolean; hasPublication: boolean }): ScheduleShiftVisualState {
+  if (input.published) return "PUBLISHED";
+  return input.hasPublication ? "CHANGES_PENDING" : "DRAFT";
+}
+
 export function canPublishSchedule(input: {
   published: boolean;
   blockers: string[];
