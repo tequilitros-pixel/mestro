@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getAccessibleBranchIds, requireModuleAccess } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 import {
+  applyScheduleTemplate,
   copyPreviousScheduleWeek,
   createOrUpdateShift,
   deleteOrCancelShift,
@@ -58,7 +59,7 @@ async function run(
       target,
       "error",
       error instanceof Error
-        ? error.message
+        ? error.message.replace(/\s*\(OVERLAPPING_SHIFT\)$/, "")
         : "No fue posible completar la acción.",
     );
   }
@@ -77,8 +78,20 @@ export async function ensureWorkforceSchedulePeriodAction(formData: FormData) {
 }
 export async function saveWorkforceShiftAction(formData: FormData) {
   await run(formData, async (current) => {
+    let periodId = value(formData, "periodId");
+    const branchId = value(formData, "branchId");
+    if (!periodId) {
+      if (!branchId) throw new Error("Selecciona una sucursal.");
+      const period = await ensureSchedulePeriod(
+        current,
+        branchId,
+        date(formData, "weekStart"),
+      );
+      periodId = period.id;
+    }
     await createOrUpdateShift(current, {
-      periodId: value(formData, "periodId"),
+      periodId,
+      branchId: branchId || undefined,
       shiftId: value(formData, "shiftId") || undefined,
       expectedVersion: value(formData, "expectedVersion")
         ? Number(value(formData, "expectedVersion"))
@@ -134,6 +147,35 @@ export async function copyWorkforcePreviousWeekAction(formData: FormData) {
     if (result.idempotent)
       return "La semana ya contiene turnos; no se crearon duplicados.";
     return `${result.copied} shifts copiados; ${result.skipped} omitidos.`;
+  });
+}
+export async function copyWorkforcePreviousWeekGroupAction(formData: FormData) {
+  await run(formData, async (current) => {
+    const branchIds = formData.getAll("branchId").map(String).filter(Boolean);
+    const weekStart = date(formData, "weekStart");
+    let copied = 0;
+    let skipped = 0;
+    for (const branchId of branchIds) {
+      const target = await ensureSchedulePeriod(current, branchId, weekStart);
+      const result = await copyPreviousScheduleWeek(current, target.id);
+      copied += result.copied;
+      skipped += result.skipped;
+    }
+    revalidatePath("/administration/workforce/schedule");
+    return `${copied} turnos copiados; ${skipped} omitidos.`;
+  });
+}
+
+export async function applyWorkforceScheduleTemplateAction(formData: FormData) {
+  await run(formData, async (current) => {
+    const result = await applyScheduleTemplate(current, {
+      templateId: value(formData, "templateId"),
+      employmentIds: formData.getAll("employmentId").map(String),
+      weekStart: date(formData, "weekStart"),
+    });
+    revalidatePath("/administration/workforce/schedule");
+    revalidatePath("/workforce");
+    return `${result.created} turnos borrador creados desde la plantilla.`;
   });
 }
 export async function saveWorkforceCoverageAction(formData: FormData) {
