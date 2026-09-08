@@ -7,60 +7,60 @@ datasource db {
 }
 
 model User {
-  id                             String                     @id @default(cuid())
-  name                           String
-  username                       String                     @unique
-  email                          String?                    @unique
+  id                        String                     @id @default(cuid())
+  name                      String
+  username                  String                     @unique
+  email                     String?                    @unique
   /// Teléfono en formato E.164 (ej. +524941234567) para acceso mediante SMS.
-  phone                          String?                    @unique
-  password                       String
+  phone                     String?                    @unique
+  password                  String
   /// PIN de 4 dígitos (hasheado) para el checador compartido (kiosco):
   /// permite identificarse en una tablet/teléfono común de la sucursal
   /// sin escribir la contraseña completa. Null = no puede usar kiosco.
-  pinHash                        String?
-  failedLoginAttempts            Int                        @default(0)
-  lockedUntil                    DateTime?
-  role                           UserRole
-  active                         Boolean                    @default(true)
-  createdAt                      DateTime                   @default(now())
-  updatedAt                      DateTime                   @updatedAt
-  lastLogin                      DateTime?
-  cookingsFinished               Cooking[]                  @relation("CookingFinishedBy")
-  distillationsFinished          Distillation[]             @relation("DistillationFinishedBy")
-  fermentationsFinished          Fermentation[]             @relation("FermentationFinishedBy")
-  liquorBatchesCreated           LiquorBatch[]              @relation("LiquorBatchCreatedBy")
-  liquorBatchesFinished          LiquorBatch[]              @relation("LiquorBatchFinishedBy")
-  liquorBottlesSold              LiquorBottle[]             @relation("LiquorBottleSoldBy")
-  liquorBottleMovements          LiquorBottleMovement[]     @relation("LiquorBottleMovementCreatedBy")
-  liquorBatchsPaused             LiquorBatch[]              @relation("LiquorBatchPausedBy")
-  liquorEventsCreated            LiquorBatchEvent[]         @relation("LiquorBatchEventCreatedBy")
-  liquorBatchStepsCompleted      LiquorBatchStep[]          @relation("LiquorBatchStepCompletedBy")
-  liquorBottlingsCreated         LiquorBottling[]           @relation("LiquorBottlingCreatedBy")
-  liquorBottlingsFinished        LiquorBottling[]           @relation("LiquorBottlingFinishedBy")
-  liquorProductsCreated          LiquorProduct[]            @relation("LiquorProductCreatedBy")
-  liquorRecipesCreated           LiquorRecipe[]             @relation("LiquorRecipeCreatedBy")
-  lots                           Lot[]
-  branches                       UserBranch[]
-  cashCutsResponsible            CashCut[]                  @relation("CashCutResponsible")
-  cashCutsCreated                CashCut[]                  @relation("CashCutCreatedBy")
-  cashCutsUpdated                CashCut[]                  @relation("CashCutUpdatedBy")
-  cashOutflowsAuthorized         CashOutflow[]              @relation("CashOutflowAuthorizedBy")
-  cashCutAuditEntries            CashCutAuditEntry[]        @relation("CashCutAuditBy")
-  cashSafeMovementsBy            CashSafeMovement[]         @relation("CashSafeMovementBy")
-  cashSafeEnvelopesCreated       CashSafeEnvelope[]         @relation("CashSafeEnvelopeCreatedBy")
-  cashSafeEnvelopesReceived      CashSafeEnvelope[]         @relation("CashSafeEnvelopeReceivedBy")
-  cashSafeEnvelopeMovements      CashSafeEnvelopeMovement[] @relation("CashSafeEnvelopeMovementBy")
-  hourlyRate                     Decimal?                   @db.Decimal(10, 2)
-  timeClockEntries               TimeClockEntry[]           @relation("TimeClockEntries")
-  timeClockEntriesClosed         TimeClockEntry[]           @relation("TimeClockClosedBy")
-  timeClockEditRequests          TimeClockEditRequest[]     @relation("TimeClockEditRequestedBy")
-  timeClockEditReviews           TimeClockEditRequest[]     @relation("TimeClockEditReviewedBy")
-  scheduledShifts                ScheduledShift[]           @relation("ScheduledShifts")
-  scheduleWeeksPublished         ScheduleWeek[]             @relation("ScheduleWeekPublishedBy")
-  geofenceAlerts                 GeofenceAlert[]
-  legacyWorkforceSettingsUpdated WorkforceSettings[]        @relation("WorkforceSettingsUpdatedBy")
-  salaryRates                    SalaryRate[]               @relation("SalaryRateOwner")
-  salaryRatesCreated             SalaryRate[]               @relation("SalaryRateCreatedBy")
+  pinHash                   String?
+  failedLoginAttempts       Int                        @default(0)
+  lockedUntil               DateTime?
+  role                      UserRole
+  active                    Boolean                    @default(true)
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  lastLogin                 DateTime?
+  cookingsFinished          Cooking[]                  @relation("CookingFinishedBy")
+  distillationsFinished     Distillation[]             @relation("DistillationFinishedBy")
+  fermentationsFinished     Fermentation[]             @relation("FermentationFinishedBy")
+  liquorBatchesCreated      LiquorBatch[]              @relation("LiquorBatchCreatedBy")
+  liquorBatchesFinished     LiquorBatch[]              @relation("LiquorBatchFinishedBy")
+  liquorBottlesSold         LiquorBottle[]             @relation("LiquorBottleSoldBy")
+  liquorBottleMovements     LiquorBottleMovement[]     @relation("LiquorBottleMovementCreatedBy")
+  liquorBatchsPaused        LiquorBatch[]              @relation("LiquorBatchPausedBy")
+  liquorEventsCreated       LiquorBatchEvent[]         @relation("LiquorBatchEventCreatedBy")
+  liquorBatchStepsCompleted LiquorBatchStep[]          @relation("LiquorBatchStepCompletedBy")
+  liquorBottlingsCreated    LiquorBottling[]           @relation("LiquorBottlingCreatedBy")
+  liquorBottlingsFinished   LiquorBottling[]           @relation("LiquorBottlingFinishedBy")
+  liquorProductsCreated     LiquorProduct[]            @relation("LiquorProductCreatedBy")
+  liquorRecipesCreated      LiquorRecipe[]             @relation("LiquorRecipeCreatedBy")
+  lots                      Lot[]
+  branches                  UserBranch[]
+  cashCutsResponsible       CashCut[]                  @relation("CashCutResponsible")
+  cashCutsCreated           CashCut[]                  @relation("CashCutCreatedBy")
+  cashCutsUpdated           CashCut[]                  @relation("CashCutUpdatedBy")
+  cashOutflowsAuthorized    CashOutflow[]              @relation("CashOutflowAuthorizedBy")
+  cashCutAuditEntries       CashCutAuditEntry[]        @relation("CashCutAuditBy")
+  cashSafeMovementsBy       CashSafeMovement[]         @relation("CashSafeMovementBy")
+  cashSafeEnvelopesCreated  CashSafeEnvelope[]         @relation("CashSafeEnvelopeCreatedBy")
+  cashSafeEnvelopesReceived CashSafeEnvelope[]         @relation("CashSafeEnvelopeReceivedBy")
+  cashSafeEnvelopeMovements CashSafeEnvelopeMovement[] @relation("CashSafeEnvelopeMovementBy")
+  hourlyRate                Decimal?                   @db.Decimal(10, 2)
+  timeClockEntries          TimeClockEntry[]           @relation("TimeClockEntries")
+  timeClockEntriesClosed    TimeClockEntry[]           @relation("TimeClockClosedBy")
+  timeClockEditRequests     TimeClockEditRequest[]     @relation("TimeClockEditRequestedBy")
+  timeClockEditReviews      TimeClockEditRequest[]     @relation("TimeClockEditReviewedBy")
+  scheduledShifts           ScheduledShift[]           @relation("ScheduledShifts")
+  scheduleWeeksPublished    ScheduleWeek[]             @relation("ScheduleWeekPublishedBy")
+  geofenceAlerts            GeofenceAlert[]
+  legacyWorkforceSettingsUpdated WorkforceSettings[] @relation("WorkforceSettingsUpdatedBy")
+  salaryRates               SalaryRate[]               @relation("SalaryRateOwner")
+  salaryRatesCreated        SalaryRate[]               @relation("SalaryRateCreatedBy")
 
   millingsFinished   Milling[]           @relation("MillingFinishedBy")
   millingDischarges  MillingDischarge[]
@@ -1004,40 +1004,40 @@ model LiquorBottleMovement {
 }
 
 model Branch {
-  id                        String            @id @default(cuid())
-  name                      String
-  code                      String            @unique
-  address                   String?
-  active                    Boolean           @default(true)
+  id               String           @id @default(cuid())
+  name             String
+  code             String           @unique
+  address          String?
+  active           Boolean          @default(true)
   /// Color (hex) para identificar la sucursal en la cuadrícula de
   /// Horario. Si no tiene, la UI le asigna uno por defecto.
-  color                     String?
+  color            String?
   /// Zona horaria IANA usada para derivar fechas de negocio locales.
-  timezone                  String?
+  timezone         String?
   /**
    * Geocerca del checador: si la sucursal tiene una geozona asignada,
    * el checador exige que el empleado esté dentro de ese radio (en
    * metros) para checar entrada o salida. Si no tiene geozona
    * asignada, no se aplica ninguna restricción de ubicación.
    */
-  geofenceId                String?
-  geofence                  Geofence?         @relation(fields: [geofenceId], references: [id])
+  geofenceId       String?
+  geofence         Geofence?        @relation(fields: [geofenceId], references: [id])
   /// Off by default for existing branches; the relation alone never enforces location.
   geofenceEnabled           Boolean           @default(false)
   templateApplyMode         TemplateApplyMode @default(ASK_BEFORE_APPLY)
   defaultScheduleTemplateId String?           @unique
   defaultScheduleTemplate   ScheduleTemplate? @relation("WorkforceBranchDefaultScheduleTemplate", fields: [defaultScheduleTemplateId], references: [id], onDelete: SetNull)
-  createdAt                 DateTime          @default(now())
-  updatedAt                 DateTime          @updatedAt
-  counts                    InventoryCount[]
-  entries                   InventoryEntry[]
-  timeClockEntries          TimeClockEntry[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  counts           InventoryCount[]
+  entries          InventoryEntry[]
+  timeClockEntries TimeClockEntry[]
 
   users                         UserBranch[]
   cashCuts                      CashCut[]
   liquorBottles                 LiquorBottle[]
-  liquorMovementsFrom           LiquorBottleMovement[]     @relation("LiquorMovementFromBranch")
-  liquorMovementsTo             LiquorBottleMovement[]     @relation("LiquorMovementToBranch")
+  liquorMovementsFrom           LiquorBottleMovement[]   @relation("LiquorMovementFromBranch")
+  liquorMovementsTo             LiquorBottleMovement[]   @relation("LiquorMovementToBranch")
   cashSafeMovements             CashSafeMovement[]
   cashSafeEnvelopes             CashSafeEnvelope[]
   scheduledShifts               ScheduledShift[]
@@ -1154,10 +1154,9 @@ model GeofenceAlert {
 }
 
 model UserBranch {
-  id             String               @id @default(cuid())
-  userId         String
-  branchId       String
-  assignmentType BranchAssignmentType @default(ALLOWED)
+  id       String @id @default(cuid())
+  userId   String
+  branchId String
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
@@ -2207,13 +2206,13 @@ model TimeClockEntry {
   /// programado, o el emparejamiento automático no encontró uno).
   scheduledShiftId String?
 
-  user                      User                       @relation("TimeClockEntries", fields: [userId], references: [id])
-  branch                    Branch                     @relation(fields: [branchId], references: [id])
-  closedManuallyBy          User?                      @relation("TimeClockClosedBy", fields: [closedManuallyById], references: [id])
-  scheduledShift            ScheduledShift?            @relation(fields: [scheduledShiftId], references: [id], onDelete: SetNull)
-  geofenceAlerts            GeofenceAlert[]
+  user             User                   @relation("TimeClockEntries", fields: [userId], references: [id])
+  branch           Branch                 @relation(fields: [branchId], references: [id])
+  closedManuallyBy User?                  @relation("TimeClockClosedBy", fields: [closedManuallyById], references: [id])
+  scheduledShift   ScheduledShift?        @relation(fields: [scheduledShiftId], references: [id], onDelete: SetNull)
+  geofenceAlerts   GeofenceAlert[]
   legacyGeolocationEvidence ClockGeolocationEvidence[]
-  editRequests              TimeClockEditRequest[]
+  editRequests     TimeClockEditRequest[]
 
   @@index([userId])
   @@index([branchId])
@@ -2270,12 +2269,11 @@ enum TimeClockEditStatus {
 }
 
 model ScheduledShift {
-  id           String   @id @default(cuid())
-  userId       String
+  id       String   @id @default(cuid())
+  userId   String
   /// Nulo cuando type = DESCANSO (día libre, no tiene sucursal).
-  branchId     String?
-  date         DateTime
-  breakMinutes Int      @default(0)
+  branchId String?
+  date     DateTime
 
   /// TURNO = turno normal de trabajo. DESCANSO = día libre, sin
   /// sucursal ni horas.
@@ -2578,11 +2576,11 @@ model ScheduleTemplateShift {
   branchId String?
   type     ShiftType @default(TURNO)
 
-  startTime    String?
-  endTime      String?
-  breakMinutes Int     @default(0)
-  position     String?
-  notes        String?
+  startTime String?
+  endTime   String?
+  breakMinutes Int @default(0)
+  position  String?
+  notes     String?
 
   template ScheduleTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   user     User?            @relation("ScheduleTemplateShiftOwner", fields: [userId], references: [id], onDelete: SetNull)
@@ -3055,38 +3053,38 @@ model EmploymentJornadaPolicy {
 }
 
 model WorkforcePolicyVersion {
-  id                                  String                  @id @default(cuid())
-  version                             Int                     @unique
-  effectiveFrom                       DateTime                @unique @db.Date
-  companyTimezone                     String                  @default("America/Mexico_City")
-  payWeekStartsOn                     Int                     @default(1)
-  payDay                              Int                     @default(1)
-  scheduledHoursWarningMinutes        Int                     @default(2880)
-  preventiveOvertimeWarningMinutes    Int                     @default(2880)
-  allowUnassignedShiftPublication     Boolean                 @default(true)
-  allowAvailabilityWarningPublication Boolean                 @default(true)
-  allowUnscheduledWork                Boolean                 @default(true)
-  requireGeolocationClockIn           Boolean                 @default(true)
-  requireGeolocationClockOut          Boolean                 @default(true)
+  id                                  String   @id @default(cuid())
+  version                             Int      @unique
+  effectiveFrom                       DateTime @unique @db.Date
+  companyTimezone                     String   @default("America/Mexico_City")
+  payWeekStartsOn                     Int      @default(1)
+  payDay                              Int      @default(1)
+  scheduledHoursWarningMinutes        Int      @default(2880)
+  preventiveOvertimeWarningMinutes    Int      @default(2880)
+  allowUnassignedShiftPublication     Boolean  @default(true)
+  allowAvailabilityWarningPublication Boolean  @default(true)
+  allowUnscheduledWork                Boolean  @default(true)
+  requireGeolocationClockIn           Boolean  @default(true)
+  requireGeolocationClockOut          Boolean  @default(true)
   geofenceOutsideBehavior             GeofenceOutsideBehavior @default(ALLOW_WITH_EXCEPTION)
-  requireOutsideGeofenceReview        Boolean                 @default(true)
-  maximumGpsAccuracyMeters            Int                     @default(100)
-  shiftLinkProximityMinutes           Int                     @default(720)
-  lateGraceMinutes                    Int                     @default(5)
-  earlyDepartureGraceMinutes          Int                     @default(5)
-  longBreakThresholdMinutes           Int                     @default(60)
-  noShowThresholdMinutes              Int                     @default(30)
-  missingClockOutThresholdMinutes     Int                     @default(60)
-  legalDayOrdinaryLimitMinutes        Int                     @default(480)
-  legalNightOrdinaryLimitMinutes      Int                     @default(420)
-  legalMixedOrdinaryLimitMinutes      Int                     @default(450)
-  legalWeeklyDoubleLimitMinutes       Int                     @default(540)
-  legalPolicyCode                     String                  @default("MX_OVERTIME_V1_2026")
+  requireOutsideGeofenceReview        Boolean  @default(true)
+  maximumGpsAccuracyMeters            Int      @default(100)
+  shiftLinkProximityMinutes           Int      @default(720)
+  lateGraceMinutes                    Int      @default(5)
+  earlyDepartureGraceMinutes          Int      @default(5)
+  longBreakThresholdMinutes           Int      @default(60)
+  noShowThresholdMinutes              Int      @default(30)
+  missingClockOutThresholdMinutes     Int      @default(60)
+  legalDayOrdinaryLimitMinutes        Int      @default(480)
+  legalNightOrdinaryLimitMinutes      Int      @default(420)
+  legalMixedOrdinaryLimitMinutes      Int      @default(450)
+  legalWeeklyDoubleLimitMinutes       Int      @default(540)
+  legalPolicyCode                     String   @default("MX_OVERTIME_V1_2026")
   changedById                         String?
-  changedAt                           DateTime                @default(now())
+  changedAt                           DateTime @default(now())
   changeReason                        String
-  criticalLegalChange                 Boolean                 @default(false)
-  createdAt                           DateTime                @default(now())
+  criticalLegalChange                 Boolean  @default(false)
+  createdAt                           DateTime @default(now())
 
   changedBy            User?                          @relation("WorkforcePolicyChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
   overtimeCalculations WorkforceOvertimeCalculation[]
@@ -3297,10 +3295,10 @@ model ClockEvent {
   idempotencyKey   String         @unique
   createdAt        DateTime       @default(now())
 
-  employment          Employment                @relation(fields: [employmentId], references: [id], onDelete: Restrict)
-  branch              Branch                    @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  targetedBy          ClockCorrection[]
-  workSessionLinks    WorkSessionClockEvent[]
+  employment       Employment              @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch           Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  targetedBy       ClockCorrection[]
+  workSessionLinks WorkSessionClockEvent[]
   geolocationEvidence ClockGeolocationEvidence?
 
   @@index([employmentId, deviceOccurredAt])
@@ -3310,21 +3308,21 @@ model ClockEvent {
 /// Privacy-minimized evidence for one immutable clock observation.
 /// Exact employee coordinates are deliberately not retained.
 model ClockGeolocationEvidence {
-  id                    String                   @id @default(cuid())
+  id                    String                    @id @default(cuid())
   /// Compatibility-only link created by the initial DEV migration; Workforce V1 never writes it.
   timeClockId           String?
   action                ClockActionType?
-  clockEventId          String?                  @unique
+  clockEventId          String?                   @unique
   branchId              String?
   result                GeofenceValidationResult
   distanceMeters        Int?
   accuracyMeters        Float?
   checkedAt             DateTime
   reviewStatus          GeofenceReviewStatus     @default(NOT_REQUIRED)
-  attendanceExceptionId String?                  @unique
+  attendanceExceptionId String?                   @unique
   reviewedById          String?
   reviewedAt            DateTime?
-  createdAt             DateTime                 @default(now())
+  createdAt             DateTime                  @default(now())
 
   timeClock           TimeClockEntry?      @relation(fields: [timeClockId], references: [id], onDelete: Cascade)
   clockEvent          ClockEvent?          @relation(fields: [clockEventId], references: [id], onDelete: Restrict)
@@ -3332,22 +3330,22 @@ model ClockGeolocationEvidence {
   attendanceException AttendanceException? @relation(fields: [attendanceExceptionId], references: [id], onDelete: SetNull)
   reviewedBy          User?                @relation("WorkforceGeolocationEvidenceReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
 
-  @@unique([timeClockId, action])
   @@index([result, checkedAt])
   @@index([reviewStatus, checkedAt])
   @@index([branchId, checkedAt])
+  @@unique([timeClockId, action])
 }
 
 /// Compatibility shell for the first additive migration. Runtime policy lives only in WorkforcePolicyVersion.
 model WorkforceSettings {
-  id                         String                  @id @default("default")
-  requireGeolocationClockIn  Boolean                 @default(true)
-  requireGeolocationClockOut Boolean                 @default(true)
+  id                         String                   @id @default("default")
+  requireGeolocationClockIn  Boolean                  @default(true)
+  requireGeolocationClockOut Boolean                  @default(true)
   outsideBehavior            GeofenceOutsideBehavior @default(ALLOW_WITH_EXCEPTION)
-  requireOutsideReview       Boolean                 @default(true)
-  maximumAccuracyMeters      Int                     @default(100)
+  requireOutsideReview       Boolean                  @default(true)
+  maximumAccuracyMeters      Int                      @default(100)
   updatedById                String?
-  updatedAt                  DateTime                @updatedAt
+  updatedAt                  DateTime                 @updatedAt
 
   updatedBy User? @relation("WorkforceSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 }
@@ -3482,12 +3480,12 @@ model AttendanceException {
   createdAt         DateTime                    @default(now())
   updatedAt         DateTime                    @updatedAt
 
-  employment          Employment                @relation(fields: [employmentId], references: [id], onDelete: Restrict)
-  branch              Branch                    @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  shift               Shift?                    @relation(fields: [shiftId], references: [id], onDelete: Restrict)
-  workSession         WorkSession?              @relation(fields: [workSessionId], references: [id], onDelete: Restrict)
+  employment  Employment   @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch      Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  shift       Shift?       @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  workSession WorkSession? @relation(fields: [workSessionId], references: [id], onDelete: Restrict)
   geolocationEvidence ClockGeolocationEvidence?
-  resolvedBy          User?                     @relation("WorkforceAttendanceExceptionResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedBy  User?        @relation("WorkforceAttendanceExceptionResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([status, type])
   @@index([branchId, businessDate, status])
@@ -3846,6 +3844,7 @@ model PosCategory {
 enum CatalogBaseUnit {
   UNIT
   ML
+  G
 }
 
 model PosProduct {

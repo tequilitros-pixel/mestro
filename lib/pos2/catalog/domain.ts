@@ -1,6 +1,6 @@
 import type { BranchProductAvailability, CatalogBaseUnit } from "@prisma/client";
 
-export const CATALOG_BASE_UNITS = ["UNIT", "ML"] as const satisfies readonly CatalogBaseUnit[];
+export const CATALOG_BASE_UNITS = ["UNIT", "ML", "G"] as const satisfies readonly CatalogBaseUnit[];
 
 export function normalizeCatalogCode(value: string | null | undefined) {
   const normalized = value?.trim().toUpperCase() || null;

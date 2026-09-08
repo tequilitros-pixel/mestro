@@ -41,7 +41,7 @@ export async function captureInitialInventoryCount(input: {
     if (input.captureUnit === "PRESENTATION") {
       const multiplier = product.contentUnit ? contentMultipliers[product.contentUnit] : null;
       if (!product.normalizedContentPerUnit || !multiplier) throw new DomainError("VALIDATION_ERROR", { field: "captureUnit" });
-      const normalizedContentUnit = product.contentUnit === "PIEZAS" ? "UNIT" : "ML";
+      const normalizedContentUnit = product.contentUnit === "PIEZAS" ? "UNIT" : ["G", "KG"].includes(product.contentUnit) ? "G" : "ML";
       if (product.inventoryBaseUnit !== (normalizedContentUnit as CatalogBaseUnit)) throw new DomainError("INVENTORY_UNIT_MISMATCH", { inventoryProductId: product.id });
       declared = counted.times(product.normalizedContentPerUnit);
     }

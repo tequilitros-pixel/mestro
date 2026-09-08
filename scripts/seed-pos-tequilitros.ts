@@ -22,7 +22,7 @@ async function main() {
   const ingredientIds = new Map<string, string>();
 
   for (const ingredient of INGREDIENTS) {
-    const inventoryBaseUnit = ingredient.unit === "ml" ? "ML" as const : ingredient.unit === "Pza" ? "UNIT" as const : null;
+    const inventoryBaseUnit = ingredient.unit === "ml" ? "ML" as const : ingredient.unit === "Pza" ? "UNIT" as const : ingredient.unit === "g" ? "G" as const : null;
     // canBeSold: true en todos — así quedan disponibles como insumos
     // seleccionables al armar paquetes/kits de Eventos, además de
     // usarse como receta del Punto de Venta. isActive: true los deja
