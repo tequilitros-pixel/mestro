@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { requireAdmin } from "@/lib/auth";
-import { formatMinutes, localBusinessDate } from "@/lib/workforce/timesheet/rules";
+import { dateKey, localBusinessDate } from "@/lib/workforce/attendance/businessDate";
 import {
   getAttendanceCenter,
   type AttendanceIncidenceFilter,
@@ -11,11 +11,11 @@ import {
 import {
   attendanceStateLabels,
   attendanceStatusLabels,
+  formatAttendanceMinutes,
   humanAttendanceIssueLabel,
 } from "@/lib/workforce/attendance/presentation";
 import { workforceAttendanceDecisionAction } from "@/app/actions/workforceAttendance";
 
-const dateKey = (value: Date) => value.toISOString().slice(0, 10);
 const centralDate = (value: Date) =>
   new Intl.DateTimeFormat("es-MX", {
     timeZone: "UTC",
@@ -53,7 +53,7 @@ function issueText(item: AttendanceOccurrence) {
 }
 
 function totalText(item: AttendanceOccurrence) {
-  return item.workedMinutes === null ? "—" : formatMinutes(item.workedMinutes);
+  return item.workedMinutes === null ? "—" : formatAttendanceMinutes(item.workedMinutes);
 }
 
 function realText(item: AttendanceOccurrence) {

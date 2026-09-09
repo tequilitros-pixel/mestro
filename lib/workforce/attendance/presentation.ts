@@ -32,6 +32,12 @@ export const attendanceStateLabels: Record<string, string> = {
   REVIEWED: "Revisado",
 };
 
+export function formatAttendanceMinutes(value: number) {
+  const sign = value < 0 ? "−" : "";
+  const absolute = Math.abs(value);
+  return `${sign}${Math.floor(absolute / 60)}h ${absolute % 60}m`;
+}
+
 export function humanAttendanceIssueLabel(type: string) {
   return attendanceIssueLabels[type] ?? "Revisar registro";
 }

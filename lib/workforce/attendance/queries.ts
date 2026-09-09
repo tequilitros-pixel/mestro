@@ -1,7 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { dateKey, localBusinessDate } from "@/lib/workforce/timesheet/rules";
+import { dateKey, localBusinessDate } from "./businessDate";
 import { canAccessAttendanceBranch } from "./evaluate";
 import { reconcileAttendanceScope } from "./reconcile";
 import { HIDDEN_ATTENDANCE_TYPES } from "./presentation";
