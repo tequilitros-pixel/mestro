@@ -1,11 +1,10 @@
 import { ClockStatus } from "./ClockStatus";
-import { clockEventLabels, clockSuccess } from "./presentation";
+import { clockError, clockSuccess, userClockEventLabel } from "./presentation";
 import { randomUUID } from "node:crypto";
 import { Card } from "@/components/ui/Card";
 import { getCurrentUser } from "@/lib/auth";
 import { getClockDashboard } from "@/lib/workforce/clock/service";
 import {
-  workforceClockAction,
   workforceCorrectionRequestAction,
 } from "@/app/actions/workforceClock";
 import { ClockActionForm } from "./ClockActionForm";
@@ -33,18 +32,12 @@ export default async function ClockPage({
       </Card>
     );
   }
-  const branch = dashboard.shifts[0]?.branch ?? dashboard.branches[0];
-  const primary =
-    dashboard.state === "NO_SESSION"
-      ? "CLOCK_IN"
-      : dashboard.state === "ON_BREAK"
-        ? "BREAK_END"
-        : "CLOCK_OUT";
-  const label = {
-    CLOCK_IN: "Registrar entrada",
-    BREAK_END: "Terminar descanso",
-    CLOCK_OUT: "Registrar salida",
-  }[primary];
+  const primary = dashboard.state === "NO_SESSION"
+    ? "CLOCK_IN"
+    : dashboard.state === "CLOCKED_IN"
+      ? "CLOCK_OUT"
+      : null;
+  const label = primary === "CLOCK_IN" ? "Iniciar turno" : primary === "CLOCK_OUT" ? "Terminar turno" : null;
   const back = "/workforce/clock";
   const availableBranches = [
     ...dashboard.branches,
@@ -58,6 +51,19 @@ export default async function ClockPage({
       ? dashboard.locationPolicy.requireGeolocationClockOut
       : false;
   const dashboardTimezone = dashboard.companyTimezone ?? "America/Mexico_City";
+  const preferredBranchId = dashboard.state === "NO_SESSION"
+    ? dashboard.shifts[0]?.branchId
+    : dashboard.displayEvents.at(-1)?.branchId;
+  const branch = availableBranches.find((item) => item.id === preferredBranchId)
+    ?? dashboard.shifts[0]?.branch
+    ?? dashboard.branches[0];
+  const formatShiftTime = (value: Date, timezone: string | null | undefined) =>
+    new Intl.DateTimeFormat("es-MX", {
+      timeZone: timezone ?? dashboardTimezone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(value);
   return (
     <section className="mx-auto max-w-xl space-y-4">
       {query.saved ? (
@@ -70,7 +76,7 @@ export default async function ClockPage({
           role="alert"
           className="rounded-xl bg-error/10 p-3 font-semibold text-error"
         >
-          {query.error}
+          {clockError(query.error)}
         </p>
       ) : null}
       <Card className="space-y-3 text-center">
@@ -93,47 +99,31 @@ export default async function ClockPage({
           <p className="rounded-lg bg-surface-container p-3 text-sm">
             Turno publicado · {dashboard.shifts[0].branch.name}
             <br />
-            {dashboard.shifts[0].startAt.toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatShiftTime(dashboard.shifts[0].startAt, dashboard.shifts[0].branch.timezone)}
             –
-            {dashboard.shifts[0].endAt.toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatShiftTime(dashboard.shifts[0].endAt, dashboard.shifts[0].branch.timezone)}
           </p>
         ) : (
-          <p className="border-t border-outline-variant pt-3 text-xs text-on-surface-variant">
-            Sin turno publicado cercano · trabajo no programado permitido con
-            advertencia.
+          <p className="border-t border-outline-variant pt-3 text-sm font-semibold text-on-surface-variant">
+            Trabajo no programado · permitido por la política actual.
           </p>
         )}
       </Card>
       {branch ? (
         <Card className="space-y-3">
-          <ClockActionForm
-            branches={availableBranches.map((item) => ({
-              id: item.id,
-              name: item.name,
-              requiresLocation: Boolean(requiresForAction && item.geofenceEnabled && item.geofenceId),
-            }))}
-            defaultBranchId={branch.id}
-            type={primary}
-            idempotencyKey={randomUUID()}
-            returnTo={back}
-            label={label}
-          />
-          {dashboard.state === "CLOCKED_IN" ? (
-            <form action={workforceClockAction}>
-              <input type="hidden" name="returnTo" value={back} />
-              <input type="hidden" name="branchId" value={branch.id} />
-              <input type="hidden" name="type" value="BREAK_START" />
-              <input type="hidden" name="idempotencyKey" value={randomUUID()} />
-              <button className="min-h-12 w-full rounded-xl border border-outline-variant px-4 py-3 font-bold">
-                Iniciar descanso
-              </button>
-            </form>
+          {primary && label ? (
+            <ClockActionForm
+              branches={availableBranches.map((item) => ({
+                id: item.id,
+                name: item.name,
+                requiresLocation: Boolean(requiresForAction && item.geofenceEnabled && item.geofenceId),
+              }))}
+              defaultBranchId={branch.id}
+              type={primary}
+              idempotencyKey={randomUUID()}
+              returnTo={back}
+              label={label}
+            />
           ) : null}
         </Card>
       ) : (
@@ -169,7 +159,7 @@ export default async function ClockPage({
                   <option
                     value={dashboard.lastEvent.originalClockEventId ?? ""}
                   >
-                    {clockEventLabels[dashboard.lastEvent.type]??"Evento"} ·{" "}
+                    {userClockEventLabel(dashboard.lastEvent.type)} ·{" "}
                     {dashboard.lastEvent.occurredAt.toISOString()}
                   </option>
                 ) : null}
@@ -183,8 +173,6 @@ export default async function ClockPage({
                 className="mt-1 w-full rounded-lg border p-3"
               >
                 <option value="CLOCK_IN">Entrada</option>
-                <option value="BREAK_START">Inicio de descanso</option>
-                <option value="BREAK_END">Fin de descanso</option>
                 <option value="CLOCK_OUT">Salida</option>
               </select>
             </label>

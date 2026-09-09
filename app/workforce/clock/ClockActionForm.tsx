@@ -19,7 +19,7 @@ export function ClockActionForm({
 }: {
   branches: BranchOption[];
   defaultBranchId: string;
-  type: "CLOCK_IN" | "BREAK_END" | "CLOCK_OUT";
+  type: "CLOCK_IN" | "CLOCK_OUT";
   idempotencyKey: string;
   returnTo: string;
   label: string;
@@ -30,7 +30,7 @@ export function ClockActionForm({
   const [ready, setReady] = useState(false);
 
   async function prepare(event: React.FormEvent<HTMLFormElement>) {
-    if (ready || type === "BREAK_END") return;
+    if (ready) return;
     event.preventDefault();
     const requiresLocation = branches.find((branch) => branch.id === branchId)?.requiresLocation;
     const input = formRef.current?.elements.namedItem("location") as HTMLInputElement | null;
@@ -74,6 +74,6 @@ export function ClockActionForm({
       </select>
     </label>
     <button disabled={locating} className="min-h-14 w-full rounded-xl bg-primary px-5 py-4 text-lg font-bold text-on-primary disabled:opacity-60">{locating ? "Verificando ubicación…" : label}</button>
-    {branches.find((branch) => branch.id === branchId)?.requiresLocation && type !== "BREAK_END" ? <p className="text-center text-xs text-on-surface-variant">Tu ubicación se consulta una sola vez para esta checada. No se guardan tus coordenadas exactas.</p> : null}
+    {branches.find((branch) => branch.id === branchId)?.requiresLocation ? <p className="text-center text-xs text-on-surface-variant">Tu ubicación se consulta una sola vez para esta checada. No se guardan tus coordenadas exactas.</p> : null}
   </form>;
 }

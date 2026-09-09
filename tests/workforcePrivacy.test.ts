@@ -11,6 +11,15 @@ test("employee clock surfaces never start continuous location tracking", () => {
   assert.match(kioskClock, /getCurrentPosition/);
 });
 
+test("employee Clock and Kiosk do not expose break controls", () => {
+  const clockPage = readFileSync("app/workforce/clock/page.tsx", "utf8");
+  const clockStatus = readFileSync("app/workforce/clock/ClockStatus.tsx", "utf8");
+  const clockAction = readFileSync("app/workforce/clock/ClockActionForm.tsx", "utf8");
+  const kioskClock = readFileSync("app/workforce/kiosk/KioskClockForm.tsx", "utf8");
+  const visibleClock = [clockPage, clockStatus, clockAction, kioskClock].join("\n");
+  assert.doesNotMatch(visibleClock, /Iniciar descanso|Terminar descanso|Descanso en curso|BREAK_START|BREAK_END/);
+});
+
 test("clock evidence stores validation metadata but not employee coordinates", () => {
   const schema = readFileSync("prisma/schema.prisma", "utf8");
   const evidenceModel = schema.match(/model ClockGeolocationEvidence \{([\s\S]*?)\n\}/)?.[1] ?? "";
