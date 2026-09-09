@@ -198,6 +198,25 @@ test("MODIFY_OCCURRED_TIME changes effective time", () => {
   );
   assert.equal(stream[1].occurredAt.toISOString(), "2026-09-01T17:00:00.000Z");
 });
+test("MODIFY_OCCURRED_TIME on clock-in preserves WorkSession identity", () => {
+  const sessions = reconstructWorkSessions(
+    buildEffectiveClockStream(
+      [
+        observed("1", "CLOCK_IN", "2026-09-01T09:00:00Z"),
+        observed("2", "CLOCK_OUT", "2026-09-01T18:00:00Z"),
+      ],
+      [
+        correction({
+          type: "MODIFY_OCCURRED_TIME",
+          targetClockEventId: "1",
+          proposedOccurredAt: at("2026-09-01T08:45:00Z"),
+        }),
+      ],
+    ),
+  );
+  assert.equal(sessions[0].key, "1");
+  assert.equal(sessions[0].startedAt?.toISOString(), "2026-09-01T08:45:00.000Z");
+});
 test("MODIFY_OCCURRED_TIME can correct a break without changing the source event", () => {
   const stream = buildEffectiveClockStream(
     [

@@ -73,7 +73,7 @@ export function reconstructWorkSessions(
         ? Math.max(0, ended.getTime() - first.occurredAt.getTime())
         : 0;
     sessions.push({
-      key: first.sourceId,
+      key: first.originalClockEventId ?? first.sourceId,
       employmentId: first.employmentId,
       branchId: first.branchId,
       startedAt: first.type === "CLOCK_IN" ? first.occurredAt : null,
