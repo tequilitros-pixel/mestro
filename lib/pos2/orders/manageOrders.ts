@@ -1,5 +1,6 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
+import { formatBusinessDateKey } from "@/lib/dateTime";
 import { DomainError } from "@/lib/domain/errors";
 import { Money } from "@/lib/domain/money";
 import { appendAuditEvent } from "@/lib/pos2/audit";
@@ -26,7 +27,7 @@ export async function createOrder(input: { branchId: string; registerId: string;
     if (!branch?.active || !register?.active || register.branchId !== input.branchId) throw new DomainError("VALIDATION_ERROR", { field: "registerId" });
     if (!session || session.status !== "OPEN" || session.branchId !== input.branchId || session.registerId !== input.registerId) throw new DomainError("CASH_SESSION_NOT_OPEN", { cashSessionId: input.cashSessionId });
     const sequence = await tx.$queryRaw<Array<{ value: bigint }>>`SELECT nextval('pos2_order_number_seq') AS value`;
-    const now = new Date(); const day = now.toISOString().slice(0, 10).replaceAll("-", "");
+    const now = new Date(); const day = formatBusinessDateKey(now);
     const order = await tx.pos2Order.create({ data: { orderNumber: `${branch.code}-${day}-${sequence[0].value.toString().padStart(6, "0")}`, branchId: input.branchId, registerId: input.registerId, terminalId: input.terminalId, cashSessionId: input.cashSessionId, createdById: input.actor.id, lastModifiedById: input.actor.id, pricingTimestamp: now, expiresAt: input.expiresAt ?? null } });
     await appendAuditEvent(tx, { actorId: input.actor.id, branchId: input.branchId, terminalId: input.terminalId, action: "ORDER_CREATED", entityType: "Pos2Order", entityId: order.id, operationId: input.operationId, metadata: { orderNumber: order.orderNumber, registerId: input.registerId, cashSessionId: input.cashSessionId } });
     return orderJson(order);

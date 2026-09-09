@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { formatDateOnly, mondayOfWeek, parseDateOnly } from "@/lib/dateOnly";
+import { formatDateOnly, mondayOfWeek, parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
 import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/periodLock";
 
 export type ShiftRequestKind = "CANNOT_WORK" | "CHANGE_TIME" | "SWAP" | "DAY_OFF";
@@ -22,7 +22,7 @@ export async function getMyPublishedUpcomingShifts() {
   const user = await getCurrentUser();
   if (!user) return [];
   const shifts = await prisma.scheduledShift.findMany({
-    where: { userId: user.id, type: "TURNO", date: { gte: parseDateOnly(formatDateOnly(new Date())) } },
+    where: { userId: user.id, type: "TURNO", date: { gte: parseDateOnly(todayDateOnly()) } },
     include: { branch: { select: { name: true } } }, orderBy: { date: "asc" }, take: 30,
   });
   const weeks = await prisma.scheduleWeek.findMany({ where: { weekStart: { in: [...new Set(shifts.map((s) => mondayOfWeek(formatDateOnly(s.date))))].map(parseDateOnly) } } });

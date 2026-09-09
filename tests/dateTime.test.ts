@@ -5,9 +5,12 @@ import {
   businessDayEnd,
   businessDayRange,
   businessWeekRange,
+  formatBusinessDateKey,
   formatBusinessDateOnly,
+  formatBusinessDateTime,
   formatBusinessDateTimeLocal,
   formatBusinessTime,
+  formatCivilDate,
   parseBusinessDateTimeLocal,
   sameBusinessDay,
 } from "../lib/dateTime";
@@ -35,6 +38,26 @@ test("los límites del día de negocio no dependen del día UTC", () => {
   assert.equal(businessDayEnd("2026-09-08").toISOString(), "2026-09-09T05:59:59.999Z");
   assert.equal(sameBusinessDay(new Date("2026-09-09T05:59:00Z"), new Date("2026-09-08T06:01:00Z")), true);
   assert.equal(sameBusinessDay(new Date("2026-09-09T06:01:00Z"), new Date("2026-09-08T06:01:00Z")), false);
+});
+
+test("las claves de negocio cruzan 23:59 y 00:01 en México sin offsets fijos", () => {
+  assert.equal(formatBusinessDateKey(new Date("2026-09-09T05:59:59.999Z")), "20260908");
+  assert.equal(formatBusinessDateKey(new Date("2026-09-09T06:00:00.000Z")), "20260909");
+  assert.equal(formatBusinessDateKey(new Date("2026-09-09T06:01:00.000Z")), "20260909");
+});
+
+test("las bitácoras muestran un instante de producción en hora de negocio", () => {
+  const fermentationReading = new Date("2026-09-09T17:11:12.718Z");
+  const rendered = formatBusinessDateTime(fermentationReading);
+
+  assert.equal(formatBusinessTime(fermentationReading), "11:11");
+  assert.equal(formatBusinessDateOnly(fermentationReading), "2026-09-09");
+  assert.match(rendered, /11:11/);
+  assert.doesNotMatch(rendered, /17:11/);
+});
+
+test("las fechas civiles no se desplazan por la zona del host", () => {
+  assert.equal(formatCivilDate("2026-09-09T00:00:00.000Z"), "9 sep 2026");
 });
 
 test("la semana de negocio empieza el lunes y cruza medianoche correctamente", () => {

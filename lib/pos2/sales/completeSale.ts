@@ -1,5 +1,6 @@
 import "server-only";
 import { Prisma, type Pos2PaymentMethod } from "@prisma/client";
+import { formatBusinessDateKey } from "@/lib/dateTime";
 import { DomainError } from "@/lib/domain/errors";
 import { executeIdempotent } from "@/lib/pos2/idempotency";
 import { requireCapability, type CommandActor } from "@/lib/pos2/authorization";
@@ -57,7 +58,7 @@ export async function completeSale(input: Input) {
     }
     const branch = await tx.branch.findUniqueOrThrow({ where: { id: order.branchId }, select: { code: true } });
     const sequence = await tx.$queryRaw<Array<{ value: bigint }>>`SELECT nextval('pos2_sale_number_seq') AS value`;
-    const day = at.toISOString().slice(0, 10).replaceAll("-", "");
+    const day = formatBusinessDateKey(at);
     const sale = await tx.pos2Sale.create({ data: { saleNumber: `${branch.code}-${day}-S${sequence[0].value.toString().padStart(6, "0")}`, orderId: order.id, branchId: order.branchId, registerId: order.registerId, terminalId: input.terminalId, cashSessionId: session.id, cashierId: input.actor.id, currency: order.currency, subtotal: order.subtotal, discountTotal: order.discountTotal, total: order.total, operationId: input.operationId } });
     inject(input, "AFTER_SALE");
     const saleLineByOrderLine = new Map<string, string>();

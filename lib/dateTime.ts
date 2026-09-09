@@ -161,6 +161,11 @@ export function formatBusinessDateOnly(value: DateTimeValue): string {
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
 }
 
+/** Business-calendar key for human-readable numbers and codes. */
+export function formatBusinessDateKey(value: DateTimeValue): string {
+  return formatBusinessDateOnly(value).replaceAll("-", "");
+}
+
 /** Formats an instant for an input type=datetime-local in business time. */
 export function formatBusinessDateTimeLocal(value: DateTimeValue): string {
   const parts = civilParts(asDate(value));

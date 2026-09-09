@@ -1,5 +1,7 @@
 import "server-only";
 import { Money } from "@/lib/domain/money";
+import { formatBusinessDateOnly } from "@/lib/dateTime";
+import { parseDateOnly } from "@/lib/dateOnly";
 import { DomainError } from "@/lib/domain/errors";
 import { executeIdempotent } from "@/lib/pos2/idempotency";
 import { appendAuditEvent } from "@/lib/pos2/audit";
@@ -42,7 +44,7 @@ export async function closeCashSession(input: {
     const cashOut = movements.filter((movement) => movement.type === "CASH_OUT").reduce((sum, movement) => sum.add(Money.from(movement.amount)), Money.zero());
     const cashSales = movements.filter((movement) => movement.type === "SALE_CASH").reduce((sum, movement) => sum.add(Money.from(movement.amount)), Money.zero());
     const closedAt = new Date();
-    const cutDate = new Date(Date.UTC(closedAt.getUTCFullYear(), closedAt.getUTCMonth(), closedAt.getUTCDate()));
+    const cutDate = parseDateOnly(formatBusinessDateOnly(closedAt));
     const cashCut = await tx.cashCut.create({ data: {
       code: `CC2-${branch.code}-${session.id}`,
       branchId: session.branchId, responsibleId: session.openedById, date: cutDate, openedAt: session.openedAt, closedAt,

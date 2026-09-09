@@ -10,7 +10,11 @@ import {
 } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
-import { businessDayStart, formatBusinessDateOnly } from "@/lib/dateTime";
+import {
+  businessDayStart,
+  formatBusinessDateOnly,
+  formatBusinessDateTime,
+} from "@/lib/dateTime";
 import PageTabs from "@/components/ui/PageTabs";
 import OfflineOperationForm from "@/components/offline/OfflineOperationForm";
 import SuccessToast from "@/components/ui/SuccessToast";
@@ -1858,10 +1862,7 @@ function formatNumber(
 }
 
 function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatBusinessDateTime(date);
 }
 
 function formatDuration(

@@ -40,6 +40,7 @@ import {
 } from "@/lib/services/distillation";
 import { getMasterAdvice } from "@/lib/services/maestroDistillation";
 import { Suspense } from "react";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -1720,10 +1721,7 @@ function formatNumber(
 }
 
 function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatBusinessDateTime(date);
 }
 
 function formatDuration(
