@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Card } from "@/components/ui/Card";
 import { requireAdmin } from "@/lib/auth";
 import { getTimesheetBoard } from "@/lib/workforce/timesheet/service";
+import { normalizeEmploymentStatusFilter } from "@/lib/workforce/timesheet/visibility";
 import { dateKey, formatMinutes, mondayOf, timesheetReadiness } from "@/lib/workforce/timesheet/rules";
 import {
   attendanceTypeLabels,
@@ -118,26 +119,29 @@ export default async function TimesheetsPage({ searchParams }: { searchParams: P
   const [user, query] = await Promise.all([requireAdmin(), searchParams]);
   const week = parseWeek(query.week);
   const status = ["OPEN", "REVIEW", "APPROVED", "LOCKED"].includes(query.status ?? "") ? query.status : undefined;
+  const employmentStatus = normalizeEmploymentStatusFilter(query.employmentStatus);
   const board = await getTimesheetBoard(
     { id: user.id, role: user.role, accessibleBranchIds: null },
     week,
     query.search || undefined,
     status,
     query.branch || undefined,
+    employmentStatus,
   );
-  const back = `/administration/workforce/timesheets?week=${dateKey(board.start)}${query.search ? `&search=${encodeURIComponent(query.search)}` : ""}${query.branch ? `&branch=${encodeURIComponent(query.branch)}` : ""}${status ? `&status=${status}` : ""}`;
+  const back = `/administration/workforce/timesheets?week=${dateKey(board.start)}${query.search ? `&search=${encodeURIComponent(query.search)}` : ""}${query.branch ? `&branch=${encodeURIComponent(query.branch)}` : ""}${status ? `&status=${status}` : ""}${employmentStatus !== "ACTIVE" ? `&employmentStatus=${employmentStatus}` : ""}`;
   return (
     <section className="space-y-4">
       {query.saved ? <p role="status" className="rounded-xl bg-primary/10 p-3 font-semibold">{query.saved}</p> : null}
       {query.error ? <p role="alert" className="rounded-xl bg-error/10 p-3 text-error">{query.error}</p> : null}
       <div><h2 className="text-2xl font-black">Horas trabajadas</h2><p className="text-sm text-on-surface-variant">Revisa jornadas, incidencias y aprobación de lunes a domingo.</p></div>
       <Card>
-        <form method="get" className="grid gap-3 sm:grid-cols-4">
+        <form method="get" className="grid gap-3 sm:grid-cols-5">
           <label className="text-sm">Semana<input name="week" type="date" defaultValue={dateKey(board.start)} className="mt-1 w-full rounded-lg border p-2" /></label>
           <label className="text-sm">Sucursal<select name="branch" defaultValue={query.branch ?? ""} className="mt-1 w-full rounded-lg border p-2"><option value="">Todas</option>{board.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
+          <label className="text-sm">Relación laboral<select name="employmentStatus" defaultValue={employmentStatus} className="mt-1 w-full rounded-lg border p-2"><option value="ACTIVE">Activos</option><option value="INACTIVE">Inactivos</option><option value="TERMINATED">Terminados</option><option value="ALL">Todos</option></select></label>
           <label className="text-sm">Empleado<input name="search" defaultValue={query.search ?? ""} className="mt-1 w-full rounded-lg border p-2" /></label>
           <label className="text-sm">Estado<select name="status" defaultValue={status ?? ""} className="mt-1 w-full rounded-lg border p-2"><option value="">Todos</option><option value="OPEN">Pendiente</option><option value="REVIEW">En revisión</option><option value="APPROVED">Aprobado</option><option value="LOCKED">Bloqueado para nómina</option></select></label>
-          <button className="min-h-11 rounded-lg bg-primary px-4 font-bold text-on-primary sm:col-span-4">Abrir periodo</button>
+          <button className="min-h-11 rounded-lg bg-primary px-4 font-bold text-on-primary sm:col-span-5">Abrir periodo</button>
         </form>
       </Card>
       <div className="hidden overflow-x-auto md:block">
