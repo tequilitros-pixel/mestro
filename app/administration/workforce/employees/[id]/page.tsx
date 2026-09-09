@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { applyWorkforceScheduleTemplateAction } from "@/app/actions/workforceScheduling";
 import {
   changeWorkforceEmploymentStatusAction,
   changeWorkforceHomeAction,
@@ -40,7 +39,7 @@ export default async function EmployeeDetail({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; saved?: string; assignedBranch?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
   await requireAdmin();
   const { id } = await params;
@@ -49,7 +48,6 @@ export default async function EmployeeDetail({
     getEmployee(id),
     prisma.branch.findMany({
       where: { active: true },
-      include: { defaultScheduleTemplate: { include: { shifts: true } } },
       orderBy: { name: "asc" },
     }),
   ]);
@@ -63,12 +61,6 @@ export default async function EmployeeDetail({
   const allowed = live.filter((assignment) => assignment.type === "ALLOWED");
   const currentRate = open?.payRates.find((rate) => isLiveAt(rate, now));
   const currentJornada = open?.jornadaPolicies.find((policy) => isLiveAt(policy, now));
-  const assigned = branches.find((branch) => branch.id === (query.assignedBranch ?? home?.branchId));
-  const template = assigned?.defaultScheduleTemplate;
-  const nextMonday = new Date(now);
-  nextMonday.setUTCHours(0, 0, 0, 0);
-  nextMonday.setUTCDate(nextMonday.getUTCDate() + 7 - ((nextMonday.getUTCDay() + 6) % 7));
-  const week = dateOnly(nextMonday);
   const hiddenIds = () => <><input type="hidden" name="employeeId" value={id} /><input type="hidden" name="employmentId" value={open?.id ?? ""} /></>;
 
   return (
@@ -220,27 +212,6 @@ export default async function EmployeeDetail({
               <label>Tipo de jornada<select name="jornadaType" defaultValue={currentJornada?.jornadaType ?? "DAY"} className={field}><option value="DAY">Diurna</option><option value="NIGHT">Nocturna</option><option value="MIXED">Mixta</option></select></label>
               <label>Vigente desde<input required type="date" name="effectiveFrom" defaultValue={today} className={field} /></label>
               <SubmitButton className={button}>Guardar jornada</SubmitButton>
-            </form>
-          </div>
-        </details>
-      )}
-
-      {open?.status === "ACTIVE" && template?.active && assigned && (
-        <details className={panel + " border-primary/40"}>
-          <summary className="cursor-pointer font-bold">Horario predeterminado de {assigned.name}</summary>
-          <div className="mt-3 space-y-3">
-            <p className="text-sm text-on-surface-variant">{template.name}. Se crearán turnos borrador; nada se publica automáticamente.</p>
-            <div className="flex flex-wrap gap-2">
-              {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((day, index) => (
-                <span className="rounded border px-2 py-1 text-xs" key={day}>{day}: {template.shifts.filter((shift) => shift.dayOfWeek === index && shift.startTime && shift.endTime).map((shift) => String(shift.startTime) + "-" + String(shift.endTime)).join(", ") || "Descanso"}</span>
-              ))}
-            </div>
-            <form action={applyWorkforceScheduleTemplateAction}>
-              <input type="hidden" name="employmentId" value={open.id} />
-              <input type="hidden" name="templateId" value={template.id} />
-              <input type="hidden" name="weekStart" value={week} />
-              <input type="hidden" name="returnTo" value={"/administration/workforce/schedule?week=" + week + "&branch=" + assigned.id} />
-              <SubmitButton className={button}>Aplicar a próxima semana</SubmitButton>
             </form>
           </div>
         </details>
