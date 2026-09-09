@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { setRlsContext } from "@/lib/rls";
 import { reconcileAttendanceForEmployment } from "@/lib/workforce/attendance/reconcile";
 import { signalTimesheetsForEmployment } from "@/lib/workforce/timesheet/service";
 import { resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
