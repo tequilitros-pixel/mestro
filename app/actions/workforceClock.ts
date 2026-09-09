@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   decideCorrection,
+  applyAdminClockCorrection,
   recordClockEvent,
   requestCorrection,
   resolveOwnActiveEmployment,
@@ -95,6 +96,29 @@ export async function workforceCorrectionRequestAction(form: FormData) {
     );
   }
 }
+
+export async function workforceAdminClockCorrectionAction(form: FormData) {
+  const current = await actor();
+  const back = value(form, "returnTo");
+  try {
+    await applyAdminClockCorrection(current, {
+      employmentId: value(form, "employmentId"),
+      type: value(form, "type") as "MODIFY_OCCURRED_TIME" | "ADD_MISSING_EVENT" | "VOID_EVENT",
+      targetClockEventId: value(form, "targetClockEventId") || null,
+      branchId: value(form, "branchId") || null,
+      proposedEventType: (value(form, "proposedEventType") || null) as ClockType | null,
+      proposedOccurredAt: value(form, "proposedOccurredAt") ? new Date(value(form, "proposedOccurredAt")) : null,
+      reason: value(form, "reason"),
+    });
+    revalidatePath("/administration/workforce/timesheets");
+    revalidatePath("/administration/workforce/attendance");
+    done(back, "saved", "Corrección aplicada y enviada al cálculo de horas.");
+  } catch (error) {
+    unstable_rethrow(error);
+    done(back, "error", error instanceof Error ? error.message : "No se pudo aplicar la corrección.");
+  }
+}
+
 export async function workforceCorrectionDecisionAction(form: FormData) {
   const current = await actor();
   const back = value(form, "returnTo");

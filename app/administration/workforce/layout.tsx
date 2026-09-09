@@ -6,9 +6,9 @@ import { workforceV1Enabled } from "@/lib/workforce/config";
 
 const tabs = [
   ["employees", "Empleados"], ["schedule", "Programar horarios"],
-  ["attendance", "Asistencia"], ["clock-corrections", "Correcciones"],
-  ["timesheets", "Timesheets"], ["overtime", "Horas extra"],
-  ["payroll", "Nómina"], ["settings", "Configuración"], ["branches", "Sucursales"],
+  ["clock-corrections", "Solicitudes / Correcciones"], ["attendance", "Asistencia"],
+  ["timesheets", "Horas trabajadas"], ["overtime", "Horas extra"],
+  ["payroll", "Nómina"], ["branches", "Sucursales"], ["settings", "Configuración"],
 ];
 export default async function WorkforceLayout({ children }: { children: React.ReactNode }) {
   if (!workforceV1Enabled()) notFound();

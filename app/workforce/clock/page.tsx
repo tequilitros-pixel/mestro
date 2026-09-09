@@ -139,6 +139,7 @@ export default async function ClockPage({
       ) : (
         <Card>No hay sucursal autorizada ni Shift publicado cercano.</Card>
       )}
+      <div id="solicitudes">
       <Card>
         <details>
           <summary className="cursor-pointer font-bold">
@@ -210,6 +211,7 @@ export default async function ClockPage({
           </form>
         </details>
       </Card>
+      </div>
     </section>
   );
 }
