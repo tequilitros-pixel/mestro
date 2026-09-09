@@ -15,6 +15,10 @@ export type PayrollDailyInput = {
   tripleMinutes: number;
 };
 
+export type PayrollAccruedDailyInput = Omit<PayrollDailyInput, "ordinaryMinutes" | "doubleMinutes" | "tripleMinutes"> & {
+  payableMinutes: number;
+};
+
 export function calculatePayrollMoney(
   days: PayrollDailyInput[],
   adjustments: Array<{ direction: "EARNING" | "DEDUCTION"; amount: Prisma.Decimal.Value }> = [],
@@ -58,6 +62,24 @@ export function calculatePayrollMoney(
     ordinaryPay, doublePay, triplePay, baseEarnings,
     earningsAmount, deductionsAmount, grossAmount, operationalPayable,
   };
+}
+
+/**
+ * Read-only accrual for an in-progress Timesheet. It deliberately prices all
+ * payable minutes at the ordinary rate until the canonical overtime
+ * calculation is final. The monetary engine remains the single source of
+ * rounding and currency rules.
+ */
+export function calculateAccruedPayrollMoney(
+  days: PayrollAccruedDailyInput[],
+  adjustments: Array<{ direction: "EARNING" | "DEDUCTION"; amount: Prisma.Decimal.Value }> = [],
+) {
+  return calculatePayrollMoney(days.map(({ payableMinutes, ...day }) => ({
+    ...day,
+    ordinaryMinutes: payableMinutes,
+    doubleMinutes: 0,
+    tripleMinutes: 0,
+  })), adjustments);
 }
 
 export function payrollReadiness(blockers: string[]) {

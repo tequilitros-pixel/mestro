@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { Prisma, type WorkforcePayrollAdjustmentDirection } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mondayOf, sundayOf } from "@/lib/workforce/timesheet/rules";
-import { assertPayrollAdmin, calculatePayrollMoney, effectivePayRateBlocker } from "./rules";
+import {
+  assertPayrollAdmin, calculateAccruedPayrollMoney, calculatePayrollMoney, effectivePayRateBlocker,
+} from "./rules";
 
 type Tx = Prisma.TransactionClient;
 export type PayrollActor = { id: string; role: string };
@@ -24,6 +26,7 @@ async function sourceFacts(tx: Tx, timesheetId: string) {
     include: {
       employment: { include: { employee: true, payRates: true } },
       payrollPeriod: true,
+      lines: { orderBy: { businessDate: "asc" } },
       overtimeCalculation: { include: { lines: { orderBy: { businessDate: "asc" } } } },
       payrollLine: { include: {
         adjustments: true,
@@ -74,6 +77,140 @@ async function sourceFacts(tx: Tx, timesheetId: string) {
     rates: days.map((day) => [day.businessDate, day.payRateId, String(day.rate), day.currency]),
   }));
   return { sheet, overtime, days, adjustments, blockers: uniqueBlockers, money, sourceFingerprint };
+}
+
+export type EmployeePayrollAccrual = {
+  id: string;
+  timesheetId: string;
+  periodStart: Date;
+  periodEnd: Date;
+  timesheetStatus: string;
+  payrollLineStatus: string | null;
+  source: "APPROVED_SOURCE" | "PROVISIONAL";
+  effectiveMinutes: number;
+  ordinaryMinutes: number;
+  doubleMinutes: number;
+  tripleMinutes: number;
+  currency: string | null;
+  amount: Prisma.Decimal | null;
+  blockers: string[];
+};
+
+function employeeAccrualFromFacts(
+  facts: Awaited<ReturnType<typeof sourceFacts>>,
+): EmployeePayrollAccrual | null {
+  const payrollLineStatus = facts.sheet.payrollLine?.status ?? null;
+  if (payrollLineStatus === "APPROVED" || payrollLineStatus === "PAID") return null;
+
+  const approved = facts.sheet.status === "APPROVED" || facts.sheet.status === "LOCKED";
+  const effectiveMinutes = approved
+    ? facts.sheet.approvedEffectiveMinutes ?? facts.sheet.effectiveMinutes
+    : facts.sheet.effectiveMinutes;
+
+  if (facts.money) {
+    return {
+      id: facts.sheet.id,
+      timesheetId: facts.sheet.id,
+      periodStart: facts.sheet.periodStart,
+      periodEnd: facts.sheet.periodEnd,
+      timesheetStatus: facts.sheet.status,
+      payrollLineStatus,
+      source: "APPROVED_SOURCE",
+      effectiveMinutes,
+      ordinaryMinutes: facts.money.ordinaryMinutes,
+      doubleMinutes: facts.money.doubleMinutes,
+      tripleMinutes: facts.money.tripleMinutes,
+      currency: facts.money.currency,
+      amount: facts.money.operationalPayable,
+      blockers: facts.blockers,
+    };
+  }
+
+  const calculationBlockers = facts.blockers.filter((blocker) =>
+    !["TIMESHEET_NOT_APPROVED", "OVERTIME_MISSING", "OVERTIME_NOT_FINAL"].includes(blocker));
+  const payableLines = facts.sheet.lines.filter((line) =>
+    line.totalPayableMinutes !== 0 || line.workedMinutes !== 0 || line.adjustmentMinutes !== 0,
+  );
+  const days: Array<{
+    businessDate: Date;
+    payRateId: string;
+    rateType: (typeof facts.sheet.employment.payRates)[number]["rateType"];
+    rate: Prisma.Decimal;
+    currency: string;
+    payableMinutes: number;
+  }> = [];
+  const rateBlockers: string[] = [];
+
+  for (const line of payableLines) {
+    const rates = facts.sheet.employment.payRates.filter((rate) =>
+      rate.effectiveFrom <= line.businessDate && (!rate.effectiveTo || rate.effectiveTo >= line.businessDate),
+    );
+    const rateBlocker = effectivePayRateBlocker(rates);
+    if (rateBlocker) {
+      rateBlockers.push(rateBlocker);
+      continue;
+    }
+    const rate = rates[0];
+    if (!rate.currency) {
+      rateBlockers.push("PAY_RATE_CURRENCY_MISSING");
+      continue;
+    }
+    days.push({
+      businessDate: line.businessDate,
+      payRateId: rate.id,
+      rateType: rate.rateType,
+      rate: rate.amount,
+      currency: rate.currency,
+      payableMinutes: line.totalPayableMinutes !== 0
+        ? line.totalPayableMinutes
+        : line.workedMinutes + line.adjustmentMinutes,
+    });
+  }
+
+  const blockers = [...new Set([...calculationBlockers, ...rateBlockers])];
+  let money: ReturnType<typeof calculateAccruedPayrollMoney> | null = null;
+  if (!blockers.length && payableLines.length === days.length) {
+    if (days.length) {
+      try {
+        money = calculateAccruedPayrollMoney(days, facts.adjustments);
+      } catch (error) {
+        blockers.push(error instanceof Error ? error.message : "PAYROLL_ACCRUAL_INVALID");
+      }
+    } else {
+      const zeroRate = facts.sheet.employment.payRates.find((rate) => rate.currency);
+      if (zeroRate?.currency) {
+        try {
+          money = calculateAccruedPayrollMoney([{
+            businessDate: facts.sheet.periodStart,
+            payRateId: zeroRate.id,
+            rateType: zeroRate.rateType,
+            rate: zeroRate.amount,
+            currency: zeroRate.currency,
+            payableMinutes: 0,
+          }]);
+        } catch (error) {
+          blockers.push(error instanceof Error ? error.message : "PAYROLL_ACCRUAL_INVALID");
+        }
+      } else blockers.push("PAY_RATE_MISSING");
+    }
+  }
+
+  return {
+    id: facts.sheet.id,
+    timesheetId: facts.sheet.id,
+    periodStart: facts.sheet.periodStart,
+    periodEnd: facts.sheet.periodEnd,
+    timesheetStatus: facts.sheet.status,
+    payrollLineStatus,
+    source: "PROVISIONAL" as const,
+    effectiveMinutes,
+    ordinaryMinutes: money?.ordinaryMinutes ?? effectiveMinutes,
+    doubleMinutes: money?.doubleMinutes ?? 0,
+    tripleMinutes: money?.tripleMinutes ?? 0,
+    currency: money?.currency ?? facts.sheet.employment.payRates.find((rate) => rate.currency)?.currency ?? null,
+    amount: money?.operationalPayable ?? null,
+    blockers: [...new Set(blockers)],
+  };
 }
 
 async function refreshTx(tx: Tx, timesheetId: string) {
@@ -269,6 +406,27 @@ export async function getEmployeePayrollStatements(userId: string) {
     include: { payrollPeriod: true, rateSegments: true, adjustments: true },
     orderBy: { payrollPeriod: { weekStart: "desc" } },
   });
+}
+
+export async function getEmployeePayrollView(userId: string, inputDate: Date) {
+  const start = mondayOf(inputDate);
+  const [statements, sheets] = await Promise.all([
+    getEmployeePayrollStatements(userId),
+    prisma.timesheet.findMany({
+      where: {
+        periodStart: start,
+        employment: { status: "ACTIVE", employee: { userId } },
+      },
+      select: { id: true },
+      orderBy: { id: "asc" },
+    }),
+  ]);
+  const accruals = await Promise.all(sheets.map(({ id }) =>
+    prisma.$transaction((tx) => sourceFacts(tx, id))));
+  return {
+    statements,
+    accruals: accruals.map(employeeAccrualFromFacts).filter((item): item is EmployeePayrollAccrual => item !== null),
+  };
 }
 
 export async function getEmployeePayrollStatement(userId: string, payrollLineId: string) {

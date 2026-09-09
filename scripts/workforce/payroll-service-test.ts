@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../../lib/prisma";
 import {
   addPayrollAdjustment, approvePayrollLine, calculatePayrollLine,
-  createRetroactivePayrollAdjustment, getEmployeePayrollStatement, getEmployeePayrollStatements, getPayrollBoard, markPayrollPaid,
+  createRetroactivePayrollAdjustment, getEmployeePayrollStatement, getEmployeePayrollStatements, getEmployeePayrollView, getPayrollBoard, markPayrollPaid,
 } from "../../lib/workforce/payroll/service";
 
 const HOST = "ep-red-lake-ats4n9i7";
@@ -56,6 +56,7 @@ async function main() {
   const minuteRows = [[480,120,0],[480,120,0],[480,120,0],[480,120,0],[480,60,60],[0,0,0],[0,0,0]];
   for (let index=0;index<7;index++) await prisma.timesheetLine.create({ data:{ id:`${P}_line_${index}`,timesheetId:ids.sheet,businessDate:new Date(start.getTime()+index*86_400_000),workedMinutes:index<5?600:0,regularPayableMinutes:index<5?600:0,totalPayableMinutes:index<5?600:0,sourceFingerprint:`${P}:${index}` } });
   await prisma.workforceOvertimeCalculation.create({ data:{ id:ids.overtime,timesheetId:ids.sheet,timesheetVersion:2,timesheetApprovedAt:new Date(),approvedMinutes:3000,ordinaryMinutes:2400,doubleMinutes:540,tripleMinutes:60,weeklyDoubleLimitMinutes:540,policyVersion:policy.legalPolicyCode,workforcePolicyVersionId:policy.id,sourceFingerprint:`${P}:ot`,status:"FINAL",calculatedById:ids.user,lines:{create:minuteRows.map((row,index)=>({timesheetLineId:`${P}_line_${index}`,businessDate:new Date(start.getTime()+index*86_400_000),jornadaType:"DAY",ordinaryLimitMinutes:480,approvedMinutes:row[0]+row[1]+row[2],ordinaryMinutes:row[0],doubleMinutes:row[1],tripleMinutes:row[2],weeklyOvertimeBeforeMinutes:Math.min(index*120,540),remainingDoubleBeforeMinutes:Math.max(0,540-index*120),explanation:"WFPAYROLLQA deterministic"}))} } });
+  const accrued = await getEmployeePayrollView(ids.user, start); assert.equal(accrued.accruals.length, 1); assert.equal(accrued.accruals[0].amount?.toFixed(2), "3785.00"); assert.equal(accrued.accruals[0].source, "APPROVED_SOURCE");
   const nonAdmin={...actor,role:"EMPLOYEE"};
   await assert.rejects(()=>calculatePayrollLine(nonAdmin,ids.sheet),/No autorizado/);
   await prisma.timesheet.update({where:{id:ids.sheet},data:{requiresAdjustment:true}});

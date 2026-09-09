@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Prisma } from "@prisma/client";
 import {
-  assertPayrollAdmin, calculatePayrollMoney, canReadPayrollStatement, effectivePayRateBlocker, payrollReadiness,
+  assertPayrollAdmin, calculateAccruedPayrollMoney, calculatePayrollMoney, canReadPayrollStatement, effectivePayRateBlocker, payrollReadiness,
 } from "../../lib/workforce/payroll/rules";
 
 const day = (date: string, rate: string, ordinaryMinutes: number, doubleMinutes = 0, tripleMinutes = 0) => ({
@@ -45,6 +45,16 @@ test("approved zero-work source produces an explainable zero result", () => {
   const result = calculatePayrollMoney([day("2030-06-03", "60", 0)]);
   assert.equal(result.operationalPayable.toFixed(2), "0.00");
   assert.equal(result.ordinaryMinutes, 0);
+});
+test("eight worked hours expose an accumulated hourly amount without floating point", () => {
+  const result = calculateAccruedPayrollMoney([{ ...day("2030-06-03", "60", 0), payableMinutes: 480 }]);
+  assert.equal(result.ordinaryMinutes, 480);
+  assert.equal(result.operationalPayable.toFixed(2), "480.00");
+});
+test("zero accrued hours keep a visible zero amount", () => {
+  const result = calculateAccruedPayrollMoney([{ ...day("2030-06-03", "60", 0), payableMinutes: 0 }]);
+  assert.equal(result.operationalPayable.toFixed(2), "0.00");
+  assert.notEqual(result.operationalPayable, null);
 });
 test("NIGHT finalized overtime minutes are priced without reclassification", () => {
   const finalizedNight = day("2030-06-03", "60", 420, 120, 30);
