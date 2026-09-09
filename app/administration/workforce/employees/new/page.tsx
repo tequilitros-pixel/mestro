@@ -1,8 +1,57 @@
+import Link from "next/link";
+import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createWorkforceEmployeeAction } from "@/app/actions/workforceEmployment";
+import { SubmitButton } from "../SubmitButton";
 
-const field = "w-full rounded-lg border border-outline-variant bg-surface px-3 py-2";
-export default async function NewWorkforceEmployeePage() {
-  const [branches, users] = await Promise.all([prisma.branch.findMany({ where: { active: true }, orderBy: { name: "asc" } }), prisma.user.findMany({ where: { active: true, workforceEmployee: null }, select: { id: true, name: true, username: true }, orderBy: { name: "asc" } })]);
-  return <section className="mx-auto max-w-3xl"><h2 className="mb-4 text-xl font-bold">Crear empleado V1</h2><form action={createWorkforceEmployeeAction} className="grid gap-4 rounded-xl border border-outline-variant bg-surface-container/60 p-4 sm:grid-cols-2 sm:p-6"><label className="sm:col-span-2">Nombre visible<input required name="displayName" className={field}/></label><label>Nombre(s)<input name="firstName" className={field}/></label><label>Apellidos<input name="lastName" className={field}/></label><label>Número de empleado<input name="employeeNumber" className={field}/></label><label>User opcional<select name="userId" className={field}><option value="">Sin login</option>{users.map((u)=><option key={u.id} value={u.id}>{u.name} (@{u.username})</option>)}</select></label><label>Estado<select name="status" className={field}><option>ACTIVE</option><option>INACTIVE</option><option>TERMINATED</option></select></label><label>Fecha de ingreso opcional<input type="date" name="startedAt" className={field}/></label><label>HOME opcional<select name="homeBranchId" className={field}><option value="">Sin HOME</option>{branches.map((b)=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label><label>Vigencia inicial<input required type="date" name="effectiveFrom" defaultValue={new Date().toISOString().slice(0,10)} className={field}/></label><label>Tipo de tarifa<select name="rateType" className={field}><option>HOURLY</option><option>DAILY</option><option>WEEKLY</option><option>SALARY</option></select></label><label>Monto opcional<input type="number" min="0.01" step="0.01" name="rateAmount" className={field}/></label><label>Moneda<input name="currency" defaultValue="MXN" maxLength={3} className={field}/></label><div className="sm:col-span-2 flex justify-end"><button className="rounded-lg bg-primary px-4 py-2 font-semibold text-on-primary">Crear empleado</button></div></form></section>;
+const field = "mt-1 w-full rounded-lg border border-outline-variant bg-surface px-3 py-2";
+
+export default async function NewEmployeePage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  await requireAdmin();
+  const { error } = await searchParams;
+  const [branches, users] = await Promise.all([
+    prisma.branch.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.user.findMany({ where: { active: true, workforceEmployee: null }, select: { id: true, name: true, username: true }, orderBy: { name: "asc" } }),
+  ]);
+  return (
+    <section className="mx-auto max-w-3xl space-y-4">
+      <Link href="/administration/workforce/employees" className="text-sm text-primary">← Empleados</Link>
+      <div>
+        <h1 className="text-3xl font-bold">Nuevo empleado</h1>
+        <p className="text-sm text-on-surface-variant">Configura lo esencial ahora. La historia se genera automáticamente.</p>
+      </div>
+      {error && <p role="alert" className="rounded-lg border border-error p-3 text-error">{error}</p>}
+      <form action={createWorkforceEmployeeAction} className="space-y-5 rounded-xl border border-outline-variant p-4 sm:p-6">
+        <input type="hidden" name="effectiveFrom" value={new Date().toISOString().slice(0, 10)} />
+        <label className="block">Nombre<input required name="displayName" className={field} /></label>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label>Usuario vinculado (opcional)<select name="userId" className={field}><option value="">Sin usuario vinculado</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name} (@{user.username})</option>)}</select></label>
+          <label>Estado inicial<select name="status" className={field}><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></label>
+          <label className="sm:col-span-2">Sucursal principal<select name="homeBranchId" className={field}><option value="">Sin sucursal</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
+        </div>
+
+        <fieldset>
+          <legend className="font-semibold">Puede trabajar en</legend>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {branches.map((branch) => <label key={branch.id} className="flex min-h-12 items-center gap-2 rounded-lg border border-outline-variant p-3"><input type="checkbox" name="allowedBranchIds" value={branch.id} />{branch.name}</label>)}
+          </div>
+        </fieldset>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <label>Pago inicial<input type="number" min="0.01" step="0.01" name="rateAmount" className={field} /></label>
+          <label>Moneda<input name="currency" placeholder="MXN" maxLength={3} className={field} /></label>
+          <label>Tipo<select name="rateType" className={field}><option value="HOURLY">Por hora</option><option value="DAILY">Por día</option><option value="WEEKLY">Por semana</option><option value="SALARY">Salario</option></select></label>
+          <label className="sm:col-span-3">Fecha de ingreso (si se conoce)<input type="date" name="startedAt" className={field} /></label>
+        </div>
+
+        <details className="rounded-lg border border-outline-variant p-3">
+          <summary className="cursor-pointer font-semibold">Configuración avanzada</summary>
+          <label className="mt-3 block">Tipo de jornada<select name="jornadaType" className={field}><option value="">Sin registrar</option><option value="DAY">Diurna</option><option value="NIGHT">Nocturna</option><option value="MIXED">Mixta</option></select></label>
+        </details>
+
+        <SubmitButton className="min-h-12 w-full rounded-lg bg-primary px-4 py-3 font-bold text-on-primary">Crear empleado</SubmitButton>
+      </form>
+    </section>
+  );
 }
