@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { requireAdmin } from "@/lib/auth";
 import { getPayrollBoard } from "@/lib/workforce/payroll/service";
 import { formatMinutes } from "@/lib/workforce/timesheet/rules";
+import { normalizeEmploymentStatusFilter, shouldShowEmployment } from "@/lib/workforce/timesheet/visibility";
 import {
   addPayrollAdjustmentAction, approvePayrollAction, approveReadyPayrollPeriodAction, calculatePayrollAction,
   createRetroactivePayrollAdjustmentAction, markPayrollPaidAction,
@@ -13,24 +14,29 @@ const money = (value: { toString(): string } | null | undefined, currency = "MXN
   new Intl.NumberFormat("es-MX", { style: "currency", currency }).format(Number(value?.toString() ?? 0));
 const input = "min-h-10 rounded-lg border bg-surface px-3";
 
-export default async function PayrollPage({ searchParams }: { searchParams: Promise<{ week?: string; error?: string; saved?: string }> }) {
+export default async function PayrollPage({ searchParams }: { searchParams: Promise<{ week?: string; error?: string; saved?: string; employmentStatus?: string }> }) {
   await requireAdmin();
   const query = await searchParams;
   const requested = query.week ? new Date(`${query.week}T00:00:00.000Z`) : new Date();
   const selected = Number.isNaN(requested.getTime()) ? new Date() : requested;
   const board = await getPayrollBoard(selected);
-  const ready = board.rows.filter((row) => row.facts.sheet.payrollLine?.status === "READY").length;
-  const approved = board.rows.filter((row) => row.facts.sheet.payrollLine?.status === "APPROVED").length;
-  const paid = board.rows.filter((row) => row.facts.sheet.payrollLine?.status === "PAID").length;
-  const blocked = board.rows.filter((row) => row.facts.blockers.length).length;
-  const total = board.rows.reduce((sum, row) => sum + Number(row.facts.sheet.payrollLine?.operationalPayable?.toString() ?? 0), 0);
+  const employmentStatus = normalizeEmploymentStatusFilter(query.employmentStatus);
+  const rows = board.rows.filter((row) => shouldShowEmployment({
+    status: row.sheet.employment.status,
+    displayName: row.sheet.employment.employee.displayName ?? "",
+  }, employmentStatus));
+  const ready = rows.filter((row) => row.facts.sheet.payrollLine?.status === "READY").length;
+  const approved = rows.filter((row) => row.facts.sheet.payrollLine?.status === "APPROVED").length;
+  const paid = rows.filter((row) => row.facts.sheet.payrollLine?.status === "PAID").length;
+  const blocked = rows.filter((row) => row.facts.blockers.length).length;
+  const total = rows.reduce((sum, row) => sum + Number(row.facts.sheet.payrollLine?.operationalPayable?.toString() ?? 0), 0);
   return <section className="min-w-0 space-y-5">
     <div><h2 className="text-2xl font-black">Payroll operativo V1</h2><p className="text-sm text-on-surface-variant">Cálculo bruto operativo; no es nómina fiscal ni CFDI.</p></div>
     {query.error ? <p role="alert" className="rounded-lg bg-error/10 p-3 text-error">{query.error}</p> : null}
     {query.saved ? <p role="status" className="rounded-lg bg-primary/10 p-3">Operación guardada.</p> : null}
-    <Card className="space-y-3"><form className="flex flex-wrap items-end gap-3"><label>Semana (lunes)<input className={input} name="week" type="date" defaultValue={board.start.toISOString().slice(0,10)} /></label><button className="min-h-10 rounded-lg bg-primary px-4 font-bold text-on-primary">Ver periodo</button></form><div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8"><p><strong>Periodo</strong><br />{board.start.toISOString().slice(0,10)} → {board.end.toISOString().slice(0,10)}</p><p><strong>Pago</strong><br />{board.payDay.toISOString().slice(0,10)}</p><p><strong>Employees</strong><br />{board.rows.length}</p><p><strong>Ready</strong><br />{ready}</p><p><strong>Blocked</strong><br />{blocked}</p><p><strong>Approved</strong><br />{approved}</p><p><strong>Paid</strong><br />{paid}</p><p><strong>Total payable</strong><br />{money({toString:()=>String(total)})}</p></div>{ready && board.rows[0] ? <form action={approveReadyPayrollPeriodAction}><input type="hidden" name="payrollPeriodId" value={board.rows[0].sheet.payrollPeriodId}/><input type="hidden" name="week" value={board.start.toISOString().slice(0,10)}/><input type="hidden" name="idempotencyKey" value={`bulk:${board.rows[0].sheet.payrollPeriodId}`}/><button className="rounded-lg border border-primary px-4 py-2 font-bold text-primary">Approve all ready</button></form> : null}</Card>
-    <div className="hidden overflow-x-auto lg:block"><table className="w-full min-w-[1050px] text-sm"><thead><tr className="text-left"><th>Employee</th><th>Ordinary</th><th>Double</th><th>Triple</th><th>Gross</th><th>Earnings</th><th>Deductions</th><th>Payable</th><th>Status</th><th>Action</th></tr></thead><tbody>{board.rows.map((row) => <PayrollRow key={row.sheet.id} row={row} categories={board.categories} settlementPeriods={board.settlementPeriods} week={board.start.toISOString().slice(0,10)} />)}</tbody></table></div>
-    <div className="grid gap-4 lg:hidden">{board.rows.map((row) => <PayrollCard key={row.sheet.id} row={row} categories={board.categories} settlementPeriods={board.settlementPeriods} week={board.start.toISOString().slice(0,10)} />)}</div>
+    <Card className="space-y-3"><form className="flex flex-wrap items-end gap-3"><label>Semana (lunes)<input className={input} name="week" type="date" defaultValue={board.start.toISOString().slice(0,10)} /></label><label>Relación laboral<select name="employmentStatus" className={input} defaultValue={employmentStatus}><option value="ACTIVE">Activos</option><option value="INACTIVE">Inactivos</option><option value="TERMINATED">Terminados</option><option value="ALL">Todos</option></select></label><button className="min-h-10 rounded-lg bg-primary px-4 font-bold text-on-primary">Ver periodo</button></form><div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8"><p><strong>Periodo</strong><br />{board.start.toISOString().slice(0,10)} → {board.end.toISOString().slice(0,10)}</p><p><strong>Pago</strong><br />{board.payDay.toISOString().slice(0,10)}</p><p><strong>Employees</strong><br />{rows.length}</p><p><strong>Ready</strong><br />{ready}</p><p><strong>Blocked</strong><br />{blocked}</p><p><strong>Approved</strong><br />{approved}</p><p><strong>Paid</strong><br />{paid}</p><p><strong>Total payable</strong><br />{money({toString:()=>String(total)})}</p></div>{ready && rows[0] ? <form action={approveReadyPayrollPeriodAction}><input type="hidden" name="payrollPeriodId" value={rows[0].sheet.payrollPeriodId}/><input type="hidden" name="week" value={board.start.toISOString().slice(0,10)}/><input type="hidden" name="idempotencyKey" value={`bulk:${rows[0].sheet.payrollPeriodId}`}/><button className="rounded-lg border border-primary px-4 py-2 font-bold text-primary">Approve all ready</button></form> : null}</Card>
+    {rows.length ? <><div className="hidden overflow-x-auto lg:block"><table className="w-full min-w-[1050px] text-sm"><thead><tr className="text-left"><th>Employee</th><th>Ordinary</th><th>Double</th><th>Triple</th><th>Gross</th><th>Earnings</th><th>Deductions</th><th>Payable</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows.map((row) => <PayrollRow key={row.sheet.id} row={row} categories={board.categories} settlementPeriods={board.settlementPeriods} week={board.start.toISOString().slice(0,10)} />)}</tbody></table></div>
+    <div className="grid gap-4 lg:hidden">{rows.map((row) => <PayrollCard key={row.sheet.id} row={row} categories={board.categories} settlementPeriods={board.settlementPeriods} week={board.start.toISOString().slice(0,10)} />)}</div></> : <Card><p className="text-sm text-on-surface-variant">No hay empleados para este filtro y periodo.</p></Card>}
   </section>;
 }
 
