@@ -22,21 +22,9 @@ export default async function WorkforceEmployeeLayout({
         <nav className="flex gap-2 overflow-x-auto pb-1">
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/workforce?view=today"
-          >
-            Hoy
-          </Link>
-          <Link
-            className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/workforce?view=week"
           >
-            Semana
-          </Link>
-          <Link
-            className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/workforce?view=month"
-          >
-            Mes
+            Mi horario
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
@@ -52,15 +40,15 @@ export default async function WorkforceEmployeeLayout({
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/workforce/kiosk"
+            href="/workforce/timesheet"
           >
-            Kiosk
+            Mis horas
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/workforce/timesheet"
+            href="/workforce/clock#solicitudes"
           >
-            Mi timesheet
+            Solicitudes
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"

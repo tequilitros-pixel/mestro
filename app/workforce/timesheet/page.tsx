@@ -4,8 +4,18 @@ import { getCurrentUser } from "@/lib/auth";
 import { getOwnTimesheet } from "@/lib/workforce/timesheet/service";
 import { dateKey, formatMinutes, mondayOf } from "@/lib/workforce/timesheet/rules";
 import { previewOvertime } from "@/lib/workforce/overtime/service";
+import { attendanceTypeLabels, humanLabel, timesheetStatusLabels } from "@/lib/workforce/presentation";
 
 const days = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+const localMoment = (value: Date | null | undefined, timezone: string | null | undefined) =>
+  value
+    ? value.toLocaleTimeString("es-MX", {
+        timeZone: timezone ?? "America/Mexico_City",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })
+    : "Sin registrar";
 
 export default async function EmployeeTimesheetPage({
   searchParams,
@@ -51,8 +61,8 @@ export default async function EmployeeTimesheetPage({
   return (
     <section className="mx-auto max-w-2xl space-y-4">
       <div>
-        <h2 className="text-2xl font-black">Mi timesheet</h2>
-        <p className="text-sm">{dateKey(sheet.periodStart)} → {dateKey(sheet.periodEnd)} · {sheet.status}</p>
+        <h2 className="text-2xl font-black">Mis horas</h2>
+        <p className="text-sm">{dateKey(sheet.periodStart)} → {dateKey(sheet.periodEnd)} · {humanLabel(timesheetStatusLabels, sheet.status)}</p>
       </div>
       <Card>
         <form method="get" className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -79,6 +89,7 @@ export default async function EmployeeTimesheetPage({
               </div>
               <p className="text-xl font-black">{line.workedMinutes ? formatMinutes(line.workedMinutes) : "—"}</p>
             </div>
+            {line.workSessionLinks.length ? <div className="mt-3 space-y-2">{line.workSessionLinks.map((link) => <div key={link.id} className="rounded-lg bg-surface-container p-3 text-sm"><div className="flex flex-wrap justify-between gap-2"><strong>{link.workSession.branch.name}</strong><span>{localMoment(link.workSession.startedAt, link.workSession.branch.timezone)} – {localMoment(link.workSession.endedAt, link.workSession.branch.timezone)}</span></div><p className="text-xs text-on-surface-variant">Descanso {formatMinutes(link.workSession.breakMinutes ?? 0)} · Total {formatMinutes(link.workSession.workedMinutes)}{link.workSession.shift ? " · Turno publicado" : " · Trabajo no programado"}</p>{link.workSession.attendanceExceptions.length ? <div className="mt-2 flex flex-wrap gap-2">{link.workSession.attendanceExceptions.map((issue) => <span key={issue.id} className="rounded-full bg-error/10 px-2 py-1 text-xs font-bold text-error">{humanLabel(attendanceTypeLabels, issue.type)}</span>)}</div> : null}</div>)}</div> : null}
             {line.needsReview ? <p className="mt-2 text-sm font-semibold text-error">Requiere revisión</p> : null}
           </Card>
         ))}

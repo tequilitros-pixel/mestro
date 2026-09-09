@@ -220,7 +220,16 @@ export async function ensureAndRecomputeTimesheet(employmentId: string, inputDat
           include: {
             adjustments: true,
             workSessionLinks: {
-              include: { workSession: { include: { branch: true, shift: true, attendanceExceptions: true } } },
+              include: {
+                workSession: {
+                  include: {
+                    branch: true,
+                    shift: true,
+                    attendanceExceptions: true,
+                    clockEventLinks: { include: { clockEvent: true }, orderBy: { sequence: "asc" } },
+                  },
+                },
+              },
             },
           },
           orderBy: { businessDate: "asc" },

@@ -49,13 +49,13 @@ export default async function WorkforceV1Layout({
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/administration/workforce/schedule"
           >
-            Horario
+            Programar horarios
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/administration/workforce/clock-corrections"
           >
-            Correcciones
+            Solicitudes / Correcciones
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
@@ -67,7 +67,7 @@ export default async function WorkforceV1Layout({
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/administration/workforce/timesheets"
           >
-            Timesheets
+            Horas trabajadas
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
@@ -79,13 +79,13 @@ export default async function WorkforceV1Layout({
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/administration/workforce/overtime"
           >
-            Overtime
+            Horas extra
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/administration/workforce/payroll"
           >
-            Payroll
+            Nómina
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-on-primary"
