@@ -10,6 +10,7 @@ import {
 } from "@/app/actions/workforceBranches";
 import { useToast } from "@/components/ui/Toast";
 import { MapPinIcon, PlusIcon, UsersIcon, ClockIcon } from "@/components/ui/icons";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 type Template = { id: string; name: string; branchId: string | null; active: boolean; shifts: { id: string; dayOfWeek: number; startTime: string | null; endTime: string | null; breakMinutes: number }[] };
 type Branch = {
@@ -124,7 +125,7 @@ export default function BranchesManager({
             {initialPendingEvidence.length === 0 && <p className="text-sm text-on-surface-variant">No hay excepciones por revisar.</p>}
             {initialPendingEvidence.filter((evidence) => evidence.clockEvent).map((evidence) => (
               <div key={evidence.id} className="rounded-md border border-outline-variant bg-background p-3 text-xs">
-                <div className="flex flex-wrap justify-between gap-2"><strong>{evidence.clockEvent?.employment.employee.displayName ?? "Empleado"}</strong><span className="text-on-surface-variant">{new Date(evidence.checkedAt).toLocaleString("es-MX")}</span></div>
+                <div className="flex flex-wrap justify-between gap-2"><strong>{evidence.clockEvent?.employment.employee.displayName ?? "Empleado"}</strong><span className="text-on-surface-variant">{formatBusinessDateTime(evidence.checkedAt)}</span></div>
                 <p className="mt-1 text-on-surface-variant">{evidence.clockEvent?.type === "CLOCK_IN" ? "Entrada" : "Salida"} · {evidence.clockEvent?.branch.name} · {evidence.result}{evidence.distanceMeters !== null ? ` · ${evidence.distanceMeters} m` : ""}</p>
                 <div className="mt-2 flex gap-2"><ReviewButton evidenceId={evidence.id} decision="APPROVED" onDone={() => router.refresh()} /><ReviewButton evidenceId={evidence.id} decision="REJECTED" onDone={() => router.refresh()} /></div>
               </div>

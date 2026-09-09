@@ -17,6 +17,7 @@ import {
   InventoryFlowChart,
   InventoryShareChart,
 } from "./InventoryCharts";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 const sections = [
   {
@@ -53,11 +54,7 @@ const units = (value: number) =>
 
 const formatDate = (iso: string | null) =>
   iso
-    ? new Date(iso).toLocaleDateString("es-MX", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
+    ? formatBusinessDateTime(iso)
     : "Nunca";
 
 export default async function InventoryPage() {

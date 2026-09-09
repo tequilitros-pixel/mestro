@@ -12,6 +12,7 @@ import {
 import { ClockIcon, LoginIcon, LogoutIcon } from "@/components/ui/icons";
 import { distanceMeters, hasGeofence, type BranchLocation } from "@/lib/geo";
 import { enqueueOperation } from "@/lib/offline/queue";
+import { formatBusinessTime, formatBusinessDateTimeLocal, parseBusinessDateTimeLocal } from "@/lib/dateTime";
 
 type Branch = BranchLocation & { id: string; name: string };
 type OpenShift = {
@@ -30,10 +31,7 @@ function formatElapsed(milliseconds: number) {
 }
 
 function toDatetimeLocal(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`;
+  return formatBusinessDateTimeLocal(date);
 }
 
 function getCurrentPosition(): Promise<GeolocationPosition> {
@@ -317,10 +315,12 @@ export default function ClockWidget() {
     }
 
     setSaving(true);
-    const adjustedClockIn = new Date(clockInValue);
-    const adjustedClockOut = new Date(clockOutValue);
-
-    if (Number.isNaN(adjustedClockIn.getTime()) || Number.isNaN(adjustedClockOut.getTime())) {
+    let adjustedClockIn: Date;
+    let adjustedClockOut: Date;
+    try {
+      adjustedClockIn = parseBusinessDateTimeLocal(clockInValue);
+      adjustedClockOut = parseBusinessDateTimeLocal(clockOutValue);
+    } catch {
       setSaving(false);
       setError("Las horas no son válidas.");
       return;
@@ -335,8 +335,8 @@ export default function ClockWidget() {
       setSaving(false);
       return;
     }
-    // datetime-local no incluye zona horaria. Convertir en el navegador conserva
-    // la hora local del empleado y envía a Vercel un instante ISO inequívoco.
+    // datetime-local no incluye zona horaria. Se interpreta explícitamente en
+    // la zona oficial de negocio antes de enviar un instante ISO inequívoco.
     const result = await clockOutAction(
       openShift.id,
       adjustedClockIn.toISOString(),
@@ -445,10 +445,7 @@ export default function ClockWidget() {
           </p>
           <p className="text-2xl font-bold text-on-surface">
             Desde las{" "}
-            {new Date(openShift.clockIn).toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatBusinessTime(openShift.clockIn)}
           </p>
 
           <div className="rounded-2xl bg-background/55 px-4 py-5">

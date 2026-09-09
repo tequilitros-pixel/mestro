@@ -7,6 +7,7 @@ import {
 import { ChevronLeftIcon } from "@/components/ui/icons";
 import OpenShiftsManager from "./OpenShiftsManager";
 import EditRequestsManager from "./EditRequestsManager";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 export default async function OpenShiftsPage() {
   const [openShifts, geofenceAlerts, editRequests] = await Promise.all([
@@ -101,10 +102,7 @@ export default async function OpenShiftsPage() {
                   </div>
 
                   <p className="shrink-0 text-xs text-error">
-                    {new Date(alert.createdAt).toLocaleString("es-MX", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
+                    {formatBusinessDateTime(alert.createdAt)}
                   </p>
                 </div>
               ))}

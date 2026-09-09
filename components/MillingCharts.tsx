@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 type MillingEvent = {
   id: string;
@@ -39,7 +40,7 @@ type ChartData = {
 
 export default function MillingCharts({ events }: { events: MillingEvent[] }) {
   const data: ChartData[] = events.map((event) => ({
-    time: new Date(event.createdAt).toLocaleString(),
+    time: formatBusinessDateTime(event.createdAt),
     brix: event.brix ?? (event.type === "REGISTRO_BRIX" ? event.value : null),
     ph: event.ph ?? (event.type === "REGISTRO_PH" ? event.value : null),
     temperature:

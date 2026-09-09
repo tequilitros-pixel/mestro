@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { ArrowUpRightIcon, ArrowDownRightIcon, CheckIcon } from "@/components/ui/icons";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 interface Movement {
   id: string;
@@ -17,7 +18,7 @@ const formatMoney = (v: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(v);
 
 const formatDateTime = (v: string) =>
-  new Intl.DateTimeFormat("es-MX", { dateStyle: "short", timeStyle: "short", timeZone: "America/Mexico_City" }).format(new Date(v));
+  formatBusinessDateTime(v);
 
 const TYPE_LABEL: Record<Movement["type"], string> = {
   INGRESO: "Ingreso desde el corte",

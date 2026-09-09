@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/icons";
  import { useEffect, useState, useCallback, startTransition } from "react";
 import { enqueueOperation } from "@/lib/offline/queue";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 function localCutKey(id: string) { return `maestro:cash-cut:${id}`; }
 function saveLocalCut(cut: CashCut) { localStorage.setItem(localCutKey(cut.id), JSON.stringify(cut)); }
@@ -181,13 +182,7 @@ const formatMoney = (value: number | null | undefined) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value ?? 0);
 
 const formatDateTime = (value: string | null | undefined) =>
-  value
-    ? new Intl.DateTimeFormat("es-MX", {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: "America/Mexico_City",
-      }).format(new Date(value))
-    : "Sin registrar";
+  value ? formatBusinessDateTime(value) : "Sin registrar";
 
 function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
   const posSales = cashCut.posSales ?? [];

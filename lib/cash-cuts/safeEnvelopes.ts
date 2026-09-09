@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, CashSafeEnvelope, CashSafeEnvelopeStatus } from "@prisma/client";
+import { formatDateOnly } from "@/lib/dateOnly";
 
 /*
  * ============================================================
@@ -112,10 +113,7 @@ export async function generateEnvelopeCode(
   branchCode: string,
   cutDate: Date
 ): Promise<string> {
-  const y = cutDate.getFullYear();
-  const m = String(cutDate.getMonth() + 1).padStart(2, "0");
-  const d = String(cutDate.getDate()).padStart(2, "0");
-  const prefix = `${branchCode}-${y}${m}${d}`;
+  const prefix = `${branchCode}-${formatDateOnly(cutDate).replace(/-/g, "")}`;
 
   const existing = await tx.cashSafeEnvelope.count({
     where: { code: { startsWith: `${prefix}-` } },

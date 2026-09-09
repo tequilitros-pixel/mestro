@@ -10,6 +10,8 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/ui/CompactUI";
+import { formatBusinessTime } from "@/lib/dateTime";
+import { formatDateOnly } from "@/lib/dateOnly";
 
 /*
  * Tablero de historial para ADMIN, GERENTE y CONSULTA.
@@ -46,9 +48,9 @@ const money = (n: number | null | undefined) =>
     : "—";
 
 const hora = (v: string | null) =>
-  v ? new Date(v).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) : "—";
+  v ? formatBusinessTime(v) : "—";
 
-const fecha = (v: string) => new Date(v).toLocaleDateString("es-MX", { timeZone: "UTC" });
+const fecha = (v: string) => formatDateOnly(new Date(v));
 
 /** El esquema solo tiene ABIERTO/CERRADO/AUDITADO; el resto se deriva. */
 function etiquetaEstado(c: Corte): { texto: string; tono: "neutral" | "success" | "warning" | "danger" } {

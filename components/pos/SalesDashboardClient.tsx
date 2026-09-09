@@ -29,6 +29,7 @@ import {
   lastSalesDayOfMonth,
   formatBusinessDateOnly,
 } from "@/lib/dateOnly";
+import { formatBusinessDate, formatBusinessTime } from "@/lib/dateTime";
 
 type SaleItem = { id: string; name: string; quantity: number; lineTotal: number };
 type SalePayment = { method: string; amount: number };
@@ -102,10 +103,10 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
 
 const formatTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  formatBusinessTime(iso);
 
 const formatDayLabel = (iso: string) =>
-  new Date(`${iso}T12:00:00`).toLocaleDateString("es-MX", {
+  formatBusinessDate(`${iso}T12:00:00.000Z`, {
     day: "2-digit",
     month: "short",
   });
@@ -354,7 +355,7 @@ export default function SalesDashboardClient({
   const hourlyData = useMemo(() => {
     const totals = new Array(24).fill(0) as number[];
     for (const sale of scopedAnalytics) {
-      totals[new Date(sale.createdAt).getHours()] += sale.total;
+      totals[Number(formatBusinessTime(sale.createdAt).slice(0, 2))] += sale.total;
     }
     return totals
       .map((total, hour) => ({ label: `${String(hour).padStart(2, "0")}h`, total, hour }))

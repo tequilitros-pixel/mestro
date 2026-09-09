@@ -13,13 +13,22 @@
  * UTC, así que el resultado es el mismo sin importar dónde se ejecuten.
  */
 
-import { BUSINESS_TIME_ZONE } from "./dateTime";
+import {
+  businessDayStart as businessDayStartInZone,
+  formatBusinessDateOnly as formatBusinessDateOnlyInZone,
+} from "./dateTime";
 
 export { BUSINESS_TIME_ZONE } from "./dateTime";
 
 /** "YYYY-MM-DD" -> Date anclado a medianoche UTC. */
 export function parseDateOnly(dateStr: string): Date {
-  return new Date(`${dateStr}T00:00:00.000Z`);
+  const value = dateStr.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("Fecha inválida; usa YYYY-MM-DD.");
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || formatDateOnly(date) !== value) {
+    throw new Error("Fecha inválida; usa YYYY-MM-DD.");
+  }
+  return date;
 }
 
 /** Date -> "YYYY-MM-DD", leyendo el calendario en UTC. */
@@ -57,9 +66,7 @@ export function todayDateOnly(): string {
 
 /** Date -> fecha de calendario en la zona horaria del negocio. */
 export function formatBusinessDateOnly(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: BUSINESS_TIME_ZONE,
-  }).format(date);
+  return formatBusinessDateOnlyInZone(date);
 }
 
 /**
@@ -68,31 +75,7 @@ export function formatBusinessDateOnly(date: Date): string {
  * servidor ni codificar UTC-6 manualmente.
  */
 export function businessDayStart(dateStr: string): Date {
-  const [year, month, day] = dateStr.split("-").map(Number);
-  const wallClockAsUtc = Date.UTC(year, month - 1, day);
-  const probe = new Date(wallClockAsUtc);
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: BUSINESS_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(probe);
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
-    Number(parts.find((part) => part.type === type)?.value);
-  const representedAsUtc = Date.UTC(
-    value("year"),
-    value("month") - 1,
-    value("day"),
-    value("hour"),
-    value("minute"),
-    value("second"),
-  );
-  const offset = representedAsUtc - wallClockAsUtc;
-  return new Date(wallClockAsUtc - offset);
+  return businessDayStartInZone(dateStr);
 }
 
 /** Primer día del mes que contiene la fecha dada. */

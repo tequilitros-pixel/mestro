@@ -1,4 +1,6 @@
 import type { EffectiveAvailability } from "@/lib/workforce/availability/rules";
+import { addDaysToDateOnly, formatDateOnly, parseDateOnly } from "@/lib/dateOnly";
+import { parseZonedDateTimeLocal } from "@/lib/dateTime";
 
 export const DEFAULT_OVERTIME_RISK_HOURS = 48;
 export const DAY_MS = 86_400_000;
@@ -26,7 +28,7 @@ export type SchedulingWarning =
   | "COVERAGE_GAP";
 
 export function dateKey(value: Date) {
-  return value.toISOString().slice(0, 10);
+  return formatDateOnly(value);
 }
 export function weekEnd(weekStart: Date) {
   return new Date(weekStart.getTime() + 6 * DAY_MS);
@@ -39,41 +41,10 @@ export function localDateTimeToInstant(
 ) {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))
     throw new Error("Hora inválida; usa HH:mm.");
-  const [hour, minute] = time.split(":").map(Number);
-  const target = Date.UTC(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate(),
-    hour,
-    minute,
+  return parseZonedDateTimeLocal(
+    `${formatDateOnly(date)}T${time}`,
+    timezone,
   );
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  });
-  let candidate = target;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const parts = Object.fromEntries(
-      formatter
-        .formatToParts(new Date(candidate))
-        .filter((part) => part.type !== "literal")
-        .map((part) => [part.type, Number(part.value)]),
-    );
-    const represented = Date.UTC(
-      parts.year,
-      parts.month - 1,
-      parts.day,
-      parts.hour,
-      parts.minute,
-    );
-    candidate += target - represented;
-  }
-  return new Date(candidate);
 }
 
 export function shiftInstants(input: {
@@ -94,7 +65,7 @@ export function shiftInstants(input: {
   );
   if (endAt <= startAt)
     endAt = localDateTimeToInstant(
-      new Date(input.businessDate.getTime() + DAY_MS),
+      parseDateOnly(addDaysToDateOnly(formatDateOnly(input.businessDate), 1)),
       input.endTime,
       input.timezone,
     );

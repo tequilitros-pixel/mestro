@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { closeShiftManuallyAction } from "@/app/actions/timeclock";
 import { useToast } from "@/components/ui/Toast";
+import { formatBusinessDateTime, formatBusinessDateTimeLocal, parseBusinessDateTimeLocal } from "@/lib/dateTime";
 
 type OpenShift = {
   id: string;
@@ -12,10 +13,7 @@ type OpenShift = {
 };
 
 function toDatetimeLocal(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-    date.getDate()
-  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return formatBusinessDateTimeLocal(date);
 }
 
 export default function OpenShiftsManager({
@@ -40,8 +38,10 @@ export default function OpenShiftsManager({
     setSaving(true);
     setError(null);
 
-    const adjustedClockOut = new Date(clockOutValue);
-    if (Number.isNaN(adjustedClockOut.getTime())) {
+    let adjustedClockOut: Date;
+    try {
+      adjustedClockOut = parseBusinessDateTimeLocal(clockOutValue);
+    } catch {
       setSaving(false);
       setError("La hora de salida no es válida.");
       return;
@@ -87,10 +87,7 @@ export default function OpenShiftsManager({
                 </p>
                 <p className="mt-1 text-sm text-on-surface-variant">
                   {shift.branch.name} · entrada{" "}
-                  {new Date(shift.clockIn).toLocaleString("es-MX", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
+                  {formatBusinessDateTime(shift.clockIn)}
                 </p>
               </div>
 

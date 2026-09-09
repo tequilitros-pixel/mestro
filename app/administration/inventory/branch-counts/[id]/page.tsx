@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import CountItemRow from "./CountItemRow";
 import CloseCountButton from "./CloseCountButton";
+import { formatDateOnly } from "@/lib/dateOnly";
 
 export default async function CountDetailPage({
   params,
@@ -35,7 +36,7 @@ export default async function CountDetailPage({
           <div>
             <h1 className="text-3xl font-bold">{count.branch.name}</h1>
             <p className="mt-2 text-on-surface-variant">
-              {new Date(count.countDate).toLocaleDateString("es-MX")}
+              {formatDateOnly(count.countDate)}
             </p>
           </div>
 

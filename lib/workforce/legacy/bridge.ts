@@ -4,6 +4,7 @@ import type {
   DifferenceCategory,
   MigrationClassification,
 } from "./types";
+import { parseZonedDateTimeLocal } from "@/lib/dateTime";
 
 const MINUTE_MS = 60_000;
 
@@ -192,32 +193,9 @@ function addDays(value: string, days: number) {
 }
 
 function localInstant(date: string, time: string, timeZone: string): Date {
-  const [year, month, day] = date.split("-").map(Number);
-  const [hour, minute] = time.split(":").map(Number);
-  const wallAsUtc = Date.UTC(year, month - 1, day, hour, minute);
-  let guess = wallAsUtc;
-  for (let iteration = 0; iteration < 2; iteration += 1) {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(new Date(guess));
-    const value = (type: Intl.DateTimeFormatPartTypes) =>
-      Number(parts.find((part) => part.type === type)?.value);
-    const represented = Date.UTC(
-      value("year"),
-      value("month") - 1,
-      value("day"),
-      value("hour"),
-      value("minute"),
-    );
-    guess -= represented - wallAsUtc;
-  }
-  return new Date(guess);
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))
+    throw new Error("Hora inválida; usa HH:mm.");
+  return parseZonedDateTimeLocal(`${date}T${time}`, timeZone);
 }
 
 export function scheduledShiftToCandidate(

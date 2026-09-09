@@ -12,6 +12,7 @@ import {
   PlusIcon,
   FlaskIcon,
 } from "@/components/ui/icons";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 import {
   createRawMaterialAction,
   updateRawMaterialAction,
@@ -79,12 +80,7 @@ const qty = (value: number) =>
   new Intl.NumberFormat("es-MX", { maximumFractionDigits: 3 }).format(value);
 
 const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  formatBusinessDateTime(iso);
 
 export default function RawMaterialsClient({
   canEdit,

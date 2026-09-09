@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { addDaysToDateOnly, formatDateOnly, mondayOfWeek, parseDateOnly } from "@/lib/dateOnly";
 import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/periodLock";
+import { parseBusinessDateTimeLocal } from "@/lib/dateTime";
 
 export type AvailabilityKind = "AVAILABLE_ALL_DAY" | "AVAILABLE_PARTIAL" | "UNAVAILABLE" | "PREFER_OFF";
 export type AvailabilityReasonKind = "MEDICAL" | "SCHOOL" | "FAMILY" | "TRAVEL" | "ERRAND" | "OTHER";
@@ -29,7 +30,7 @@ async function isAvailabilityClosed(date: string) {
   const settings = await getSettings();
   const targetMonday = mondayOfWeek(date);
   const deadlineDate = addDaysToDateOnly(targetMonday, settings.deadlineWeekday - 7);
-  const deadline = new Date(`${deadlineDate}T${settings.deadlineTime}:00-06:00`);
+  const deadline = parseBusinessDateTimeLocal(`${deadlineDate}T${settings.deadlineTime}`);
   return { closed: new Date() > deadline, settings };
 }
 

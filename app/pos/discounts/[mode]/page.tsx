@@ -6,6 +6,7 @@ import {
   getDiscountAnalytics,
   type DiscountReportMode,
 } from "@/lib/pos/discountAnalytics";
+import { addBusinessDays, businessDayStart, formatBusinessDateOnly } from "@/lib/dateTime";
 
 const MODES = new Set<DiscountReportMode>(["courtesies", "employees", "products"]);
 
@@ -41,9 +42,7 @@ export default async function DiscountReportPage({
   });
 
   const validBranchId = branches.some((branch) => branch.id === branchId) ? branchId : "";
-  const from = new Date();
-  from.setHours(0, 0, 0, 0);
-  from.setDate(from.getDate() - (days - 1));
+  const from = businessDayStart(addBusinessDays(formatBusinessDateOnly(new Date()), -(days - 1)));
 
   const analytics = await getDiscountAnalytics({
     mode,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { addDaysToDateOnly, parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -37,14 +38,13 @@ export async function GET(req: NextRequest) {
     branchFilter = { in: allowedBranchIds };
   }
 
-  const defaultFrom = new Date();
-  defaultFrom.setDate(defaultFrom.getDate() - 7);
+  const defaultFrom = parseDateOnly(addDaysToDateOnly(todayDateOnly(), -7));
 
   const dateFrom = searchParams.get("dateFrom")
-    ? new Date(searchParams.get("dateFrom")!)
+    ? parseDateOnly(searchParams.get("dateFrom")!)
     : defaultFrom;
   const dateTo = searchParams.get("dateTo")
-    ? new Date(searchParams.get("dateTo")!)
+    ? parseDateOnly(searchParams.get("dateTo")!)
     : new Date();
 
   const cuts = await prisma.cashCut.findMany({

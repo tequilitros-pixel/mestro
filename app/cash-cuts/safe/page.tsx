@@ -8,6 +8,7 @@ import { BranchSafeSummaryCard } from "@/components/cash-cuts/safe/BranchSafeSum
 import { EnvelopeRow } from "@/components/cash-cuts/safe/EnvelopeRow";
 import { PendingEnvelopeRow } from "@/components/cash-cuts/safe/PendingEnvelopeRow";
 import type { BranchSafeSummary } from "@/lib/cash-cuts/safeEnvelopes";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 interface EnvelopeItem {
   id: string;
@@ -35,13 +36,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
 
 const formatDateTime = (value: string) =>
-  new Intl.DateTimeFormat("es-MX", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  formatBusinessDateTime(value);
 
 /*
  * El permiso real se valida en el servidor (canWithdraw/canReceive

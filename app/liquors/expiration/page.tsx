@@ -4,15 +4,13 @@ import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
 import { Prisma } from "@prisma/client";
 import PageTabs from "@/components/ui/PageTabs";
 import { AlertIcon, ClockIcon, CalendarIcon } from "@/components/ui/icons";
+import { addBusinessDays, businessDayStart } from "@/lib/dateTime";
 
 export default async function LiquorExpirationPage() {
   const now = new Date();
 
-  const in30Days = new Date(now);
-  in30Days.setDate(in30Days.getDate() + 30);
-
-  const in60Days = new Date(now);
-  in60Days.setDate(in60Days.getDate() + 60);
+  const in30Days = businessDayStart(addBusinessDays(now, 30));
+  const in60Days = businessDayStart(addBusinessDays(now, 60));
 
   const bottles = await prisma.liquorBottle.findMany({
     where: {

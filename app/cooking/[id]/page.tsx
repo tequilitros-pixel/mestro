@@ -9,6 +9,7 @@ import {
 import { startSteamAction, changeSteamPressureAction, stopSteamAction, createSweetHoneyRecoveryAction } from "../actions";
 import { notFound, redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
+import { businessDayStart, formatBusinessDateOnly } from "@/lib/dateTime";
 
 import CookingCharts from "@/components/CookingCharts";
 import FinishCookingModal from "@/components/FinishCookingModal";
@@ -1704,19 +1705,9 @@ function ActValue({
 async function createCookingClosureCode(
   date: Date
 ) {
-  const year = date.getFullYear();
-
-  const startOfYear = new Date(
-    year,
-    0,
-    1
-  );
-
-  const startOfNextYear = new Date(
-    year + 1,
-    0,
-    1
-  );
+  const year = Number(formatBusinessDateOnly(date).slice(0, 4));
+  const startOfYear = businessDayStart(`${year}-01-01`);
+  const startOfNextYear = businessDayStart(`${year + 1}-01-01`);
 
   const closuresThisYear =
     await prisma.cooking.count({

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { requireAdmin } from "@/lib/auth";
 import { getPayrollBoard } from "@/lib/workforce/payroll/service";
 import { formatMinutes } from "@/lib/workforce/timesheet/rules";
+import { parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
 import {
   addPayrollAdjustmentAction, approvePayrollAction, approveReadyPayrollPeriodAction, calculatePayrollAction,
   createRetroactivePayrollAdjustmentAction, markPayrollPaidAction,
@@ -16,8 +17,8 @@ const input = "min-h-10 rounded-lg border bg-surface px-3";
 export default async function PayrollPage({ searchParams }: { searchParams: Promise<{ week?: string; error?: string; saved?: string }> }) {
   await requireAdmin();
   const query = await searchParams;
-  const requested = query.week ? new Date(`${query.week}T00:00:00.000Z`) : new Date();
-  const selected = Number.isNaN(requested.getTime()) ? new Date() : requested;
+  const requested = query.week ? parseDateOnly(query.week) : parseDateOnly(todayDateOnly());
+  const selected = Number.isNaN(requested.getTime()) ? parseDateOnly(todayDateOnly()) : requested;
   const board = await getPayrollBoard(selected);
   const ready = board.rows.filter((row) => row.facts.sheet.payrollLine?.status === "READY").length;
   const approved = board.rows.filter((row) => row.facts.sheet.payrollLine?.status === "APPROVED").length;

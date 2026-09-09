@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import EntryForm from "./EntryForm";
 import { InventoryEntryType } from "@prisma/client";
+import { formatBusinessDate } from "@/lib/dateTime";
 
 const typeLabels: Record<string, string> = {
   COMPRA: "Compra",
@@ -98,7 +99,7 @@ export default async function BranchEntriesPage() {
                       {quantity > 0 ? "+" : ""}
                       {quantity} {entry.product.unit}
                     </span>{" "}
-                    · {new Date(entry.entryDate).toLocaleDateString("es-MX")}
+                    · {formatBusinessDate(entry.entryDate)}
                   </p>
                 </div>
               </div>

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import PrintButton from "./PrintButton";
 import MarkFulfilledButton from "../../MarkFulfilledButton";
+import { formatBusinessDate } from "@/lib/dateTime";
 
 export default async function RecountDetailPage({
   params,
@@ -63,8 +64,8 @@ export default async function RecountDetailPage({
           <h1 className="mt-1 text-3xl font-bold print:text-black">{recount.event.clientName}</h1>
           <p className="mt-2 text-sm text-on-surface-variant print:text-neutral-600">
             {recount.event.location} ·{" "}
-            {new Date(recount.event.eventDate).toLocaleDateString("es-MX")} · Reconteo del{" "}
-            {new Date(recount.countDate).toLocaleDateString("es-MX")}
+            {formatBusinessDate(recount.event.eventDate)} · Reconteo del{" "}
+            {formatBusinessDate(recount.countDate)}
           </p>
 
           <span

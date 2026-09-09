@@ -1,5 +1,7 @@
 import { Card } from "@/components/ui/Card";
 import { getCurrentUser } from "@/lib/auth";
+import { formatBusinessDateOnly, formatBusinessTime } from "@/lib/dateTime";
+import { todayDateOnly } from "@/lib/dateOnly";
 import { dateOnly } from "@/lib/workforce/availability/rules";
 import { getEmployeeCalendar, type CalendarShift } from "@/lib/workforce/calendar/service";
 import { getOwnEmployeeOrNull } from "@/lib/workforce/availability/service";
@@ -8,9 +10,7 @@ const dayMs = 86_400_000;
 const dayNames = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const statusLabel = { NEW: "Nuevo", CHANGED: "Cambió", CANCELLED: "Cancelado" };
 
-function localTime(date: Date, timezone: string) { return new Intl.DateTimeFormat("es-MX", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false }).format(date); }
-function localDate(date: Date, timezone: string) { return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year:"numeric",month:"2-digit",day:"2-digit" }).format(date); }
-function ShiftCard({ shift }: { shift: CalendarShift }) { return <Card className="space-y-1"><div className="flex flex-wrap items-center justify-between gap-2"><strong>{shift.branchName}</strong><span className={`rounded-full px-2 py-1 text-xs font-bold ${shift.status === "CANCELLED" ? "bg-error/10 text-error" : shift.status === "CHANGED" ? "bg-secondary/10 text-secondary" : "bg-primary/10 text-primary"}`}>{statusLabel[shift.status]}</span></div><p className="text-lg font-bold">{localTime(shift.startAt, shift.branchTimezone)} → {localTime(shift.endAt, shift.branchTimezone)}{localDate(shift.endAt,shift.branchTimezone) !== localDate(shift.startAt,shift.branchTimezone) ? " · termina al día siguiente" : ""}</p><p className="text-xs text-on-surface-variant">Sucursal: {shift.branchName}</p></Card>; }
+function ShiftCard({ shift }: { shift: CalendarShift }) { return <Card className="space-y-1"><div className="flex flex-wrap items-center justify-between gap-2"><strong>{shift.branchName}</strong><span className={`rounded-full px-2 py-1 text-xs font-bold ${shift.status === "CANCELLED" ? "bg-error/10 text-error" : shift.status === "CHANGED" ? "bg-secondary/10 text-secondary" : "bg-primary/10 text-primary"}`}>{statusLabel[shift.status]}</span></div><p className="text-lg font-bold">{formatBusinessTime(shift.startAt)} → {formatBusinessTime(shift.endAt)}{formatBusinessDateOnly(shift.endAt) !== formatBusinessDateOnly(shift.startAt) ? " · termina al día siguiente" : ""}</p><p className="text-xs text-on-surface-variant">Sucursal: {shift.branchName}</p></Card>; }
 
 export default async function WorkforceCalendarPage({ searchParams }: { searchParams: Promise<{ view?: string; date?: string }> }) {
   const user = await getCurrentUser();
@@ -19,7 +19,7 @@ export default async function WorkforceCalendarPage({ searchParams }: { searchPa
   if (!await getOwnEmployeeOrNull(actor)) return <Card><h2 className="font-bold">Sin relación laboral vinculada</h2><p className="text-sm text-on-surface-variant">Tu identidad de acceso todavía no está asociada a un Employee activo. Solicita apoyo a administración.</p></Card>;
   const query = await searchParams;
   const view = query.view === "month" ? "month" : query.view === "today" ? "today" : "week";
-  const anchor = dateOnly(query.date ?? new Date());
+  const anchor = dateOnly(query.date ?? todayDateOnly());
   const weekStart = new Date(anchor.getTime() - ((anchor.getUTCDay() + 6) % 7) * dayMs);
   const from = view === "today" ? anchor : view === "week" ? weekStart : new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
   const days = view === "today" ? 1 : view === "week" ? 7 : new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 0)).getUTCDate();

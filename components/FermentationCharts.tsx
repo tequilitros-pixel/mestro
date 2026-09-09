@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 type Reading = {
   createdAt: Date;
@@ -27,7 +28,7 @@ export default function FermentationCharts({
     .slice()
     .reverse()
     .map((reading) => ({
-      time: new Date(reading.createdAt).toLocaleString(),
+      time: formatBusinessDateTime(reading.createdAt),
       brix: reading.brix,
       ph: reading.ph,
       temperature: reading.temperature,

@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 import { assertWorkforceAdministrator } from "@/lib/workforce/employment/rules";
 import { addBranchAssignment, changeEmploymentStatus, changeHomeBranch, changePayRate, createEmployee } from "@/lib/workforce/employment/service";
+import { parseDateOnly } from "@/lib/dateOnly";
 
 async function authorize() {
   if (!workforceV1Enabled()) throw new Error("Workforce V1 no está habilitado.");
@@ -17,7 +18,7 @@ async function authorize() {
 
 function dateValue(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "");
-  const date = value ? new Date(`${value}T00:00:00.000Z`) : null;
+  const date = value ? parseDateOnly(value) : null;
   if (!date || Number.isNaN(date.getTime())) throw new Error(`Fecha inválida: ${key}`);
   return date;
 }

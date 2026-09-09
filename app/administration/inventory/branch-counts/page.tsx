@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { PlusIcon } from "@/components/ui/icons";
+import { formatDateOnly } from "@/lib/dateOnly";
 
 export default async function BranchCountsPage() {
   const counts = await prisma.inventoryCount.findMany({
@@ -43,7 +44,7 @@ export default async function BranchCountsPage() {
               <div>
                 <p className="font-semibold text-on-surface">{count.branch.name}</p>
                 <p className="text-sm text-on-surface-variant">
-                  {new Date(count.countDate).toLocaleDateString("es-MX")}
+                  {formatDateOnly(count.countDate)}
                 </p>
               </div>
               <span

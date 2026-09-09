@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 import { ExpensesCharts } from "@/components/cash-cuts/ExpensesCharts";
 import { DateRangeCalendar } from "@/components/ui/DateRangeCalendar";
+import { addDaysToDateOnly, firstDayOfMonth, lastDayOfMonth, mondayOfWeek, todayDateOnly } from "@/lib/dateOnly";
+import { formatBusinessDate, formatCivilDate } from "@/lib/dateTime";
 
 interface Branch { id: string; name: string; }
 interface Outflow {
@@ -18,33 +20,21 @@ type Preset = "current-week" | "previous-week" | "current-month" | "previous-mon
 type Tab = "summary" | "charts";
 
 const money = (value: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
-const dateInput = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
 function periodFor(preset: Exclude<Preset, "custom">) {
-  const today = new Date();
-  const currentMonday = new Date(today);
-  currentMonday.setHours(0, 0, 0, 0);
-  currentMonday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const today = todayDateOnly();
+  const currentMonday = mondayOfWeek(today);
   if (preset === "current-week") {
-    const end = new Date(currentMonday); end.setDate(end.getDate() + 6);
-    return { from: dateInput(currentMonday), to: dateInput(end) };
+    return { from: currentMonday, to: addDaysToDateOnly(currentMonday, 6) };
   }
   if (preset === "previous-week") {
-    const start = new Date(currentMonday); start.setDate(start.getDate() - 7);
-    const end = new Date(currentMonday); end.setDate(end.getDate() - 1);
-    return { from: dateInput(start), to: dateInput(end) };
+    return { from: addDaysToDateOnly(currentMonday, -7), to: addDaysToDateOnly(currentMonday, -1) };
   }
-  const year = today.getFullYear();
-  const month = today.getMonth();
-  const selectedMonth = preset === "current-month" ? month : month - 1;
+  const selectedMonth = preset === "current-month"
+    ? today
+    : addDaysToDateOnly(firstDayOfMonth(today), -1);
   return {
-    from: dateInput(new Date(year, selectedMonth, 1)),
-    to: dateInput(new Date(year, selectedMonth + 1, 0)),
+    from: firstDayOfMonth(selectedMonth),
+    to: lastDayOfMonth(selectedMonth),
   };
 }
 
@@ -98,7 +88,7 @@ export default function ExpensesPage() {
       total += outflow.amount;
       categories.set(outflow.category, (categories.get(outflow.category) ?? 0) + outflow.amount);
       const key = outflow.occurredAt.slice(0, 10);
-      const current = days.get(key) ?? { label: new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(new Date(`${key}T12:00:00`)), amount: 0 };
+      const current = days.get(key) ?? { label: formatCivilDate(`${key}T00:00:00.000Z`, { day: "2-digit", month: "short" }), amount: 0 };
       current.amount += outflow.amount;
       days.set(key, current);
     }
@@ -150,7 +140,7 @@ export default function ExpensesPage() {
           <Card><CardLabel>Promedio por salida</CardLabel><CardValue>{money(analytics.average)}</CardValue></Card>
         </div>
         {analytics.byCategory.length > 0 && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{analytics.byCategory.map(({ name, value }) => <Card key={name}><CardLabel>{name}</CardLabel><p className="text-lg font-bold text-on-surface">{money(value)}</p></Card>)}</div>}
-        {!loading && outflows.length === 0 ? <Card><p className="text-sm text-on-surface-variant">No hay salidas en el periodo y filtros seleccionados.</p></Card> : <div className="space-y-2">{outflows.map((outflow) => <Card key={outflow.id} className="p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-on-surface">{outflow.concept}</p><p className="mt-1 text-xs text-on-surface-variant">{outflow.category} · {outflow.cashCut.branch.name} · {outflow.cashCut.code}</p><p className="mt-1 text-xs text-outline">{new Intl.DateTimeFormat("es-MX", { dateStyle: "medium" }).format(new Date(outflow.occurredAt))}</p></div><p className="font-bold text-on-surface">{money(outflow.amount)}</p></div></Card>)}</div>}
+        {!loading && outflows.length === 0 ? <Card><p className="text-sm text-on-surface-variant">No hay salidas en el periodo y filtros seleccionados.</p></Card> : <div className="space-y-2">{outflows.map((outflow) => <Card key={outflow.id} className="p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-on-surface">{outflow.concept}</p><p className="mt-1 text-xs text-on-surface-variant">{outflow.category} · {outflow.cashCut.branch.name} · {outflow.cashCut.code}</p><p className="mt-1 text-xs text-outline">{formatBusinessDate(outflow.occurredAt)}</p></div><p className="font-bold text-on-surface">{money(outflow.amount)}</p></div></Card>)}</div>}
       </> : <Card><ExpensesCharts byCategory={analytics.byCategory} byDay={analytics.byDay} /></Card>}
     </div>
   );

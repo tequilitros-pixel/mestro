@@ -9,6 +9,7 @@ import {
   parseDateOnly,
   todayDateOnly,
 } from "@/lib/dateOnly";
+import { formatBusinessDateOnly } from "@/lib/dateTime";
 import { distanceMeters, hasGeofence } from "@/lib/geo";
 import {
   BRANCH_LOCATION_SELECT,
@@ -524,8 +525,8 @@ export async function createManualTimeClockEntryAction(input: {
         branchId: input.branchId,
         type: "TURNO",
         date: {
-          gte: new Date(clockIn.toISOString().slice(0, 10) + "T00:00:00.000Z"),
-          lt: new Date(clockIn.toISOString().slice(0, 10) + "T23:59:59.999Z"),
+          gte: parseDateOnly(formatBusinessDateOnly(clockIn)),
+          lt: parseDateOnly(addDaysToDateOnly(formatBusinessDateOnly(clockIn), 1)),
         },
       },
       select: { id: true },

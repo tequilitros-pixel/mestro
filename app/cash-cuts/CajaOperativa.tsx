@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PlusIcon, WalletIcon, ClockIcon, StoreIcon } from "@/components/ui/icons";
 import { PageHeader, StatusBadge } from "@/components/ui/CompactUI";
+import { formatBusinessDate, formatBusinessTime } from "@/lib/dateTime";
 
 /*
  * Pantalla del cajero (ENCARGADO). Solo tiene dos estados posibles.
@@ -52,12 +53,7 @@ export default function CajaOperativa({
     return () => clearInterval(t);
   }, []);
 
-  const hoy = new Date().toLocaleDateString("es-MX", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  const hoy = formatBusinessDate(new Date(), { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   if (!branchName) {
     return (
@@ -145,10 +141,7 @@ export default function CajaOperativa({
           <div>
             <dt className="text-on-surface-variant">Abierto desde</dt>
             <dd className="mt-0.5 font-semibold text-on-surface">
-              {new Date(corte.openedAt).toLocaleTimeString("es-MX", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {formatBusinessTime(corte.openedAt)}
             </dd>
           </div>
           <div>

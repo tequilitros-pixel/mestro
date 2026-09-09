@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { ServiceEventStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
+import { parseBusinessDateTimeLocal } from "@/lib/dateTime";
 
 export type ActionResult =
   | { success: true; message: string; id?: string }
@@ -65,9 +66,10 @@ export async function createServiceEventAction(
       return { success: false, error: "El número de invitados debe ser mayor a cero." };
     }
 
-    const eventDate = new Date(eventDateRaw);
-
-    if (Number.isNaN(eventDate.getTime())) {
+    let eventDate: Date;
+    try {
+      eventDate = parseBusinessDateTimeLocal(eventDateRaw);
+    } catch {
       return { success: false, error: "La fecha del evento no es válida." };
     }
 

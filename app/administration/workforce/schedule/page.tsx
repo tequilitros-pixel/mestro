@@ -1,11 +1,12 @@
 import { getAccessibleBranchIds, requireModuleAccess } from "@/lib/auth";
 import { dateOnly } from "@/lib/workforce/availability/rules";
 import { dateKey, DAY_MS } from "@/lib/workforce/scheduling/rules";
+import { todayDateOnly } from "@/lib/dateOnly";
 import { getGlobalScheduleBoard, type SchedulingActor } from "@/lib/workforce/scheduling/service";
 import { ScheduleExperience, type ScheduleViewModel } from "./ScheduleExperience";
 
 function monday(value?: string) {
-  const date = dateOnly(value ?? new Date());
+  const date = dateOnly(value ?? todayDateOnly());
   return new Date(date.getTime() - ((date.getUTCDay() + 6) % 7) * DAY_MS);
 }
 
@@ -18,11 +19,12 @@ export default async function WorkforceSchedulePage({ searchParams }: { searchPa
   const board = await getGlobalScheduleBoard(actor, requestedBranch, start);
   if (!board.branches.length) return <div className="rounded-2xl border border-outline-variant bg-surface p-6">No tienes sucursales autorizadas para programar horarios.</div>;
 
-  const branchById = new Map(board.branches.map((branch) => [branch.id, branch]));
-  const formatTime = (value: Date, branchId: string) => new Intl.DateTimeFormat("es-MX", {
-    timeZone: branchById.get(branchId)?.timezone ?? board.companyTimezone,
-    hour: "2-digit", minute: "2-digit", hour12: false,
-  }).format(value);
+  const formatTime = (value: Date, branchId: string) => {
+    void branchId;
+    return new Intl.DateTimeFormat("es-MX", {
+      timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit", hour12: false,
+    }).format(value);
+  };
   const previousStart = new Date(start.getTime() - 7 * DAY_MS);
   const allShifts = board.periods.flatMap((period) => period.shifts);
   const model: ScheduleViewModel = {

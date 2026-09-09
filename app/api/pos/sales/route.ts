@@ -6,6 +6,7 @@ import { getDiscountLimitsByRole, verifyManagerPin } from "@/lib/pos/discountLim
 import { getActiveDiscountRules } from "@/lib/pos/discountRules";
 import { setRlsContext, withRlsContext } from "@/lib/rls";
 import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
+import { formatBusinessDateOnly } from "@/lib/dateTime";
 import { hashPayload } from "@/lib/pos2/payloadHash";
 import { consumePosInventory } from "@/lib/pos/v1InventoryGuard";
 import { DomainError } from "@/lib/domain/errors";
@@ -504,8 +505,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
+  const dayStart = businessDayStart(todayDateOnly());
 
   const todayCount = await withRlsContext(user, (tx) => tx.posSale.count({
     where: { branchId, createdAt: { gte: dayStart } },
@@ -513,7 +513,7 @@ export async function POST(request: NextRequest) {
 
   const code = clientOperationId
     ? `POS-${branch.code}-${clientOperationId.replace(/-/g, "").slice(0, 12).toUpperCase()}`
-    : `POS-${branch.code}-${dayStart.toISOString().slice(0, 10).replace(/-/g, "")}-${String(todayCount + 1).padStart(3, "0")}`;
+    : `POS-${branch.code}-${formatBusinessDateOnly(dayStart).replace(/-/g, "")}-${String(todayCount + 1).padStart(3, "0")}`;
   const saleCreatedAt = clientCreatedAt ? new Date(clientCreatedAt) : new Date();
   if (Number.isNaN(saleCreatedAt.getTime())) {
     return NextResponse.json({ error: "La fecha de la venta no es válida." }, { status: 400 });

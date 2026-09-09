@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { withRlsContext } from "@/lib/rls";
 import { ChevronLeftIcon } from "@/components/ui/icons";
 import PrintReceiptButton from "./PrintReceiptButton";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 const PAYMENT_LABELS: Record<string, string> = {
   EFECTIVO: "Efectivo",
@@ -76,7 +77,7 @@ export default async function PosReceiptPage({
 
         <div className="mb-4 space-y-0.5 border-y border-dashed border-outline-variant py-3 text-xs text-on-surface-variant">
           <p>Folio: {sale.code}</p>
-          <p>Fecha: {sale.createdAt.toLocaleString("es-MX")}</p>
+          <p>Fecha: {formatBusinessDateTime(sale.createdAt)}</p>
           <p>Atendió: {sale.soldBy.name}</p>
           {sale.cashCut && <p>Corte: {sale.cashCut.code}</p>}
         </div>
@@ -126,7 +127,7 @@ export default async function PosReceiptPage({
             {sale.cancelledBy && (
               <p>
                 Por {sale.cancelledBy.name}
-                {sale.cancelledAt ? ` · ${sale.cancelledAt.toLocaleString("es-MX")}` : ""}
+                {sale.cancelledAt ? ` · ${formatBusinessDateTime(sale.cancelledAt)}` : ""}
               </p>
             )}
             {sale.cancelReason && <p>Motivo: {sale.cancelReason}</p>}

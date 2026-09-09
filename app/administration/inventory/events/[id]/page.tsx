@@ -8,6 +8,7 @@ import RecountForm from "./RecountForm";
 import MarkFulfilledButton from "./MarkFulfilledButton";
 import EventChecklistTable from "./EventChecklistTable";
 import { ListChecksIcon } from "@/components/ui/icons";
+import { formatBusinessDate, formatBusinessDateTime } from "@/lib/dateTime";
 
 export default async function EventDetailPage({
   params,
@@ -107,7 +108,7 @@ export default async function EventDetailPage({
               <p className="mt-1 text-sm text-on-surface-variant">{event.clientPhone}</p>
             )}
             <p className="mt-2 text-on-surface-variant">
-              {event.location} · {new Date(event.eventDate).toLocaleString("es-MX")} ·{" "}
+              {event.location} · {formatBusinessDateTime(event.eventDate)} ·{" "}
               {event.guestCount} invitados
             </p>
             <p className="mt-1 text-sm text-outline">
@@ -222,7 +223,7 @@ export default async function EventDetailPage({
                   <div>
                     <p className="font-medium text-on-surface">Día {recount.dayNumber}</p>
                     <p className="text-sm text-on-surface-variant">
-                      {new Date(recount.countDate).toLocaleDateString("es-MX")} · {missingCount}{" "}
+                      {formatBusinessDate(recount.countDate)} · {missingCount}{" "}
                       producto{missingCount === 1 ? "" : "s"} por traer
                     </p>
                   </div>

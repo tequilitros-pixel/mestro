@@ -6,6 +6,7 @@ import { ChevronDownIcon } from "@/components/ui/icons";
 import { EnvelopeMovementHistory } from "./EnvelopeMovementHistory";
 import { WithdrawEnvelopeForm } from "./WithdrawEnvelopeForm";
 import { AdjustEnvelopeForm } from "./AdjustEnvelopeForm";
+import { formatCivilDate } from "@/lib/dateTime";
 
 interface EnvelopeSummary {
   id: string;
@@ -23,7 +24,7 @@ const formatMoney = (v: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(v);
 
 const formatDate = (v: string) =>
-  new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "2-digit", month: "2-digit" }).format(new Date(v));
+  formatCivilDate(v, { weekday: "long", day: "2-digit", month: "2-digit" });
 
 const STATUS_LABEL: Record<EnvelopeSummary["status"], string> = {
   PENDIENTE: "Pendiente de recibir",

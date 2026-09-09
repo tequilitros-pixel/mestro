@@ -3,14 +3,18 @@ import { prisma } from "@/lib/prisma";
 import { generateOperationId } from "@/lib/pos2/operationId";
 import { getPriceHistory } from "@/lib/pos2/pricing/history";
 import { createPriceAction, endPriceAction } from "./actions";
+import { formatBusinessDateTime, formatBusinessDateTimeLocal, parseBusinessDateTimeLocal } from "@/lib/dateTime";
 
 const field = "rounded border border-outline-variant bg-background px-2 py-1";
-const localDate = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+const localDate = (date: Date) => formatBusinessDateTimeLocal(date);
 
 export default async function PricingAdministrationPage({ searchParams }: { searchParams: Promise<{ branchId?: string; target?: string; at?: string }> }) {
   await requireAdmin();
   const query = await searchParams;
-  const now = query.at ? new Date(query.at) : new Date();
+  const now = (() => {
+    if (!query.at) return new Date();
+    try { return parseBusinessDateTimeLocal(query.at); } catch { return new Date(); }
+  })();
   const [products, branches, history] = await Promise.all([
     prisma.posProduct.findMany({ where: { archivedAt: null }, include: { variants: { where: { active: true }, orderBy: { position: "asc" } } }, orderBy: { name: "asc" } }),
     prisma.branch.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
@@ -33,7 +37,7 @@ export default async function PricingAdministrationPage({ searchParams }: { sear
     <section className="space-y-2"><h2 className="text-lg font-semibold">Historial publicado</h2>{history.length === 0 && <p className="text-sm">Todavía no hay versiones.</p>}{history.map((item) => <article key={item.id} className="grid gap-2 rounded-lg border p-3 text-sm lg:grid-cols-[2fr_1fr_1fr_2fr]">
       <div><strong>{item.variant ? `${item.variant.product.name} · ${item.variant.name}` : item.product?.name}</strong><div>{item.scope === "GLOBAL" ? "Global" : item.branch?.name}</div></div>
       <div>${item.amount} {item.currency}<br/><span className="font-semibold">{item.state}</span></div>
-      <div>{item.validFrom.toLocaleString("es-MX")}<br/>{item.effectiveEnd ? `→ ${item.effectiveEnd.toLocaleString("es-MX")}` : "→ sin fin"}</div>
+      <div>{formatBusinessDateTime(item.validFrom)}<br/>{item.effectiveEnd ? `→ ${formatBusinessDateTime(item.effectiveEnd)}` : "→ sin fin"}</div>
       {!item.termination && <form action={endPriceAction} className="flex flex-wrap gap-1"><input type="hidden" name="operationId" value={generateOperationId()}/><input type="hidden" name="priceVersionId" value={item.id}/><input className={field} name="effectiveAt" type="datetime-local" min={localDate(item.validFrom)} defaultValue={localDate(now > item.validFrom ? now : item.validFrom)} required/><input className={field} name="reason" minLength={3} required placeholder="Motivo explícito"/><button className="underline">Finalizar</button></form>}
     </article>)}</section>
   </main>;

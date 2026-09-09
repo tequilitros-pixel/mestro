@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createInventoryCountAction, type ActionResult } from "../actions";
+import { todayDateOnly } from "@/lib/dateOnly";
 
 type Branch = { id: string; name: string };
 
@@ -25,7 +26,7 @@ export default function NewCountForm({ branches }: { branches: Branch[] }) {
     }
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDateOnly();
 
   return (
     <form

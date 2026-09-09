@@ -6,12 +6,13 @@ import { useRouter } from "next/navigation";
 import { CalendarIcon, ChevronRightIcon, SearchIcon, XIcon } from "@/components/ui/icons";
 import { EmptyState, FilterBar, StatusBadge } from "@/components/ui/CompactUI";
 import { addDaysToDateOnly, firstDayOfMonth, lastDayOfMonth, todayDateOnly } from "@/lib/dateOnly";
+import { formatBusinessDate } from "@/lib/dateTime";
 
 export type ProcessColumn = { key: string; label: string; width?: string };
 export type ProcessRow = { id: string; href: string; code: string; startedAt: string; status: string; finished: boolean; values: Record<string, string>; filters?: Record<string, string>; search?: string };
 export type ProcessFilter = { key: string; label: string; options: string[] };
 
-const formatDate = (value: string) => new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Mexico_City" }).format(new Date(value));
+const formatDate = (value: string) => formatBusinessDate(value, { day: "2-digit", month: "short", year: "numeric" });
 const MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 export default function ProcessTable({ rows, columns, filters = [], emptyLabel }: { rows: ProcessRow[]; columns: ProcessColumn[]; filters?: ProcessFilter[]; emptyLabel: string }) {

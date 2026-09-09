@@ -3,6 +3,7 @@
 import { useEffect, useState, startTransition } from "react";
 import Link from "next/link";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
+import { formatDateOnly } from "@/lib/dateOnly";
 
 interface Branch {
   id: string;
@@ -101,7 +102,7 @@ export default function CashCutsHistoryPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardLabel>
-                    {cc.branch.name} · {new Date(cc.date).toLocaleDateString("es-MX")}
+                    {cc.branch.name} · {formatDateOnly(new Date(cc.date))}
                   </CardLabel>
                   <CardValue>{cc.code}</CardValue>
                   <p className="text-on-surface-variant text-xs mt-1">

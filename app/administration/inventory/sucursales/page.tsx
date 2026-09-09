@@ -10,11 +10,16 @@ import {
 } from "@/components/ui/icons";
 import PageTabs from "@/components/ui/PageTabs";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  addBusinessDays,
+  businessDayStart,
+  formatBusinessDate,
+  formatBusinessDateOnly,
+  formatCivilDate,
+} from "@/lib/dateTime";
 
 const formatDate = (value: Date) =>
-  new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(
-    value
-  );
+  formatBusinessDate(value, { day: "2-digit", month: "short" });
 
 const entryTypeLabels: Record<string, string> = {
   COMPRA: "Compra",
@@ -46,9 +51,8 @@ export default async function SucursalesInventoryPage() {
   const visibleQuickActions = quickActions.filter(
     (action) => user?.role === "ADMIN" || permissionKeys.has(action.permissionKey),
   );
-  const fourteenDaysAgo = new Date();
-  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-  fourteenDaysAgo.setHours(0, 0, 0, 0);
+  const today = formatBusinessDateOnly(new Date());
+  const fourteenDaysAgo = businessDayStart(addBusinessDays(today, -14));
 
   const [products, recentEntries, entriesForTrend] = await Promise.all([
     prisma.inventoryProduct.findMany({
@@ -82,23 +86,15 @@ export default async function SucursalesInventoryPage() {
 
   const trendMap = new Map<string, number>();
   for (let i = 13; i >= 0; i--) {
-    const day = new Date();
-    day.setDate(day.getDate() - i);
-    day.setHours(0, 0, 0, 0);
-    trendMap.set(day.toISOString().slice(0, 10), 0);
+    trendMap.set(addBusinessDays(today, -i), 0);
   }
   for (const entry of entriesForTrend) {
-    const key = new Date(entry.entryDate).toISOString().slice(0, 10);
+    const key = formatBusinessDateOnly(entry.entryDate);
     if (trendMap.has(key)) trendMap.set(key, (trendMap.get(key) ?? 0) + 1);
   }
   const trendData = Array.from(trendMap.entries()).map(([key, count]) => ({
-    date: new Intl.DateTimeFormat("es-MX", {
-      day: "2-digit",
-      month: "short",
-    }).format(new Date(`${key}T00:00:00`)),
-    label: new Intl.DateTimeFormat("es-MX", { day: "2-digit" }).format(
-      new Date(`${key}T00:00:00`)
-    ),
+    date: formatCivilDate(`${key}T00:00:00.000Z`, { day: "2-digit", month: "short" }),
+    label: formatCivilDate(`${key}T00:00:00.000Z`, { day: "2-digit" }),
     movimientos: count,
   }));
 

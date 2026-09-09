@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { parseDateOnly } from "@/lib/dateOnly";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -37,8 +38,8 @@ export async function GET(req: NextRequest) {
       ...(dateFrom || dateTo
         ? {
             date: {
-              gte: dateFrom ? new Date(dateFrom) : undefined,
-              lte: dateTo ? new Date(dateTo) : undefined,
+              gte: dateFrom ? parseDateOnly(dateFrom) : undefined,
+              lte: dateTo ? parseDateOnly(dateTo) : undefined,
             },
           }
         : {}),

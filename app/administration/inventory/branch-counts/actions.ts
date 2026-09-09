@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds, requireModuleActionAccess } from "@/lib/auth";
 import { isBranchAllowed } from "@/lib/branches/access";
+import { parseDateOnly } from "@/lib/dateOnly";
 
 const INVENTORY_COUNTS_PERMISSION = "/administration/inventory/branch-counts";
 
@@ -33,9 +34,10 @@ export async function createInventoryCountAction(
       return { success: false, error: "La fecha del conteo es obligatoria." };
     }
 
-    const countDate = new Date(countDateRaw);
-
-    if (Number.isNaN(countDate.getTime())) {
+    let countDate: Date;
+    try {
+      countDate = parseDateOnly(countDateRaw);
+    } catch {
       return { success: false, error: "La fecha no es válida." };
     }
 

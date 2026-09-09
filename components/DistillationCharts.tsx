@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
+import { formatBusinessTime } from "@/lib/dateTime";
 
 type Event = {
   createdAt: Date | string;
@@ -25,7 +26,7 @@ export default function DistillationCharts({
   events: Event[];
 }) {
   const data = events.map((event) => ({
-    time: new Date(event.createdAt).toLocaleTimeString(),
+    time: formatBusinessTime(event.createdAt),
     temperature: event.temperature,
     outputTemperature: event.outputTemperature,
     alcohol: event.alcohol,

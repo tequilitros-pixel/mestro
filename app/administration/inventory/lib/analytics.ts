@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { computeStockMatrix, totalStockByProduct } from "./stock";
+import {
+  addBusinessDays,
+  businessDayStart,
+  formatBusinessDateOnly,
+  formatCivilDate,
+} from "@/lib/dateTime";
 
 /**
  * Analítica del inventario para el tablero de inicio.
@@ -99,12 +105,9 @@ export type InventoryAnalytics = {
 export async function getInventoryAnalytics(
   days = ANALYTICS_DAYS,
 ): Promise<InventoryAnalytics> {
-  const since = new Date();
-  since.setHours(0, 0, 0, 0);
-  since.setDate(since.getDate() - (days - 1));
-
-  const staleSince = new Date();
-  staleSince.setDate(staleSince.getDate() - STALE_DAYS);
+  const today = formatBusinessDateOnly(new Date());
+  const since = businessDayStart(addBusinessDays(today, -(days - 1)));
+  const staleSince = businessDayStart(addBusinessDays(today, -STALE_DAYS));
 
   const [products, entries, lastMovements] = await Promise.all([
     prisma.inventoryProduct.findMany({
@@ -233,7 +236,7 @@ export async function getInventoryAnalytics(
     type.units += Math.abs(quantity);
     typeAcc.set(typeLabel, type);
 
-    const dayKey = entry.entryDate.toISOString().slice(0, 10);
+    const dayKey = formatBusinessDateOnly(entry.entryDate);
     const day = dailyAcc.get(dayKey) ?? { consumed: 0, received: 0 };
     day.consumed += consumed;
     day.received += received;
@@ -321,10 +324,7 @@ export async function getInventoryAnalytics(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, value]) => ({
       date,
-      label: new Date(`${date}T12:00:00`).toLocaleDateString("es-MX", {
-        day: "2-digit",
-        month: "short",
-      }),
+      label: formatCivilDate(`${date}T00:00:00.000Z`, { day: "2-digit", month: "short" }),
       consumed: Math.round(value.consumed * 10) / 10,
       received: Math.round(value.received * 10) / 10,
     }));
