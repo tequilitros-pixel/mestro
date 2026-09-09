@@ -7,7 +7,7 @@ import { workforceV1Enabled } from "@/lib/workforce/config";
 const tabs = [
   ["employees", "Empleados"], ["schedule", "Programar horarios"],
   ["clock", "Checador"],
-  ["clock-corrections", "Solicitudes / Correcciones"], ["attendance", "Asistencia"],
+  ["clock-corrections", "Solicitudes"], ["attendance", "Asistencia"],
   ["timesheets", "Horas trabajadas"], ["overtime", "Horas extra"],
   ["payroll", "Nómina"], ["branches", "Sucursales"], ["settings", "Configuración"],
 ];

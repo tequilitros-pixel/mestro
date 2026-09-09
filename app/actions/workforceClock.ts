@@ -13,6 +13,7 @@ import {
 } from "@/lib/workforce/clock/service";
 import type { ClockType } from "@/lib/workforce/clock/effectiveStream";
 import type { LocationInput } from "@/lib/workforce/geofence";
+import { parseZonedDateTimeLocal } from "@/lib/workforce/clock/localDateTime";
 
 const value = (form: FormData, key: string) =>
   String(form.get(key) ?? "").trim();
@@ -40,6 +41,38 @@ function location(form: FormData): LocationInput {
   } catch {
     return { failure: "UNAVAILABLE" };
   }
+}
+async function correctionTimezone(form: FormData) {
+  const branchId = value(form, "branchId");
+  if (branchId) {
+    const branch = await prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { timezone: true },
+    });
+    if (branch?.timezone) return branch.timezone;
+  }
+  const targetClockEventId = value(form, "targetClockEventId");
+  if (targetClockEventId) {
+    const event = await prisma.clockEvent.findUnique({
+      where: { id: targetClockEventId },
+      select: { branch: { select: { timezone: true } } },
+    });
+    if (event?.branch.timezone) return event.branch.timezone;
+  }
+  return "America/Mexico_City";
+}
+async function proposedLocalDateTime(form: FormData) {
+  const date = value(form, "proposedDate");
+  const time = value(form, "proposedTime");
+  const raw = value(form, "proposedOccurredAt");
+  if (date || time) {
+    if (!date || !time) throw new Error("Indica fecha y hora.");
+    return parseZonedDateTimeLocal(date, time, await correctionTimezone(form));
+  }
+  if (!raw) return null;
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+  if (!match) throw new Error("Fecha y hora inválidas.");
+  return parseZonedDateTimeLocal(match[1], match[2], await correctionTimezone(form));
 }
 export async function workforceClockAction(form: FormData) {
   const current = await actor();
@@ -73,6 +106,7 @@ export async function workforceCorrectionRequestAction(form: FormData) {
   const current = await actor();
   const back = value(form, "returnTo");
   try {
+    const proposedOccurredAt = await proposedLocalDateTime(form);
     await requestCorrection(current, {
       type: value(form, "type") as
         "MODIFY_OCCURRED_TIME" | "ADD_MISSING_EVENT" | "VOID_EVENT",
@@ -81,11 +115,10 @@ export async function workforceCorrectionRequestAction(form: FormData) {
       branchId: value(form, "branchId") || null,
       proposedEventType: (value(form, "proposedEventType") ||
         null) as ClockType | null,
-      proposedOccurredAt: value(form, "proposedOccurredAt")
-        ? new Date(value(form, "proposedOccurredAt"))
-        : null,
-      reason: value(form, "reason"),
+      proposedOccurredAt,
+      reason: value(form, "reason") || "Solicitud de corrección de registro.",
     });
+    revalidatePath("/workforce/requests");
     done(back, "saved", "Solicitud enviada.");
   } catch (error) {
     unstable_rethrow(error);
@@ -101,17 +134,19 @@ export async function workforceAdminClockCorrectionAction(form: FormData) {
   const current = await actor();
   const back = value(form, "returnTo");
   try {
+    const proposedOccurredAt = await proposedLocalDateTime(form);
     await applyAdminClockCorrection(current, {
       employmentId: value(form, "employmentId"),
       type: value(form, "type") as "MODIFY_OCCURRED_TIME" | "ADD_MISSING_EVENT" | "VOID_EVENT",
       targetClockEventId: value(form, "targetClockEventId") || null,
       branchId: value(form, "branchId") || null,
       proposedEventType: (value(form, "proposedEventType") || null) as ClockType | null,
-      proposedOccurredAt: value(form, "proposedOccurredAt") ? new Date(value(form, "proposedOccurredAt")) : null,
+      proposedOccurredAt,
       reason: value(form, "reason"),
     });
     revalidatePath("/administration/workforce/timesheets");
     revalidatePath("/administration/workforce/attendance");
+    revalidatePath("/administration/workforce/clock-corrections");
     done(back, "saved", "Corrección aplicada y enviada al cálculo de horas.");
   } catch (error) {
     unstable_rethrow(error);
@@ -129,6 +164,7 @@ export async function workforceCorrectionDecisionAction(form: FormData) {
       rejectionReason: value(form, "rejectionReason"),
     });
     revalidatePath("/administration/workforce/clock-corrections");
+    revalidatePath("/workforce/requests");
     done(back, "saved", "Decisión guardada.");
   } catch (error) {
     unstable_rethrow(error);

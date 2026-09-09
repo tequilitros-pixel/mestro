@@ -46,7 +46,7 @@ export default async function WorkforceEmployeeLayout({
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/workforce/clock#solicitudes"
+            href="/workforce/requests"
           >
             Solicitudes
           </Link>

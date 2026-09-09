@@ -475,6 +475,7 @@ export async function requestCorrection(
   context: ClockServiceContext = defaultContext,
 ) {
   const employment = await resolveOwnActiveEmployment(actor);
+  if (!employment.employee.active) throw new Error("Tu perfil de empleado está inactivo.");
   if (input.reason.trim().length < 5) throw new Error("Razón demasiado corta.");
   const targets = Number(Boolean(input.targetClockEventId)) +
     Number(Boolean(input.targetCorrectionId));
@@ -627,6 +628,8 @@ export async function decideCorrection(
 ) {
   if (actor.role !== "ADMIN")
     throw new Error("No autorizado.");
+  if (input.decision === "REJECTED" && (input.rejectionReason?.trim().length ?? 0) < 5)
+    throw new Error("Motivo de rechazo obligatorio.");
   return serializable(async (tx) => {
     const correction = await tx.clockCorrection.findUnique({
       where: { id: input.correctionId },
@@ -647,8 +650,7 @@ export async function decideCorrection(
               status: "REJECTED",
               rejectedById: actor.id,
               rejectedAt: context.clock.now(),
-              rejectionReason:
-                input.rejectionReason?.trim() || "Rechazada por manager",
+              rejectionReason: input.rejectionReason!.trim(),
             },
     });
     if (input.decision === "APPROVED")
@@ -656,15 +658,45 @@ export async function decideCorrection(
     return updated;
   }, context.transactionTimeoutMs);
 }
-export async function listPendingCorrections() {
+
+const correctionListInclude = {
+  employment: { include: { employee: true } },
+  branch: true,
+  targetClockEvent: { include: { branch: true } },
+  requestedBy: { select: { name: true } },
+  approvedBy: { select: { name: true } },
+  rejectedBy: { select: { name: true } },
+} as const;
+
+type CorrectionStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+
+export async function listCorrections(input: {
+  status?: CorrectionStatus;
+  branchId?: string;
+  requestedFrom?: Date;
+  requestedTo?: Date;
+} = {}) {
   return prisma.clockCorrection.findMany({
-    where: { status: "PENDING" },
-    include: {
-      employment: { include: { employee: true } },
-      branch: true,
-      targetClockEvent: true,
-      requestedBy: { select: { name: true } },
+    where: {
+      status: input.status,
+      branchId: input.branchId || undefined,
+      requestedAt: input.requestedFrom || input.requestedTo
+        ? { gte: input.requestedFrom, lt: input.requestedTo }
+        : undefined,
     },
+    include: correctionListInclude,
     orderBy: { requestedAt: "asc" },
   });
+}
+
+export async function listOwnCorrections(actor: ClockActor) {
+  return prisma.clockCorrection.findMany({
+    where: { requestedById: actor.id },
+    include: correctionListInclude,
+    orderBy: [{ requestedAt: "desc" }, { id: "desc" }],
+  });
+}
+
+export async function listPendingCorrections() {
+  return listCorrections({ status: "PENDING" });
 }

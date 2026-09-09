@@ -1,12 +1,10 @@
 import { ClockStatus } from "./ClockStatus";
 import { clockError, clockSuccess, userClockEventLabel } from "./presentation";
 import { randomUUID } from "node:crypto";
+import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { getCurrentUser } from "@/lib/auth";
 import { getClockDashboard } from "@/lib/workforce/clock/service";
-import {
-  workforceCorrectionRequestAction,
-} from "@/app/actions/workforceClock";
 import { ClockActionForm } from "./ClockActionForm";
 
 export default async function ClockPage({
@@ -129,77 +127,9 @@ export default async function ClockPage({
       ) : (
         <Card>No hay sucursal autorizada ni Shift publicado cercano.</Card>
       )}
-      <div id="solicitudes">
       <Card>
-        <details>
-          <summary className="cursor-pointer font-bold">
-            Solicitar corrección
-          </summary>
-          <form
-            action={workforceCorrectionRequestAction}
-            className="mt-3 space-y-2"
-          >
-            <input type="hidden" name="returnTo" value={back} />
-            <label className="block text-sm">
-              Tipo
-              <select name="type" className="mt-1 w-full rounded-lg border p-3">
-                <option value="ADD_MISSING_EVENT">Evento faltante</option>
-                <option value="MODIFY_OCCURRED_TIME">Hora incorrecta</option>
-                <option value="VOID_EVENT">Evento duplicado</option>
-              </select>
-            </label>
-            <label className="block text-sm">
-              Evento observado
-              <select
-                name="targetClockEventId"
-                className="mt-1 w-full rounded-lg border p-3"
-              >
-                <option value="">No aplica</option>
-                {dashboard.lastEvent ? (
-                  <option
-                    value={dashboard.lastEvent.originalClockEventId ?? ""}
-                  >
-                    {userClockEventLabel(dashboard.lastEvent.type)} ·{" "}
-                    {dashboard.lastEvent.occurredAt.toISOString()}
-                  </option>
-                ) : null}
-              </select>
-            </label>
-            <input type="hidden" name="branchId" value={branch?.id ?? ""} />
-            <label className="block text-sm">
-              Evento propuesto
-              <select
-                name="proposedEventType"
-                className="mt-1 w-full rounded-lg border p-3"
-              >
-                <option value="CLOCK_IN">Entrada</option>
-                <option value="CLOCK_OUT">Salida</option>
-              </select>
-            </label>
-            <label className="block text-sm">
-              Hora propuesta
-              <input
-                name="proposedOccurredAt"
-                type="datetime-local"
-                className="mt-1 w-full rounded-lg border p-3"
-              />
-            </label>
-            <label className="block text-sm">
-              Razón
-              <textarea
-                required
-                minLength={5}
-                name="reason"
-                className="mt-1 w-full rounded-lg border p-3"
-              />
-            </label>
-            <button className="min-h-12 w-full rounded-xl border border-primary px-4 py-3 font-bold text-primary">
-              Enviar solicitud
-            </button>
-          </form>
-        </details>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-bold">¿Algo no coincide?</h2><p className="text-sm text-on-surface-variant">Solicita una corrección sin modificar tus horas de inmediato.</p></div><Link href="/workforce/requests" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-primary px-4 py-3 font-bold text-primary">Solicitar corrección</Link></div>
       </Card>
-      </div>
     </section>
   );
 }

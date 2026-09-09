@@ -14,6 +14,7 @@ export const ALWAYS_AVAILABLE_PATHS = [
   "/workforce/availability",
   "/workforce/clock",
   "/workforce/timesheet",
+  "/workforce/requests",
   "/workforce/payroll",
 ] as const;
 

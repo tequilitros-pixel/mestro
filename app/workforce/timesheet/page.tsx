@@ -64,6 +64,7 @@ export default async function EmployeeTimesheetPage({
         <h2 className="text-2xl font-black">Mis horas</h2>
         <p className="text-sm">{dateKey(sheet.periodStart)} → {dateKey(sheet.periodEnd)} · {humanLabel(timesheetStatusLabels, sheet.status)}</p>
       </div>
+      <Link href="/workforce/requests" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-primary px-4 py-3 font-bold text-primary">Solicitar corrección</Link>
       <Card>
         <form method="get" className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <label className="flex-1 text-sm">
