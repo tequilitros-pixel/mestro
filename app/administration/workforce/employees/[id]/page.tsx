@@ -13,6 +13,7 @@ import {
 } from "@/app/actions/workforceEmployment";
 import { SubmitButton } from "../SubmitButton";
 import { getEmployee } from "@/lib/workforce/employment/service";
+import { IdentityControls } from "../IdentityControls";
 
 const field = "mt-1 w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm";
 const panel = "space-y-4 rounded-xl border border-outline-variant p-4 sm:p-5";
@@ -85,11 +86,15 @@ export default async function EmployeeDetail({
               aria-checked={open.status === "ACTIVE"}
               className={"min-h-12 rounded-full border px-4 py-2 font-bold " + (open.status === "ACTIVE" ? "border-primary bg-primary/10 text-primary" : "border-outline-variant bg-surface-container text-on-surface-variant")}
             >
-              <span aria-hidden="true">{open.status === "ACTIVE" ? "●" : "○"}</span> {open.status === "ACTIVE" ? "Activo" : "Inactivo"}
+              <span aria-hidden="true">{open.status === "ACTIVE" ? "●" : "○"}</span> Relación laboral: {open.status === "ACTIVE" ? "Activa" : "Inactiva"}
             </button>
           </form>
-        ) : <span className="rounded-full border border-outline-variant px-4 py-2 font-bold text-on-surface-variant">● Baja</span>}
+        ) : <span className="rounded-full border border-outline-variant px-4 py-2 font-bold text-on-surface-variant">Relación laboral: Baja</span>}
       </header>
+
+      <IdentityControls employeeId={id} employeeActive={employee.active}
+        userId={employee.user?.id ?? null} userActive={employee.user?.active ?? null}
+        hasActiveEmployment={employee.employments.some(employment => employment.status === "ACTIVE")} />
 
       {query.error && <p role="alert" className="rounded-lg border border-error p-3 text-error">{query.error}</p>}
       {query.saved && <p role="status" className="rounded-lg border p-3">Cambios guardados.</p>}

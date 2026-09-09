@@ -1,5 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "crypto";
+import type { Prisma } from "@prisma/client";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getDefaultPathForModuleKeys, isConfigurablePermissionKey } from "@/lib/permission-modules";
@@ -46,8 +47,9 @@ export async function revokeCurrentSession() {
   cookieStore.delete("maestro_role");
 }
 
-export async function revokeAllUserSessions(userId: string) {
-  await prisma.userSession.deleteMany({ where: { userId } });
+export async function revokeAllUserSessions(userId: string, client: Pick<Prisma.TransactionClient, "userSession"> = prisma) {
+  const result = await client.userSession.deleteMany({ where: { userId } });
+  return result.count;
 }
 
 export async function destinationForUser(user: { id: string; role: string }) {

@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import type { UserRole } from "@prisma/client";
 import { normalizeMexicanPhone } from "@/lib/phone";
+import { changeIdentityState } from "@/lib/workforce/identity/service";
+import { IdentityChangeError } from "@/lib/workforce/identity/operations";
 
 export async function getPersonnel() {
   return prisma.user.findMany({
@@ -227,7 +229,11 @@ export async function updatePersonnelActive(userId: string, active: boolean) {
     return { error: "No tienes permiso" };
   }
 
-  await prisma.user.update({ where: { id: userId }, data: { active } });
+  try {
+    await changeIdentityState(currentUser, { target: "USER", userId, active });
+  } catch (error) {
+    return { error: error instanceof IdentityChangeError ? error.message : "No se pudo actualizar el acceso." };
+  }
   revalidatePath("/administration/personnel");
   return { success: true };
 }

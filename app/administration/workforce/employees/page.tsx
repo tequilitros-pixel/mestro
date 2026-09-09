@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { listEmployees } from "@/lib/workforce/employment/service";
-import { normalizeEmployeeStatusFilter, selectEmploymentForStatus } from "@/lib/workforce/employment/presentation";
+import { employeeMatchesStatus, normalizeEmployeeStatusFilter, selectEmploymentForStatus } from "@/lib/workforce/employment/presentation";
 import { prisma } from "@/lib/prisma";
 
 const states: Record<string, string> = {
@@ -35,20 +35,20 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
 
   const rows = all
     .map((employee) => {
-      const current = selectEmploymentForStatus(employee.employments, statusFilter);
+      const current = selectEmploymentForStatus(employee.employments, statusFilter === "INACTIVE" && !employee.active ? "ALL" : statusFilter);
       const assignments = current && current.status !== "TERMINATED" ? current.branchAssignments : [];
       return {
         employee,
         assignments,
         home: assignments.find((assignment) => assignment.type === "HOME")?.branch.name ?? "Sin sucursal",
-        status: current?.status ?? "NONE",
+        status: current?.status ?? ("NONE" as const),
         rate: current?.status !== "TERMINATED" ? current?.payRates[0] : null,
       };
     })
     .filter((row) => {
       const haystack = (row.employee.displayName ?? "") + " " + (row.employee.employeeNumber ?? "") + " " + (row.employee.user?.username ?? "");
       const queryMatches = !filters.q || haystack.toLocaleLowerCase().includes(filters.q.toLocaleLowerCase());
-      const statusMatches = statusFilter === "ALL" || row.status === statusFilter;
+      const statusMatches = employeeMatchesStatus(row.employee.active, row.status, statusFilter);
       const branchMatches = !filters.branch || row.assignments.some((assignment) => assignment.branchId === filters.branch);
       return queryMatches && statusMatches && branchMatches;
     });
@@ -106,7 +106,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
                     {row.employee.displayName ?? "Sin nombre"}
                   </Link>
                 </td>
-                <td className="p-3">{states[row.status]}</td>
+                <td className="p-3">{states[row.status]}{!row.employee.active && <span className="mt-1 block text-xs text-on-surface-variant">Operativo inactivo</span>}</td>
                 <td className="break-words p-3">{row.home}</td>
                 <td className="break-words p-3">{formatRate(row.rate)}</td>
                 <td className="break-words p-3">{row.employee.user ? <><span>@{row.employee.user.username}</span><span className="mt-1 block text-xs text-on-surface-variant">{row.employee.user.active ? "Habilitado" : "Deshabilitado"}</span></> : "Sin acceso"}</td>
@@ -121,7 +121,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
           <Link key={row.employee.id} href={"/administration/workforce/employees/" + row.employee.id} className="block rounded-xl border border-outline-variant p-4 hover:bg-surface-container/60">
             <div className="flex items-start justify-between gap-3">
               <h2 className="break-words font-bold">{row.employee.displayName ?? "Sin nombre"}</h2>
-              <span className="shrink-0 text-sm">{states[row.status]}</span>
+              <span className="shrink-0 text-sm">{states[row.status]}{!row.employee.active && <span className="block text-xs">Operativo inactivo</span>}</span>
             </div>
             <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
               <div><dt className="text-xs text-on-surface-variant">Sucursal principal</dt><dd className="break-words">{row.home}</dd></div>
