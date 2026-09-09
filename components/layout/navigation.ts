@@ -176,6 +176,12 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       operatorAllowed: true,
     },
     {
+      href: "/boiler",
+      label: "Caldera",
+      icon: FlameIcon,
+      iconVariant: "orange",
+    },
+    {
       href: "/milling",
       label: "Molienda",
       icon: GearIcon,
@@ -617,6 +623,7 @@ export function getCurrentModule(pathname: string): AppModule {
     "/plant",
     "/lots",
     "/cooking",
+    "/boiler",
     "/milling",
     "/fermentation",
     "/distillation",
