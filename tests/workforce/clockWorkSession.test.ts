@@ -198,6 +198,45 @@ test("MODIFY_OCCURRED_TIME changes effective time", () => {
   );
   assert.equal(stream[1].occurredAt.toISOString(), "2026-09-01T17:00:00.000Z");
 });
+test("MODIFY_OCCURRED_TIME can correct a break without changing the source event", () => {
+  const stream = buildEffectiveClockStream(
+    [
+      observed("1", "CLOCK_IN", "2026-09-01T09:00:00Z"),
+      observed("2", "BREAK_START", "2026-09-01T12:00:00Z"),
+      observed("3", "BREAK_END", "2026-09-01T13:00:00Z"),
+      observed("4", "CLOCK_OUT", "2026-09-01T17:00:00Z"),
+    ],
+    [
+      correction({
+        type: "MODIFY_OCCURRED_TIME",
+        targetClockEventId: "2",
+        proposedOccurredAt: at("2026-09-01T12:15:00Z"),
+      }),
+    ],
+  );
+  const session = reconstructWorkSessions(stream)[0];
+  assert.equal(stream.find((event) => event.type === "BREAK_START")?.occurredAt.toISOString(), "2026-09-01T12:15:00.000Z");
+  assert.equal(session.breakMinutes, 45);
+});
+test("ADD_MISSING_EVENT can close an incomplete break", () => {
+  const session = reconstructWorkSessions(
+    buildEffectiveClockStream(
+      [
+        observed("1", "CLOCK_IN", "2026-09-01T09:00:00Z"),
+        observed("2", "BREAK_START", "2026-09-01T12:00:00Z"),
+        observed("3", "CLOCK_OUT", "2026-09-01T17:00:00Z"),
+      ],
+      [
+        correction({
+          id: "break-end",
+          proposedEventType: "BREAK_END",
+          proposedOccurredAt: at("2026-09-01T12:30:00Z"),
+        }),
+      ],
+    ),
+  )[0];
+  assert.deepEqual({ status: session.status, breakMinutes: session.breakMinutes }, { status: "COMPLETE", breakMinutes: 30 });
+});
 test("VOID_EVENT removes observed duplicate", () => {
   const stream = buildEffectiveClockStream(
     [
