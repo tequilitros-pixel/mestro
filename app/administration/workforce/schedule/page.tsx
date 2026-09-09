@@ -2,6 +2,7 @@ import { getAccessibleBranchIds, requireModuleAccess } from "@/lib/auth";
 import { dateOnly } from "@/lib/workforce/availability/rules";
 import { dateKey, DAY_MS } from "@/lib/workforce/scheduling/rules";
 import { todayDateOnly } from "@/lib/dateOnly";
+import { formatBusinessTime } from "@/lib/dateTime";
 import { getGlobalScheduleBoard, type SchedulingActor } from "@/lib/workforce/scheduling/service";
 import { ScheduleExperience, type ScheduleViewModel } from "./ScheduleExperience";
 
@@ -19,12 +20,6 @@ export default async function WorkforceSchedulePage({ searchParams }: { searchPa
   const board = await getGlobalScheduleBoard(actor, requestedBranch, start);
   if (!board.branches.length) return <div className="rounded-2xl border border-outline-variant bg-surface p-6">No tienes sucursales autorizadas para programar horarios.</div>;
 
-  const formatTime = (value: Date, branchId: string) => {
-    void branchId;
-    return new Intl.DateTimeFormat("es-MX", {
-      timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit", hour12: false,
-    }).format(value);
-  };
   const previousStart = new Date(start.getTime() - 7 * DAY_MS);
   const allShifts = board.periods.flatMap((period) => period.shifts);
   const model: ScheduleViewModel = {
@@ -44,7 +39,7 @@ export default async function WorkforceSchedulePage({ searchParams }: { searchPa
     shifts: allShifts.map((shift) => ({
       id: shift.id, periodId: shift.schedulePeriodId, branchId: shift.branchId, branchName: shift.branch.name, branchColor: shift.branch.color,
       employmentId: shift.employmentId, employeeName: shift.employment?.employee.displayName ?? null, date: dateKey(shift.businessDate),
-      start: formatTime(shift.startAt, shift.branchId), end: formatTime(shift.endAt, shift.branchId), breakMinutes: shift.expectedBreakMinutes,
+      start: formatBusinessTime(shift.startAt), end: formatBusinessTime(shift.endAt), breakMinutes: shift.expectedBreakMinutes,
       version: shift.version, cancelled: shift.status === "CANCELLED", warnings: board.shiftWarnings.get(shift.id) ?? [],
       revisions: shift.revisions.map((revision) => ({ id: revision.id, reason: revision.reason, by: revision.changedBy.name, at: revision.changedAt.toISOString() })),
     })),
@@ -60,7 +55,7 @@ export default async function WorkforceSchedulePage({ searchParams }: { searchPa
         shifts: period.shifts.map((shift) => ({
           id: shift.id, employeeName: shift.employment?.employee.displayName ?? "Sin asignar",
           dayOffset: Math.round((shift.businessDate.getTime() - previousStart.getTime()) / DAY_MS),
-          start: formatTime(shift.startAt, period.branchId), end: formatTime(shift.endAt, period.branchId),
+          start: formatBusinessTime(shift.startAt), end: formatBusinessTime(shift.endAt),
         })),
       })),
     },

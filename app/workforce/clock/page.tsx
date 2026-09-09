@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Card } from "@/components/ui/Card";
 import { getCurrentUser } from "@/lib/auth";
+import { formatBusinessTime } from "@/lib/dateTime";
 import { getClockDashboard } from "@/lib/workforce/clock/service";
 import {
   workforceClockAction,
@@ -78,15 +79,9 @@ export default async function ClockPage({
           <p className="rounded-lg bg-surface-container p-3 text-sm">
             Turno publicado · {dashboard.shifts[0].branch.name}
             <br />
-            {dashboard.shifts[0].startAt.toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatBusinessTime(dashboard.shifts[0].startAt)}
             –
-            {dashboard.shifts[0].endAt.toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatBusinessTime(dashboard.shifts[0].endAt)}
           </p>
         ) : (
           <p className="rounded-lg bg-secondary/10 p-3 text-sm">
