@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { getCurrentUser } from "@/lib/auth";
 import { getClockDashboard } from "@/lib/workforce/clock/service";
+import { resolveBranchGeofencePolicy } from "@/lib/workforce/geofence";
 import { ClockActionForm } from "./ClockActionForm";
 
 export default async function ClockPage({
@@ -43,11 +44,6 @@ export default async function ClockPage({
       .map((shift) => shift.branch)
       .filter((candidate) => !dashboard.branches.some((item) => item.id === candidate.id)),
   ];
-  const requiresForAction = primary === "CLOCK_IN"
-    ? dashboard.locationPolicy.requireGeolocationClockIn
-    : primary === "CLOCK_OUT"
-      ? dashboard.locationPolicy.requireGeolocationClockOut
-      : false;
   const dashboardTimezone = dashboard.companyTimezone ?? "America/Mexico_City";
   const preferredBranchId = dashboard.state === "NO_SESSION"
     ? dashboard.shifts[0]?.branchId
@@ -114,7 +110,11 @@ export default async function ClockPage({
               branches={availableBranches.map((item) => ({
                 id: item.id,
                 name: item.name,
-                requiresLocation: Boolean(requiresForAction && item.geofenceEnabled && item.geofenceId),
+                requiresLocation: primary === "CLOCK_IN"
+                  ? resolveBranchGeofencePolicy(item, dashboard.locationPolicy).requireGeolocationClockIn
+                  : primary === "CLOCK_OUT"
+                    ? resolveBranchGeofencePolicy(item, dashboard.locationPolicy).requireGeolocationClockOut
+                    : false,
               }))}
               defaultBranchId={branch.id}
               type={primary}

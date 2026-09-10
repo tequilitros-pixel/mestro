@@ -1,5 +1,10 @@
 "use server";
 
+import {
+  BRANCH_GEOFENCE_MODES,
+  type BranchGeofenceMode,
+} from "@/lib/workforce/geofence";
+
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { withRlsContext } from "@/lib/rls";
@@ -110,15 +115,19 @@ export async function updateWorkforceBranchAction(input: {
   }
 }
 
-export async function updateBranchGeofenceAction(input: { branchId: string; enabled: boolean; latitude: number; longitude: number; radius: number }) {
+export async function updateBranchGeofenceAction(input: { branchId: string; enabled: boolean; mode?: BranchGeofenceMode | null; latitude: number; longitude: number; radius: number }) {
   const admin = await requireAdmin();
-  if (input.enabled && !validGeofenceConfig(input.latitude, input.longitude, input.radius)) return { error: "Coordenadas o radio de geozona inválidos." };
+  if (input.mode !== undefined && input.mode !== null && !BRANCH_GEOFENCE_MODES.includes(input.mode)) return { error: "Modo de geozona inválido." };
+  if ((input.mode === "WARN" || input.mode === "BLOCK") && !input.enabled) return { error: "Activa la geozona antes de seleccionar WARN o BLOCK." };
+  const storedMode = input.mode === undefined ? (input.enabled ? null : "OFF") : input.mode;
+  const shouldEnable = input.enabled && storedMode !== "OFF";
+  if (shouldEnable && !validGeofenceConfig(input.latitude, input.longitude, input.radius)) return { error: "Coordenadas o radio de geozona inválidos." };
   try {
     await withRlsContext(admin, async (tx) => {
       const branch = await tx.branch.findUnique({ where: { id: input.branchId }, include: { geofence: { include: { branches: { select: { id: true } } } } } });
       if (!branch) throw new Error("Sucursal no encontrada.");
-      if (!input.enabled) {
-        await tx.branch.update({ where: { id: branch.id }, data: { geofenceEnabled: false } });
+      if (!shouldEnable) {
+        await tx.branch.update({ where: { id: branch.id }, data: { geofenceEnabled: false, geofenceMode: storedMode } });
         return;
       }
       await assertActiveBranch(tx, branch.id);
@@ -128,7 +137,7 @@ export async function updateBranchGeofenceAction(input: { branchId: string; enab
       } else {
         await tx.geofence.update({ where: { id: branch.geofence.id }, data: { latitude: input.latitude, longitude: input.longitude, radius: input.radius } });
       }
-      await tx.branch.update({ where: { id: branch.id }, data: { geofenceId, geofenceEnabled: true } });
+      await tx.branch.update({ where: { id: branch.id }, data: { geofenceId, geofenceEnabled: true, geofenceMode: storedMode } });
     });
     revalidatePath(BRANCHES_PATH);
     revalidatePath("/workforce/clock");

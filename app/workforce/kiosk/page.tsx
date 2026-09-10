@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Card } from "@/components/ui/Card";
 import { prisma } from "@/lib/prisma";
 import { resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
+import { resolveBranchGeofencePolicy } from "@/lib/workforce/geofence";
 import { KioskClockForm } from "./KioskClockForm";
 
 export default async function KioskPage({
@@ -16,6 +17,7 @@ export default async function KioskPage({
   const query = await searchParams;
   const [branches, policy] = await Promise.all([prisma.branch.findMany({
     where: { active: true },
+    include: { geofence: true },
     orderBy: { name: "asc" },
   }), resolveWorkforcePolicy(new Date())]);
   const selectedBranch = branches.some((branch) => branch.id === query.branchId)
@@ -49,6 +51,9 @@ export default async function KioskPage({
     })
     : [];
   const selectedBranchRecord = branches.find((branch) => branch.id === selectedBranch);
+  const selectedBranchPolicy = selectedBranchRecord
+    ? resolveBranchGeofencePolicy(selectedBranchRecord, policy)
+    : null;
   return (
     <section className="mx-auto max-w-xl space-y-4">
       {query.saved ? (
@@ -93,7 +98,7 @@ export default async function KioskPage({
           </button>
         </form>
         {selectedBranch ? (
-        <KioskClockForm branchId={selectedBranch} requiresLocation={Boolean(selectedBranchRecord?.geofenceEnabled && selectedBranchRecord.geofenceId && (policy.requireGeolocationClockIn || policy.requireGeolocationClockOut))} idempotencyKey={randomUUID()} employees={employees.filter((employee) => employee.employments.length === 1).map((employee) => ({ id: employee.userId ?? "", name: employee.displayName ?? "Empleado", hasOpenShift: employee.employments[0].workSessions.length > 0 }))} />
+        <KioskClockForm branchId={selectedBranch} requiresLocation={Boolean(selectedBranchPolicy?.requireGeolocationClockIn || selectedBranchPolicy?.requireGeolocationClockOut)} idempotencyKey={randomUUID()} employees={employees.filter((employee) => employee.employments.length === 1).map((employee) => ({ id: employee.userId ?? "", name: employee.displayName ?? "Empleado", hasOpenShift: employee.employments[0].workSessions.length > 0 }))} />
         ) : (
           <p className="text-sm text-on-surface-variant">
             Selecciona una sucursal antes de mostrar empleados.

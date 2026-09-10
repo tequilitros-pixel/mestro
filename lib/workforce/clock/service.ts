@@ -9,6 +9,7 @@ import {
   evaluateGeofence,
   geofenceDecision,
   geofenceMessage,
+  resolveBranchGeofencePolicy,
   type LocationInput,
 } from "@/lib/workforce/geofence";
 import {
@@ -318,6 +319,9 @@ export async function getClockDashboard(actor: ClockActor, context: ClockService
     locationPolicy: {
       requireGeolocationClockIn: locationPolicy.requireGeolocationClockIn,
       requireGeolocationClockOut: locationPolicy.requireGeolocationClockOut,
+      geofenceOutsideBehavior: locationPolicy.geofenceOutsideBehavior,
+      requireOutsideGeofenceReview: locationPolicy.requireOutsideGeofenceReview,
+      maximumGpsAccuracyMeters: locationPolicy.maximumGpsAccuracyMeters,
     },
   };
 }
@@ -392,20 +396,21 @@ export async function recordClockEvent(
       where: { id: input.branchId },
       include: { geofence: true },
     });
+    const branchPolicy = resolveBranchGeofencePolicy(branch, policy);
     const requiresGeolocation = input.type === "CLOCK_IN"
-      ? policy.requireGeolocationClockIn
+      ? branchPolicy.requireGeolocationClockIn
       : input.type === "CLOCK_OUT"
-        ? policy.requireGeolocationClockOut
+        ? branchPolicy.requireGeolocationClockOut
         : false;
     const geolocation = evaluateGeofence(
       branch,
       input.location,
       requiresGeolocation,
-      policy.maximumGpsAccuracyMeters,
+      branchPolicy.maximumGpsAccuracyMeters,
     );
     const locationDecision = geofenceDecision(
       geolocation.result,
-      policy.geofenceOutsideBehavior,
+      branchPolicy.geofenceOutsideBehavior,
     );
     if (!locationDecision.allow)
       throw new Error(geofenceMessage(geolocation) ?? "No se pudo validar la ubicación.");
@@ -423,7 +428,7 @@ export async function recordClockEvent(
     });
     await materialize(tx, input.employmentId, context);
     let attendanceExceptionId: string | null = null;
-    if (locationDecision.needsReview && policy.requireOutsideGeofenceReview) {
+    if (locationDecision.needsReview && branchPolicy.requireOutsideGeofenceReview) {
       const exception = await tx.attendanceException.create({
         data: {
           employmentId: input.employmentId,
@@ -436,8 +441,9 @@ export async function recordClockEvent(
           fingerprint: `geofence:${event.id}`,
           policySnapshot: {
             policyVersion: policy.version,
+            geofenceMode: branchPolicy.mode,
             result: geolocation.result,
-            outsideBehavior: policy.geofenceOutsideBehavior,
+            outsideBehavior: branchPolicy.geofenceOutsideBehavior,
           },
           detectedAt: now,
           evaluatedAt: now,

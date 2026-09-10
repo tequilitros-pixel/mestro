@@ -1024,6 +1024,8 @@ model Branch {
   geofence                  Geofence?         @relation(fields: [geofenceId], references: [id])
   /// Off by default for existing branches; the relation alone never enforces location.
   geofenceEnabled           Boolean           @default(false)
+  /// Null means use the current global Workforce policy.
+  geofenceMode              BranchGeofenceMode?
   templateApplyMode         TemplateApplyMode @default(ASK_BEFORE_APPLY)
   defaultScheduleTemplateId String?           @unique
   defaultScheduleTemplate   ScheduleTemplate? @relation("WorkforceBranchDefaultScheduleTemplate", fields: [defaultScheduleTemplateId], references: [id], onDelete: SetNull)
@@ -1124,6 +1126,12 @@ enum GeofenceReviewStatus {
 enum GeofenceOutsideBehavior {
   BLOCK
   ALLOW_WITH_EXCEPTION
+}
+
+enum BranchGeofenceMode {
+  OFF
+  WARN
+  BLOCK
 }
 
 enum ClockActionType {

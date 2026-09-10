@@ -11,7 +11,12 @@ import {
 } from "@/app/actions/workforceBranches";
 import { useToast } from "@/components/ui/Toast";
 import { MapPinIcon, PlusIcon, UsersIcon, ClockIcon } from "@/components/ui/icons";
-import { geofenceResultLabel } from "@/lib/workforce/geofence";
+import {
+  geofenceResultLabel,
+  globalGeofenceMode,
+  resolveBranchGeofencePolicy,
+  type BranchGeofenceMode,
+} from "@/lib/workforce/geofence";
 
 type Template = { id: string; name: string; branchId: string | null; active: boolean; shifts: { id: string; dayOfWeek: number; startTime: string | null; endTime: string | null; breakMinutes: number }[] };
 type Branch = {
@@ -23,6 +28,7 @@ type Branch = {
   color: string | null;
   timezone: string | null;
   geofenceEnabled: boolean;
+  geofenceMode?: BranchGeofenceMode | null;
   templateApplyMode: "ASK_BEFORE_APPLY" | "AUTO_CREATE_DRAFT" | "DO_NOT_APPLY";
   defaultScheduleTemplateId: string | null;
   defaultScheduleTemplate: { id: string; name: string; active: boolean } | null;
@@ -49,8 +55,7 @@ type Evidence = {
 const fieldClass = "h-10 w-full rounded-lg border border-outline-variant bg-background px-3 text-sm text-on-surface outline-none focus:border-primary";
 
 function policyMode(settings: Settings) {
-  if (!settings.requireGeolocationClockIn && !settings.requireGeolocationClockOut) return "OFF";
-  return settings.geofenceOutsideBehavior === "BLOCK" ? "BLOCK" : "WARN";
+  return globalGeofenceMode(settings);
 }
 
 export default function BranchesManager({
@@ -111,6 +116,7 @@ export default function BranchesManager({
             <span className="inline-flex items-center gap-1.5 text-xs text-on-surface-variant"><UsersIcon className="h-3.5 w-3.5" /> {branch.workforceAssignments.filter((item) => item.employment.employee.active).length}</span>
             <div className="space-y-1 text-xs text-on-surface-variant">
               <p><MapPinIcon className="mr-1 inline h-3.5 w-3.5" />{branch.geofenceEnabled && branch.geofence ? `Geozona activa · ${branch.geofence.radius} m` : "Geozona desactivada"}</p>
+              <p>Modo efectivo: <strong>{resolveBranchGeofencePolicy(branch, initialSettings).mode}</strong></p>
               <p><ClockIcon className="mr-1 inline h-3.5 w-3.5" />{branch.defaultScheduleTemplate?.name ?? "Sin plantilla predeterminada"}</p>
             </div>
             <button onClick={() => setSelected(branch)} className="h-8 rounded-md border border-outline-variant px-3 text-xs font-semibold hover:border-outline">Configurar</button>
@@ -170,6 +176,7 @@ function BranchPanel({ branch, templates, initialSettings, onClose, onSaved, onE
   const [templateId, setTemplateId] = useState(branch?.defaultScheduleTemplateId ?? "");
   const [applyMode, setApplyMode] = useState(branch?.templateApplyMode ?? "ASK_BEFORE_APPLY");
   const [geoEnabled, setGeoEnabled] = useState(branch?.geofenceEnabled ?? false);
+  const [modeOverride, setModeOverride] = useState<"GLOBAL" | BranchGeofenceMode>(branch?.geofenceMode ?? "GLOBAL");
   const [latitude, setLatitude] = useState(branch?.geofence?.latitude.toString() ?? "");
   const [longitude, setLongitude] = useState(branch?.geofence?.longitude.toString() ?? "");
   const [radius, setRadius] = useState(branch?.geofence?.radius.toString() ?? "100");
@@ -182,7 +189,7 @@ function BranchPanel({ branch, templates, initialSettings, onClose, onSaved, onE
       : await createWorkforceBranchAction({ name, code, address, timezone });
     if (result.error) { setBusy(false); onError(result.error); return; }
     if (branch) {
-      const geofenceResult = await updateBranchGeofenceAction({ branchId: branch.id, enabled: geoEnabled, latitude: Number(latitude), longitude: Number(longitude), radius: Number(radius) });
+      const geofenceResult = await updateBranchGeofenceAction({ branchId: branch.id, enabled: modeOverride === "OFF" ? false : geoEnabled, mode: modeOverride === "GLOBAL" ? null : modeOverride, latitude: Number(latitude), longitude: Number(longitude), radius: Number(radius) });
       if (geofenceResult.error) { setBusy(false); onError(geofenceResult.error); return; }
     }
     setBusy(false); onSaved(branch ? "Sucursal actualizada." : "Sucursal creada.");
@@ -198,6 +205,7 @@ function BranchPanel({ branch, templates, initialSettings, onClose, onSaved, onE
           <div className="sm:col-span-2"><Field label="Dirección"><input className={fieldClass} value={address} onChange={(e) => setAddress(e.target.value)} /></Field></div>
           <Field label="Timezone IANA"><input className={fieldClass} value={timezone} onChange={(e) => setTimezone(e.target.value)} /></Field>
           {branch && <Field label="Estado"><select aria-label="Estado" className={fieldClass} value={active ? "active" : "inactive"} onChange={(e) => setActive(e.target.value === "active")}><option value="active">Activa</option><option value="inactive">Inactiva</option></select></Field>}
+          {branch && <div className="sm:col-span-2"><label className="block"><span className="mb-1 block text-xs font-medium text-on-surface-variant">Modo de geozona</span><select aria-label="Modo de geozona" className={fieldClass} value={modeOverride} onChange={(e) => { const next = e.target.value as "GLOBAL" | BranchGeofenceMode; setModeOverride(next); if (next === "OFF") setGeoEnabled(false); if (next === "WARN" || next === "BLOCK") setGeoEnabled(true); }}><option value="GLOBAL">Global ({policyMode(initialSettings)})</option><option value="OFF">OFF</option><option value="WARN">WARN</option><option value="BLOCK">BLOCK</option></select></label></div>}
         </div>
 
         {branch && <>
