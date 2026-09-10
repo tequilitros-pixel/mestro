@@ -7,6 +7,7 @@ type TraceActor = { id: string; role: string };
 
 export type Pos2OperationTrace = {
   actor: TraceActor;
+  operation?: string;
   operationId?: string;
   branchId?: string;
   terminalId?: string;
@@ -57,6 +58,7 @@ export async function recordPos2OperationTrace(input: Pos2OperationTrace & {
       correlationId: input.correlationId,
       metadata: {
         status: input.outcome === "FAIL" ? "FAIL" : input.outcome === "SUCCESS" ? "SUCCESS" : "IN_PROGRESS",
+        operation: input.operation ?? null,
         clientOperationId: input.operationId ?? null,
         userId: input.actor.id,
         branchId: input.branchId ?? null,
