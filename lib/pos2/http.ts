@@ -29,10 +29,11 @@ export async function requireTerminalBranch(terminalId: string, branchId: string
   requirePos2ContextEnabled(branchId, registerId);
 }
 
-export function pos2ErrorResponse(error: unknown) {
-  if (error instanceof DomainError) return NextResponse.json(error.toResponse(), { status: error.httpStatus });
+export function pos2ErrorResponse(error: unknown, operationId?: string) {
+  if (error instanceof DomainError) return NextResponse.json(error.toResponse(operationId), { status: error.httpStatus });
   const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
   if (code === "P2002" || code === "23505") return NextResponse.json(new DomainError("CONFLICT").toResponse(), { status: 409 });
   console.error("POS2 command failed", error);
-  return NextResponse.json({ error: { code: "INTERNAL_ERROR", message: "No fue posible completar la operación." } }, { status: 500 });
+  const suffix = operationId ? ` Operación ${operationId.slice(0, 8)} registrada para reintento.` : "";
+  return NextResponse.json({ error: { code: "INTERNAL_ERROR", message: `Error al procesar cobro.${suffix}`, retryable: true, ...(operationId ? { operationId } : {}) } }, { status: 500 });
 }
