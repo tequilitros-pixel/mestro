@@ -152,6 +152,23 @@ export async function updateEmployeeProfile(input: { employeeId: string; display
   return prisma.employee.update({ where: { id: input.employeeId }, data: { displayName: input.displayName.trim() } });
 }
 
+export async function setEmployeeActive(input: { employeeId: string; active: boolean }) {
+  return prisma.employee.update({ where: { id: input.employeeId }, data: { active: input.active } });
+}
+
+export async function archiveEmployeeIdentity(actor: { role: string }, employeeId: string) {
+  if (actor.role !== "ADMIN") throw new Error("No autorizado.");
+  return prisma.$transaction(async (tx) => {
+    const employee = await tx.employee.findUniqueOrThrow({ where: { id: employeeId }, select: { id: true, userId: true } });
+    await tx.employee.update({ where: { id: employee.id }, data: { active: false } });
+    if (employee.userId) {
+      await tx.user.update({ where: { id: employee.userId }, data: { active: false, pinHash: null } });
+      await tx.userSession.deleteMany({ where: { userId: employee.userId } });
+    }
+    return employee;
+  });
+}
+
 export async function endAllowedBranch(input: { assignmentId: string; employmentId: string; effectiveTo: Date }) {
   return prisma.$transaction(async tx => {
     await assertOpenEmployment(tx, input.employmentId);

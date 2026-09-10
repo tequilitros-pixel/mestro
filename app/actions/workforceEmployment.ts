@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 import { assertWorkforceAdministrator } from "@/lib/workforce/employment/rules";
-import { addBranchAssignment, changeEmploymentStatus, changeHomeBranch, changePayRate, createEmployee, rehireEmployee, updateEmployeeProfile, changeJornada, endAllowedBranch } from "@/lib/workforce/employment/service";
+import { addBranchAssignment, archiveEmployeeIdentity, changeEmploymentStatus, changeHomeBranch, changePayRate, createEmployee, rehireEmployee, setEmployeeActive, updateEmployeeProfile, changeJornada, endAllowedBranch } from "@/lib/workforce/employment/service";
 
 async function authorize() {
   if (!workforceV1Enabled()) throw new Error("Workforce V1 no está habilitado.");
@@ -115,6 +115,19 @@ export async function changeWorkforceEmploymentStatusAction(formData: FormData) 
 }
 export async function updateWorkforceEmployeeAction(formData: FormData) {
   return change(formData, () => updateEmployeeProfile({ employeeId: String(formData.get("employeeId")), displayName: String(formData.get("displayName") ?? "") }));
+}
+export async function changeWorkforceEmployeeActiveAction(formData: FormData) {
+  return change(formData, () => setEmployeeActive({ employeeId: String(formData.get("employeeId")), active: String(formData.get("active") ?? "") === "true" }));
+}
+export async function archiveWorkforceIdentityAction(formData: FormData) {
+  const admin = await authorize();
+  const employeeId = String(formData.get("employeeId") ?? "");
+  let error = "";
+  try { await archiveEmployeeIdentity(admin, employeeId); } catch (cause) { error = cause instanceof Error ? cause.message : "No fue posible archivar la identidad."; }
+  revalidatePath("/administration/personnel");
+  revalidatePath("/administration/workforce/employees");
+  revalidatePath(`/administration/workforce/employees/${employeeId}`);
+  redirect(`/administration/workforce/employees/${encodeURIComponent(employeeId)}?${error ? `error=${encodeURIComponent(error)}` : "saved=1"}`);
 }
 export async function rehireWorkforceEmployeeAction(formData: FormData) {
   return change(formData, () => rehireEmployee({ employeeId: String(formData.get("employeeId")), startedAt: formData.get("startedAt") ? dateValue(formData, "startedAt") : null, dataConfidence: formData.get("startedAt") ? "KNOWN" : "LEGACY_UNKNOWN" }));

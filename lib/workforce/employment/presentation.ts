@@ -18,3 +18,14 @@ export function selectEmploymentForStatus<T extends EmploymentLike>(
   if (filter === "TERMINATED") return open ? null : employments[0] ?? null;
   return open?.status === filter ? open : null;
 }
+
+export function matchesEmployeeStatusFilter(
+  input: { active: boolean; status: string },
+  filter: EmployeeStatusFilter,
+): boolean {
+  if (filter === "ALL") return true;
+  if (filter === "TERMINATED") return input.status === "TERMINATED";
+  if (filter === "ACTIVE") return input.active && input.status === "ACTIVE";
+  return input.status === "INACTIVE" ||
+    (input.status !== "TERMINATED" && !input.active);
+}

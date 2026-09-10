@@ -37,6 +37,8 @@ interface PersonnelUser {
   branches: { branch: Branch }[];
 }
 
+type PersonnelActiveFilter = "ACTIVE" | "INACTIVE" | "TODOS";
+
 export default function PersonnelPage() {
   const [users, setUsers] = useState<PersonnelUser[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -47,6 +49,7 @@ export default function PersonnelPage() {
   const [roleFilter, setRoleFilter] = useState<PersonnelRole | "TODOS">(
     "TODOS"
   );
+  const [activeFilter, setActiveFilter] = useState<PersonnelActiveFilter>("ACTIVE");
 
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -148,14 +151,15 @@ export default function PersonnelPage() {
 
     return users.filter((u) => {
       const matchesRole = roleFilter === "TODOS" || u.role === roleFilter;
+      const matchesActive = activeFilter === "TODOS" || (activeFilter === "ACTIVE" ? u.active : !u.active);
       const matchesQuery =
         query === "" ||
         u.name.toLowerCase().includes(query) ||
         u.username.toLowerCase().includes(query);
 
-      return matchesRole && matchesQuery;
+      return matchesRole && matchesActive && matchesQuery;
     });
-  }, [users, search, roleFilter]);
+  }, [users, search, roleFilter, activeFilter]);
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface sm:px-6 lg:px-8">
@@ -222,6 +226,22 @@ export default function PersonnelPage() {
                                   placeholder="Buscar por nombre o usuario..."
                                   className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
                                 />
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                {(["ACTIVE", "INACTIVE", "TODOS"] as PersonnelActiveFilter[]).map((key) => (
+                                  <button
+                                    key={key}
+                                    onClick={() => setActiveFilter(key)}
+                                    className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide ${
+                                      activeFilter === key
+                                        ? "bg-primary text-on-primary"
+                                        : "border border-outline-variant text-on-surface-variant hover:border-primary/40 hover:text-on-surface"
+                                    }`}
+                                  >
+                                    {key === "ACTIVE" ? "Activos" : key === "INACTIVE" ? "Inactivos" : "Todos"}
+                                  </button>
+                                ))}
                               </div>
 
                               <div className="flex flex-wrap gap-2">

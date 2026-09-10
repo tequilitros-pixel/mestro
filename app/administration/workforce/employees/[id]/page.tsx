@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
+  archiveWorkforceIdentityAction,
+  changeWorkforceEmployeeActiveAction,
   changeWorkforceEmploymentStatusAction,
   changeWorkforceHomeAction,
   changeWorkforceJornadaAction,
@@ -90,6 +92,30 @@ export default async function EmployeeDetail({
           </form>
         ) : <span className="rounded-full border border-outline-variant px-4 py-2 font-bold text-on-surface-variant">● Baja</span>}
       </header>
+
+      <section className="grid gap-3 rounded-xl border border-outline-variant p-4 sm:grid-cols-2 sm:p-5">
+        <div>
+          <h2 className="font-bold">Estado operativo</h2>
+          <p className="text-sm text-on-surface-variant">Controla si el empleado aparece en la operación normal. No modifica Employment ni su historia.</p>
+        </div>
+        <form action={changeWorkforceEmployeeActiveAction} className="flex items-center justify-between gap-3 sm:justify-end">
+          <input type="hidden" name="employeeId" value={id} />
+          <input type="hidden" name="active" value={employee.active ? "false" : "true"} />
+          <button type="submit" role="switch" aria-checked={employee.active} className={"min-h-11 rounded-full border px-4 py-2 font-bold " + (employee.active ? "border-primary bg-primary/10 text-primary" : "border-outline-variant bg-surface-container text-on-surface-variant")}>
+            {employee.active ? "Empleado activo" : "Empleado inactivo"}
+          </button>
+        </form>
+        {employee.user ? <>
+          <div>
+            <h2 className="font-bold">Acceso a MAESTRO</h2>
+            <p className="text-sm text-on-surface-variant">{employee.user.active ? "Habilitado" : "Deshabilitado"}. Para cambiarlo usa Personal, donde también se revocan sesiones al deshabilitar.</p>
+          </div>
+          <form action={archiveWorkforceIdentityAction} className="flex items-center justify-between gap-3 sm:justify-end">
+            <input type="hidden" name="employeeId" value={id} />
+            <button type="submit" className="min-h-11 rounded-lg border border-error/50 px-4 py-2 font-bold text-error">Desactivar identidad y cerrar sesiones</button>
+          </form>
+        </> : null}
+      </section>
 
       {query.error && <p role="alert" className="rounded-lg border border-error p-3 text-error">{query.error}</p>}
       {query.saved && <p role="status" className="rounded-lg border p-3">Cambios guardados.</p>}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { listEmployees } from "@/lib/workforce/employment/service";
-import { normalizeEmployeeStatusFilter, selectEmploymentForStatus } from "@/lib/workforce/employment/presentation";
+import { matchesEmployeeStatusFilter, normalizeEmployeeStatusFilter, selectEmploymentForStatus } from "@/lib/workforce/employment/presentation";
 import { prisma } from "@/lib/prisma";
 
 const states: Record<string, string> = {
@@ -48,7 +48,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
     .filter((row) => {
       const haystack = (row.employee.displayName ?? "") + " " + (row.employee.employeeNumber ?? "") + " " + (row.employee.user?.username ?? "");
       const queryMatches = !filters.q || haystack.toLocaleLowerCase().includes(filters.q.toLocaleLowerCase());
-      const statusMatches = statusFilter === "ALL" || row.status === statusFilter;
+      const statusMatches = matchesEmployeeStatusFilter({ active: row.employee.active, status: row.status }, statusFilter);
       const branchMatches = !filters.branch || row.assignments.some((assignment) => assignment.branchId === filters.branch);
       return queryMatches && statusMatches && branchMatches;
     });

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import type { UserRole } from "@prisma/client";
 import { normalizeMexicanPhone } from "@/lib/phone";
+import { revokeAllUserSessions } from "@/lib/session";
 
 export async function getPersonnel() {
   return prisma.user.findMany({
@@ -228,6 +229,7 @@ export async function updatePersonnelActive(userId: string, active: boolean) {
   }
 
   await prisma.user.update({ where: { id: userId }, data: { active } });
+  if (!active) await revokeAllUserSessions(userId);
   revalidatePath("/administration/personnel");
   return { success: true };
 }

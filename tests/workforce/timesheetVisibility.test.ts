@@ -18,6 +18,10 @@ test("timesheet visibility defaults to active employments", () => {
     shouldShowEmployment({ status: "INACTIVE", displayName: "María Real" }, "ACTIVE"),
     false,
   );
+  assert.equal(
+    shouldShowEmployment({ status: "ACTIVE", displayName: "María Real", employeeActive: false }, "ACTIVE"),
+    false,
+  );
 });
 
 test("synthetic active records stay hidden by default but remain available in history", () => {

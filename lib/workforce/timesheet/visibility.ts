@@ -23,9 +23,14 @@ export function isSyntheticWorkforceRecord(displayName: string | null | undefine
 }
 
 export function shouldShowEmployment(
-  input: { status: Exclude<EmploymentStatusFilter, "ALL">; displayName: string },
+  input: {
+    status: Exclude<EmploymentStatusFilter, "ALL">;
+    displayName: string;
+    employeeActive?: boolean;
+  },
   filter: EmploymentStatusFilter,
 ): boolean {
   if (filter !== "ALL" && input.status !== filter) return false;
+  if (filter === "ACTIVE" && input.employeeActive === false) return false;
   return filter !== "ACTIVE" || !isSyntheticWorkforceRecord(input.displayName);
 }

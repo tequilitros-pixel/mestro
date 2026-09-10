@@ -36,3 +36,8 @@ test("request and decision paths keep ownership and admin authorization server-s
   assert.match(service, /status !== "PENDING"/);
   assert.match(action, /parseZonedDateTimeLocal/);
 });
+
+test("canonical employee Requests route is versioned", async () => {
+  const source = await readFile(new URL("../../app/workforce/requests/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /export default async function WorkforceRequestsPage/);
+});

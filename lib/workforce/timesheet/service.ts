@@ -441,6 +441,7 @@ export async function getTimesheetBoard(
               status: employmentFilter as "ACTIVE" | "INACTIVE" | "TERMINATED",
             },
           ]),
+      ...(employmentFilter === "ACTIVE" ? [{ employee: { active: true } }] : []),
       { OR: [{ startedAt: null }, { startedAt: { lte: end } }] },
       { OR: [{ endedAt: null }, { endedAt: { gte: start } }] },
       ...(search
@@ -479,7 +480,7 @@ export async function getTimesheetBoard(
   const visibleEmployments = employments.filter(
     (employment) =>
       employmentFilter !== "ACTIVE" ||
-      !isSyntheticWorkforceRecord(employment.employee.displayName),
+      (employment.employee.active && !isSyntheticWorkforceRecord(employment.employee.displayName)),
   );
   for (const employment of visibleEmployments) {
     const sheet = await ensureAndRecomputeTimesheet(employment.id, start);

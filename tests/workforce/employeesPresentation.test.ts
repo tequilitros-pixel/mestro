@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  matchesEmployeeStatusFilter,
   normalizeEmployeeStatusFilter,
   selectEmploymentForStatus,
   type EmployeeListStatus,
@@ -25,4 +26,13 @@ test("inactive, terminated and all filters select the right relationship", () =>
   assert.equal(selectEmploymentForStatus(history, "INACTIVE")?.id, "inactive");
   assert.equal(selectEmploymentForStatus([employment("terminated", "TERMINATED")], "TERMINATED")?.id, "terminated");
   assert.equal(selectEmploymentForStatus(history, "ALL")?.id, "inactive");
+});
+
+test("employee active state is part of the operational filter", () => {
+  assert.equal(matchesEmployeeStatusFilter({ active: true, status: "ACTIVE" }, "ACTIVE"), true);
+  assert.equal(matchesEmployeeStatusFilter({ active: false, status: "ACTIVE" }, "ACTIVE"), false);
+  assert.equal(matchesEmployeeStatusFilter({ active: false, status: "ACTIVE" }, "INACTIVE"), true);
+  assert.equal(matchesEmployeeStatusFilter({ active: true, status: "INACTIVE" }, "INACTIVE"), true);
+  assert.equal(matchesEmployeeStatusFilter({ active: false, status: "TERMINATED" }, "INACTIVE"), false);
+  assert.equal(matchesEmployeeStatusFilter({ active: false, status: "TERMINATED" }, "TERMINATED"), true);
 });
