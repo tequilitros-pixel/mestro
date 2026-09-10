@@ -38,7 +38,15 @@ test("branch administration persists an enabled geofence through the canonical a
   const actions = readFileSync("app/actions/workforceBranches.ts", "utf8");
   const manager = readFileSync("app/administration/workforce/branches/BranchesManager.tsx", "utf8");
   assert.doesNotMatch(actions, /Geolocalización desactivada\. Próximamente/);
-  assert.match(actions, /geofenceEnabled: true/);
-  assert.match(manager, /updateBranchGeofenceAction/);
+  assert.match(actions, /persistBranchGeofence/);
+  assert.match(manager, /geofence:\s*\{/);
+  assert.doesNotMatch(manager, /updateBranchGeofenceAction/);
   assert.doesNotMatch(manager, /fieldset disabled/);
+});
+
+test("branch save keeps address and cancel remains write-free", () => {
+  const actions = readFileSync("app/actions/workforceBranches.ts", "utf8");
+  const manager = readFileSync("app/administration/workforce/branches/BranchesManager.tsx", "utf8");
+  assert.match(actions, /address: input\.address\?\.trim\(\) \|\| null/);
+  assert.match(manager, /<button onClick=\{onClose\}[^>]*>Cancelar<\/button>/);
 });

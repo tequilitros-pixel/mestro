@@ -6,7 +6,6 @@ import {
   createWorkforceBranchAction,
   reviewGeolocationEvidenceAction,
   saveWorkforceScheduleTemplateAction,
-  updateBranchGeofenceAction,
   updateWorkforceBranchAction,
 } from "@/app/actions/workforceBranches";
 import { useToast } from "@/components/ui/Toast";
@@ -186,13 +185,9 @@ function BranchPanel({ branch, templates, initialSettings, onClose, onSaved, onE
   async function save() {
     setBusy(true); onError(null);
     const result = branch
-      ? await updateWorkforceBranchAction({ branchId: branch.id, name, code, address, timezone, active, templateApplyMode: applyMode, defaultScheduleTemplateId: templateId || null })
+      ? await updateWorkforceBranchAction({ branchId: branch.id, name, code, address, timezone, active, templateApplyMode: applyMode, defaultScheduleTemplateId: templateId || null, geofence: { enabled: modeOverride === "OFF" ? false : geoEnabled, mode: modeOverride === "GLOBAL" ? null : modeOverride, latitude: latitude.trim() ? Number(latitude) : null, longitude: longitude.trim() ? Number(longitude) : null, radius: Number(radius) } })
       : await createWorkforceBranchAction({ name, code, address, timezone });
     if (result.error) { setBusy(false); onError(result.error); return; }
-    if (branch) {
-      const geofenceResult = await updateBranchGeofenceAction({ branchId: branch.id, enabled: modeOverride === "OFF" ? false : geoEnabled, mode: modeOverride === "GLOBAL" ? null : modeOverride, latitude: Number(latitude), longitude: Number(longitude), radius: Number(radius) });
-      if (geofenceResult.error) { setBusy(false); onError(geofenceResult.error); return; }
-    }
     setBusy(false); onSaved(branch ? "Sucursal actualizada." : "Sucursal creada.");
   }
 

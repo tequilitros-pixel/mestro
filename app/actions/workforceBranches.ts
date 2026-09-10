@@ -1,16 +1,12 @@
 "use server";
 
-import {
-  BRANCH_GEOFENCE_MODES,
-  type BranchGeofenceMode,
-} from "@/lib/workforce/geofence";
-
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { withRlsContext } from "@/lib/rls";
 import { assertActiveBranch } from "@/lib/workforce/branchLifecycle";
 import { signalTimesheetsForEmployment } from "@/lib/workforce/timesheet/service";
-import { normalizeBranchCode, validBranchCode, validGeofenceConfig, validTimezone } from "@/lib/workforce/branch";
+import { normalizeBranchCode, validBranchCode, validTimezone } from "@/lib/workforce/branch";
+import { getBranchGeofenceSaveState, persistBranchGeofence, type BranchGeofenceSaveInput } from "@/lib/workforce/geofencePersistence";
 import { rangesOverlap, shiftRangeMinutes, validBreakMinutes, validTemplateWeekday } from "@/lib/workforce/scheduleTemplate";
 
 const BRANCHES_PATH = "/administration/workforce/branches";
@@ -89,12 +85,15 @@ export async function updateWorkforceBranchAction(input: {
   branchId: string; name: string; code: string; address?: string; timezone: string; active: boolean;
   templateApplyMode: "ASK_BEFORE_APPLY" | "AUTO_CREATE_DRAFT" | "DO_NOT_APPLY";
   defaultScheduleTemplateId?: string | null;
+  geofence?: BranchGeofenceSaveInput;
 }) {
   const admin = await requireAdmin();
   const name = input.name.trim();
   const code = normalizeBranchCode(input.code);
   if (name.length < 2 || !validBranchCode(code)) return { error: "Nombre o código de sucursal inválido." };
   if (!validTimezone(input.timezone)) return { error: "La zona horaria IANA no es válida." };
+  const geofenceState = input.geofence ? getBranchGeofenceSaveState(input.geofence) : null;
+  if (geofenceState?.error) return { error: geofenceState.error };
   try {
     await withRlsContext(admin, async (tx) => {
       if (await tx.branch.findFirst({ where: { code, id: { not: input.branchId } }, select: { id: true } })) throw new Error("Ya existe una sucursal con ese código.");
@@ -102,10 +101,18 @@ export async function updateWorkforceBranchAction(input: {
         const template = await tx.scheduleTemplate.findFirst({ where: { id: input.defaultScheduleTemplateId, branchId: input.branchId, active: true }, select: { id: true } });
         if (!template) throw new Error("La plantilla no pertenece a esta sucursal.");
       }
+      const branch = input.geofence
+        ? await tx.branch.findUnique({ where: { id: input.branchId }, include: { geofence: { include: { branches: { select: { id: true } } } } } })
+        : null;
+      if (input.geofence && !branch) throw new Error("Sucursal no encontrada.");
       await tx.branch.update({
         where: { id: input.branchId },
         data: { name, code, address: input.address?.trim() || null, timezone: input.timezone, active: input.active, templateApplyMode: "ASK_BEFORE_APPLY", defaultScheduleTemplateId: input.defaultScheduleTemplateId || null },
       });
+      if (input.geofence) {
+        if (geofenceState!.shouldEnable) await assertActiveBranch(tx, input.branchId);
+        await persistBranchGeofence(tx, { ...branch!, name }, input.geofence, geofenceState!);
+      }
     });
     revalidatePath(BRANCHES_PATH);
     revalidatePath("/administration/workforce/schedule");
@@ -115,29 +122,16 @@ export async function updateWorkforceBranchAction(input: {
   }
 }
 
-export async function updateBranchGeofenceAction(input: { branchId: string; enabled: boolean; mode?: BranchGeofenceMode | null; latitude: number; longitude: number; radius: number }) {
+export async function updateBranchGeofenceAction(input: { branchId: string } & BranchGeofenceSaveInput) {
   const admin = await requireAdmin();
-  if (input.mode !== undefined && input.mode !== null && !BRANCH_GEOFENCE_MODES.includes(input.mode)) return { error: "Modo de geozona inválido." };
-  if ((input.mode === "WARN" || input.mode === "BLOCK") && !input.enabled) return { error: "Activa la geozona antes de seleccionar WARN o BLOCK." };
-  const storedMode = input.mode === undefined ? (input.enabled ? null : "OFF") : input.mode;
-  const shouldEnable = input.enabled && storedMode !== "OFF";
-  if (shouldEnable && !validGeofenceConfig(input.latitude, input.longitude, input.radius)) return { error: "Coordenadas o radio de geozona inválidos." };
+  const geofenceState = getBranchGeofenceSaveState(input);
+  if (geofenceState.error) return { error: geofenceState.error };
   try {
     await withRlsContext(admin, async (tx) => {
       const branch = await tx.branch.findUnique({ where: { id: input.branchId }, include: { geofence: { include: { branches: { select: { id: true } } } } } });
       if (!branch) throw new Error("Sucursal no encontrada.");
-      if (!shouldEnable) {
-        await tx.branch.update({ where: { id: branch.id }, data: { geofenceEnabled: false, geofenceMode: storedMode } });
-        return;
-      }
-      await assertActiveBranch(tx, branch.id);
-      let geofenceId = branch.geofenceId;
-      if (!branch.geofence || branch.geofence.branches.length > 1) {
-        geofenceId = (await tx.geofence.create({ data: { name: `${branch.name} · geozona`, latitude: input.latitude, longitude: input.longitude, radius: input.radius } })).id;
-      } else {
-        await tx.geofence.update({ where: { id: branch.geofence.id }, data: { latitude: input.latitude, longitude: input.longitude, radius: input.radius } });
-      }
-      await tx.branch.update({ where: { id: branch.id }, data: { geofenceId, geofenceEnabled: true, geofenceMode: storedMode } });
+      if (geofenceState.shouldEnable) await assertActiveBranch(tx, branch.id);
+      await persistBranchGeofence(tx, branch, input, geofenceState);
     });
     revalidatePath(BRANCHES_PATH);
     revalidatePath("/workforce/clock");
