@@ -25,6 +25,10 @@ type LeafletMarker = {
   getLatLng: () => LatLng;
   setLatLng: (latlng: [number, number]) => void;
 };
+type LeafletCircle = {
+  setLatLng: (latlng: [number, number]) => void;
+  setRadius: (radius: number) => void;
+};
 type LeafletMap = {
   setView: (center: [number, number], zoom: number) => LeafletMap;
   getZoom: () => number;
@@ -38,6 +42,10 @@ type LeafletNamespace = {
     latlng: [number, number],
     options?: Record<string, unknown>,
   ) => LeafletMarker & { addTo: (map: LeafletMap) => LeafletMarker };
+  circle: (
+    latlng: [number, number],
+    options?: Record<string, unknown>,
+  ) => LeafletCircle & { addTo: (map: LeafletMap) => LeafletCircle };
 };
 
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
@@ -82,15 +90,18 @@ const DEFAULT_CENTER: [number, number] = [21.1236, -102.9721]; // Zacatecas, com
 export default function LocationPicker({
   latitude,
   longitude,
+  radius,
   onChange,
 }: {
   latitude: number | null;
   longitude: number | null;
+  radius: number;
   onChange: (lat: number, lng: number) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<LeafletMarker | null>(null);
+  const circleRef = useRef<LeafletCircle | null>(null);
   const onChangeRef = useRef(onChange);
 
   const [ready, setReady] = useState(false);
@@ -113,25 +124,29 @@ export default function LocationPicker({
           latitude !== null && longitude !== null ? [latitude, longitude] : DEFAULT_CENTER;
 
         const map = L.map(containerRef.current).setView(start, latitude !== null ? 16 : 12);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "© OpenStreetMap",
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "© OpenStreetMap contributors",
           maxZoom: 19,
         }).addTo(map);
 
         const marker = L.marker(start, { draggable: true }).addTo(map);
+        const circle = L.circle(start, { radius }).addTo(map);
 
         marker.on("dragend", () => {
           const pos = marker.getLatLng();
+          circle.setLatLng([pos.lat, pos.lng]);
           onChangeRef.current(pos.lat, pos.lng);
         });
 
         map.on("click", (e) => {
           marker.setLatLng([e.latlng.lat, e.latlng.lng]);
+          circle.setLatLng([e.latlng.lat, e.latlng.lng]);
           onChangeRef.current(e.latlng.lat, e.latlng.lng);
         });
 
         mapRef.current = map;
         markerRef.current = marker;
+        circleRef.current = circle;
         setReady(true);
       })
       .catch((err) => {
@@ -143,6 +158,7 @@ export default function LocationPicker({
       mapRef.current?.remove();
       mapRef.current = null;
       markerRef.current = null;
+      circleRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -157,8 +173,14 @@ export default function LocationPicker({
     if (Math.abs(current.lat - latitude) > 1e-9 || Math.abs(current.lng - longitude) > 1e-9) {
       markerRef.current.setLatLng([latitude, longitude]);
       mapRef.current.setView([latitude, longitude], mapRef.current.getZoom());
+      circleRef.current?.setLatLng([latitude, longitude]);
     }
   }, [latitude, longitude, ready]);
+
+  useEffect(() => {
+    if (!ready || !circleRef.current) return;
+    circleRef.current.setRadius(Number.isFinite(radius) && radius > 0 ? radius : 100);
+  }, [radius, ready]);
 
   if (loadError) {
     return (

@@ -148,6 +148,52 @@ export async function updateBranchGeofenceAction(input: { branchId: string; enab
   }
 }
 
+let lastAddressSearchAt = 0;
+
+export async function searchBranchAddressAction(query: string) {
+  await requireAdmin();
+  const normalized = query.trim();
+  if (normalized.length < 3) return { error: "Escribe al menos 3 caracteres para buscar." } as const;
+  if (Date.now() - lastAddressSearchAt < 1000) return { error: "Espera un momento antes de buscar otra vez." } as const;
+
+  lastAddressSearchAt = Date.now();
+  const endpoint = process.env.MAESTRO_GEOCODER_URL ?? "https://nominatim.openstreetmap.org/search";
+  const url = new URL(endpoint);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("countrycodes", "mx");
+  url.searchParams.set("limit", "5");
+  url.searchParams.set("q", normalized);
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "Accept-Language": "es-MX,es;q=0.9",
+        "User-Agent": "MAESTRO geofence admin search (+https://maestro-destiladora.space)",
+      },
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return { error: "El buscador de lugares no está disponible." } as const;
+    const payload: unknown = await response.json();
+    const results = Array.isArray(payload)
+      ? payload.flatMap((item) => {
+          if (!item || typeof item !== "object") return [];
+          const record = item as Record<string, unknown>;
+          const latitude = Number(record.lat);
+          const longitude = Number(record.lon);
+          const displayName = typeof record.display_name === "string" ? record.display_name.trim() : "";
+          if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !displayName) return [];
+          return [{ placeId: String(record.place_id ?? `${latitude}:${longitude}`), displayName, latitude, longitude }];
+        })
+      : [];
+    return { results } as const;
+  } catch {
+    return { error: "No pudimos consultar el buscador de lugares." } as const;
+  }
+}
+
 export async function saveWorkforceScheduleTemplateAction(input: {
   templateId?: string; branchId: string; name: string; active: boolean;
   blocks: Array<{ dayOfWeek: number; startTime: string; endTime: string; breakMinutes: number }>;
