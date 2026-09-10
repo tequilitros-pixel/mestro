@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "prisma generate && next build --webpack",
+    "build": "prisma generate --schema=prisma/schema.prisma && node scripts/verify-prisma-client.cjs && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "node --import tsx --test tests/*.test.ts tests/workforce/*.test.ts",
