@@ -56,7 +56,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/timeclock/geofences",
-        destination: "/administration/workforce/settings",
+        destination: "/administration/workforce/branches",
         permanent: true,
       },
       {
