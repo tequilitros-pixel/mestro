@@ -11,6 +11,8 @@ test("attendance issue labels are human and hide technical enum names", () => {
   assert.equal(humanAttendanceIssueLabel("LATE_ARRIVAL"), "Llegó tarde");
   assert.equal(humanAttendanceIssueLabel("MISSING_CLOCK_OUT"), "Falta registrar salida");
   assert.equal(humanAttendanceIssueLabel("UNSCHEDULED_WORK"), "Trabajo no programado");
+  assert.equal(humanAttendanceIssueLabel("OUTSIDE_GEOFENCE", "PERMISSION_DENIED"), "Ubicación no disponible");
+  assert.equal(humanAttendanceIssueLabel("OUTSIDE_GEOFENCE", "LOW_ACCURACY"), "Ubicación imprecisa");
   assert.notEqual(humanAttendanceIssueLabel("NO_SHOW"), "NO_SHOW");
 });
 

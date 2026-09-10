@@ -126,3 +126,22 @@ export function geofenceMessage(result: GeofenceResult) {
       return null;
   }
 }
+
+export function geofenceResultLabel(result: GeofenceResult["result"] | string) {
+  switch (result) {
+    case "INSIDE":
+      return "Dentro de la sucursal";
+    case "OUTSIDE":
+      return "Fuera de la geozona";
+    case "PERMISSION_DENIED":
+      return "Permiso de ubicación rechazado";
+    case "LOW_ACCURACY":
+      return "Ubicación imprecisa";
+    case "UNAVAILABLE":
+      return "Ubicación no disponible";
+    case "NOT_REQUIRED":
+      return "Ubicación no requerida";
+    default:
+      return "Revisión de ubicación";
+  }
+}

@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { workforceGeolocationEnabled } from '../../lib/workforce/geolocation-release';
 
-test('Monday scheduling release cannot enable location enforcement',()=>{
- assert.equal(workforceGeolocationEnabled,false);
+test('Workforce geofence enforcement is opt-in at branch level',()=>{
  const action=readFileSync(new URL('../../app/actions/workforceBranches.ts',import.meta.url),'utf8');
- assert.match(action,/if \(input.enabled\) return \{ error:/);
+ assert.doesNotMatch(action,/if \(input.enabled\) return \{ error:/);
+ assert.match(action,/geofenceEnabled: true/);
 });
 test('HOME assignment never silently applies a schedule',()=>{
  const source=readFileSync(new URL('../../app/actions/workforceEmployment.ts',import.meta.url),'utf8');

@@ -28,3 +28,14 @@ test("clock evidence stores validation metadata but not employee coordinates", (
   assert.match(evidenceModel, /accuracyMeters\s+Float\?/);
   assert.doesNotMatch(evidenceModel, /\blatitude\b|\blongitude\b/);
 });
+
+test("legacy clock and geofence routes delegate to Workforce canonical flows", () => {
+  const clock = readFileSync("app/timeclock/page.tsx", "utf8");
+  const kiosk = readFileSync("app/timeclock/kiosk/page.tsx", "utf8");
+  const geofences = readFileSync("app/timeclock/geofences/page.tsx", "utf8");
+  assert.match(clock, /redirect\("\/workforce\/clock"\)/);
+  assert.match(kiosk, /redirect\("\/workforce\/kiosk"\)/);
+  assert.match(geofences, /redirect\("\/administration\/workforce\/branches"\)/);
+  assert.doesNotMatch(clock, /watchPosition/);
+  assert.doesNotMatch(kiosk, /getCurrentPosition/);
+});

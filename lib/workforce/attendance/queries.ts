@@ -36,6 +36,7 @@ export type AttendanceOccurrence = {
   workedMinutes: number | null;
   differenceMinutes: number | null;
   issueTypes: string[];
+  geofenceResults: string[];
   status: AttendanceOccurrenceStatus;
   state: AttendanceOccurrenceState;
   workSessionId: string | null;
@@ -260,6 +261,11 @@ export async function getAttendanceCenter(
       issueList[0]?.employment.employee.displayName ??
       "Empleado";
     const issueTypes = [...new Set(issueList.map((issue) => issue.type))];
+    const geofenceResults = [...new Set(issueList.flatMap((issue) => {
+      if (issue.type !== "OUTSIDE_GEOFENCE" || !issue.policySnapshot || typeof issue.policySnapshot !== "object" || Array.isArray(issue.policySnapshot)) return [];
+      const result = (issue.policySnapshot as Record<string, unknown>).result;
+      return typeof result === "string" ? [result] : [];
+    }))];
     const openIssues = issueList.filter((issue) => issue.status === "OPEN");
     const status = statusForIssues(issueList);
     const state: AttendanceOccurrenceState = openIssues.length
@@ -302,6 +308,7 @@ export async function getAttendanceCenter(
       differenceMinutes:
         issueList.find((issue) => issue.differenceMinutes !== null)?.differenceMinutes ?? null,
       issueTypes,
+      geofenceResults,
       status,
       state,
       workSessionId: session?.id ?? issueList[0]?.workSessionId ?? null,

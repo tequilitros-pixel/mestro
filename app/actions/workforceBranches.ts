@@ -112,7 +112,6 @@ export async function updateWorkforceBranchAction(input: {
 
 export async function updateBranchGeofenceAction(input: { branchId: string; enabled: boolean; latitude: number; longitude: number; radius: number }) {
   const admin = await requireAdmin();
-  if (input.enabled) return { error: "Geolocalización desactivada. Próximamente." };
   if (input.enabled && !validGeofenceConfig(input.latitude, input.longitude, input.radius)) return { error: "Coordenadas o radio de geozona inválidos." };
   try {
     await withRlsContext(admin, async (tx) => {
@@ -133,6 +132,7 @@ export async function updateBranchGeofenceAction(input: { branchId: string; enab
     });
     revalidatePath(BRANCHES_PATH);
     revalidatePath("/workforce/clock");
+    revalidatePath("/workforce/kiosk");
     return { success: true } as const;
   } catch (error) {
     return { error: error instanceof Error ? error.message : "No se pudo guardar la geozona." };

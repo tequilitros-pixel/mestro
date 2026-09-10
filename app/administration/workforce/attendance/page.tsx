@@ -48,7 +48,7 @@ const incidenceLabels: Record<AttendanceIncidenceFilter, string> = {
 
 function issueText(item: AttendanceOccurrence) {
   if (item.issueTypes.length)
-    return item.issueTypes.map(humanAttendanceIssueLabel).join(" · ");
+    return item.issueTypes.map((type) => humanAttendanceIssueLabel(type, type === "OUTSIDE_GEOFENCE" ? item.geofenceResults[0] : undefined)).join(" · ");
   return item.state === "WAITING" ? "Todavía no registra entrada" : "Sin incidencia";
 }
 

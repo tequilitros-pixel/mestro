@@ -38,7 +38,11 @@ export function formatAttendanceMinutes(value: number) {
   return `${sign}${Math.floor(absolute / 60)}h ${absolute % 60}m`;
 }
 
-export function humanAttendanceIssueLabel(type: string) {
+export function humanAttendanceIssueLabel(type: string, geofenceResult?: string) {
+  if (type === "OUTSIDE_GEOFENCE") {
+    if (geofenceResult === "PERMISSION_DENIED" || geofenceResult === "UNAVAILABLE") return "Ubicación no disponible";
+    if (geofenceResult === "LOW_ACCURACY") return "Ubicación imprecisa";
+  }
   return attendanceIssueLabels[type] ?? "Revisar registro";
 }
 

@@ -1,9 +1,5 @@
-import KioskClient from "./KioskClient";
+import { redirect } from "next/navigation";
 
 export default function KioskPage() {
-  return (
-    <main className="min-h-screen bg-background text-on-surface">
-      <KioskClient />
-    </main>
-  );
+  redirect("/workforce/kiosk");
 }

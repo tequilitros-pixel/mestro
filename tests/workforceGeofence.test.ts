@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateGeofence, geofenceDecision, requiresLocation } from "@/lib/workforce/geofence";
+import { evaluateGeofence, geofenceDecision, geofenceResultLabel, requiresLocation } from "@/lib/workforce/geofence";
 import type { LocationInput } from "@/lib/workforce/geofence";
 
 const branch = {
@@ -66,4 +66,12 @@ test("disabled branches skip location; enabled but broken configuration fails cl
 test("outside policy can block or allow with a review exception", () => {
   assert.deepEqual(geofenceDecision("OUTSIDE", "BLOCK"), { allow: false, needsReview: false });
   assert.deepEqual(geofenceDecision("OUTSIDE", "ALLOW_WITH_EXCEPTION"), { allow: true, needsReview: true });
+});
+
+test("geofence result labels stay human and do not expose protocol values", () => {
+  assert.equal(geofenceResultLabel("INSIDE"), "Dentro de la sucursal");
+  assert.equal(geofenceResultLabel("OUTSIDE"), "Fuera de la geozona");
+  assert.equal(geofenceResultLabel("PERMISSION_DENIED"), "Permiso de ubicación rechazado");
+  assert.equal(geofenceResultLabel("LOW_ACCURACY"), "Ubicación imprecisa");
+  assert.equal(geofenceResultLabel("UNAVAILABLE"), "Ubicación no disponible");
 });
