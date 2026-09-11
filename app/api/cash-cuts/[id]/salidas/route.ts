@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { requireFinancialMovementCategory } from "@/lib/financialMovementCategories";
 
 const ROLES_QUE_PUEDEN_EDITAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -88,7 +89,7 @@ export async function POST(
   }
 
   const body = await request.json();
-  const { concept, category, amount, authorizedById, notes, receiptPhotoUrl, clientOperationId, clientCreatedAt } = body;
+  const { concept, category, categoryId, amount, authorizedById, notes, receiptPhotoUrl, clientOperationId, clientCreatedAt } = body;
 
   if (clientOperationId) {
     const existing = await prisma.cashOutflow.findUnique({ where: { id: clientOperationId } });
@@ -106,6 +107,11 @@ export async function POST(
       { status: 400 }
     );
   }
+  let categoryRef;
+  try { categoryRef = await requireFinancialMovementCategory(prisma, { categoryId, direction: "EXPENSE", scope: "CASH" }); }
+  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Categoría inválida" }, { status: 400 }); }
+  if (categoryRef.requiresReason && (!notes || typeof notes !== "string" || !notes.trim())) return NextResponse.json({ error: "Esta categoría requiere motivo." }, { status: 400 });
+  if (categoryRef.requiresReceipt && (!receiptPhotoUrl || typeof receiptPhotoUrl !== "string")) return NextResponse.json({ error: "Esta categoría requiere comprobante." }, { status: 400 });
 
   const occurredAt = clientCreatedAt ? new Date(clientCreatedAt) : null;
   if (occurredAt && Number.isNaN(occurredAt.getTime())) return NextResponse.json({ error: "Fecha de salida inválida" }, { status: 400 });
@@ -114,6 +120,8 @@ export async function POST(
       cashCutId,
       concept,
       category,
+      categoryId: categoryRef.id,
+      categoryNameSnapshot: categoryRef.name,
       amount,
       authorizedById: authorizedById ?? null,
       notes,

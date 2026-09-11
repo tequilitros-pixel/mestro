@@ -1,7 +1,7 @@
 // PENDIENTE DE SCHEMA
 // Destino: components/cash-cuts/safe/WithdrawEnvelopeForm.tsx
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 
 export function WithdrawEnvelopeForm({
@@ -17,8 +17,13 @@ export function WithdrawEnvelopeForm({
 }) {
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [categories, setCategories] = useState<Array<{ id: string; name: string; requiresReason: boolean; requiresReceipt: boolean }>>([]);
+  const [receiptPhotoUrl, setReceiptPhotoUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => { fetch("/api/financial-movement-categories?direction=EXPENSE&scope=ENVELOPE").then((r) => r.ok ? r.json() : []).then((rows) => { setCategories(rows); setCategoryId(rows[0]?.id ?? ""); }).catch(() => setCategories([])); }, []);
+  const selected = categories.find((category) => category.id === categoryId);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -32,16 +37,18 @@ export function WithdrawEnvelopeForm({
       setError(`No puedes retirar más de $${maxAmount.toFixed(2)}.`);
       return;
     }
-    if (!reason.trim()) {
+    if (!categoryId) { setError("Selecciona una categoría."); return; }
+    if (selected?.requiresReason && !reason.trim()) {
       setError("El motivo es obligatorio.");
       return;
     }
+    if (selected?.requiresReceipt && !receiptPhotoUrl.trim()) { setError("El comprobante es obligatorio."); return; }
     setSaving(true);
     try {
       const res = await fetch(`/api/cash-cuts/safe/envelopes/${envelopeId}/withdraw`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: value, reason }),
+        body: JSON.stringify({ amount: value, reason, categoryId, receiptPhotoUrl: receiptPhotoUrl || undefined }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -74,8 +81,12 @@ export function WithdrawEnvelopeForm({
         />
       </div>
       <div>
+        <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Categoría</label>
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface"><option value="">Selecciona…</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
+      </div>
+      <div>
         <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">
-          Motivo
+          Motivo{selected?.requiresReason ? " (obligatorio)" : ""}
         </label>
         <input
           value={reason}
@@ -84,6 +95,7 @@ export function WithdrawEnvelopeForm({
           placeholder="Ej. Pago a proveedor"
         />
       </div>
+      {selected?.requiresReceipt && <div><label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Comprobante (URL)</label><input value={receiptPhotoUrl} onChange={(e) => setReceiptPhotoUrl(e.target.value)} required placeholder="URL del comprobante" className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface" /></div>}
       {error && <p className="text-xs text-error">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={saving}>

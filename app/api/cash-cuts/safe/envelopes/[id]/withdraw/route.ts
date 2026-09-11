@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canWithdraw, withdrawFromEnvelope } from "@/lib/cash-cuts/safeEnvelopes";
+import { isCurrentManagerBusinessWeek } from "@/lib/cash-cuts/access";
 
 /**
  * body: { amount: number, reason: string } -> retiro parcial
@@ -26,6 +27,7 @@ export async function POST(
   if (!envelope) {
     return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
   }
+  if (!isCurrentManagerBusinessWeek(user.role, envelope.cutDate)) return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
 
   const allowedBranchIds = await getAccessibleBranchIds();
   if (allowedBranchIds && !allowedBranchIds.includes(envelope.branchId)) {
@@ -33,7 +35,7 @@ export async function POST(
   }
 
   const body = await request.json().catch(() => ({}));
-  const { amount, full, reason } = body;
+  const { amount, full, reason, categoryId } = body;
 
   if (typeof reason !== "string" || !reason.trim()) {
     return NextResponse.json({ error: "El motivo del retiro es obligatorio" }, { status: 400 });
@@ -45,6 +47,8 @@ export async function POST(
       amount: typeof amount === "number" ? amount : undefined,
       full: full === true,
       reason,
+      categoryId: typeof categoryId === "string" ? categoryId : undefined,
+      receiptPhotoUrl: typeof body.receiptPhotoUrl === "string" ? body.receiptPhotoUrl : undefined,
       userId: user.id,
     });
     return NextResponse.json(updated);

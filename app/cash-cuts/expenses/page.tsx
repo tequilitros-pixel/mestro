@@ -12,30 +12,29 @@ interface Outflow {
   id: string;
   concept: string;
   category: string;
+  categoryRef?: { id: string; name: string; group: string | null } | null;
   amount: number;
   occurredAt: string;
   cashCut: { code: string; branch: { name: string } };
 }
-type Preset = "current-week" | "previous-week" | "current-month" | "previous-month" | "custom";
+type Preset = "current-week" | "previous-week" | "current-month" | "previous-month" | "current-quarter" | "current-year" | "custom";
 type Tab = "summary" | "charts";
 
 const money = (value: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
 function periodFor(preset: Exclude<Preset, "custom">) {
   const today = todayDateOnly();
   const currentMonday = mondayOfWeek(today);
-  if (preset === "current-week") {
-    return { from: currentMonday, to: addDaysToDateOnly(currentMonday, 6) };
+  if (preset === "current-week") return { from: currentMonday, to: addDaysToDateOnly(currentMonday, 6) };
+  if (preset === "previous-week") return { from: addDaysToDateOnly(currentMonday, -7), to: addDaysToDateOnly(currentMonday, -1) };
+  if (preset === "current-quarter") {
+    const month = Number(today.slice(5, 7));
+    const quarterStartMonth = Math.floor((month - 1) / 3) * 3 + 1;
+    const quarterStart = `${today.slice(0, 4)}-${String(quarterStartMonth).padStart(2, "0")}-01`;
+    return { from: quarterStart, to: lastDayOfMonth(`${today.slice(0, 4)}-${String(quarterStartMonth + 2).padStart(2, "0")}-01`) };
   }
-  if (preset === "previous-week") {
-    return { from: addDaysToDateOnly(currentMonday, -7), to: addDaysToDateOnly(currentMonday, -1) };
-  }
-  const selectedMonth = preset === "current-month"
-    ? today
-    : addDaysToDateOnly(firstDayOfMonth(today), -1);
-  return {
-    from: firstDayOfMonth(selectedMonth),
-    to: lastDayOfMonth(selectedMonth),
-  };
+  if (preset === "current-year") return { from: `${today.slice(0, 4)}-01-01`, to: `${today.slice(0, 4)}-12-31` };
+  const selectedMonth = preset === "current-month" ? today : addDaysToDateOnly(firstDayOfMonth(today), -1);
+  return { from: firstDayOfMonth(selectedMonth), to: lastDayOfMonth(selectedMonth) };
 }
 
 export default function ExpensesPage() {
@@ -81,18 +80,20 @@ export default function ExpensesPage() {
   }, [branchId, concept, from, to]);
 
   const analytics = useMemo(() => {
-    const categories = new Map<string, number>();
+    const categories = new Map<string, { name: string; value: number }>();
     const days = new Map<string, { label: string; amount: number }>();
     let total = 0;
     for (const outflow of outflows) {
       total += outflow.amount;
-      categories.set(outflow.category, (categories.get(outflow.category) ?? 0) + outflow.amount);
+      const categoryKey = outflow.categoryRef?.id ?? `legacy:${outflow.category}`;
+      const categoryName = outflow.categoryRef?.name ?? outflow.category;
+      categories.set(categoryKey, { name: categoryName, value: (categories.get(categoryKey)?.value ?? 0) + outflow.amount });
       const key = outflow.occurredAt.slice(0, 10);
       const current = days.get(key) ?? { label: formatCivilDate(`${key}T00:00:00.000Z`, { day: "2-digit", month: "short" }), amount: 0 };
       current.amount += outflow.amount;
       days.set(key, current);
     }
-    const byCategory = [...categories].map(([name, value]) => ({ name, value })).toSorted((a, b) => b.value - a.value);
+    const byCategory = [...categories.values()].toSorted((a, b) => b.value - a.value);
     return { total, average: outflows.length ? total / outflows.length : 0, byCategory, byDay: [...days.entries()].toSorted(([a], [b]) => a.localeCompare(b)).map(([, value]) => value) };
   }, [outflows]);
 
@@ -114,7 +115,7 @@ export default function ExpensesPage() {
       <Card className="space-y-4">
         <div className="flex flex-wrap gap-2" role="group" aria-label="Periodo de consulta">
           {([
-            ["current-week", "Esta semana"], ["previous-week", "Semana anterior"], ["current-month", "Este mes"], ["previous-month", "Mes anterior"], ["custom", "Personalizado"],
+            ["current-week", "Esta semana"], ["previous-week", "Semana anterior"], ["current-month", "Este mes"], ["previous-month", "Mes anterior"], ["current-quarter", "Este trimestre"], ["current-year", "Este año"], ["custom", "Personalizado"],
           ] as Array<[Preset, string]>).map(([key, label]) => (
             <button key={key} type="button" onClick={() => selectPreset(key)} className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${preset === key ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface hover:bg-surface-container-highest"}`}>{label}</button>
           ))}

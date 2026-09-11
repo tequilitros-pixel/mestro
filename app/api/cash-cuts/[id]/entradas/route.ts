@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { requireFinancialMovementCategory } from "@/lib/financialMovementCategories";
 
 const ROLES_QUE_PUEDEN_EDITAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -89,7 +90,7 @@ export async function POST(
   }
 
   const body = await request.json();
-  const { type, amount, notes, clientOperationId, clientCreatedAt } = body;
+  const { type, categoryId, amount, notes, clientOperationId, clientCreatedAt } = body;
 
   if (clientOperationId) {
     const existing = await prisma.cashInflow.findUnique({ where: { id: clientOperationId } });
@@ -104,11 +105,16 @@ export async function POST(
   if (!TIPOS_VALIDOS.includes(type) || typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json({ error: "type inválido o amount faltante" }, { status: 400 });
   }
+  let categoryRef;
+  try { categoryRef = await requireFinancialMovementCategory(prisma, { categoryId, direction: "INCOME", scope: "CASH" }); }
+  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Categoría inválida" }, { status: 400 }); }
+  if (categoryRef.requiresReason && (!notes || typeof notes !== "string" || !notes.trim())) return NextResponse.json({ error: "Esta categoría requiere motivo." }, { status: 400 });
+  if (categoryRef.requiresReceipt) return NextResponse.json({ error: "Esta categoría requiere comprobante." }, { status: 400 });
 
   const occurredAt = clientCreatedAt ? new Date(clientCreatedAt) : null;
   if (occurredAt && Number.isNaN(occurredAt.getTime())) return NextResponse.json({ error: "Fecha de entrada inválida" }, { status: 400 });
   const entrada = await prisma.cashInflow.create({
-    data: { ...(clientOperationId ? { id: clientOperationId } : {}), cashCutId, type, amount, notes, ...(occurredAt ? { occurredAt, createdAt: occurredAt } : {}) },
+    data: { ...(clientOperationId ? { id: clientOperationId } : {}), cashCutId, type, categoryId: categoryRef.id, categoryNameSnapshot: categoryRef.name, amount, notes, receiptPhotoUrl: body.receiptPhotoUrl ?? null, ...(occurredAt ? { occurredAt, createdAt: occurredAt } : {}) },
   });
 
   const totalInflows = await recalcularTotalEntradas(cashCutId);

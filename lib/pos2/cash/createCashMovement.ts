@@ -7,8 +7,9 @@ import { appendOutboxEvent } from "@/lib/pos2/outbox";
 import { requireCapability, type CommandActor } from "@/lib/pos2/authorization";
 import { sanitizeAuditMetadata } from "@/lib/pos2/auditMetadata";
 import { lockCashSession, requireActiveTerminal, requireActorBranch } from "./guards";
+import { requireFinancialMovementCategory } from "@/lib/financialMovementCategories";
 
-type Input = { operationId: string; cashSessionId: string; terminalId: string; actor: CommandActor; amount: string; reason: string; metadata?: Record<string, unknown> };
+type Input = { operationId: string; cashSessionId: string; terminalId: string; actor: CommandActor; amount: string; reason: string; categoryId?: string; metadata?: Record<string, unknown> };
 
 async function create(input: Input, kind: "CASH_IN" | "CASH_OUT") {
   let amount: Money;
@@ -22,10 +23,13 @@ async function create(input: Input, kind: "CASH_IN" | "CASH_OUT") {
     await requireCapability(tx, input.actor, capability, session.branchId);
     await requireActiveTerminal(tx, { terminalId: input.terminalId, branchId: session.branchId });
     if (session.status !== "OPEN") throw new DomainError("INVALID_STATE_TRANSITION", { status: session.status });
+    const category = input.categoryId ? await requireFinancialMovementCategory(tx, { categoryId: input.categoryId, direction: kind === "CASH_IN" ? "INCOME" : "EXPENSE", scope: "CASH" }) : null;
+    if (category?.requiresReceipt && !(input.metadata?.receiptPhotoUrl && typeof input.metadata.receiptPhotoUrl === "string")) throw new DomainError("VALIDATION_ERROR", { field: "receiptPhotoUrl" });
     const movement = await tx.cashMovement.create({ data: {
       cashSessionId: session.id, branchId: session.branchId, registerId: session.registerId, type: kind,
       direction: kind === "CASH_IN" ? "IN" : "OUT", amount: amount.toDecimal(), sourceType: "Manual", sourceId: input.operationId,
       actorId: input.actor.id, operationId: input.operationId, metadata: sanitizeAuditMetadata({ reason: input.reason.trim(), ...input.metadata }),
+      ...(category ? { categoryId: category.id, categoryNameSnapshot: category.name } : {}),
     } });
     const action = kind === "CASH_IN" ? "cash.in.created" : "cash.out.created";
     await appendAuditEvent(tx, { actorId: input.actor.id, branchId: session.branchId, terminalId: input.terminalId, action, entityType: "CashMovement", entityId: movement.id, operationId: input.operationId, metadata: { sessionId: session.id, amount: amount.toString(), reason: input.reason.trim() } });

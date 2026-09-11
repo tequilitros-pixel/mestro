@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canReceive, receiveEnvelope } from "@/lib/cash-cuts/safeEnvelopes";
+import { isCurrentManagerBusinessWeek } from "@/lib/cash-cuts/access";
 
 export async function POST(
   request: Request,
@@ -22,6 +23,7 @@ export async function POST(
   if (!envelope) {
     return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
   }
+  if (!isCurrentManagerBusinessWeek(user.role, envelope.cutDate)) return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
 
   const allowedBranchIds = await getAccessibleBranchIds();
   if (allowedBranchIds && !allowedBranchIds.includes(envelope.branchId)) {

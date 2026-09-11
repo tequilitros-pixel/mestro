@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
 import { getBranchSafeSummary, listEnvelopesForBranch } from "@/lib/cash-cuts/safeEnvelopes";
+import { currentBusinessWeekRange } from "@/lib/cash-cuts/access";
 
 /**
  * GET /api/cash-cuts/safe/envelopes
@@ -20,13 +21,15 @@ export async function GET(req: NextRequest) {
   const allowedBranchIds = await getAccessibleBranchIds();
   const { searchParams } = new URL(req.url);
   const requestedBranchId = searchParams.get("branchId");
+  const dateRange = user.role === "GERENTE" ? currentBusinessWeekRange() : undefined;
 
   if (requestedBranchId) {
     if (allowedBranchIds && !allowedBranchIds.includes(requestedBranchId)) {
       return NextResponse.json({ error: "No tienes acceso a esta sucursal" }, { status: 403 });
     }
     const envelopes = await listEnvelopesForBranch(requestedBranchId);
-    return NextResponse.json(envelopes);
+    const visible = dateRange ? envelopes.filter((envelope) => envelope.cutDate >= dateRange.from && envelope.cutDate < dateRange.toExclusive) : envelopes;
+    return NextResponse.json(visible);
   }
 
   if (allowedBranchIds && allowedBranchIds.length === 0) {
@@ -39,7 +42,7 @@ export async function GET(req: NextRequest) {
   });
 
   const summaries = await Promise.all(
-    branches.map((b) => getBranchSafeSummary(b.id))
+    branches.map((b) => getBranchSafeSummary(b.id, dateRange))
   );
 
   return NextResponse.json(summaries);
