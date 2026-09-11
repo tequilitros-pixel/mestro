@@ -2,9 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getAccessibleBranchIds, requireModuleActionAccess } from "@/lib/auth";
+import { getAccessibleBranchIds, getCurrentUser, requireModuleActionAccess } from "@/lib/auth";
 import { isBranchAllowed } from "@/lib/branches/access";
 import { parseDateOnly } from "@/lib/dateOnly";
+import { executeIdempotent } from "@/lib/pos2/idempotency";
+import { reconcileWeeklyCountCutover } from "@/lib/inventory/weeklyCountCutover";
 
 const INVENTORY_COUNTS_PERMISSION = "/administration/inventory/branch-counts";
 
@@ -132,72 +134,22 @@ export async function updateCountItemQuantityAction(
 
 export async function closeInventoryCountAction(
   countId: string,
+  operationId: string,
 ): Promise<ActionResult> {
   try {
     const scopedCount = await prisma.inventoryCount.findUnique({ where: { id: countId }, select: { branchId: true } });
     if (!scopedCount) return { success: false, error: "Conteo no encontrado." };
     await authorizeCountBranch(scopedCount.branchId);
-    const count = await prisma.inventoryCount.findUnique({
-      where: { id: countId },
-      include: { items: { include: { product: true } } },
-    });
-
-    if (!count) {
-      return { success: false, error: "Conteo no encontrado." };
-    }
-
-    if (count.status === "CERRADO") {
-      return { success: false, error: "Este conteo ya está cerrado." };
-    }
-
-    const previousCount = await prisma.inventoryCount.findFirst({
-      where: {
-        branchId: count.branchId,
-        status: "CERRADO",
-        countDate: { lt: count.countDate },
+    const actor = await getCurrentUser();
+    if (!actor) return { success: false, error: "Sesión no válida." };
+    await executeIdempotent({
+      operationId,
+      command: "CloseInventoryCountV2",
+      payload: { countId },
+      receiptContext: { actorId: actor.id, branchId: scopedCount.branchId },
+      execute: async (tx) => {
+        return reconcileWeeklyCountCutover(tx, { countId, actorId: actor.id, operationId });
       },
-      orderBy: { countDate: "desc" },
-      select: { countDate: true },
-    });
-
-    const periodStart = previousCount?.countDate ?? new Date(0);
-
-    await prisma.$transaction(async (tx) => {
-      for (const item of count.items) {
-        const entries = await tx.inventoryEntry.aggregate({
-          where: {
-            branchId: count.branchId,
-            productId: item.productId,
-            entryDate: { gt: periodStart, lte: count.countDate },
-          },
-          _sum: { quantity: true },
-        });
-
-        const entriesQuantity = entries._sum.quantity
-          ? Number(entries._sum.quantity)
-          : 0;
-        const previous = Number(item.previousQuantity ?? 0);
-        const counted = Number(item.quantityCounted);
-        const consumed = Math.max(previous + entriesQuantity - counted, 0);
-        const unitCost =
-          item.product.unitCost !== null ? Number(item.product.unitCost) : null;
-        const costTotal = unitCost !== null ? consumed * unitCost : null;
-
-        await tx.inventoryCountItem.update({
-          where: { id: item.id },
-          data: {
-            entriesQuantity,
-            quantityConsumed: consumed,
-            unitCostAtTime: unitCost,
-            costTotal,
-          },
-        });
-      }
-
-      await tx.inventoryCount.update({
-        where: { id: countId },
-        data: { status: "CERRADO" },
-      });
     });
 
     revalidatePath(`/administration/inventory/branch-counts/${countId}`);

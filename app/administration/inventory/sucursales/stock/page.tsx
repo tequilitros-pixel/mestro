@@ -1,11 +1,18 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { computeStockMatrix } from "../../lib/stock";
+import { formatCommercialQuantity } from "@/lib/inventory/units";
 
 const numberFormat = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 });
 const literFormat = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 3 });
 
-function formatStock(quantity: number, unit: string) {
+type StockProduct = { unit: string; inventoryBaseUnit: string | null; handlingUnit: string | null; contentPerUnit: unknown; contentUnit: string | null; normalizedContentPerUnit: unknown };
+
+function formatStock(quantity: number, product: StockProduct) {
+  if (product.inventoryBaseUnit === "UNIT" && product.contentPerUnit !== null && product.contentUnit) {
+    return formatCommercialQuantity(quantity, product);
+  }
+  const unit = product.unit;
   if (unit.trim().toLowerCase() === "ml") {
     return `${literFormat.format(quantity / 1000)} L (${numberFormat.format(quantity)} ml)`;
   }
@@ -13,11 +20,19 @@ function formatStock(quantity: number, unit: string) {
   return `${numberFormat.format(quantity)} ${unit}`;
 }
 
+function commercialLabel(product: StockProduct) {
+  const content = Number(product.contentPerUnit);
+  if (product.inventoryBaseUnit === "UNIT" && Number.isFinite(content) && content > 0 && product.contentUnit) {
+    return `${product.handlingUnit?.toLowerCase() === "paquete" ? "Paquete" : product.handlingUnit} de ${content} ${product.contentUnit.toLowerCase()}`;
+  }
+  return product.unit;
+}
+
 export default async function BranchStockPage() {
   const products = await prisma.inventoryProduct.findMany({
     where: { isActive: true, trackStock: true },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, unit: true, category: true, minimumStock: true },
+    select: { id: true, name: true, unit: true, category: true, minimumStock: true, inventoryBaseUnit: true, handlingUnit: true, contentPerUnit: true, contentUnit: true, normalizedContentPerUnit: true },
   });
 
   const matrix = await computeStockMatrix(products.map((p) => p.id));
@@ -82,14 +97,14 @@ export default async function BranchStockPage() {
                     <td className="sticky left-0 bg-surface-container px-4 py-3 font-medium text-on-surface">
                       {product.name}
                       {product.unit.trim().toLowerCase() !== "ml" && (
-                        <span className="ml-2 text-xs text-on-surface-variant">{product.unit}</span>
+                        <span className="ml-2 text-xs text-on-surface-variant">{commercialLabel(product)}</span>
                       )}
                     </td>
                     {matrix.branches.map((branch) => {
                       const stock = matrix.stockByBranch.get(branch.id)?.get(product.id) ?? 0;
                       return (
                         <td key={branch.id} className="px-4 py-3 text-right text-on-surface-variant">
-                          {formatStock(stock, product.unit)}
+                          {formatStock(stock, product)}
                         </td>
                       );
                     })}
@@ -98,10 +113,10 @@ export default async function BranchStockPage() {
                         isLow ? "text-error" : "text-on-surface"
                       }`}
                     >
-                      {formatStock(total, product.unit)}
+                      {formatStock(total, product)}
                     </td>
                     <td className="px-4 py-3 text-right text-on-surface-variant">
-                      {minimum > 0 ? formatStock(minimum, product.unit) : "—"}
+                      {minimum > 0 ? formatStock(minimum, product) : "—"}
                     </td>
                   </tr>
                 );

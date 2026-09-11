@@ -18,7 +18,7 @@ function verifiedDatabaseUrl() {
   }
   // pg 9 dejará de tratar `require` como verificación completa. Fijarlo aquí
   // mantiene validación de certificado aunque una integración regenere la URL.
-  url.searchParams.set("sslmode", "verify-full");
+  if (process.env.NODE_ENV !== "test") url.searchParams.set("sslmode", "verify-full");
   return url.toString();
 }
 

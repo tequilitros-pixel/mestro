@@ -5,6 +5,7 @@ import CloseCountButton from "./CloseCountButton";
 import { formatDateOnly } from "@/lib/dateOnly";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility";
+import { generateOperationId } from "@/lib/pos2/operationId";
 
 export default async function CountDetailPage({
   params,
@@ -97,7 +98,7 @@ export default async function CountDetailPage({
           ))}
         </div>
 
-        {editable && <CloseCountButton countId={count.id} />}
+        {editable && <CloseCountButton countId={count.id} operationId={generateOperationId()} />}
       </div>
     </main>
   );

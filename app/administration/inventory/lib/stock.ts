@@ -24,6 +24,11 @@ export async function computeStockMatrix(productIds: string[], allowedBranchIds:
 
   await Promise.all(
     branches.map(async (branch) => {
+      const v2Balances = await prisma.inventoryBalance.findMany({
+        where: { branchId: branch.id, inventoryProductId: { in: productIds } },
+        select: { inventoryProductId: true, quantity: true },
+      });
+      const v2ByProduct = new Map(v2Balances.map((balance) => [balance.inventoryProductId, Number(balance.quantity)]));
       const lastCount = await prisma.inventoryCount.findFirst({
         where: { branchId: branch.id, status: "CERRADO" },
         orderBy: { countDate: "desc" },
@@ -52,7 +57,9 @@ export async function computeStockMatrix(productIds: string[], allowedBranchIds:
       for (const productId of productIds) {
         productMap.set(
           productId,
-          (baseline.get(productId) ?? 0) + (entriesByProduct.get(productId) ?? 0),
+          v2ByProduct.has(productId)
+            ? v2ByProduct.get(productId)!
+            : (baseline.get(productId) ?? 0) + (entriesByProduct.get(productId) ?? 0),
         );
       }
       stockByBranch.set(branch.id, productMap);

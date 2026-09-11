@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { closeInventoryCountAction, type ActionResult } from "../actions";
 import { useToast } from "@/components/ui/Toast";
 
-export default function CloseCountButton({ countId }: { countId: string }) {
+export default function CloseCountButton({ countId, operationId }: { countId: string; operationId: string }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [result, setResult] = useState<ActionResult | null>(null);
@@ -14,7 +14,7 @@ export default function CloseCountButton({ countId }: { countId: string }) {
 
   async function handleClose() {
     setSaving(true);
-    const response = await closeInventoryCountAction(countId);
+    const response = await closeInventoryCountAction(countId, operationId);
     setResult(response);
     setSaving(false);
 
