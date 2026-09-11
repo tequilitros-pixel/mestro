@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
-  archiveWorkforceIdentityAction,
+  createWorkforceEmployeeUserAction,
   changeWorkforceEmployeeActiveAction,
   changeWorkforceEmploymentStatusAction,
   changeWorkforceHomeAction,
@@ -12,9 +12,11 @@ import {
   rehireWorkforceEmployeeAction,
   toggleWorkforceAllowedBranchAction,
   updateWorkforceEmployeeAction,
+  setWorkforceEmployeeUserAction,
 } from "@/app/actions/workforceEmployment";
 import { SubmitButton } from "../SubmitButton";
-import { getEmployee } from "@/lib/workforce/employment/service";
+import { ConfirmSubmitButton } from "../ConfirmSubmitButton";
+import { getEmployee, listEligibleUsers } from "@/lib/workforce/employment/service";
 
 const field = "mt-1 w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm";
 const panel = "space-y-4 rounded-xl border border-outline-variant p-4 sm:p-5";
@@ -46,12 +48,13 @@ export default async function EmployeeDetail({
   await requireAdmin();
   const { id } = await params;
   const query = await searchParams;
-  const [employee, branches] = await Promise.all([
+  const [employee, branches, eligibleUsers] = await Promise.all([
     getEmployee(id),
     prisma.branch.findMany({
       where: { active: true },
       orderBy: { name: "asc" },
     }),
+    listEligibleUsers(id),
   ]);
   if (!employee) notFound();
 
@@ -105,16 +108,26 @@ export default async function EmployeeDetail({
             {employee.active ? "Empleado activo" : "Empleado inactivo"}
           </button>
         </form>
-        {employee.user ? <>
-          <div>
-            <h2 className="font-bold">Acceso a MAESTRO</h2>
-            <p className="text-sm text-on-surface-variant">{employee.user.active ? "Habilitado" : "Deshabilitado"}. Para cambiarlo usa Personal, donde también se revocan sesiones al deshabilitar.</p>
-          </div>
-          <form action={archiveWorkforceIdentityAction} className="flex items-center justify-between gap-3 sm:justify-end">
+        <div className="sm:col-span-2">
+          <h2 className="font-bold">Acceso a MAESTRO</h2>
+          <p className="text-sm text-on-surface-variant">{employee.user ? `@${employee.user.username} · ${employee.user.active ? "Habilitado" : "Deshabilitado"}` : "Sin usuario vinculado"}</p>
+          <form action={setWorkforceEmployeeUserAction} className="mt-3 flex flex-wrap items-end gap-2">
             <input type="hidden" name="employeeId" value={id} />
-            <button type="submit" className="min-h-11 rounded-lg border border-error/50 px-4 py-2 font-bold text-error">Desactivar identidad y cerrar sesiones</button>
+            <label className="min-w-64 flex-1 text-sm">Usuario vinculado<select name="userId" defaultValue={employee.user?.id ?? ""} className={field}><option value="">Sin usuario</option>{eligibleUsers.map((user) => <option key={user.id} value={user.id}>{user.name} · @{user.username} · {user.role}</option>)}</select></label>
+            <ConfirmSubmitButton className={button} message="¿Cambiar el usuario vinculado a este empleado? Si queda sin usuario, sólo se quitará la relación de identidad; no se eliminarán datos laborales.">Guardar vínculo</ConfirmSubmitButton>
           </form>
-        </> : null}
+          <details className="mt-3 rounded-lg border border-outline-variant p-3">
+            <summary className="cursor-pointer font-semibold">Crear usuario nuevo y vincular</summary>
+            <form action={createWorkforceEmployeeUserAction} className="mt-3 grid gap-3 sm:grid-cols-2">
+              <input type="hidden" name="employeeId" value={id} />
+              <label>Nombre<input required name="newUserName" defaultValue={employee.displayName ?? ""} className={field} /></label>
+              <label>Usuario/login<input required name="newUsername" className={field} /></label>
+              <label>Contraseña inicial<input required minLength={8} type="password" name="newPassword" className={field} /></label>
+              <label>Rol<select name="newRole" defaultValue="OPERATOR" className={field}><option value="OPERATOR">Operador</option><option value="ENCARGADO">Encargado</option><option value="GERENTE">Gerente</option><option value="CONSULTA">Consulta</option><option value="ADMIN">Administrador</option></select></label>
+              <ConfirmSubmitButton className={button} message="¿Crear este usuario y vincularlo a este empleado? Si ya existe otro usuario, será reemplazado y sus sesiones serán revocadas.">Crear y vincular</ConfirmSubmitButton>
+            </form>
+          </details>
+        </div>
       </section>
 
       {query.error && <p role="alert" className="rounded-lg border border-error p-3 text-error">{query.error}</p>}
@@ -209,11 +222,6 @@ export default async function EmployeeDetail({
               <p className="text-sm text-on-surface-variant">No existe una meta individual canónica en el modelo actual. El umbral global de horas extra no se reutiliza como meta de este empleado.</p>
             </section>
 
-            <section className={panel}>
-              <h2 className="text-lg font-bold">Acceso a MAESTRO</h2>
-              <p className="text-lg font-bold">{employee.user ? "@" + employee.user.username : "Sin cuenta vinculada"}</p>
-              <p className="text-sm text-on-surface-variant">{employee.user ? (employee.user.active ? "Habilitado" : "Deshabilitado") : "El empleado no tiene login."}</p>
-            </section>
           </div>
         </div>
       ) : (

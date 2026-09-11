@@ -18,7 +18,10 @@ function verifiedDatabaseUrl() {
   }
   // pg 9 dejará de tratar `require` como verificación completa. Fijarlo aquí
   // mantiene validación de certificado aunque una integración regenere la URL.
-  url.searchParams.set("sslmode", "verify-full");
+  // La instancia efímera de QA local no expone TLS; las conexiones remotas,
+  // incluida toda producción, conservan verificación estricta del certificado.
+  const localDevelopment = ["localhost", "127.0.0.1"].includes(url.hostname);
+  url.searchParams.set("sslmode", localDevelopment ? "disable" : "verify-full");
   return url.toString();
 }
 

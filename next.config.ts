@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+const developmentScriptEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
+
 const nextConfig: NextConfig = {
   reactCompiler: true,
   async redirects() {
@@ -99,7 +101,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
               "style-src 'self' 'unsafe-inline' https://unpkg.com",
-              "script-src 'self' 'unsafe-inline' https://unpkg.com",
+              `script-src 'self' 'unsafe-inline'${developmentScriptEval} https://unpkg.com`,
               "connect-src 'self' https:",
               "upgrade-insecure-requests",
             ].join("; "),

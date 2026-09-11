@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { listEligibleUsers } from "@/lib/workforce/employment/service";
 import { createWorkforceEmployeeAction } from "@/app/actions/workforceEmployment";
 import { SubmitButton } from "../SubmitButton";
 
@@ -11,7 +12,7 @@ export default async function NewEmployeePage({ searchParams }: { searchParams: 
   const { error } = await searchParams;
   const [branches, users] = await Promise.all([
     prisma.branch.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
-    prisma.user.findMany({ where: { active: true, workforceEmployee: null }, select: { id: true, name: true, username: true }, orderBy: { name: "asc" } }),
+    listEligibleUsers(),
   ]);
   return (
     <section className="mx-auto max-w-3xl space-y-4">
@@ -26,7 +27,22 @@ export default async function NewEmployeePage({ searchParams }: { searchParams: 
         <label className="block">Nombre<input required name="displayName" className={field} /></label>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <label>Usuario vinculado (opcional)<select name="userId" className={field}><option value="">Sin usuario vinculado</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name} (@{user.username})</option>)}</select></label>
+          <fieldset className="sm:col-span-2 rounded-lg border border-outline-variant p-3">
+            <legend className="px-1 font-semibold">Acceso a MAESTRO</legend>
+            <div className="mt-2 grid gap-2">
+              <label className="flex min-h-11 items-center gap-2"><input type="radio" name="accessMode" value="EXISTING" />Vincular usuario existente</label>
+              <select name="userId" className={field}><option value="">Seleccionar usuario</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name} · @{user.username} · {user.role}</option>)}</select>
+              <label className="flex min-h-11 items-center gap-2"><input type="radio" name="accessMode" value="NEW" />Crear usuario nuevo</label>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <input name="newUserName" placeholder="Nombre de la cuenta" className={field} />
+                <input name="newUsername" placeholder="Usuario/login" className={field} />
+                <input name="newPassword" type="password" minLength={8} placeholder="Contraseña inicial" className={field} />
+                <select name="newRole" defaultValue="OPERATOR" className={field}><option value="OPERATOR">Operador</option><option value="ENCARGADO">Encargado</option><option value="GERENTE">Gerente</option><option value="CONSULTA">Consulta</option><option value="ADMIN">Administrador</option></select>
+              </div>
+              <label className="flex min-h-11 items-center gap-2"><input type="radio" name="accessMode" value="NONE" defaultChecked />Sin acceso por ahora</label>
+              <p className="text-xs text-on-surface-variant">La cuenta nueva usa el mismo login de MAESTRO y queda vinculada automáticamente.</p>
+            </div>
+          </fieldset>
           <label>Estado inicial<select name="status" className={field}><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></label>
           <label className="sm:col-span-2">Sucursal principal<select name="homeBranchId" className={field}><option value="">Sin sucursal</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
         </div>

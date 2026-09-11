@@ -3,6 +3,7 @@ import { Prisma, type BranchAssignmentType, type DataConfidence, type Employment
 import { prisma } from "@/lib/prisma";
 import { assertActiveBranch } from "@/lib/workforce/branchLifecycle";
 import { assertNativeCurrency, assertValidRange, rangesOverlap } from "./rules";
+import { createUserRecord, type CreateUserRecordInput } from "@/lib/personnel/user-service";
 
 export type CreateEmployeeInput = {
   displayName: string;
@@ -10,6 +11,7 @@ export type CreateEmployeeInput = {
   lastName?: string | null;
   employeeNumber?: string | null;
   userId?: string | null;
+  newUser?: CreateUserRecordInput;
   active?: boolean;
   employment?: {
     status: EmploymentStatus;
@@ -22,6 +24,20 @@ export type CreateEmployeeInput = {
     payRate?: { rateType: WorkforceRateType; amount: number; currency: string; effectiveFrom: Date };
   };
 };
+
+export async function listEligibleUsers(employeeId?: string) {
+  return prisma.user.findMany({
+    where: {
+      active: true,
+      OR: [
+        { workforceEmployee: null },
+        ...(employeeId ? [{ workforceEmployee: { is: { id: employeeId } } }] : []),
+      ],
+    },
+    select: { id: true, name: true, username: true, role: true, workforceEmployee: { select: { id: true } } },
+    orderBy: { name: "asc" },
+  });
+}
 
 export async function listEmployees() {
   const now = new Date();
@@ -62,11 +78,19 @@ export async function createEmployee(input: CreateEmployeeInput) {
   if (!displayName) throw new Error("El nombre visible es obligatorio.");
   if (input.employment?.payRate) { assertNativeCurrency(input.employment.payRate.currency); if (!Number.isFinite(input.employment.payRate.amount) || input.employment.payRate.amount <= 0) throw new Error("La tarifa debe ser mayor que cero."); }
   if (input.employment?.status === "TERMINATED") throw new Error("Use Dar de baja para terminar una relación laboral.");
+  if (input.userId && input.newUser) throw new Error("Elige vincular un usuario existente o crear uno nuevo.");
   return prisma.$transaction(async (tx) => {
     for (const branchId of new Set([input.employment?.homeBranchId, ...(input.employment?.allowedBranchIds ?? [])].filter((id): id is string => Boolean(id)))) {
       await assertActiveBranch(tx, branchId);
     }
-    const employee = await tx.employee.create({ data: { displayName, firstName: input.firstName?.trim() || null, lastName: input.lastName?.trim() || null, employeeNumber: input.employeeNumber?.trim() || null, userId: input.userId || null, active: input.active ?? true } });
+    let userId = input.userId || null;
+    if (input.newUser) userId = (await createUserRecord(tx, input.newUser)).id;
+    if (userId) {
+      const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true, active: true, workforceEmployee: { select: { id: true } } } });
+      if (!user || !user.active) throw new Error("El usuario no existe o está deshabilitado.");
+      if (user.workforceEmployee) throw new Error("Este usuario ya está vinculado a otro empleado.");
+    }
+    const employee = await tx.employee.create({ data: { displayName, firstName: input.firstName?.trim() || null, lastName: input.lastName?.trim() || null, employeeNumber: input.employeeNumber?.trim() || null, userId, active: input.active ?? true } });
     if (!input.employment) return employee;
     const employment = await tx.employment.create({ data: { employeeId: employee.id, status: input.employment.status, startedAt: input.employment.startedAt ?? null, dataConfidence: input.employment.dataConfidence } });
     if (input.employment.homeBranchId) await tx.branchAssignment.create({ data: { employmentId: employment.id, branchId: input.employment.homeBranchId, type: "HOME", effectiveFrom: input.employment.effectiveFrom } });
@@ -75,6 +99,32 @@ export async function createEmployee(input: CreateEmployeeInput) {
     if (input.employment.jornadaType) await tx.employmentJornadaPolicy.create({ data: { employmentId: employment.id, jornadaType: input.employment.jornadaType, effectiveFrom: input.employment.effectiveFrom } });
     if (input.employment.payRate) await tx.payRate.create({ data: { employmentId: employment.id, ...input.employment.payRate } });
     return employee;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
+}
+
+export async function setEmployeeUser(input: { employeeId: string; userId: string | null }) {
+  return prisma.$transaction(async (tx) => {
+    const employee = await tx.employee.findUniqueOrThrow({ where: { id: input.employeeId }, select: { id: true, userId: true } });
+    if (input.userId) {
+      const user = await tx.user.findUnique({ where: { id: input.userId }, select: { id: true, active: true, workforceEmployee: { select: { id: true } } } });
+      if (!user || !user.active) throw new Error("El usuario no existe o está deshabilitado.");
+      if (user.workforceEmployee && user.workforceEmployee.id !== employee.id) throw new Error("Este usuario ya está vinculado a otro empleado.");
+    }
+    if (employee.userId !== input.userId) {
+      if (employee.userId) await tx.userSession.deleteMany({ where: { userId: employee.userId } });
+      await tx.employee.update({ where: { id: employee.id }, data: { userId: input.userId } });
+    }
+    return { previousUserId: employee.userId, userId: input.userId };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
+}
+
+export async function createAndSetEmployeeUser(input: { employeeId: string; user: CreateUserRecordInput }) {
+  return prisma.$transaction(async (tx) => {
+    const employee = await tx.employee.findUniqueOrThrow({ where: { id: input.employeeId }, select: { userId: true } });
+    const user = await createUserRecord(tx, input.user);
+    if (employee.userId) await tx.userSession.deleteMany({ where: { userId: employee.userId } });
+    await tx.employee.update({ where: { id: input.employeeId }, data: { userId: user.id } });
+    return user;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
 }
 

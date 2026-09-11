@@ -35,6 +35,7 @@ interface PersonnelUser {
   role: PersonnelRole;
   active: boolean;
   branches: { branch: Branch }[];
+  workforceEmployee: { id: string; displayName: string | null; active: boolean } | null;
 }
 
 type PersonnelActiveFilter = "ACTIVE" | "INACTIVE" | "TODOS";
@@ -335,6 +336,9 @@ export default function PersonnelPage() {
                                                 </span>
                                                 <span className="block truncate text-xs text-on-surface-variant">
                                                   @{u.username}
+                                                </span>
+                                                <span className="block truncate text-xs text-on-surface-variant">
+                                                  {u.workforceEmployee ? `Empleado: ${u.workforceEmployee.displayName ?? "Sin nombre"}` : "Sin empleado vinculado"}
                                                 </span>
                                               </span>
                                             </Link>

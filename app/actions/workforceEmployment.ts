@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 import { assertWorkforceAdministrator } from "@/lib/workforce/employment/rules";
-import { addBranchAssignment, archiveEmployeeIdentity, changeEmploymentStatus, changeHomeBranch, changePayRate, createEmployee, rehireEmployee, setEmployeeActive, updateEmployeeProfile, changeJornada, endAllowedBranch } from "@/lib/workforce/employment/service";
+import { addBranchAssignment, archiveEmployeeIdentity, changeEmploymentStatus, changeHomeBranch, changePayRate, createEmployee, rehireEmployee, setEmployeeActive, updateEmployeeProfile, changeJornada, endAllowedBranch, setEmployeeUser, createAndSetEmployeeUser } from "@/lib/workforce/employment/service";
 
 async function authorize() {
   if (!workforceV1Enabled()) throw new Error("Workforce V1 no está habilitado.");
@@ -28,12 +28,24 @@ export async function createWorkforceEmployeeAction(formData: FormData) {
   let employee;
   try {
     if (String(formData.get("rateAmount") ?? "").trim() && (!Number.isFinite(rateAmount) || rateAmount <= 0)) throw new Error("La tarifa debe ser mayor que cero.");
+    const accessMode = String(formData.get("accessMode") ?? "NONE");
+    if (!["EXISTING", "NEW", "NONE"].includes(accessMode)) throw new Error("Opción de acceso inválida.");
+    const userId = accessMode === "EXISTING" ? String(formData.get("userId") ?? "") || null : null;
+    if (accessMode === "EXISTING" && !userId) throw new Error("Selecciona un usuario existente o elige sin acceso.");
+    const newUser = accessMode === "NEW" ? {
+      name: String(formData.get("newUserName") ?? formData.get("displayName") ?? ""),
+      username: String(formData.get("newUsername") ?? ""),
+      password: String(formData.get("newPassword") ?? ""),
+      role: String(formData.get("newRole") ?? "OPERATOR") as "ADMIN" | "OPERATOR" | "GERENTE" | "ENCARGADO" | "CONSULTA",
+      branchIds: [String(formData.get("homeBranchId") ?? ""), ...formData.getAll("allowedBranchIds").map(String)].filter(Boolean),
+    } : undefined;
     employee = await createEmployee({
     displayName: String(formData.get("displayName") ?? ""),
     firstName: String(formData.get("firstName") ?? "") || null,
     lastName: String(formData.get("lastName") ?? "") || null,
     employeeNumber: String(formData.get("employeeNumber") ?? "") || null,
-    userId: String(formData.get("userId") ?? "") || null,
+    userId,
+    newUser,
     employment: {
       status: String(formData.get("status") ?? "ACTIVE") as "ACTIVE" | "INACTIVE" | "TERMINATED",
       startedAt: String(formData.get("startedAt") ?? "") ? dateValue(formData, "startedAt") : null,
@@ -49,6 +61,30 @@ export async function createWorkforceEmployeeAction(formData: FormData) {
   revalidatePath("/administration/workforce/employees");
   const home = String(formData.get("homeBranchId") ?? "");
   redirect(`/administration/workforce/employees/${employee.id}${home ? `?assignedBranch=${encodeURIComponent(home)}` : ""}`);
+}
+
+export async function setWorkforceEmployeeUserAction(formData: FormData) {
+  return change(formData, () => setEmployeeUser({ employeeId: String(formData.get("employeeId") ?? ""), userId: String(formData.get("userId") ?? "") || null }));
+}
+
+export async function createWorkforceEmployeeUserAction(formData: FormData) {
+  await authorize();
+  const employeeId = String(formData.get("employeeId") ?? "");
+  let error = "";
+  try {
+    await createAndSetEmployeeUser({
+      employeeId,
+      user: {
+        name: String(formData.get("newUserName") ?? ""),
+        username: String(formData.get("newUsername") ?? ""),
+        password: String(formData.get("newPassword") ?? ""),
+        role: String(formData.get("newRole") ?? "OPERATOR") as "ADMIN" | "OPERATOR" | "GERENTE" | "ENCARGADO" | "CONSULTA",
+        branchIds: formData.getAll("branchIds").map(String),
+      },
+    });
+  } catch (cause) { error = cause instanceof Error ? cause.message : "No fue posible crear el usuario."; }
+  revalidatePath(`/administration/workforce/employees/${employeeId}`);
+  redirect(`/administration/workforce/employees/${encodeURIComponent(employeeId)}?${error ? `error=${encodeURIComponent(error)}` : "saved=1"}`);
 }
 
 export async function changeWorkforceHomeAction(formData: FormData) {
