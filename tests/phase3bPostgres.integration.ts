@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { DomainError } from "@/lib/domain/errors";
 import { generateOperationId } from "@/lib/pos2/operationId";
 import { createRegister } from "@/lib/pos2/registers";
-import { authenticateTerminal, createTerminalEnrollment, enrollTerminal, revokeTerminal } from "@/lib/pos2/terminals";
+import { authenticateTerminal, createTerminalEnrollment, enrollTerminal, revokeTerminal, rotateTerminalCredential } from "@/lib/pos2/terminals";
 import { openCashSession } from "@/lib/pos2/cash/openCashSession";
 import { createCashIn, createCashOut } from "@/lib/pos2/cash/createCashMovement";
 import { closeCashSession } from "@/lib/pos2/cash/closeCashSession";
@@ -33,6 +33,19 @@ test("POS 2.0 phase 3B PostgreSQL contract", { skip: !enabled, timeout: 45_000 }
   await t.test("enrollment token is one-use and credential authenticates", async () => {
     assert.equal((await authenticateTerminal({ terminalId, credential: enrolled.credential })).id, terminalId);
     await assert.rejects(enrollTerminal({ enrollmentToken: enrollment.enrollmentToken, deviceIdentifier: `${prefix}-device-retry` }), DomainError);
+  });
+
+  await t.test("credential rotation preserves the terminal and invalidates the previous credential", async () => {
+    const before = await prisma.terminal.findUniqueOrThrow({ where: { id: terminalId } });
+    const rotated = await rotateTerminalCredential({ actor: admin, terminalId, deviceIdentifier: `${prefix}-device-rotated` });
+    assert.equal(rotated.terminal.id, terminalId);
+    assert.equal(rotated.terminal.branchId, branchA);
+    assert.equal((await prisma.terminal.findMany({ where: { branchId: branchA } })).length, 1);
+    const after = await prisma.terminal.findUniqueOrThrow({ where: { id: terminalId } });
+    assert.equal(after.branchId, before.branchId);
+    assert.equal(after.status, "ACTIVE");
+    await assert.rejects(authenticateTerminal({ terminalId, credential: enrolled.credential }), DomainError);
+    assert.equal((await authenticateTerminal({ terminalId, credential: rotated.credential })).id, terminalId);
   });
 
   let openSessionId = "";
@@ -106,6 +119,7 @@ test("POS 2.0 phase 3B PostgreSQL contract", { skip: !enabled, timeout: 45_000 }
     await assert.rejects(openCashSession({ operationId: generateOperationId(), branchId: branchB, registerId: registerB.id, terminalId, actor: restrictedAdmin, openingCash: "0" }), (error: unknown) => error instanceof DomainError && error.code === "PERMISSION_DENIED");
     const noCapability = { id: `${prefix}-manager`, role: "GERENTE" as const, branchIds: [branchA] };
     await prisma.user.create({ data: { id: noCapability.id, name: "No Capability", username: `${prefix}-manager`, password: "not-a-login", role: "GERENTE" } });
+    await assert.rejects(rotateTerminalCredential({ actor: noCapability, terminalId }), (error: unknown) => error instanceof DomainError && error.code === "PERMISSION_DENIED");
     const register3 = await createRegister({ actor: admin, branchId: branchA, code: "CAJA-03", name: "Caja 3" });
     await assert.rejects(openCashSession({ operationId: generateOperationId(), branchId: branchA, registerId: register3.id, terminalId, actor: noCapability, openingCash: "0" }), (error: unknown) => error instanceof DomainError && error.code === "PERMISSION_DENIED");
     await revokeTerminal({ actor: admin, terminalId });

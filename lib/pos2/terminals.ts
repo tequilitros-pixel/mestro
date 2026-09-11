@@ -28,9 +28,12 @@ export async function createTerminalEnrollment(input: { actor: CommandActor; bra
 export async function rotateTerminalCredential(input: { actor: CommandActor; terminalId: string; deviceIdentifier?: string }) {
   const rawCredential = secret();
   const terminal = await prisma.$transaction(async (tx) => {
-    const current = await tx.terminal.findUniqueOrThrow({ where: { id: input.terminalId } });
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Terminal" WHERE "id" = ${input.terminalId} FOR UPDATE`;
+    if (!locked[0]) throw new DomainError("VALIDATION_ERROR", { field: "terminalId" });
+    const current = await tx.terminal.findUniqueOrThrow({ where: { id: input.terminalId }, include: { branch: { select: { active: true } } } });
     requireActorBranch(input.actor, current.branchId);
     await requireCapability(tx, input.actor, "terminal.manage", current.branchId);
+    if (current.status !== "ACTIVE" || !current.branch.active) throw new DomainError("INVALID_STATE_TRANSITION", { terminalId: current.id });
     const rotated = await tx.terminal.update({
       where: { id: current.id },
       data: {
@@ -41,7 +44,7 @@ export async function rotateTerminalCredential(input: { actor: CommandActor; ter
         lastSeenAt: new Date(),
       },
     });
-    await appendAuditEvent(tx, { actorId: input.actor.id, branchId: rotated.branchId, action: "terminal.credential_rotated", entityType: "Terminal", entityId: rotated.id });
+    await appendAuditEvent(tx, { actorId: input.actor.id, branchId: rotated.branchId, terminalId: rotated.id, action: "TERMINAL_CREDENTIAL_ROTATED", entityType: "Terminal", entityId: rotated.id });
     return rotated;
   });
   return { terminal: { id: terminal.id, branchId: terminal.branchId, name: terminal.name, status: terminal.status }, credential: rawCredential };

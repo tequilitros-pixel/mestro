@@ -34,7 +34,7 @@ export async function createTerminalAction(_: EnrollmentState, formData: FormDat
     const result = await createTerminalEnrollment({ actor, branchId: String(formData.get("branchId") ?? ""), name: String(formData.get("name") ?? "") });
     revalidatePath("/administration/pos2/cash");
     return { token: result.enrollmentToken, terminalName: result.terminal.name };
-  } catch { return { error: "No fue posible crear la terminal." }; }
+  } catch { return { error: "No fue posible completar la operación de terminal." }; }
 }
 
 export async function revokeTerminalAction(formData: FormData) {
