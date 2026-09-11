@@ -1,6 +1,5 @@
 import {getCurrentCommandActor} from '@/lib/pos2/currentActor';
 import {requireActorBranch} from '@/lib/pos2/cash/guards';
-import {prisma} from '@/lib/prisma';
 import {dispatchServerOutbox} from '@/lib/pos2/serverOutbox';
 import {pos2ErrorResponse} from '@/lib/pos2/http';
 import {recordPos2OperationTrace, type Pos2OperationTrace} from '@/lib/pos2/operationTrace';
