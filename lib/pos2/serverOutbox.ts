@@ -4,7 +4,7 @@ import {appendAuditEvent} from './audit';
 import {readPos2RolloutConfig,isPos2ContextEnabled} from './certification/rollout';
 // Pilot-only telemetry consumer. Financial effects already committed with the event.
 export async function dispatchServerOutbox(branchId:string,limit=20){
- const rollout=readPos2RolloutConfig();const pos2Enabled=rollout.mode==='PILOT'&&isPos2ContextEnabled(rollout,branchId);const legacyPending=pos2Enabled?false:Boolean((await prisma.$queryRaw<Array<{exists:boolean}>>`SELECT EXISTS(SELECT 1 FROM "OutboxEvent" WHERE "status" IN ('PENDING','FAILED') AND "availableAt"<=NOW() AND "topic"='pos.sale.completed' AND "payload"->>'branchId'=${branchId}) AS "exists"`)[0]?.exists);if(!pos2Enabled&&!legacyPending)throw Error('OUTBOX_BRANCH_DISABLED');
+ const rollout=readPos2RolloutConfig();const pos2Enabled=rollout.mode==='PILOT'&&isPos2ContextEnabled(rollout,branchId);const legacyPending=pos2Enabled?false:Boolean((await prisma.$queryRaw<Array<{exists:boolean}>>`SELECT EXISTS(SELECT 1 FROM "OutboxEvent" WHERE "status" IN ('PENDING','FAILED') AND "availableAt"<=NOW() AND "topic"='pos.sale.completed' AND "payload"->>'branchId'=${branchId}) AS "exists"`)[0]?.exists);if(!pos2Enabled&&!legacyPending)return {processed:0,...await serverOutboxStatus(branchId)};
  let processed=0;
  for(let i=0;i<Math.min(limit,20);i++){
  let claimedId:string|undefined;
