@@ -201,6 +201,18 @@ export function getModuleKeyForPath(pathname: string): string | null {
   return matches.sort((a, b) => b.length - a.length)[0];
 }
 
+/** Read-only inventory surfaces available to a manager with branch scope. */
+export function isInventoryManagerReadPath(pathname: string): boolean {
+  return pathname === "/administration/inventory" ||
+    pathname === "/administration/inventory/products" ||
+    pathname.startsWith("/administration/inventory/products/") ||
+    pathname === "/administration/inventory/sucursales" ||
+    pathname === "/administration/inventory/sucursales/stock" ||
+    pathname === "/administration/inventory/branch-counts" ||
+    (pathname.startsWith("/administration/inventory/branch-counts/") &&
+      !pathname.startsWith("/administration/inventory/branch-counts/new"));
+}
+
 /** Primera pantalla útil después de iniciar sesión, según los permisos asignados. */
 export function getDefaultPathForModuleKeys(moduleKeys: string[]): string {
   const orderedKeys = PERMISSION_GROUPS.flatMap((group) =>

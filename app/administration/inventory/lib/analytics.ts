@@ -104,6 +104,7 @@ export type InventoryAnalytics = {
 
 export async function getInventoryAnalytics(
   days = ANALYTICS_DAYS,
+  allowedBranchIds: string[] | null = null,
 ): Promise<InventoryAnalytics> {
   const today = formatBusinessDateOnly(new Date());
   const since = businessDayStart(addBusinessDays(today, -(days - 1)));
@@ -125,7 +126,10 @@ export async function getInventoryAnalytics(
     }),
 
     prisma.inventoryEntry.findMany({
-      where: { entryDate: { gte: since } },
+      where: {
+        entryDate: { gte: since },
+        ...(allowedBranchIds === null ? {} : { branchId: { in: allowedBranchIds } }),
+      },
       select: {
         productId: true,
         branchId: true,
@@ -140,6 +144,7 @@ export async function getInventoryAnalytics(
     // Último movimiento de cada producto, para detectar inventario parado.
     prisma.inventoryEntry.groupBy({
       by: ["productId"],
+      where: allowedBranchIds === null ? undefined : { branchId: { in: allowedBranchIds } },
       _max: { entryDate: true },
     }),
   ]);
@@ -150,7 +155,7 @@ export async function getInventoryAnalytics(
     lastMovements.map((m) => [m.productId, m._max.entryDate]),
   );
 
-  const stockMatrix = await computeStockMatrix(products.map((p) => p.id));
+  const stockMatrix = await computeStockMatrix(products.map((p) => p.id), allowedBranchIds);
 
   type ProductAcc = {
     consumed: number;

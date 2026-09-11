@@ -18,6 +18,7 @@ import {
   InventoryShareChart,
 } from "./InventoryCharts";
 import { formatBusinessDateTime } from "@/lib/dateTime";
+import { getAccessibleBranchIds } from "@/lib/auth";
 
 const sections = [
   {
@@ -58,7 +59,7 @@ const formatDate = (iso: string | null) =>
     : "Nunca";
 
 export default async function InventoryPage() {
-  const analytics = await getInventoryAnalytics();
+  const analytics = await getInventoryAnalytics(30, await getAccessibleBranchIds());
   const { totals, topProducts, categories, branches, movementTypes, daily, lowStock, stale } =
     analytics;
 

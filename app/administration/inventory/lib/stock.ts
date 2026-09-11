@@ -13,9 +13,9 @@ export type StockMatrix = {
  * so the "current stock" shown across the module stays consistent with what
  * a closed count would report.
  */
-export async function computeStockMatrix(productIds: string[]): Promise<StockMatrix> {
+export async function computeStockMatrix(productIds: string[], allowedBranchIds: string[] | null = null): Promise<StockMatrix> {
   const branches = await prisma.branch.findMany({
-    where: { active: true },
+    where: { active: true, ...(allowedBranchIds === null ? {} : { id: { in: allowedBranchIds } }) },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });

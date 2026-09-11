@@ -5,26 +5,34 @@ import { useRouter } from "next/navigation";
 import { updateCountItemQuantityAction } from "../actions";
 import { CheckIcon } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/Toast";
+import { formatCommercialQuantity } from "@/lib/inventory/units";
 
 type Item = {
   id: string;
   productName: string;
   unit: string;
-  previousQuantity: number;
+  previousQuantity: number | null;
   quantityCounted: number;
   entriesQuantity: number | null;
   quantityConsumed: number | null;
   costTotal: number | null;
+  inventoryBaseUnit: string | null;
+  handlingUnit: string | null;
+  contentPerUnit: number | null;
+  contentUnit: string | null;
+  normalizedContentPerUnit: number | null;
 };
 
 export default function CountItemRow({
   item,
   countId,
   editable,
+  isAdmin,
 }: {
   item: Item;
   countId: string;
   editable: boolean;
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -43,12 +51,12 @@ export default function CountItemRow({
     <div className="grid gap-3 border-b border-outline-variant p-4 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1fr] md:items-center">
       <p className="font-medium text-on-surface">{item.productName}</p>
 
-      <div>
+      {isAdmin && <div>
         <span className="block text-xs text-on-surface-variant">Anterior</span>
         <p className="text-sm text-on-surface-variant">
           {item.previousQuantity} {item.unit}
         </p>
-      </div>
+      </div>}
 
       {editable ? (
         <div className="flex gap-1">
@@ -72,24 +80,24 @@ export default function CountItemRow({
         <div>
           <span className="block text-xs text-on-surface-variant">Contado</span>
           <p className="text-sm text-on-surface-variant">
-            {item.quantityCounted} {item.unit}
+            {formatCommercialQuantity(item.quantityCounted, { inventoryBaseUnit: item.inventoryBaseUnit, handlingUnit: item.handlingUnit, contentPerUnit: item.contentPerUnit, contentUnit: item.contentUnit, normalizedContentPerUnit: item.normalizedContentPerUnit })}
           </p>
         </div>
       )}
 
-      <div>
+      {isAdmin && <div>
         <span className="block text-xs text-on-surface-variant">Entradas</span>
         <p className="text-sm text-on-surface-variant">
           {item.entriesQuantity !== null ? item.entriesQuantity : "—"}
         </p>
-      </div>
+      </div>}
 
-      <div>
+      {isAdmin && <div>
         <span className="block text-xs text-on-surface-variant">Consumido</span>
         <p className="text-sm font-semibold text-on-surface">
           {item.quantityConsumed !== null ? item.quantityConsumed : "—"}
         </p>
-      </div>
+      </div>}
 
       <div>
         <span className="block text-xs text-on-surface-variant">Costo</span>
@@ -100,4 +108,3 @@ export default function CountItemRow({
     </div>
   );
 }
-

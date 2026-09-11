@@ -2,8 +2,10 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import NewProductModal from "./NewProductModal";
 import ProductsList from "./ProductsList";
+import { getCurrentUser } from "@/lib/auth";
 
 export default async function InventoryProductsPage() {
+  const user = await getCurrentUser();
   const products = await prisma.inventoryProduct.findMany({
       orderBy: { name: "asc" },
   });
@@ -44,11 +46,11 @@ export default async function InventoryProductsPage() {
               ← Regresar a Inventario
             </Link>
 
-            <NewProductModal />
+            {user?.role === "ADMIN" && <NewProductModal />}
           </div>
         </div>
 
-        <ProductsList products={productsForList} />
+        <ProductsList products={productsForList} readOnly={user?.role !== "ADMIN"} />
       </div>
     </main>
   );

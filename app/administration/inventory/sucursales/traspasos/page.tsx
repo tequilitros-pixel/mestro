@@ -67,7 +67,7 @@ export default async function TraspasosPage() {
                     {entry.product.name} · {entry.branch.name}
                   </p>
                   <p className="text-sm text-on-surface-variant">
-                    {entry.notes} · {formatBusinessDateTime(entry.entryDate)}
+                    Traspaso entre sucursales · {formatBusinessDateTime(entry.entryDate)}
                   </p>
                 </div>
                 <span

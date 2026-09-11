@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import CountItemRow from "./CountItemRow";
 import CloseCountButton from "./CloseCountButton";
 import { formatDateOnly } from "@/lib/dateOnly";
+import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility";
 
 export default async function CountDetailPage({
   params,
@@ -10,6 +12,14 @@ export default async function CountDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const allowedBranchIds = await getAccessibleBranchIds();
+  const user = await getCurrentUser();
+  const isAdmin = canViewInventoryCountSystemData(user?.role ?? "");
+  const scope = await prisma.inventoryCount.findUnique({ where: { id }, select: { branchId: true } });
+  if (!scope) notFound();
+  if (allowedBranchIds !== null && !allowedBranchIds.includes(scope.branchId)) {
+    return <main className="mx-auto max-w-2xl space-y-4 p-6 text-on-surface"><h1 className="text-2xl font-bold">Acceso denegado</h1><p className="text-on-surface-variant">Este conteo pertenece a una sucursal fuera de tu alcance.</p></main>;
+  }
 
   const count = await prisma.inventoryCount.findUnique({
     where: { id },
@@ -61,22 +71,27 @@ export default async function CountDetailPage({
         )}
 
         <div className="rounded-2xl border border-outline-variant bg-surface-container">
+          {count.items.length === 0 && <p className="p-6 text-sm text-on-surface-variant">Este conteo no tiene partidas registradas.</p>}
           {count.items.map((item) => (
             <CountItemRow
               key={item.id}
               countId={count.id}
               editable={editable}
+              isAdmin={isAdmin}
               item={{
                 id: item.id,
                 productName: item.product.name,
                 unit: item.product.unit,
-                previousQuantity: Number(item.previousQuantity ?? 0),
+                previousQuantity: isAdmin ? Number(item.previousQuantity ?? 0) : null,
                 quantityCounted: Number(item.quantityCounted),
-                entriesQuantity:
-                  item.entriesQuantity !== null ? Number(item.entriesQuantity) : null,
-                quantityConsumed:
-                  item.quantityConsumed !== null ? Number(item.quantityConsumed) : null,
-                costTotal: item.costTotal !== null ? Number(item.costTotal) : null,
+                entriesQuantity: isAdmin && item.entriesQuantity !== null ? Number(item.entriesQuantity) : null,
+                quantityConsumed: isAdmin && item.quantityConsumed !== null ? Number(item.quantityConsumed) : null,
+                costTotal: isAdmin && item.costTotal !== null ? Number(item.costTotal) : null,
+                inventoryBaseUnit: item.product.inventoryBaseUnit,
+                handlingUnit: item.product.handlingUnit,
+                contentPerUnit: item.product.contentPerUnit !== null ? Number(item.product.contentPerUnit) : null,
+                contentUnit: item.product.contentUnit,
+                normalizedContentPerUnit: item.product.normalizedContentPerUnit !== null ? Number(item.product.normalizedContentPerUnit) : null,
               }}
             />
           ))}

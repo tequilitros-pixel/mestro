@@ -9,6 +9,14 @@ const ERROR_MESSAGES: Record<string, string> = {
   corta: "La nueva contraseña debe tener al menos 6 caracteres.",
 };
 
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: "Administrador",
+  GERENTE: "Gerente",
+  OPERATOR: "Operador",
+  ENCARGADO: "Encargado",
+  CONSULTA: "Consulta",
+};
+
 export default async function ProfilePage({
   searchParams,
 }: {
@@ -36,7 +44,7 @@ export default async function ProfilePage({
       <section className="rounded-xl border border-outline-variant bg-surface-container p-6">
         <p className="text-lg font-semibold text-primary">{user.name}</p>
         <p className="text-sm text-on-surface-variant">
-          {user.role === "ADMIN" ? "Administrador" : "Operador"}
+          {ROLE_LABELS[user.role] ?? user.role}
         </p>
       </section>
 

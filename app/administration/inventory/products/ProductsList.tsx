@@ -24,7 +24,7 @@ const itemTypeLabels: Record<string, string> = {
   EQUIPMENT: "Equipo",
 };
 
-export default function ProductsList({ products: initialProducts }: { products: Product[] }) {
+export default function ProductsList({ products: initialProducts, readOnly = false }: { products: Product[]; readOnly?: boolean }) {
   const router = useRouter();
   const [products, setProducts] = useState(initialProducts);
   const [syncedProducts, setSyncedProducts] = useState(initialProducts);
@@ -149,7 +149,7 @@ export default function ProductsList({ products: initialProducts }: { products: 
               {p.name}
             </Link>
 
-            <select
+            {readOnly ? <span className="text-sm text-on-surface-variant">{p.category}</span> : <select
               value={p.category}
               disabled={categorySavingId === p.id}
               onChange={(e) => handleCategoryChange(p.id, e.target.value)}
@@ -160,13 +160,13 @@ export default function ProductsList({ products: initialProducts }: { products: 
                   {c}
                 </option>
               ))}
-            </select>
+            </select>}
 
             <span className="text-sm text-on-surface-variant">{itemTypeLabels[p.itemType]}</span>
             <span className="text-sm text-on-surface-variant">
               {p.unitCost !== null ? `$${p.unitCost.toFixed(2)}` : "—"}
             </span>
-            <button
+            {readOnly ? <span className="w-fit rounded-full bg-surface-container-high px-3 py-1 text-xs font-medium text-on-surface-variant">{p.isActive ? "Activo" : "Inactivo"}</span> : <button
               onClick={() => handleToggle(p.id, p.isActive)}
               disabled={loadingId === p.id}
               className={`w-fit rounded-full px-3 py-1 text-xs font-medium transition ${
@@ -176,7 +176,7 @@ export default function ProductsList({ products: initialProducts }: { products: 
               }`}
             >
               {loadingId === p.id ? "..." : p.isActive ? "Activo" : "Inactivo"}
-            </button>
+            </button>}
           </div>
         ))}
       </div>

@@ -9,7 +9,7 @@ import {
   ChartLineIcon,
 } from "@/components/ui/icons";
 import PageTabs from "@/components/ui/PageTabs";
-import { getCurrentUser } from "@/lib/auth";
+import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import {
   addBusinessDays,
   businessDayStart,
@@ -43,6 +43,7 @@ const quickActions = [
 
 export default async function SucursalesInventoryPage() {
   const user = await getCurrentUser();
+  const allowedBranchIds = await getAccessibleBranchIds();
   const permissionRows = user?.role === "ADMIN" ? [] : await prisma.modulePermission.findMany({
     where: { userId: user?.id ?? "" },
     select: { moduleKey: true },
@@ -53,6 +54,7 @@ export default async function SucursalesInventoryPage() {
   );
   const today = formatBusinessDateOnly(new Date());
   const fourteenDaysAgo = businessDayStart(addBusinessDays(today, -14));
+  const branchFilter = allowedBranchIds === null ? {} : { branchId: { in: allowedBranchIds } };
 
   const [products, recentEntries, entriesForTrend] = await Promise.all([
     prisma.inventoryProduct.findMany({
@@ -60,17 +62,18 @@ export default async function SucursalesInventoryPage() {
       select: { id: true, name: true, unit: true, minimumStock: true },
     }),
     prisma.inventoryEntry.findMany({
+      where: branchFilter,
       orderBy: { entryDate: "desc" },
       take: 12,
       include: { product: true, branch: true },
     }),
     prisma.inventoryEntry.findMany({
-      where: { entryDate: { gte: fourteenDaysAgo } },
+      where: { entryDate: { gte: fourteenDaysAgo }, ...branchFilter },
       select: { entryDate: true },
     }),
   ]);
 
-  const matrix = await computeStockMatrix(products.map((p) => p.id));
+  const matrix = await computeStockMatrix(products.map((p) => p.id), allowedBranchIds);
 
   const lowStockProducts = products
     .map((product) => ({

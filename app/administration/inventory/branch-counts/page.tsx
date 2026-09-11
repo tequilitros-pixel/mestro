@@ -2,9 +2,12 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { PlusIcon } from "@/components/ui/icons";
 import { formatDateOnly } from "@/lib/dateOnly";
+import { getAccessibleBranchIds } from "@/lib/auth";
 
 export default async function BranchCountsPage() {
+  const allowedBranchIds = await getAccessibleBranchIds();
   const counts = await prisma.inventoryCount.findMany({
+    where: allowedBranchIds === null ? undefined : { branchId: { in: allowedBranchIds } },
     orderBy: { countDate: "desc" },
     include: { branch: true },
     take: 30,
