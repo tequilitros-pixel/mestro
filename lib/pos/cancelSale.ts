@@ -1,9 +1,12 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { setRlsContext } from "@/lib/rls";
 import { appendAuditEvent } from "@/lib/pos2/audit";
 import { appendOutboxEvent } from "@/lib/pos2/outbox";
 import { evaluateCapabilityShadow } from "@/lib/pos2/capabilities";
+import { applyInventoryBatchInTransaction } from "@/lib/pos2/inventory/applyMovements";
+import { groupInventoryDeltas } from "@/lib/pos2/inventory/domain";
 
 export async function cancelPosSaleAtomic(input: {
   saleId: string;
@@ -38,18 +41,42 @@ export async function cancelPosSaleAtomic(input: {
       include: { items: true, payments: true },
     });
 
-    const reversals = sale.items.flatMap((item) =>
-      item.variant
-        ? item.variant.ingredients.map((ingredient) => ({
-            branchId: sale.branchId,
-            productId: ingredient.inventoryProductId,
-            type: "DEVOLUCION_POS" as const,
-            quantity: Number(ingredient.quantity) * item.quantity,
-            notes: `Cancelación de venta POS ${sale.code}`,
-          }))
-        : [],
-    );
-    if (reversals.length) await tx.inventoryEntry.createMany({ data: reversals });
+    const pos2Consumption = await tx.inventoryMovement.findMany({
+      where: { sourceType: "SALE", sourceId: sale.code, movementType: "SALE_CONSUMPTION" },
+      select: { id: true, inventoryProductId: true, quantityDelta: true, unit: true, sourceLineId: true },
+    });
+    if (pos2Consumption.length) {
+      const operationId = input.operationId ?? randomUUID();
+      await applyInventoryBatchInTransaction(tx, {
+        branchId: sale.branchId,
+        movements: groupInventoryDeltas(pos2Consumption.map((movement) => ({
+          inventoryProductId: movement.inventoryProductId,
+          quantityDelta: movement.quantityDelta.negated().toString(),
+          unit: movement.unit,
+          movementType: "SALE_REVERSAL" as const,
+          sourceType: "CANCELLATION" as const,
+          sourceId: sale.code,
+          sourceLineId: movement.sourceLineId ?? undefined,
+          reasonCode: "SALE_CANCELLED",
+          metadata: { originalMovementId: movement.id },
+        }))),
+        actorId: input.user.id,
+        operationId,
+      });
+    } else {
+      const reversals = sale.items.flatMap((item) =>
+        item.variant
+          ? item.variant.ingredients.map((ingredient) => ({
+              branchId: sale.branchId,
+              productId: ingredient.inventoryProductId,
+              type: "DEVOLUCION_POS" as const,
+              quantity: Number(ingredient.quantity) * item.quantity,
+              notes: `Cancelación de venta POS ${sale.code}`,
+            }))
+          : [],
+      );
+      if (reversals.length) await tx.inventoryEntry.createMany({ data: reversals });
+    }
 
     if (sale.cashCut.status === "ABIERTO") {
       for (const payment of sale.payments) {
