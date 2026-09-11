@@ -92,9 +92,7 @@ export async function requireModuleAccess(moduleKey: string) {
     where: { userId_moduleKey: { userId: user.id, moduleKey } },
   });
 
-  if (!permission) {
-    redirect("/cooking");
-  }
+  if (!permission) redirect("/profile");
 
   return user;
 }
