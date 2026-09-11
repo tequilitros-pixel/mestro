@@ -55,6 +55,8 @@ model User {
   cashCutsCreated           CashCut[]                  @relation("CashCutCreatedBy")
   cashCutsUpdated           CashCut[]                  @relation("CashCutUpdatedBy")
   cashOutflowsAuthorized    CashOutflow[]              @relation("CashOutflowAuthorizedBy")
+  financialCategoriesCreated FinancialMovementCategory[] @relation("FinancialCategoryCreatedBy")
+  financialCategoriesUpdated FinancialMovementCategory[] @relation("FinancialCategoryUpdatedBy")
   cashCutAuditEntries       CashCutAuditEntry[]        @relation("CashCutAuditBy")
   cashSafeMovementsBy       CashSafeMovement[]         @relation("CashSafeMovementBy")
   cashSafeEnvelopesCreated  CashSafeEnvelope[]         @relation("CashSafeEnvelopeCreatedBy")
@@ -71,6 +73,7 @@ model User {
   legacyWorkforceSettingsUpdated WorkforceSettings[] @relation("WorkforceSettingsUpdatedBy")
   salaryRates               SalaryRate[]               @relation("SalaryRateOwner")
   salaryRatesCreated        SalaryRate[]               @relation("SalaryRateCreatedBy")
+  cashTransfersCreated      CashTransfer[]             @relation("CashTransferCreatedBy")
 
   millingsFinished   Milling[]           @relation("MillingFinishedBy")
   millingDischarges  MillingDischarge[]
@@ -1279,6 +1282,7 @@ model Branch {
   workforceSessions             WorkSession[]
   workforceAttendanceExceptions AttendanceException[]
   workforceGeolocationEvidence  ClockGeolocationEvidence[]
+  cashTransfers                 CashTransfer[]
 
   eventAddedSource  EventAddedProduct[] @relation("EventAddedSourceBranch")
   eventAddedReturns EventAddedProduct[] @relation("EventAddedReturnBranch")
@@ -1521,6 +1525,9 @@ model CashOutflow {
 
   concept         String
   category        String
+  categoryId      String?
+  categoryRef     FinancialMovementCategory? @relation("CashOutflowCategory", fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryNameSnapshot String?
   amount          Float
   authorizedById  String?
   authorizedBy    User?   @relation("CashOutflowAuthorizedBy", fields: [authorizedById], references: [id])
@@ -1542,8 +1549,12 @@ model CashInflow {
   cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
 
   type   CashInflowType
+  categoryId      String?
+  categoryRef     FinancialMovementCategory? @relation("CashInflowCategory", fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryNameSnapshot String?
   amount Float
   notes  String?
+  receiptPhotoUrl String?
 
   occurredAt DateTime @default(now())
   createdAt  DateTime @default(now())
@@ -1981,6 +1992,10 @@ model CashSafeEnvelopeMovement {
   /// (no se fuerza aqui a nivel de schema porque INGRESO/RECEPCION
   /// pueden no necesitarlo).
   notes String?
+  categoryId String?
+  categoryRef FinancialMovementCategory? @relation("EnvelopeMovementCategory", fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryNameSnapshot String?
+  receiptPhotoUrl String?
 
   /// Referencia al corte de origen cuando aplica (tipicamente en
   /// el movimiento INGRESO).
@@ -5391,6 +5406,31 @@ enum CashMovementDirection {
   OUT
 }
 
+enum CashTransferEndpointType {
+  CASH_SESSION
+  ENVELOPE
+}
+
+model CashTransfer {
+  id              String                   @id @default(cuid())
+  operationId     String                   @unique @db.Uuid
+  branchId        String
+  branch          Branch                   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  sourceType      CashTransferEndpointType
+  sourceId        String
+  destinationType CashTransferEndpointType
+  destinationId   String
+  amount          Decimal                  @db.Decimal(18, 2)
+  reason          String
+  actorId         String
+  actor           User                     @relation("CashTransferCreatedBy", fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt       DateTime                 @default(now())
+
+  @@index([branchId, createdAt])
+  @@index([sourceType, sourceId])
+  @@index([destinationType, destinationId])
+}
+
 model CashMovement {
   id            String                @id @default(cuid())
   cashSessionId String
@@ -5408,10 +5448,53 @@ model CashMovement {
   actor         User                  @relation("CashMovementActor", fields: [actorId], references: [id], onDelete: Restrict)
   operationId   String?               @unique @db.Uuid
   metadata      Json?
+  categoryId    String?
+  categoryRef  FinancialMovementCategory? @relation("CashMovementCategory", fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryNameSnapshot String?
   createdAt     DateTime              @default(now())
 
   @@index([cashSessionId, createdAt])
   @@index([branchId, createdAt])
   @@index([operationId])
   @@index([sourceType, sourceId])
+}
+
+enum FinancialMovementDirection {
+  INCOME
+  EXPENSE
+}
+
+enum FinancialMovementScope {
+  CASH
+  ENVELOPE
+  BOTH
+}
+
+/// Global, administrable taxonomy for manual cash/envelope movements.
+/// Historical movement rows keep their categoryId and name snapshot; rows
+/// created before this catalog remains compatible with nullable references.
+model FinancialMovementCategory {
+  id              String                    @id @default(cuid())
+  name            String
+  code            String                    @unique
+  direction       FinancialMovementDirection
+  scope           FinancialMovementScope
+  group           String?
+  requiresReason  Boolean                   @default(false)
+  requiresReceipt Boolean                   @default(false)
+  isActive        Boolean                   @default(true)
+  sortOrder       Int                       @default(0)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  createdById     String?
+  createdBy       User?                     @relation("FinancialCategoryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById     String?
+  updatedBy       User?                     @relation("FinancialCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  cashOutflows    CashOutflow[]             @relation("CashOutflowCategory")
+  cashInflows     CashInflow[]              @relation("CashInflowCategory")
+  cashMovements   CashMovement[]            @relation("CashMovementCategory")
+  envelopeMovements CashSafeEnvelopeMovement[] @relation("EnvelopeMovementCategory")
+
+  @@index([direction, scope, isActive, sortOrder])
+  @@index([isActive, name])
 }

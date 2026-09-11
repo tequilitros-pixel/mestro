@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Prisma, UserRole } from "@prisma/client";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { addDaysToDateOnly, businessDayStart, mondayOfWeek, todayDateOnly } from "@/lib/dateOnly";
 
 /*
  * ============================================================
@@ -77,6 +78,14 @@ export function cashCutScopeWhere(scope: CashCutScope): Prisma.CashCutWhereInput
     where.status = "ABIERTO";
   }
 
+  if (scope.user.role === "GERENTE") {
+    const weekStart = mondayOfWeek(todayDateOnly());
+    where.date = {
+      gte: businessDayStart(weekStart),
+      lt: businessDayStart(addDaysToDateOnly(weekStart, 7)),
+    };
+  }
+
   return where;
 }
 
@@ -105,4 +114,15 @@ export function canWriteCashCut(
   if (cut.status !== "ABIERTO") return false;
   if (!scope.canSeeHistory && cut.responsibleId !== scope.user.id) return false;
   return true;
+}
+
+export function currentBusinessWeekRange() {
+  const start = mondayOfWeek(todayDateOnly());
+  return { from: businessDayStart(start), toExclusive: businessDayStart(addDaysToDateOnly(start, 7)) };
+}
+
+export function isCurrentManagerBusinessWeek(role: UserRole, value: Date) {
+  if (role !== "GERENTE") return true;
+  const range = currentBusinessWeekRange();
+  return value >= range.from && value < range.toExclusive;
 }

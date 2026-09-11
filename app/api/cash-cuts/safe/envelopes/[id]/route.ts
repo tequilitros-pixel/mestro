@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
 import { getEnvelopeWithMovements } from "@/lib/cash-cuts/safeEnvelopes";
+import { isCurrentManagerBusinessWeek } from "@/lib/cash-cuts/access";
 
 /** GET: detalle de un sobre con su historial completo de movimientos. */
 export async function GET(
@@ -17,6 +18,9 @@ export async function GET(
   const { id } = await params;
   const envelope = await getEnvelopeWithMovements(id);
   if (!envelope) {
+    return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
+  }
+  if (!isCurrentManagerBusinessWeek(user.role, envelope.cutDate)) {
     return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
   }
 

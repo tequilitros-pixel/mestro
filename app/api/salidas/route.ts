@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
 import { isBranchAllowed } from "@/lib/branches/access";
-import { addDaysToDateOnly, businessDayStart } from "@/lib/dateOnly";
+import { addDaysToDateOnly, businessDayStart, mondayOfWeek, todayDateOnly } from "@/lib/dateOnly";
 
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -15,9 +15,11 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const requestedBranchId = searchParams.get("branchId") ?? undefined;
   const category = searchParams.get("category") ?? undefined;
+  const categoryId = searchParams.get("categoryId") ?? undefined;
   const concept = searchParams.get("concept")?.trim() ?? undefined;
-  const from = searchParams.get("from");
-  const to = searchParams.get("to");
+  const managerWeek = user.role === "GERENTE" ? mondayOfWeek(todayDateOnly()) : null;
+  const from = managerWeek ?? searchParams.get("from");
+  const to = managerWeek ? addDaysToDateOnly(managerWeek, 6) : searchParams.get("to");
 
   if ((from && !DATE_ONLY_PATTERN.test(from)) || (to && !DATE_ONLY_PATTERN.test(to))) {
     return NextResponse.json({ error: "El rango de fechas no es válido." }, { status: 400 });
@@ -43,6 +45,7 @@ export async function GET(request: Request) {
   const outflows = await prisma.cashOutflow.findMany({
     where: {
       category: category ?? undefined,
+      categoryId: categoryId ?? undefined,
       concept: concept ? { contains: concept, mode: "insensitive" } : undefined,
       occurredAt: { gte: fromDate, lt: endExclusive },
       cashCut: {
@@ -50,6 +53,7 @@ export async function GET(request: Request) {
       },
     },
     include: {
+      categoryRef: { select: { id: true, name: true, group: true } },
       cashCut: {
         select: { code: true, branch: { select: { name: true } } },
       },
