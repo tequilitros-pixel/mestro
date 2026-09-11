@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
-import { PaymentMethod, PosBenefitReason, Prisma } from "@prisma/client";
+import { PaymentMethod, PosBenefitReason, Prisma, type CatalogBaseUnit } from "@prisma/client";
 import { getDiscountLimitsByRole, verifyManagerPin } from "@/lib/pos/discountLimits";
 import { getActiveDiscountRules } from "@/lib/pos/discountRules";
 import { setRlsContext, withRlsContext } from "@/lib/rls";
@@ -568,17 +568,17 @@ export async function POST(request: NextRequest) {
       include: { items: true, payments: true, branch: true },
     });
 
-    const inventoryRequirements: Array<{ productId: string; quantity: number }> = [];
+    const inventoryRequirements: Array<{ productId: string; quantity: number; unit?: CatalogBaseUnit }> = [];
     for (const item of resolvedItems) {
       if (!item.variantId) continue;
       const variant = variantsById.get(item.variantId);
       if (!variant) continue;
 
       for (const ingredient of variant.ingredients) {
-        inventoryRequirements.push({ productId: ingredient.inventoryProductId, quantity: Number(ingredient.quantity) * item.quantity });
+        inventoryRequirements.push({ productId: ingredient.inventoryProductId, quantity: Number(ingredient.quantity) * item.quantity, unit: ingredient.unit ?? undefined });
       }
     }
-    await consumePosInventory(tx, { branchId, saleCode: code, requirements: inventoryRequirements });
+    await consumePosInventory(tx, { branchId, saleCode: code, requirements: inventoryRequirements, actorId: user.id });
 
     // Suma los pagos de esta venta al corte de caja abierto de la
     // sucursal — así "Ventas" en el corte queda alimentado por el
