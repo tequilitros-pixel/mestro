@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/purity -- temporary server-side timing instrumentation */
 import Link from "next/link";
 import {
   PackageIcon,
@@ -59,7 +60,19 @@ const formatDate = (iso: string | null) =>
     : "Nunca";
 
 export default async function InventoryPage() {
-  const analytics = await getInventoryAnalytics(30, await getAccessibleBranchIds());
+  const routeStart = Date.now();
+  console.info(`[INVENTORY_TRACE] page entry ${routeStart}`);
+  const branchesStart = Date.now();
+  const allowedBranchIds = await getAccessibleBranchIds();
+  console.info(
+    `[INVENTORY_TRACE] branches end duration=${Date.now() - branchesStart}ms count=${allowedBranchIds?.length ?? "global"}`,
+  );
+  const analyticsStart = Date.now();
+  console.info(`[INVENTORY_TRACE] analytics start`);
+  const analytics = await getInventoryAnalytics(30, allowedBranchIds);
+  console.info(
+    `[INVENTORY_TRACE] analytics end duration=${Date.now() - analyticsStart}ms`,
+  );
   const { totals, topProducts, categories, branches, movementTypes, daily, lowStock, stale } =
     analytics;
 
@@ -93,7 +106,8 @@ export default async function InventoryPage() {
   const alertCount =
     totals.lowStockCount + totals.outOfStockCount + totals.staleCount;
 
-  return (
+  const renderStart = Date.now();
+  const result = (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl space-y-6">
         <div>
@@ -677,4 +691,8 @@ export default async function InventoryPage() {
       </div>
     </main>
   );
+  console.info(
+    `[INVENTORY_TRACE] render final duration=${Date.now() - renderStart}ms total=${Date.now() - routeStart}ms`,
+  );
+  return result;
 }
