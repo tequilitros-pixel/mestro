@@ -6,5 +6,5 @@ export type AdjustmentRuleDto={id:string;kind:"DISCOUNT"|"COURTESY";name:string;
 export type PersonDto={id:string;name:string};
 export type OrderLineDto={id:string;productId:string|null;variantId:string|null;displayName:string;quantity:string;unit:"UNIT"|"ML";unitPrice:string;lineSubtotal:string;discountTotal:string;lineTotal:string};
 export type OrderAdjustmentDto={id:string;kind:"PROMOTION"|"DISCOUNT"|"COURTESY";name:string;amount:string;automatic:boolean;beneficiaryId:string|null;reason:string|null};
-export type OrderDto={id:string;orderNumber:string;status:"OPEN"|"PAYMENT_PENDING"|"FINALIZED"|"VOIDED"|"EXPIRED";version:number;subtotal:string;discountTotal:string;total:string;createdAt:string;lines:OrderLineDto[];adjustments:OrderAdjustmentDto[]};
+export type OrderDto={id:string;orderNumber:string;reference?:string|null;status:"OPEN"|"PAYMENT_PENDING"|"FINALIZED"|"VOIDED"|"EXPIRED";version:number;subtotal:string;discountTotal:string;total:string;createdAt:string;updatedAt?:string;lines:OrderLineDto[];adjustments:OrderAdjustmentDto[]};
 export type SaleSummaryDto={id:string;saleNumber:string;total:string;status:string;completedAt:string;cashier:string;payments:Array<{method:string;amount:string}>};

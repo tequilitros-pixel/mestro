@@ -1,6 +1,5 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
-import { formatBusinessDateKey } from "@/lib/dateTime";
 import { DomainError } from "@/lib/domain/errors";
 import { Money } from "@/lib/domain/money";
 import { appendAuditEvent } from "@/lib/pos2/audit";
@@ -12,11 +11,14 @@ import { targetKey } from "@/lib/pos2/pricing/domain";
 import { calculateLineTotal, canTransitionOrder, parseOrderQuantity } from "./domain";
 import { lockOrder, requireExpectedVersion, requireOpenOrder } from "./guards";
 import { recalculateOrderTotals, resolveOrderTarget, type OrderTarget } from "./helpers";
+import { quantityUnitFromCatalogBaseUnit } from "@/lib/pos2/units";
 
-const orderJson = (order: { id: string; orderNumber: string; status: string; version: number; subtotal: Prisma.Decimal; discountTotal: Prisma.Decimal; total: Prisma.Decimal }) => ({ type: "Pos2Order", id: order.id, orderNumber: order.orderNumber, status: order.status, version: order.version, subtotal: order.subtotal.toFixed(2), discountTotal: order.discountTotal.toFixed(2), total: order.total.toFixed(2) } as Prisma.InputJsonObject);
+const orderJson = (order: { id: string; orderNumber: string; reference?: string | null; status: string; version: number; subtotal: Prisma.Decimal; discountTotal: Prisma.Decimal; total: Prisma.Decimal }) => ({ type: "Pos2Order", id: order.id, orderNumber: order.orderNumber, reference: order.reference ?? null, status: order.status, version: order.version, subtotal: order.subtotal.toFixed(2), discountTotal: order.discountTotal.toFixed(2), total: order.total.toFixed(2) } as Prisma.InputJsonObject);
 
-export async function createOrder(input: { branchId: string; registerId: string; terminalId: string; cashSessionId: string; actor: CommandActor; operationId: string; expiresAt?: Date | null }) {
-  const payload = { branchId: input.branchId, registerId: input.registerId, terminalId: input.terminalId, cashSessionId: input.cashSessionId, expiresAt: input.expiresAt?.toISOString() ?? null };
+export async function createOrder(input: { branchId: string; registerId: string; terminalId: string; cashSessionId: string; actor: CommandActor; operationId: string; expiresAt?: Date | null; reference?: string | null }) {
+  const reference = input.reference?.trim() || null;
+  if (reference && reference.length > 80) throw new DomainError("VALIDATION_ERROR", { field: "reference" });
+  const payload = { branchId: input.branchId, registerId: input.registerId, terminalId: input.terminalId, cashSessionId: input.cashSessionId, expiresAt: input.expiresAt?.toISOString() ?? null, reference };
   return executeIdempotent({ operationId: input.operationId, command: "CreateOrder", payload, receiptContext: { actorId: input.actor.id, branchId: input.branchId }, execute: async (tx) => {
     requireActorBranch(input.actor, input.branchId); await requireCapability(tx, input.actor, "pos.order.create", input.branchId);
     const register = await tx.register.findUnique({ where: { id: input.registerId } });
@@ -27,9 +29,9 @@ export async function createOrder(input: { branchId: string; registerId: string;
     if (!branch?.active || !register?.active || register.branchId !== input.branchId) throw new DomainError("VALIDATION_ERROR", { field: "registerId" });
     if (!session || session.status !== "OPEN" || session.branchId !== input.branchId || session.registerId !== input.registerId) throw new DomainError("CASH_SESSION_NOT_OPEN", { cashSessionId: input.cashSessionId });
     const sequence = await tx.$queryRaw<Array<{ value: bigint }>>`SELECT nextval('pos2_order_number_seq') AS value`;
-    const now = new Date(); const day = formatBusinessDateKey(now);
-    const order = await tx.pos2Order.create({ data: { orderNumber: `${branch.code}-${day}-${sequence[0].value.toString().padStart(6, "0")}`, branchId: input.branchId, registerId: input.registerId, terminalId: input.terminalId, cashSessionId: input.cashSessionId, createdById: input.actor.id, lastModifiedById: input.actor.id, pricingTimestamp: now, expiresAt: input.expiresAt ?? null } });
-    await appendAuditEvent(tx, { actorId: input.actor.id, branchId: input.branchId, terminalId: input.terminalId, action: "ORDER_CREATED", entityType: "Pos2Order", entityId: order.id, operationId: input.operationId, metadata: { orderNumber: order.orderNumber, registerId: input.registerId, cashSessionId: input.cashSessionId } });
+    const now = new Date(); const day = now.toISOString().slice(0, 10).replaceAll("-", "");
+    const order = await tx.pos2Order.create({ data: { orderNumber: `${branch.code}-${day}-${sequence[0].value.toString().padStart(6, "0")}`, branchId: input.branchId, registerId: input.registerId, terminalId: input.terminalId, cashSessionId: input.cashSessionId, createdById: input.actor.id, lastModifiedById: input.actor.id, reference, pricingTimestamp: now, expiresAt: input.expiresAt ?? null } });
+    await appendAuditEvent(tx, { actorId: input.actor.id, branchId: input.branchId, terminalId: input.terminalId, action: "ORDER_CREATED", entityType: "Pos2Order", entityId: order.id, operationId: input.operationId, metadata: { orderNumber: order.orderNumber, registerId: input.registerId, cashSessionId: input.cashSessionId, reference } });
     return orderJson(order);
   } });
 }
@@ -41,7 +43,7 @@ export async function addOrderLine(input: OrderTarget & { orderId: string; quant
     const now = new Date(); const resolved = await resolveOrderTarget(tx, { ...input, branchId: order.branchId, at: now }); const key = targetKey(input);
     const existing = order.lines.find((line) => line.targetKey === key && line.priceVersionId === resolved.price.priceVersionId);
     if (existing) {
-      let combined; try { combined = parseOrderQuantity(existing.quantity.add(resolved.quantity.toDecimal()).toString(), existing.unit); } catch { throw new DomainError("INVALID_QUANTITY", { unit: existing.unit }); }
+      let combined; try { combined = parseOrderQuantity(existing.quantity.add(resolved.quantity.toDecimal()).toString(), quantityUnitFromCatalogBaseUnit(existing.unit)); } catch { throw new DomainError("INVALID_QUANTITY", { unit: existing.unit }); }
       const total = calculateLineTotal(resolved.price.amount, combined.toDecimal().toString());
       await tx.pos2OrderLine.update({ where: { id: existing.id }, data: { quantity: combined.toDecimal(), unitPrice: Money.from(resolved.price.amount).toDecimal(), lineSubtotal: total.toDecimal(), lineTotal: total.toDecimal(), catalogVersion: resolved.catalogVersion, pricingExplanation: resolved.price.explanation } });
     } else {

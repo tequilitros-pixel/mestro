@@ -9,9 +9,10 @@ test("Order state machine exposes only approved transitions", () => {
   assert.equal(canTransitionOrder("FINALIZED", "OPEN"), false);
   assert.equal(canTransitionOrder("VOIDED", "PAYMENT_PENDING"), false);
 });
-test("UNIT quantities are positive integers while ML accepts decimals", () => {
+test("UNIT quantities are positive integers while ML and G accept decimals", () => {
   assert.equal(parseOrderQuantity("2", "UNIT").toString(), "2.000000");
   assert.equal(parseOrderQuantity("125.5", "ML").toString(), "125.500000");
+  assert.equal(parseOrderQuantity("125.5", "G").toString(), "125.500000");
   assert.throws(() => parseOrderQuantity("1.5", "UNIT")); assert.throws(() => parseOrderQuantity("0", "ML"));
 });
 test("line and order totals use Money exact arithmetic", () => {

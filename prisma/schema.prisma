@@ -5073,6 +5073,7 @@ model Pos2Order {
   cashSession      CashSession     @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
   createdById      String
   lastModifiedById String
+  reference        String?
   status           Pos2OrderStatus @default(OPEN)
   currency         String          @default("MXN")
   subtotal         Decimal         @default(0) @db.Decimal(18, 2)
@@ -5094,6 +5095,7 @@ model Pos2Order {
   @@index([registerId, status])
   @@index([cashSessionId, status])
   @@index([createdById, status])
+  @@index([branchId, reference])
 }
 
 enum Pos2SaleStatus {

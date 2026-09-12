@@ -1,8 +1,9 @@
 import { Prisma, type CatalogBaseUnit } from "@prisma/client";
 import { Quantity } from "@/lib/domain/quantity";
+import { quantityUnitFromCatalogBaseUnit } from "@/lib/pos2/units";
 
 export function parseInventoryDelta(value: string, unit: CatalogBaseUnit) {
-  const quantity = Quantity.from(value, unit);
+  const quantity = Quantity.from(value, quantityUnitFromCatalogBaseUnit(unit));
   if (quantity.toDecimal().isZero()) throw new Error("zero delta");
   if (unit === "UNIT" && !quantity.toDecimal().isInteger()) throw new Error("fractional UNIT");
   return quantity;
