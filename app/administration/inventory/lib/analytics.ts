@@ -106,24 +106,12 @@ export async function getInventoryAnalytics(
   days = ANALYTICS_DAYS,
   allowedBranchIds: string[] | null = null,
 ): Promise<InventoryAnalytics> {
-  const traceStart = Date.now();
-  console.info(`[INVENTORY_TRACE] analytics function start`);
   const today = formatBusinessDateOnly(new Date());
   const since = businessDayStart(addBusinessDays(today, -(days - 1)));
   const staleSince = businessDayStart(addBusinessDays(today, -STALE_DAYS));
 
-  const traceQuery = async <T>(name: string, query: Promise<T>, count?: (value: T) => number) => {
-    const start = Date.now();
-    console.info(`[INVENTORY_TRACE] ${name} start mode=parallel`);
-    const value = await query;
-    console.info(
-      `[INVENTORY_TRACE] ${name} end duration=${Date.now() - start}ms${count ? ` results=${count(value)}` : ""}`,
-    );
-    return value;
-  };
-
   const [products, entries, lastMovements] = await Promise.all([
-    traceQuery("analytics.products", prisma.inventoryProduct.findMany({
+    prisma.inventoryProduct.findMany({
       select: {
         id: true,
         code: true,
@@ -135,9 +123,9 @@ export async function getInventoryAnalytics(
         isActive: true,
       },
       orderBy: { name: "asc" },
-    }), (value) => value.length),
+    }),
 
-    traceQuery("analytics.entries", prisma.inventoryEntry.findMany({
+    prisma.inventoryEntry.findMany({
       where: {
         entryDate: { gte: since },
         ...(allowedBranchIds === null ? {} : { branchId: { in: allowedBranchIds } }),
@@ -151,16 +139,15 @@ export async function getInventoryAnalytics(
         entryDate: true,
         branch: { select: { id: true, name: true } },
       },
-    }), (value) => value.length),
+    }),
 
     // Último movimiento de cada producto, para detectar inventario parado.
-    traceQuery("analytics.lastMovements", prisma.inventoryEntry.groupBy({
+    prisma.inventoryEntry.groupBy({
       by: ["productId"],
       where: allowedBranchIds === null ? undefined : { branchId: { in: allowedBranchIds } },
       _max: { entryDate: true },
-    }), (value) => value.length),
+    }),
   ]);
-  console.info(`[INVENTORY_TRACE] analytics base queries end duration=${Date.now() - traceStart}ms`);
 
   const productById = new Map(products.map((p) => [p.id, p]));
 
@@ -168,12 +155,7 @@ export async function getInventoryAnalytics(
     lastMovements.map((m) => [m.productId, m._max.entryDate]),
   );
 
-  const stockStart = Date.now();
-  console.info(`[INVENTORY_TRACE] computeStockMatrix start`);
   const stockMatrix = await computeStockMatrix(products.map((p) => p.id), allowedBranchIds);
-  console.info(
-    `[INVENTORY_TRACE] computeStockMatrix end duration=${Date.now() - stockStart}ms branches=${stockMatrix.branches.length}`,
-  );
 
   type ProductAcc = {
     consumed: number;
