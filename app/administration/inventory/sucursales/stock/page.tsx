@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { computeStockMatrix } from "../../lib/stock";
-import { formatCommercialQuantity } from "@/lib/inventory/units";
+import { formatCommercialPresentation, formatCommercialQuantity } from "@/lib/inventory/units";
 
 const numberFormat = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 });
 const literFormat = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 3 });
 
-type StockProduct = { unit: string; inventoryBaseUnit: string | null; handlingUnit: string | null; contentPerUnit: unknown; contentUnit: string | null; normalizedContentPerUnit: unknown };
+type StockProduct = { name: string; unit: string; inventoryBaseUnit: string | null; handlingUnit: string | null; contentPerUnit: unknown; contentUnit: string | null; normalizedContentPerUnit: unknown };
 
 function formatStock(quantity: number, product: StockProduct) {
   if (product.inventoryBaseUnit === "UNIT" && product.contentPerUnit !== null && product.contentUnit) {
@@ -21,11 +21,7 @@ function formatStock(quantity: number, product: StockProduct) {
 }
 
 function commercialLabel(product: StockProduct) {
-  const content = Number(product.contentPerUnit);
-  if (product.inventoryBaseUnit === "UNIT" && Number.isFinite(content) && content > 0 && product.contentUnit) {
-    return `${product.handlingUnit?.toLowerCase() === "paquete" ? "Paquete" : product.handlingUnit} de ${content} ${product.contentUnit.toLowerCase()}`;
-  }
-  return product.unit;
+  return formatCommercialPresentation({ ...product, productName: product.name }) ?? product.unit;
 }
 
 export default async function BranchStockPage() {
