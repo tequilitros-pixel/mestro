@@ -37,7 +37,7 @@ test("FASE 4L: cutover autoritativo, replay, rollback, locking y vasos legacy", 
     ] });
     await tx.inventoryBalance.create({ data: { branchId, inventoryProductId: productId, quantity: 167, unit: "UNIT" } });
     await tx.inventoryCount.create({ data: { id: countId, code: `4L-C-${suffix}`, branchId, countDate: new Date(), items: { create: [
-      { productId, quantityCounted: 120, previousQuantity: 167 },
+      { productId, quantityCounted: 120, previousQuantity: 999 },
       { productId: vasoGrandeId, quantityCounted: 10 },
       { productId: vasoMedianoId, quantityCounted: 8 },
       { productId: vasosLegacyId, quantityCounted: 25 },
@@ -51,11 +51,19 @@ test("FASE 4L: cutover autoritativo, replay, rollback, locking y vasos legacy", 
   assert.equal((await owner.inventoryBalance.findUniqueOrThrow({ where: { branchId_inventoryProductId: { branchId, inventoryProductId: productId } } })).quantity.toString(), "120");
   assert.equal(await owner.inventoryMovement.count({ where: { operationId } }), 3);
   assert.equal(await owner.auditEvent.count({ where: { operationId } }), 1);
+  const declaration = await owner.inventoryCountDeclaration.findFirstOrThrow({ where: { branchId, inventoryProductId: productId } });
+  assert.equal(declaration.expectedQuantity.toString(), "167");
+  assert.equal(declaration.declaredQuantity.toString(), "120");
+  assert.equal(declaration.unit, "UNIT");
+  assert.equal(declaration.actorId, adminId);
+  const reconciledItem = await owner.inventoryCountItem.findFirstOrThrow({ where: { countId, productId } });
+  assert.equal(reconciledItem.previousQuantity?.toString(), "167");
 
   const replay = await run(operationId, countId);
   assert.equal(replay.replayed, true);
   assert.equal((await owner.inventoryBalance.findUniqueOrThrow({ where: { branchId_inventoryProductId: { branchId, inventoryProductId: productId } } })).quantity.toString(), "120");
   assert.equal(await owner.inventoryMovement.count({ where: { operationId } }), 3);
+  assert.equal(await owner.inventoryCountDeclaration.count({ where: { branchId, inventoryProductId: productId } }), 1);
 
   const rollbackCountId = `4l-rollback-${suffix}`;
   const rollbackOp = id(`${suffix.slice(-6)}1`);
@@ -64,6 +72,7 @@ test("FASE 4L: cutover autoritativo, replay, rollback, locking y vasos legacy", 
   assert.equal((await owner.inventoryCount.findUniqueOrThrow({ where: { id: rollbackCountId } })).status, "BORRADOR");
   assert.equal((await owner.inventoryBalance.findUniqueOrThrow({ where: { branchId_inventoryProductId: { branchId, inventoryProductId: productId } } })).quantity.toString(), "120");
   assert.equal(await owner.operationReceipt.count({ where: { operationId: rollbackOp } }), 0);
+  assert.equal(await owner.inventoryCountDeclaration.count({ where: { branchId, inventoryProductId: productId } }), 1);
 
   const concurrentCountId = `4l-concurrent-${suffix}`;
   const concurrentOpA = id(`${suffix.slice(-6)}2`);
@@ -73,6 +82,7 @@ test("FASE 4L: cutover autoritativo, replay, rollback, locking y vasos legacy", 
   assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
   assert.equal((await owner.inventoryBalance.findUniqueOrThrow({ where: { branchId_inventoryProductId: { branchId, inventoryProductId: productId } } })).quantity.toString(), "100");
   assert.equal(await owner.inventoryMovement.count({ where: { sourceId: concurrentCountId } }), 1);
+  assert.equal(await owner.inventoryCountDeclaration.count({ where: { branchId, inventoryProductId: productId } }), 2);
 
   assert.equal(isBranchAllowed([branchId], branchId), true);
   assert.equal(isBranchAllowed([branchId], otherBranchId), false);

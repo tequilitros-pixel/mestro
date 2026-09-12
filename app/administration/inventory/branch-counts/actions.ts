@@ -158,6 +158,9 @@ export async function closeInventoryCountAction(
     return { success: true, message: "Conteo cerrado y consumo calculado." };
   } catch (error) {
     console.error("Error closing inventory count:", error);
+    if (error instanceof Error && error.message === "COUNT_ALREADY_CLOSED") {
+      return { success: false, error: "Este conteo ya está cerrado." };
+    }
     return { success: false, error: "No fue posible cerrar el conteo." };
   }
 }

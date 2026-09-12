@@ -6,6 +6,7 @@ import { formatDateOnly } from "@/lib/dateOnly";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility";
 import { generateOperationId } from "@/lib/pos2/operationId";
+import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresentation";
 
 export default async function CountDetailPage({
   params,
@@ -78,22 +79,10 @@ export default async function CountDetailPage({
               key={item.id}
               countId={count.id}
               editable={editable}
-              isAdmin={isAdmin}
-              item={{
-                id: item.id,
-                productName: item.product.name,
-                unit: item.product.unit,
-                previousQuantity: isAdmin ? Number(item.previousQuantity ?? 0) : null,
-                quantityCounted: Number(item.quantityCounted),
-                entriesQuantity: isAdmin && item.entriesQuantity !== null ? Number(item.entriesQuantity) : null,
-                quantityConsumed: isAdmin && item.quantityConsumed !== null ? Number(item.quantityConsumed) : null,
-                costTotal: isAdmin && item.costTotal !== null ? Number(item.costTotal) : null,
-                inventoryBaseUnit: item.product.inventoryBaseUnit,
-                handlingUnit: item.product.handlingUnit,
-                contentPerUnit: item.product.contentPerUnit !== null ? Number(item.product.contentPerUnit) : null,
-                contentUnit: item.product.contentUnit,
-                normalizedContentPerUnit: item.product.normalizedContentPerUnit !== null ? Number(item.product.normalizedContentPerUnit) : null,
-              }}
+              item={buildInventoryCountItemClientView(item, {
+                status: count.status,
+                canViewHistory: isAdmin,
+              })}
             />
           ))}
         </div>

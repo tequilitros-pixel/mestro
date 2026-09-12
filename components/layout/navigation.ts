@@ -406,7 +406,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
     },
     {
       href: "/administration/inventory/eventos",
-      label: "Inventario de eventos",
+      label: "Eventos",
       icon: PartyIcon,
       iconVariant: "purple",
       children: [
@@ -434,7 +434,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
     },
     {
       href: "/administration/inventory/sucursales",
-      label: "Inventario de sucursales",
+      label: "Sucursales",
       icon: StoreIcon,
       iconVariant: "orange",
       children: [

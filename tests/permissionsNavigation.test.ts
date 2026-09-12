@@ -79,7 +79,7 @@ test("cada reporte terciario de Descuentos requiere su propio permiso", () => {
 
 test("un permiso terciario abre directamente el hijo autorizado", () => {
   const parent = SUBMENUS.administration.find(
-    (item) => item.label === "Inventario de sucursales",
+    (item) => item.label === "Sucursales",
   )!;
   const keys = ["/administration/inventory/sucursales/stock"];
 
