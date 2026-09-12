@@ -35,7 +35,7 @@ export async function captureInitialInventoryCount(input: {
     requireActorBranch(input.actor, input.branchId);
     await requireCapability(tx, input.actor, "inventory.count", input.branchId);
     const product = await tx.inventoryProduct.findUnique({ where: { id: input.inventoryProductId } });
-    if (!product?.isActive || !product.trackStock || !product.inventoryBaseUnit) throw new DomainError("INVENTORY_NOT_TRACKED", { inventoryProductId: input.inventoryProductId });
+    if (!product?.isActive || product.archivedAt || !product.trackStock || !product.inventoryBaseUnit) throw new DomainError("INVENTORY_NOT_TRACKED", { inventoryProductId: input.inventoryProductId });
 
     let declared = counted;
     if (input.captureUnit === "PRESENTATION") {

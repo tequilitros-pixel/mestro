@@ -4,6 +4,7 @@ import { Prisma, type CatalogBaseUnit } from "@prisma/client";
 import { DomainError } from "@/lib/domain/errors";
 import { applyInventoryBatchInTransaction } from "@/lib/pos2/inventory/applyMovements";
 import { groupInventoryDeltas } from "@/lib/pos2/inventory/domain";
+import { assertLegacyInventoryProductUsable } from "@/lib/inventory/legacyProductGuard";
 
 export type InventoryRequirement = { productId: string; quantity: Prisma.Decimal | string | number; unit?: CatalogBaseUnit };
 
@@ -33,7 +34,7 @@ export async function consumePosInventory(
   const [products, lastCount] = await Promise.all([
     tx.inventoryProduct.findMany({
       where: { id: { in: productIds } },
-      select: { id: true, name: true, trackStock: true, inventoryBaseUnit: true },
+      select: { id: true, name: true, trackStock: true, inventoryBaseUnit: true, archivedAt: true },
     }),
     tx.inventoryCount.findFirst({
       where: { branchId: input.branchId, status: "CERRADO" },
@@ -41,6 +42,10 @@ export async function consumePosInventory(
       include: { items: { where: { productId: { in: productIds } }, select: { productId: true, quantityCounted: true } } },
     }),
   ]);
+  const productById = new Map(products.map((product) => [product.id, product]));
+  for (const productId of productIds) {
+    assertLegacyInventoryProductUsable(productById.get(productId));
+  }
   const tracked = new Map(products.filter((product) => product.trackStock).map((product) => [product.id, product]));
 
   const balances = await tx.inventoryBalance.findMany({

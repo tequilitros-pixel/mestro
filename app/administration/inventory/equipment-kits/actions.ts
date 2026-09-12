@@ -79,6 +79,14 @@ export async function addEquipmentKitItemAction(
       return { success: false, error: "Ese producto ya está en el kit." };
     }
 
+    const product = await prisma.inventoryProduct.findFirst({
+      where: { id: productId, isActive: true, archivedAt: null, itemType: "EQUIPMENT" },
+      select: { id: true },
+    });
+    if (!product) {
+      return { success: false, error: "No se puede agregar un equipo inactivo o archivado." };
+    }
+
     await prisma.equipmentKitItem.create({
       data: { kitId, productId, quantity, isRequired, notes },
     });

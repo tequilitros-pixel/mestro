@@ -62,7 +62,7 @@ export default async function RawMaterialsPage() {
     }),
 
     prisma.inventoryProduct.findMany({
-      where: { isActive: true },
+      where: { isActive: true, archivedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true, unit: true },
     }),

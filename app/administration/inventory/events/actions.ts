@@ -295,7 +295,7 @@ export async function addCustomEventItemAction(
       where: { id: productId },
     });
 
-    if (!product) {
+    if (!product || product.archivedAt || !product.isActive) {
       return { success: false, error: "Producto no encontrado." };
     }
 

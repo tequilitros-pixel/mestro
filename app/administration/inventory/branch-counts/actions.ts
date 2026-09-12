@@ -72,7 +72,7 @@ export async function createInventoryCountAction(
     });
 
     const products = await prisma.inventoryProduct.findMany({
-      where: { isActive: true, trackStock: true },
+      where: { isActive: true, archivedAt: null, trackStock: true },
       orderBy: { name: "asc" },
     });
 

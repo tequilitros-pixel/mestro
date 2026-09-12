@@ -64,6 +64,17 @@ export async function createInventoryEntryAction(
       };
     }
 
+    const product = await prisma.inventoryProduct.findFirst({
+      where: { id: productId, isActive: true, archivedAt: null, trackStock: true },
+      select: { id: true },
+    });
+    if (!product) {
+      return {
+        success: false,
+        error: "No se puede registrar movimiento para un producto inactivo, archivado o no inventariable.",
+      };
+    }
+
     const signedQuantity =
       typeValue === "AJUSTE" && direction === "RESTA" ? -quantity : quantity;
 

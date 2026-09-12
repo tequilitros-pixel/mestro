@@ -45,7 +45,7 @@ export async function createEventPackageAction(
     }
     if (!items) return { success: false, error: "Selecciona al menos un producto y captura una cantidad mayor a cero." };
 
-    const activeProducts = await prisma.inventoryProduct.findMany({ where: { id: { in: items.map((item) => item.productId) }, isActive: true }, select: { id: true } });
+    const activeProducts = await prisma.inventoryProduct.findMany({ where: { id: { in: items.map((item) => item.productId) }, isActive: true, archivedAt: null }, select: { id: true } });
     if (activeProducts.length !== items.length) return { success: false, error: "Uno o más productos están inactivos o ya no existen." };
 
     if (pricePerPerson !== null && pricePerPerson < 0) {
@@ -133,7 +133,7 @@ export async function addEventPackageItemAction(
     if (existing) {
       return { success: false, error: "Ese producto ya está en el paquete." };
     }
-    const product = await prisma.inventoryProduct.findFirst({ where: { id: productId, isActive: true }, select: { id: true } });
+    const product = await prisma.inventoryProduct.findFirst({ where: { id: productId, isActive: true, archivedAt: null }, select: { id: true } });
     if (!product) return { success: false, error: "No se puede agregar un producto inactivo." };
 
     await prisma.eventPackageItem.create({

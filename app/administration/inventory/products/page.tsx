@@ -19,6 +19,7 @@ export default async function InventoryProductsPage() {
     unitCost: p.unitCost !== null ? Number(p.unitCost) : null,
     itemType: p.itemType,
     isActive: p.isActive,
+    archivedAt: p.archivedAt?.toISOString() ?? null,
   }));
 
   return (

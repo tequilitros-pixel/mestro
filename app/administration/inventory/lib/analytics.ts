@@ -112,6 +112,7 @@ export async function getInventoryAnalytics(
 
   const [products, entries, lastMovements] = await Promise.all([
     prisma.inventoryProduct.findMany({
+      where: { archivedAt: null, trackStock: true },
       select: {
         id: true,
         code: true,

@@ -31,6 +31,7 @@ type Product = {
   canBeSold: boolean;
   mustReturn: boolean;
   contentPerUnit: number | null; contentUnit: string | null; handlingUnit: string | null; normalizedContentPerUnit: number | null;
+  archivedAt: string | null;
 };
 
 export default function EditProductForm({ product }: { product: Product }) {
@@ -213,18 +214,20 @@ export default function EditProductForm({ product }: { product: Product }) {
       </form>
 
       <div className="rounded-2xl border border-error/40 bg-error/10 p-6">
-        <h3 className="font-bold text-error">Eliminar producto</h3>
+        <h3 className="font-bold text-error">{product.archivedAt ? "Producto archivado" : "Eliminar producto"}</h3>
         <p className="mt-1 text-sm text-error/70">
-          Solo se puede eliminar si nunca se ha usado en paquetes, eventos, kits o movimientos.
+          {product.archivedAt
+            ? "El archivado conserva existencias e historial. Restáuralo desde el catálogo si necesitas operar con él."
+            : "Solo se puede eliminar si nunca se ha usado en paquetes, eventos, kits o movimientos."}
         </p>
 
-        {deleteError && (
+        {!product.archivedAt && deleteError && (
           <div className="mt-3 rounded-xl border border-error/40 bg-error/10 p-3 text-sm text-error">
             {deleteError}
           </div>
         )}
 
-        {!confirmingDelete ? (
+        {!product.archivedAt && (!confirmingDelete ? (
           <button
             onClick={() => setConfirmingDelete(true)}
             className="mt-4 rounded-xl border border-error/40 px-4 py-2 text-sm font-semibold text-error transition duration-150 ease-out hover:scale-[1.04] hover:bg-error/10 active:scale-[0.97]"
@@ -248,7 +251,7 @@ export default function EditProductForm({ product }: { product: Product }) {
               Cancelar
             </button>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );

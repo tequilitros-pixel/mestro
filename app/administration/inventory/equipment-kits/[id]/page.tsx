@@ -22,7 +22,7 @@ export default async function EquipmentKitDetailPage({
   }
 
   const equipment = await prisma.inventoryProduct.findMany({
-    where: { isActive: true, itemType: "EQUIPMENT" },
+      where: { isActive: true, archivedAt: null, itemType: "EQUIPMENT" },
     orderBy: { name: "asc" },
     select: { id: true, name: true, unit: true },
   });

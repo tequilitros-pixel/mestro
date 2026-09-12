@@ -7,6 +7,7 @@ import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility";
 import { generateOperationId } from "@/lib/pos2/operationId";
 import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresentation";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 export default async function CountDetailPage({
   params,
@@ -27,6 +28,7 @@ export default async function CountDetailPage({
     where: { id },
     include: {
       branch: true,
+      closedBy: { select: { name: true, username: true } },
       items: { include: { product: true }, orderBy: { product: { name: "asc" } } },
     },
   });
@@ -62,6 +64,14 @@ export default async function CountDetailPage({
             {count.status === "CERRADO" ? "Cerrado" : "Borrador"}
           </span>
         </div>
+
+        {count.status === "CERRADO" && (
+          <p className="-mt-5 text-sm text-on-surface-variant">
+            Cerrado {count.closedAt ? formatBusinessDateTime(count.closedAt) : "sin fecha registrada"}
+            {count.closedBy ? ` · ${count.closedBy.name} (${count.closedBy.username})` : " · usuario no registrado"}
+            {` · ID ${count.id}`}
+          </p>
+        )}
 
         {count.status === "CERRADO" && (
           <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">

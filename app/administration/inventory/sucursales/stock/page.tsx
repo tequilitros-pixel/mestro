@@ -85,7 +85,7 @@ export default async function BranchStockPage({
 
   const selectedBranch = selection.branch;
   const products = await prisma.inventoryProduct.findMany({
-    where: { isActive: true, trackStock: true },
+    where: { isActive: true, archivedAt: null, trackStock: true },
     orderBy: { name: "asc" },
     select: {
       id: true,

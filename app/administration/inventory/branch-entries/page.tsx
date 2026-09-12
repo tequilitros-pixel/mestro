@@ -39,7 +39,7 @@ export default async function BranchEntriesPage() {
       select: { id: true, name: true },
     }),
     prisma.inventoryProduct.findMany({
-      where: { isActive: true, trackStock: true },
+      where: { isActive: true, archivedAt: null, trackStock: true },
       orderBy: { name: "asc" },
       select: { id: true, code: true, name: true, category: true, unit: true },
     }),

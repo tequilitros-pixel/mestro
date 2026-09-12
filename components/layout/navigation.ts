@@ -459,6 +459,11 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
           icon: ArrowsRangeIcon,
         },
         {
+          href: "/administration/inventory/sucursales/legacy-report",
+          label: "Reporte legacy",
+          icon: SearchIcon,
+        },
+        {
           href: "/administration/inventory/branch-counts",
           label: "Conteos semanales",
           icon: ListChecksIcon,

@@ -58,7 +58,7 @@ export default async function SucursalesInventoryPage() {
 
   const [products, recentEntries, entriesForTrend] = await Promise.all([
     prisma.inventoryProduct.findMany({
-      where: { isActive: true, trackStock: true },
+      where: { isActive: true, archivedAt: null, trackStock: true },
       select: { id: true, name: true, unit: true, minimumStock: true },
     }),
     prisma.inventoryEntry.findMany({

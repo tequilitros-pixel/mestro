@@ -85,6 +85,7 @@ export async function reconcileWeeklyCountCutover(
     const declaration = await tx.inventoryCountDeclaration.create({
       data: {
         branchId: count.branchId,
+        countId: count.id,
         inventoryProductId: product.id,
         expectedQuantity: balance.quantity,
         declaredQuantity: counted,
@@ -124,7 +125,7 @@ export async function reconcileWeeklyCountCutover(
   const closedAt = new Date();
   await tx.inventoryCount.update({
     where: { id: input.countId },
-    data: { status: "CERRADO" },
+    data: { status: "CERRADO", closedAt, closedById: input.actorId },
   });
   await appendAuditEvent(tx, {
     actorId: input.actorId,

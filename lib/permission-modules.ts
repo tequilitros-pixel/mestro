@@ -152,6 +152,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         label: "Inventario de sucursales · Traspasos",
       },
       {
+        key: "/administration/inventory/sucursales/legacy-report",
+        label: "Inventario de sucursales · Reporte legacy",
+      },
+      {
         key: "/administration/inventory/branch-counts",
         label: "Conteo semanal",
       },
@@ -208,6 +212,7 @@ export function isInventoryManagerReadPath(pathname: string): boolean {
     pathname.startsWith("/administration/inventory/products/") ||
     pathname === "/administration/inventory/sucursales" ||
     pathname === "/administration/inventory/sucursales/stock" ||
+    pathname === "/administration/inventory/sucursales/legacy-report" ||
     pathname === "/administration/inventory/branch-counts" ||
     (pathname.startsWith("/administration/inventory/branch-counts/") &&
       !pathname.startsWith("/administration/inventory/branch-counts/new"));

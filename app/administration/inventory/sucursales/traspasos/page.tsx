@@ -16,7 +16,7 @@ export default async function TraspasosPage() {
       select: { id: true, name: true },
     }),
     prisma.inventoryProduct.findMany({
-      where: { isActive: true, trackStock: true },
+      where: { isActive: true, archivedAt: null, trackStock: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, unit: true },
     }),

@@ -11,7 +11,7 @@ export type NotificationCheckResult = {
 
 export async function checkStockBajo(): Promise<NotificationCheckResult> {
   const products = await prisma.inventoryProduct.findMany({
-    where: { isActive: true, trackStock: true, minimumStock: { gt: 0 } },
+    where: { isActive: true, archivedAt: null, trackStock: true, minimumStock: { gt: 0 } },
     select: { id: true, name: true, minimumStock: true },
   });
 

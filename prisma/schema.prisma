@@ -151,6 +151,8 @@ model User {
   workforcePayrollAdjustmentsCreated    WorkforcePayrollAdjustment[]     @relation("WorkforcePayrollAdjustmentCreatedBy")
   workforcePayrollAdjustmentsApproved   WorkforcePayrollAdjustment[]     @relation("WorkforcePayrollAdjustmentApprovedBy")
 
+  inventoryCountsClosed InventoryCount[] @relation("InventoryCountClosedBy")
+
   registersCreated             Register[]               @relation("RegisterCreatedBy")
   terminalsCreated             Terminal[]               @relation("TerminalCreatedBy")
   terminalEnrollmentsCreated   TerminalEnrollment[]     @relation("TerminalEnrollmentCreatedBy")
@@ -2042,6 +2044,9 @@ model InventoryProduct {
   entries         InventoryEntry[]
 
   isActive Boolean @default(true)
+  /// Estado archivado separado de activo/inactivo. Archivar nunca elimina
+  /// referencias, movimientos, conteos ni balances históricos.
+  archivedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2062,6 +2067,7 @@ model InventoryProduct {
   @@index([category])
   @@index([itemType])
   @@index([isActive])
+  @@index([archivedAt])
 }
 
 enum InventoryMovementTypeV2 {
@@ -2136,6 +2142,8 @@ model InventoryCountDeclaration {
   id String @id @default(cuid())
   branchId String
   branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  countId String?
+  count InventoryCount? @relation(fields: [countId], references: [id], onDelete: SetNull)
   inventoryProductId String
   inventoryProduct InventoryProduct @relation(fields: [inventoryProductId], references: [id], onDelete: Restrict)
   expectedQuantity Decimal @db.Decimal(18, 6)
@@ -2148,6 +2156,7 @@ model InventoryCountDeclaration {
   createdAt DateTime @default(now())
   @@index([branchId, createdAt])
   @@index([inventoryProductId, createdAt])
+  @@index([countId])
 }
 
 enum InventoryItemType {
@@ -2422,14 +2431,19 @@ model InventoryCount {
   countDate DateTime
   status    InventoryCountStatus @default(BORRADOR)
   notes     String?
+  closedAt   DateTime?
+  closedById String?
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
 
-  branch Branch               @relation(fields: [branchId], references: [id])
-  items  InventoryCountItem[]
+  branch   Branch               @relation(fields: [branchId], references: [id])
+  closedBy User?                @relation("InventoryCountClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  items        InventoryCountItem[]
+  declarations InventoryCountDeclaration[]
 
   @@index([branchId])
   @@index([countDate])
+  @@index([closedById])
 }
 
 model InventoryCountItem {
