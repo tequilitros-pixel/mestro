@@ -62,7 +62,6 @@ const formatDate = (iso: string | null) =>
 export default async function InventoryPage() {
   const routeStart = Date.now();
   console.info(`[INVENTORY_TRACE] page entry ${routeStart}`);
-  return <main><h1>Inventory static isolation</h1></main>;
   const branchesStart = Date.now();
   const allowedBranchIds = await getAccessibleBranchIds();
   console.info(
