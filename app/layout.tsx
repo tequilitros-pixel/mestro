@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/purity -- temporary server-side timing instrumentation */
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -36,17 +37,27 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const traceStart = Date.now();
   /*
    * El proxy (proxy.ts) solo confirma que exista la cookie de sesión
    * y no toca la base de datos (ver comentario en ese archivo). La
    * verificación real de usuario activo y restricción de rutas por
    * rol se hace aquí, que sí es un Server Component normal.
    */
+  console.info(`[INVENTORY_TRACE] root layout start`);
+  const authStart = Date.now();
   const user = await getCurrentUser();
+  console.info(
+    `[INVENTORY_TRACE] root auth end duration=${Date.now() - authStart}ms resolved=${Boolean(user)}`,
+  );
 
+  const modulesStart = Date.now();
   const moduleKeys = user && user.role !== "ADMIN"
     ? await getUserModuleKeys(user.id)
     : [];
+  console.info(
+    `[INVENTORY_TRACE] root modules end duration=${Date.now() - modulesStart}ms count=${moduleKeys.length}`,
+  );
 
   if (user) {
     if (!user.active) {
@@ -55,7 +66,9 @@ export default async function RootLayout({
       redirect("/api/session/clear");
     }
 
+    const headersStart = Date.now();
     const pathname = (await headers()).get("x-pathname") ?? "";
+    console.info(`[INVENTORY_TRACE] root headers end duration=${Date.now() - headersStart}ms`);
     const isAllowedForOperator = OPERATOR_ALLOWED_PATHS.some((path) =>
       matchesPath(pathname, path),
     );
@@ -86,6 +99,7 @@ export default async function RootLayout({
    * fijo a producción). Para el resto, la navegación debe reflejar
    * exactamente lo que tienen otorgado.
    */
+  console.info(`[INVENTORY_TRACE] root layout end duration=${Date.now() - traceStart}ms`);
   return (
     <html
       lang="es"
