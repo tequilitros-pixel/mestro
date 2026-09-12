@@ -44,7 +44,7 @@ export default function NewCountForm({ branches }: { branches: Branch[] }) {
         <select
           name="branchId"
           required
-          defaultValue=""
+          defaultValue={branches.length === 1 ? branches[0].id : ""}
           className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
         >
           <option value="" disabled>
