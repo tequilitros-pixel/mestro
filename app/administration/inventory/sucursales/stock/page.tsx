@@ -5,14 +5,12 @@ import { getAccessibleBranchIds } from "@/lib/auth";
 import {
   formatCommercialPresentation,
   formatCommercialQuantity,
+  hasValidCommercialConversion,
 } from "@/lib/inventory/units";
 import {
   classifyStock,
   resolveStockBranchSelection,
 } from "@/lib/inventory/stockSelection";
-
-const numberFormat = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 3 });
-const literFormat = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 3 });
 
 type StockProduct = {
   name: string;
@@ -24,38 +22,15 @@ type StockProduct = {
   normalizedContentPerUnit: unknown;
 };
 
-function formatNegativeStock(quantity: number, product: StockProduct) {
-  const baseUnit = product.inventoryBaseUnit?.toUpperCase();
-  if (baseUnit === "ML") {
-    return `${literFormat.format(quantity / 1000)} L (${numberFormat.format(quantity)} ml)`;
-  }
-  if (baseUnit === "G") {
-    return `${literFormat.format(quantity / 1000)} kg (${numberFormat.format(quantity)} g)`;
-  }
-  return `${numberFormat.format(quantity)} ${product.unit}`;
-}
-
 function formatStock(quantity: number, product: StockProduct) {
-  // Commercial package arithmetic is intentionally not used for signed
-  // values: a negative balance must remain visibly negative, not become a
-  // misleading package/remainder representation.
-  if (quantity < 0) return formatNegativeStock(quantity, product);
-  if (
-    product.inventoryBaseUnit === "UNIT" &&
-    product.contentPerUnit !== null &&
-    product.contentUnit
-  ) {
-    return formatCommercialQuantity(quantity, product);
-  }
-  if (product.unit.trim().toLowerCase() === "ml") {
-    return `${literFormat.format(quantity / 1000)} L (${numberFormat.format(quantity)} ml)`;
-  }
-
-  return `${numberFormat.format(quantity)} ${product.unit}`;
+  return formatCommercialQuantity(quantity, product);
 }
 
 function commercialLabel(product: StockProduct) {
-  return formatCommercialPresentation({ ...product, productName: product.name }) ?? product.unit;
+  const config = { ...product, productName: product.name };
+  return hasValidCommercialConversion(config)
+    ? formatCommercialPresentation(config) ?? "Presentación por configurar"
+    : "Presentación por configurar";
 }
 
 type StockSearchParams = {

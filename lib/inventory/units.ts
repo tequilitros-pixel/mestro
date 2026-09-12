@@ -1,5 +1,6 @@
 export type InventoryProductUnitConfig = {
   productName?: string | null;
+  unit?: string | null;
   itemLabel?: string | null;
   trackStock?: boolean;
   itemType?: string | null;
@@ -11,6 +12,18 @@ export type InventoryProductUnitConfig = {
 };
 
 const multipliers: Record<string, number> = { ML: 1, L: 1000, G: 1, KG: 1000, PIEZAS: 1 };
+const contentUnitBase: Record<string, string> = {
+  ML: "ML",
+  L: "ML",
+  G: "G",
+  KG: "G",
+  PIEZAS: "UNIT",
+};
+const baseUnitLabels: Record<string, string> = {
+  UNIT: "unidad",
+  ML: "ml",
+  G: "g",
+};
 
 function pluralizeSpanish(value: string) {
   const word = value.trim().toLocaleLowerCase("es-MX");
@@ -35,6 +48,64 @@ function contentLabel(config: InventoryProductUnitConfig, contentUnit: string) {
   return contentUnit.toLocaleLowerCase("es-MX");
 }
 
+function formatNumber(value: number) {
+  return value.toLocaleString("es-MX", { maximumFractionDigits: 3 });
+}
+
+function formatUnitLabel(value: number, unit: string) {
+  const label = unit.trim().toLocaleLowerCase("es-MX") || "unidad";
+  const magnitude = Math.abs(value);
+  const singular = magnitude > 0 && magnitude <= 1;
+  return singular ? singularizeSpanish(label) : pluralizeSpanish(label);
+}
+
+function getNormalizedContentPerUnit(config: InventoryProductUnitConfig) {
+  const base = config.inventoryBaseUnit?.trim().toUpperCase();
+  const contentUnit = config.contentUnit?.trim().toUpperCase();
+  const multiplier = contentUnit ? multipliers[contentUnit] : undefined;
+
+  if (
+    !base ||
+    !contentUnit ||
+    !multiplier ||
+    contentUnitBase[contentUnit] !== base
+  ) {
+    return null;
+  }
+
+  const content = Number(config.contentPerUnit);
+  if (!Number.isFinite(content) || content <= 0) return null;
+
+  const derived = content * multiplier;
+  const configured = config.normalizedContentPerUnit;
+  if (configured !== null && configured !== undefined && String(configured).trim() !== "") {
+    const normalized = Number(configured);
+    const tolerance = Math.max(1e-9, Math.abs(derived) * 1e-9);
+    if (!Number.isFinite(normalized) || normalized <= 0 || Math.abs(normalized - derived) > tolerance) {
+      return null;
+    }
+    return normalized;
+  }
+
+  return derived;
+}
+
+function formatBaseQuantity(quantity: number, config: InventoryProductUnitConfig) {
+  const base = config.inventoryBaseUnit?.trim().toUpperCase();
+  const baseLabel = baseUnitLabels[base ?? ""];
+  if (baseLabel) {
+    const quantityUnit = base === "UNIT" ? formatUnitLabel(quantity, baseLabel) : baseLabel;
+    return `${formatNumber(quantity)} ${quantityUnit} · Presentación por configurar`;
+  }
+
+  const fallbackUnit = config.unit?.trim() || "unidad base";
+  return `${formatNumber(quantity)} ${fallbackUnit} · Presentación por configurar`;
+}
+
+export function hasValidCommercialConversion(config: InventoryProductUnitConfig) {
+  return Boolean(config.handlingUnit?.trim()) && getNormalizedContentPerUnit(config) !== null;
+}
+
 export function formatCommercialPresentation(config: InventoryProductUnitConfig): string | null {
   const content = Number(config.contentPerUnit);
   const contentUnit = config.contentUnit?.toUpperCase();
@@ -50,25 +121,33 @@ export function formatCommercialQuantity(
 ): string {
   const quantity = Number(baseQuantity);
   if (!Number.isFinite(quantity)) return "—";
-  const base = config.inventoryBaseUnit?.toUpperCase();
-  const content = Number(config.normalizedContentPerUnit ?? config.contentPerUnit);
-  const handling = (config.handlingUnit ?? "unidad").toLowerCase();
-  if (base === "UNIT" && Number.isFinite(content) && content > 0 && handling !== "pieza") {
+  const content = getNormalizedContentPerUnit(config);
+  const handling = config.handlingUnit?.trim().toLocaleLowerCase("es-MX");
+  if (!content || !handling) return formatBaseQuantity(quantity, config);
+
+  const commercialQuantity = quantity / content;
+  const base = config.inventoryBaseUnit?.trim().toUpperCase();
+  const contentUnit = config.contentUnit?.trim().toUpperCase();
+
+  if (
+    base === "UNIT" &&
+    contentUnit === "PIEZAS" &&
+    handling !== "pieza" &&
+    quantity > 0
+  ) {
     const contentUnit = config.contentUnit?.toUpperCase() ?? "PIEZAS";
     const itemLabel = contentLabel(config, contentUnit);
     const packages = Math.floor(quantity / content);
     const remainder = quantity - packages * content;
     const packageLabel = `${packages} ${handling}${packages === 1 ? "" : "s"}`;
-    const quantityLabel = (value: number) => `${value.toLocaleString("es-MX", { maximumFractionDigits: 3 })} ${value === 1 ? singularizeSpanish(itemLabel) : itemLabel}`;
+    const quantityLabel = (value: number) => `${formatNumber(value)} ${value === 1 ? singularizeSpanish(itemLabel) : itemLabel}`;
     const remainderLabel = quantityLabel(remainder);
     return remainder === 0 && packages > 0
       ? `${packageLabel} (${quantityLabel(quantity)})`
       : `${quantityLabel(quantity)} (${packageLabel} + ${remainderLabel})`;
   }
-  if (base === "ML" && Number.isFinite(quantity)) {
-    return `${(quantity / 1000).toLocaleString("es-MX", { maximumFractionDigits: 3 })} L (${quantity.toLocaleString("es-MX", { maximumFractionDigits: 3 })} ml)`;
-  }
-  return `${quantity.toLocaleString("es-MX", { maximumFractionDigits: 3 })} ${base ?? handling}`;
+
+  return `${formatNumber(commercialQuantity)} ${formatUnitLabel(commercialQuantity, handling)}`;
 }
 
 export function normalizeCommercialQuantity(input: {
