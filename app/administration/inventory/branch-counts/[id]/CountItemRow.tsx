@@ -6,8 +6,12 @@ import { updateCountItemQuantityAction } from "../actions";
 import { CheckIcon } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/Toast";
 import {
+  formatCommercialCaptureHint,
   formatCommercialPresentation,
   formatCommercialQuantity,
+  getInventoryBaseUnitLabel,
+  getInventoryCaptureDescriptor,
+  getInventoryCaptureInputValue,
 } from "@/lib/inventory/units";
 import type { InventoryCountItemClientView } from "@/lib/inventory/countPresentation";
 
@@ -28,17 +32,25 @@ export default function CountItemRow({
 }) {
   const router = useRouter();
   const { showToast } = useToast();
-  const [quantity, setQuantity] = useState(item.quantityCounted);
+  const capture = getInventoryCaptureDescriptor(item.quantityCounted, item);
+  const [quantity, setQuantity] = useState(() =>
+    getInventoryCaptureInputValue(item.quantityCounted, item),
+  );
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
     setSaving(true);
-    const result = await updateCountItemQuantityAction(item.id, countId, quantity);
+    const result = await updateCountItemQuantityAction({
+      itemId: item.id,
+      countId,
+      quantity: quantity.trim(),
+      captureUnit: capture.captureUnit,
+    });
     setSaving(false);
 
     if (result.success) {
       router.refresh();
-      showToast("Cantidad guardada correctamente.");
+      showToast(`Cantidad guardada: ${quantity.trim()} ${capture.unitLabel}.`);
     } else {
       showToast(result.error);
     }
@@ -48,29 +60,40 @@ export default function CountItemRow({
   const difference = historyVisible
     ? item.quantityCounted - (item.previousQuantity ?? 0)
     : null;
-  const presentation = formatCommercialPresentation(item) ?? item.unit;
+  const configuredPresentation = formatCommercialPresentation(item);
+  const presentation = capture.captureUnit === "PRESENTATION" && configuredPresentation
+    ? configuredPresentation
+    : `${getInventoryBaseUnitLabel(item)} · Presentación por configurar`;
+  const captureHint = capture.captureUnit === "PRESENTATION"
+    ? formatCommercialCaptureHint(item)
+    : null;
 
   return (
     <div className="grid gap-3 border-b border-outline-variant p-4 md:grid-cols-[1.5fr_repeat(4,minmax(0,1fr))] md:items-center">
       <div>
         <p className="font-medium text-on-surface">{item.productName}</p>
         <p className="mt-1 text-xs text-on-surface-variant">{presentation}</p>
+        {captureHint && <p className="mt-1 text-xs text-on-surface-variant">{captureHint}</p>}
       </div>
 
       {editable ? (
         <div className="flex gap-1">
           <label className="sr-only" htmlFor={`count-${item.id}`}>
-            Cantidad contada de {item.productName}
+            Cantidad contada de {item.productName} en {capture.unitLabel}
           </label>
           <input
             id={`count-${item.id}`}
             type="number"
+            inputMode="decimal"
             min="0"
             step="0.001"
             value={quantity}
-            onChange={(event) => setQuantity(Number(event.target.value))}
+            onChange={(event) => setQuantity(event.target.value)}
             className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
           />
+          <span className="flex items-center px-1 text-sm text-on-surface-variant" aria-hidden="true">
+            {capture.unitLabel}
+          </span>
           <button
             type="button"
             onClick={handleSave}

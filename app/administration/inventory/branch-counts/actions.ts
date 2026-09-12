@@ -7,6 +7,10 @@ import { isBranchAllowed } from "@/lib/branches/access";
 import { parseDateOnly } from "@/lib/dateOnly";
 import { executeIdempotent } from "@/lib/pos2/idempotency";
 import { reconcileWeeklyCountCutover } from "@/lib/inventory/weeklyCountCutover";
+import {
+  normalizeInventoryCountCapture,
+} from "@/lib/inventory/countCapture";
+import type { InventoryCaptureUnit } from "@/lib/inventory/units";
 
 const INVENTORY_COUNTS_PERMISSION = "/administration/inventory/branch-counts";
 
@@ -17,7 +21,13 @@ async function authorizeCountBranch(branchId: string) {
 }
 
 export type ActionResult =
-  | { success: true; message: string; id?: string }
+  | {
+      success: true;
+      message: string;
+      id?: string;
+      baseQuantity?: string;
+      captureUnit?: InventoryCaptureUnit;
+    }
   | { success: false; error: string };
 
 export async function createInventoryCountAction(
@@ -103,31 +113,71 @@ export async function createInventoryCountAction(
 }
 
 export async function updateCountItemQuantityAction(
-  itemId: string,
-  countId: string,
-  quantityCounted: number,
+  input: {
+    itemId: string;
+    countId: string;
+    quantity: string;
+    captureUnit: InventoryCaptureUnit;
+  },
 ): Promise<ActionResult> {
   try {
     const scopedItem = await prisma.inventoryCountItem.findUnique({
-      where: { id: itemId },
+      where: { id: input.itemId },
       select: { countId: true, count: { select: { branchId: true } } },
     });
-    if (!scopedItem || scopedItem.countId !== countId) throw new Error("PERMISSION_DENIED");
+    if (!scopedItem || scopedItem.countId !== input.countId) throw new Error("PERMISSION_DENIED");
     await authorizeCountBranch(scopedItem.count.branchId);
-    if (quantityCounted < 0) {
-      return { success: false, error: "La cantidad no puede ser negativa." };
-    }
 
-    await prisma.inventoryCountItem.update({
-      where: { id: itemId },
-      data: { quantityCounted },
+    const result = await prisma.$transaction(async (tx) => {
+      const lockedCount = await tx.$queryRaw<Array<{ id: string; status: string }>>`SELECT "id", "status"::text FROM "InventoryCount" WHERE "id"=${input.countId} FOR UPDATE`;
+      if (!lockedCount[0]) throw new Error("COUNT_NOT_FOUND");
+      if (lockedCount[0].status !== "BORRADOR") throw new Error("COUNT_ALREADY_CLOSED");
+
+      const item = await tx.inventoryCountItem.findUnique({
+        where: { id: input.itemId },
+        include: { product: true },
+      });
+      if (!item || item.countId !== input.countId) throw new Error("PERMISSION_DENIED");
+
+      const normalized = normalizeInventoryCountCapture({
+        quantity: input.quantity,
+        captureUnit: input.captureUnit,
+        product: item.product,
+      });
+
+      await tx.inventoryCountItem.update({
+        where: { id: item.id },
+        data: { quantityCounted: normalized.baseQuantity },
+      });
+
+      return normalized;
     });
 
-    revalidatePath(`/administration/inventory/branch-counts/${countId}`);
+    revalidatePath(`/administration/inventory/branch-counts/${input.countId}`);
 
-    return { success: true, message: "Cantidad guardada." };
+    return {
+      success: true,
+      message: "Cantidad guardada.",
+      baseQuantity: result.baseQuantity.toFixed(3),
+      captureUnit: result.captureUnit,
+    };
   } catch (error) {
     console.error("Error updating count item:", error);
+    if (error instanceof Error && error.message === "COUNT_ALREADY_CLOSED") {
+      return { success: false, error: "Este conteo ya está cerrado." };
+    }
+    if (error instanceof Error && error.message === "COUNT_QUANTITY_REQUIRED") {
+      return { success: false, error: "Captura una cantidad antes de guardar." };
+    }
+    if (error instanceof Error && error.message === "COUNT_QUANTITY_PRECISION") {
+      return { success: false, error: "La cantidad admite hasta 3 decimales." };
+    }
+    if (error instanceof Error && error.message === "PRESENTATION_NOT_CONFIGURED") {
+      return { success: false, error: "La presentación comercial no está configurada." };
+    }
+    if (error instanceof Error && ["COUNT_QUANTITY_INVALID", "COUNT_CAPTURE_UNIT_INVALID"].includes(error.message)) {
+      return { success: false, error: "La cantidad o unidad de captura no es válida." };
+    }
     return { success: false, error: "No fue posible guardar la cantidad." };
   }
 }

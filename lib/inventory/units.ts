@@ -11,6 +11,8 @@ export type InventoryProductUnitConfig = {
   normalizedContentPerUnit?: unknown;
 };
 
+export type InventoryCaptureUnit = "BASE" | "PRESENTATION";
+
 const multipliers: Record<string, number> = { ML: 1, L: 1000, G: 1, KG: 1000, PIEZAS: 1 };
 const contentUnitBase: Record<string, string> = {
   ML: "ML",
@@ -59,7 +61,7 @@ function formatUnitLabel(value: number, unit: string) {
   return singular ? singularizeSpanish(label) : pluralizeSpanish(label);
 }
 
-function getNormalizedContentPerUnit(config: InventoryProductUnitConfig) {
+export function getNormalizedContentPerUnit(config: InventoryProductUnitConfig) {
   const base = config.inventoryBaseUnit?.trim().toUpperCase();
   const contentUnit = config.contentUnit?.trim().toUpperCase();
   const multiplier = contentUnit ? multipliers[contentUnit] : undefined;
@@ -90,6 +92,80 @@ function getNormalizedContentPerUnit(config: InventoryProductUnitConfig) {
   return derived;
 }
 
+export function getCommercialQuantity(
+  baseQuantity: number | string,
+  config: InventoryProductUnitConfig,
+) {
+  const quantity = Number(baseQuantity);
+  const content = getNormalizedContentPerUnit(config);
+  if (!Number.isFinite(quantity) || content === null) return null;
+  return quantity / content;
+}
+
+export function getInventoryBaseUnitLabel(config: InventoryProductUnitConfig) {
+  const base = config.inventoryBaseUnit?.trim().toUpperCase();
+  if (base === "UNIT") return "unidades";
+  if (baseUnitLabels[base ?? ""]) return baseUnitLabels[base ?? ""];
+  return config.unit?.trim().toLocaleLowerCase("es-MX") || "unidad base";
+}
+
+export function getCommercialUnitLabel(config: InventoryProductUnitConfig) {
+  const handling = config.handlingUnit?.trim();
+  if (!handling || getNormalizedContentPerUnit(config) === null) return null;
+  return pluralizeSpanish(handling);
+}
+
+export function getInventoryCaptureDescriptor(
+  baseQuantity: number | string,
+  config: InventoryProductUnitConfig,
+): {
+  captureUnit: InventoryCaptureUnit;
+  quantity: number | null;
+  unitLabel: string;
+} {
+  const quantity = Number(baseQuantity);
+  const commercialQuantity = getCommercialQuantity(baseQuantity, config);
+  const commercialUnit = getCommercialUnitLabel(config);
+  if (commercialQuantity !== null && commercialUnit) {
+    return {
+      captureUnit: "PRESENTATION",
+      quantity: commercialQuantity,
+      unitLabel: commercialUnit,
+    };
+  }
+
+  return {
+    captureUnit: "BASE",
+    quantity: Number.isFinite(quantity) ? quantity : null,
+    unitLabel: getInventoryBaseUnitLabel(config),
+  };
+}
+
+export function getInventoryCaptureInputValue(
+  baseQuantity: number | string,
+  config: InventoryProductUnitConfig,
+) {
+  const quantity = getInventoryCaptureDescriptor(baseQuantity, config).quantity;
+  return quantity === null ? "" : String(quantity);
+}
+
+export function formatCommercialCaptureHint(config: InventoryProductUnitConfig) {
+  const content = Number(config.contentPerUnit);
+  const contentUnit = config.contentUnit?.trim().toUpperCase();
+  const handling = config.handlingUnit?.trim();
+  if (
+    !Number.isFinite(content) ||
+    content <= 0 ||
+    !contentUnit ||
+    !handling ||
+    getNormalizedContentPerUnit(config) === null
+  ) {
+    return null;
+  }
+
+  return `1 ${singularizeSpanish(handling.toLocaleLowerCase("es-MX"))} = ${formatNumber(content)} ${contentLabel(config, contentUnit)}`;
+}
+
 function formatBaseQuantity(quantity: number, config: InventoryProductUnitConfig) {
   const base = config.inventoryBaseUnit?.trim().toUpperCase();
   const baseLabel = baseUnitLabels[base ?? ""];
@@ -98,8 +174,7 @@ function formatBaseQuantity(quantity: number, config: InventoryProductUnitConfig
     return `${formatNumber(quantity)} ${quantityUnit} · Presentación por configurar`;
   }
 
-  const fallbackUnit = config.unit?.trim() || "unidad base";
-  return `${formatNumber(quantity)} ${fallbackUnit} · Presentación por configurar`;
+  return `${formatNumber(quantity)} ${getInventoryBaseUnitLabel(config)} · Presentación por configurar`;
 }
 
 export function hasValidCommercialConversion(config: InventoryProductUnitConfig) {
