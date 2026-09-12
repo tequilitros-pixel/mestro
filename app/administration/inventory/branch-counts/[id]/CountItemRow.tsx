@@ -13,12 +13,7 @@ import type { InventoryCountItemClientView } from "@/lib/inventory/countPresenta
 
 type Item = InventoryCountItemClientView;
 
-const signedNumberFormat = new Intl.NumberFormat("es-MX", {
-  maximumFractionDigits: 3,
-});
-
 function formatCountQuantity(value: number, item: Item) {
-  if (value < 0) return `${signedNumberFormat.format(value)} ${item.unit}`;
   return formatCommercialQuantity(value, item);
 }
 
