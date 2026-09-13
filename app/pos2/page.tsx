@@ -8,6 +8,7 @@ import Pos2CashierApp from "@/components/pos2/Pos2CashierApp";
 import type { AdjustmentRuleDto, CatalogCategoryDto, PosContextDto } from "@/lib/pos2/ui/types";
 import { isPos2ContextEnabled, readPos2RolloutConfig } from "@/lib/pos2/certification/rollout";
 import { getPosAccessibleBranchIds } from "@/lib/pos2/currentActor";
+import { canAccessModule } from "@/lib/permission-modules";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +75,23 @@ export default async function Pos2Page() {
   const actor = { id: user.id, role: user.role, branchIds };
   const capabilityRows = grants.map((grant) => ({ ...grant, capabilityKey: grant.capability.key }));
   const capabilities = Object.fromEntries(PHASE3A_CAPABILITIES.map((key) => [key, evaluateCapability(actor, key, initialBranchId, capabilityRows)])) as Record<CapabilityKey, boolean>;
+  const legacyNavigationKeys = [
+    "/cash-cuts",
+    "/pos/sales",
+    "/pos/discounts/courtesies",
+    "/pos/categories",
+    "/pos/products",
+  ] as const;
+  const legacyNavigationPermissions = user.role === "ADMIN"
+    ? [...legacyNavigationKeys]
+    : (await prisma.modulePermission.findMany({
+        where: { userId: user.id, moduleKey: { in: [...legacyNavigationKeys] } },
+        select: { moduleKey: true },
+      })).map((permission) => permission.moduleKey);
+  const legacyNavigation = Object.fromEntries(
+    legacyNavigationKeys.map((key) => [key, canAccessModule(user.role, legacyNavigationPermissions, key)]),
+  );
   const rules: AdjustmentRuleDto[] = adjustmentVersions.map((version) => ({ id: version.id, kind: version.kind as "DISCOUNT" | "COURTESY", name: version.definition.name, requiresBeneficiary: version.requiresBeneficiary, requiresAuthorization: version.requiresAuthorization }));
 
-  return <Pos2CashierApp userId={user.id} userName={user.name} contexts={contexts} initialCatalog={catalog} rules={rules} people={people} capabilities={capabilities} />;
+  return <Pos2CashierApp userId={user.id} userName={user.name} contexts={contexts} initialCatalog={catalog} rules={rules} people={people} capabilities={capabilities} legacyNavigation={legacyNavigation} />;
 }
