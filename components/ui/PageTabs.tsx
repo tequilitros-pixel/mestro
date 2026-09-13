@@ -32,6 +32,7 @@ export default function PageTabs({
         {tabs.map((t) => (
           <button
             key={t.key}
+            type="button"
             onClick={() => setActive(t.key)}
             role="tab"
             aria-selected={active === t.key}

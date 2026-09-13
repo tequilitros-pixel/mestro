@@ -17,7 +17,7 @@ import { canUserAccessModule } from "@/lib/moduleAccess";
 import { prisma } from "@/lib/prisma";
 import { getProductionOperationModuleKey } from "@/lib/offline/production";
 import type { OfflineOperation } from "@/lib/offline/types";
-import { createBoilerEvent, createBoilerIncident, createBoilerMaintenance, createGasReading, createPressureReading, createSweetHoneyRecovery, startBoilerSession, startSteamInterval, stopBoilerSession, stopSteamInterval } from "@/lib/boiler/service";
+import { BoilerDomainError, createBoilerEvent, createBoilerIncident, createBoilerMaintenance, createGasReading, createPressureReading, createSweetHoneyRecovery, startBoilerSession, startSteamInterval, stopBoilerSession, stopSteamInterval } from "@/lib/boiler/service";
 
 type Payload = Record<string, string | number | boolean | null | undefined>;
 export async function POST(request: Request) {
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
         await createPressureReading({ operationId: operation.id, sessionId: requiredString(payload.sessionId, "Falta la sesión"), intervalId: optionalString(payload.intervalId), actorId: user.id, value: requiredNumber(payload.value, "Presión inválida"), unit: enumValue(payload.unit, PressureUnit, "Unidad de presión inválida"), occurredAt: optionalDate(payload.occurredAt) ?? createdAt, source: enumValue(payload.source, BoilerSource, "Fuente inválida"), notes: optionalString(payload.notes) });
         break;
       case "boiler.event.create":
-        await createBoilerEvent({ operationId: operation.id, sessionId: optionalString(payload.sessionId), actorId: user.id, type: enumValue(payload.type, BoilerEventType, "Evento de Caldera inválido"), occurredAt: optionalDate(payload.occurredAt) ?? createdAt, source: enumValue(payload.source, BoilerSource, "Fuente inválida"), notes: optionalString(payload.notes) });
+        await createBoilerEvent({ operationId: operation.id, sessionId: requiredString(payload.sessionId, "Falta la sesión"), actorId: user.id, type: enumValue(payload.type, BoilerEventType, "Evento de Caldera inválido"), occurredAt: optionalDate(payload.occurredAt) ?? createdAt, source: enumValue(payload.source, BoilerSource, "Fuente inválida"), notes: optionalString(payload.notes) });
         break;
       case "boiler.maintenance.create":
         await createBoilerMaintenance({ operationId: operation.id, equipmentId: requiredString(payload.equipmentId, "Falta la Caldera"), actorId: user.id, notes: requiredString(payload.notes, "Faltan notas"), occurredAt: optionalDate(payload.occurredAt) ?? createdAt, source: enumValue(payload.source, BoilerSource, "Fuente inválida") });
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
         await startSteamInterval({ operationId: operation.id, cookingId: requiredString(payload.cookingId, "Falta la cocción"), boilerSessionId: optionalString(payload.boilerSessionId) ?? undefined, actorId: user.id, pressureValue: requiredNumber(payload.pressureValue, "Presión inválida"), pressureUnit: enumValue(payload.pressureUnit, PressureUnit, "Unidad de presión inválida"), occurredAt: optionalDate(payload.occurredAt) ?? createdAt, source: enumValue(payload.source, BoilerSource, "Fuente inválida"), notes: optionalString(payload.notes) });
         break;
       case "steam.pressure.create":
-        await createPressureReading({ operationId: operation.id, sessionId: requiredString(payload.boilerSessionId, "Falta la sesión"), intervalId: requiredString(payload.intervalId, "Falta el intervalo"), actorId: user.id, value: requiredNumber(payload.pressureValue, "Presión inválida"), unit: enumValue(payload.pressureUnit, PressureUnit, "Unidad de presión inválida"), occurredAt: optionalDate(payload.occurredAt) ?? createdAt, source: enumValue(payload.source, BoilerSource, "Fuente inválida"), notes: optionalString(payload.notes) });
+        await createPressureReading({ operationId: operation.id, sessionId: requiredString(payload.boilerSessionId, "Falta la sesión"), intervalId: requiredString(payload.intervalId, "Falta el intervalo"), cookingId: requiredString(payload.cookingId, "Falta la cocción"), actorId: user.id, value: requiredNumber(payload.pressureValue, "Presión inválida"), unit: enumValue(payload.pressureUnit, PressureUnit, "Unidad de presión inválida"), occurredAt: optionalDate(payload.occurredAt) ?? createdAt, source: enumValue(payload.source, BoilerSource, "Fuente inválida"), notes: optionalString(payload.notes) });
         break;
       case "steam.interval.stop":
         await stopSteamInterval({ operationId: operation.id, cookingId: requiredString(payload.cookingId, "Falta la cocción"), actorId: user.id, occurredAt: optionalDate(payload.occurredAt) ?? createdAt, source: enumValue(payload.source, BoilerSource, "Fuente inválida"), notes: optionalString(payload.notes) });
@@ -91,6 +91,7 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     if (error instanceof SyncValidationError) return fail(error.message, error.status);
+    if (error instanceof BoilerDomainError) return fail(error.message, 409);
     throw error;
   }
 

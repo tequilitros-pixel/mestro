@@ -19,7 +19,7 @@ export async function startSteamAction(cookingId: string, form: FormData) {
 
 export async function changeSteamPressureAction(cookingId: string, form: FormData) {
   const user = await requireModuleActionAccess("/cooking");
-  await createPressureReading({ operationId: crypto.randomUUID(), sessionId: required(form, "boilerSessionId"), intervalId: required(form, "intervalId"), actorId: user.id, value: number(form, "pressureValue"), unit: required(form, "pressureUnit") as PressureUnit, source: source(form), notes: text(form, "notes") });
+  await createPressureReading({ operationId: crypto.randomUUID(), sessionId: required(form, "boilerSessionId"), intervalId: required(form, "intervalId"), cookingId, actorId: user.id, value: number(form, "pressureValue"), unit: required(form, "pressureUnit") as PressureUnit, source: source(form), notes: text(form, "notes") });
   refresh(cookingId);
 }
 

@@ -54,8 +54,13 @@ export async function stopBoilerSession(input: { operationId: string; sessionId:
   });
 }
 
-export async function createBoilerEvent(input: { operationId: string; sessionId?: string | null; type: BoilerEventType; actorId: string; occurredAt?: Date | string; source?: BoilerSource; notes?: string | null; metadata?: Prisma.InputJsonValue }) {
-  return prisma.boilerEvent.upsert({ where: { operationId: input.operationId }, update: {}, create: { operationId: input.operationId, sessionId: input.sessionId ?? null, type: input.type, actorId: input.actorId, occurredAt: date(input.occurredAt ?? new Date()), source: input.source ?? BoilerSource.MANUAL, notes: input.notes ?? null, metadata: input.metadata } });
+const genericBoilerEventTypes = new Set<BoilerEventType>([BoilerEventType.OBSERVACION]);
+
+export async function createBoilerEvent(input: { operationId: string; sessionId: string; type: BoilerEventType; actorId: string; occurredAt?: Date | string; source?: BoilerSource; notes?: string | null; metadata?: Prisma.InputJsonValue }) {
+  if (!genericBoilerEventTypes.has(input.type)) invalid("Las transiciones operativas deben registrarse mediante su acción específica", "EVENT_TRANSITION_NOT_ALLOWED");
+  const session = await prisma.boilerSession.findUnique({ where: { id: input.sessionId }, select: { id: true } });
+  if (!session) invalid("Sesión de Caldera no encontrada", "SESSION_NOT_FOUND");
+  return prisma.boilerEvent.upsert({ where: { operationId: input.operationId }, update: {}, create: { operationId: input.operationId, sessionId: input.sessionId, type: input.type, actorId: input.actorId, occurredAt: date(input.occurredAt ?? new Date()), source: input.source ?? BoilerSource.MANUAL, notes: input.notes ?? null, metadata: input.metadata } });
 }
 
 export async function createBoilerMaintenance(input: { operationId: string; equipmentId: string; actorId: string; notes: string; occurredAt?: Date | string; source?: BoilerSource }) {
@@ -64,8 +69,14 @@ export async function createBoilerMaintenance(input: { operationId: string; equi
 }
 
 export async function createBoilerIncident(input: { operationId: string; equipmentId: string; actorId: string; sessionId?: string | null; notes: string; occurredAt?: Date | string; source?: BoilerSource }) {
-  await ensureCaldera(prisma, input.equipmentId);
-  return prisma.boilerIncident.upsert({ where: { operationId: input.operationId }, update: {}, create: { operationId: input.operationId, equipmentId: input.equipmentId, sessionId: input.sessionId ?? null, actorId: input.actorId, notes: input.notes, occurredAt: date(input.occurredAt ?? new Date()), source: input.source ?? BoilerSource.MANUAL } });
+  return prisma.$transaction(async (tx) => {
+    await ensureCaldera(tx, input.equipmentId);
+    if (input.sessionId) {
+      const session = await tx.boilerSession.findUnique({ where: { id: input.sessionId }, select: { equipmentId: true } });
+      if (!session || session.equipmentId !== input.equipmentId) invalid("La sesión no pertenece a la Caldera indicada", "SESSION_EQUIPMENT_MISMATCH");
+    }
+    return tx.boilerIncident.upsert({ where: { operationId: input.operationId }, update: {}, create: { operationId: input.operationId, equipmentId: input.equipmentId, sessionId: input.sessionId ?? null, actorId: input.actorId, notes: input.notes, occurredAt: date(input.occurredAt ?? new Date()), source: input.source ?? BoilerSource.MANUAL } });
+  });
 }
 
 export async function createGasReading(input: { operationId: string; sessionId: string; actorId: string; percent: Prisma.Decimal.Value; type: GasReadingType; occurredAt?: Date | string; source?: BoilerSource; notes?: string | null }) {
@@ -116,7 +127,7 @@ export async function startSteamInterval(input: { operationId: string; cookingId
   });
 }
 
-export async function createPressureReading(input: { operationId: string; sessionId: string; intervalId?: string | null; actorId: string; value: Prisma.Decimal.Value; unit: PressureUnit; occurredAt?: Date | string; source?: BoilerSource; notes?: string | null }) {
+export async function createPressureReading(input: { operationId: string; sessionId: string; intervalId?: string | null; cookingId?: string | null; actorId: string; value: Prisma.Decimal.Value; unit: PressureUnit; occurredAt?: Date | string; source?: BoilerSource; notes?: string | null }) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.pressureReading.findUnique({ where: { operationId: input.operationId } });
     if (existing) return existing;
@@ -124,7 +135,7 @@ export async function createPressureReading(input: { operationId: string; sessio
     const value = nonNegative(decimal(input.value, "Presión"), "Presión");
     if (input.intervalId) {
       const interval = await tx.steamInjectionInterval.findUnique({ where: { id: input.intervalId } });
-      if (!interval || interval.boilerSessionId !== session.id) invalid("Intervalo de vapor inválido");
+      if (!interval || interval.boilerSessionId !== session.id || (input.cookingId && interval.cookingId !== input.cookingId)) invalid("Intervalo de vapor inválido", "STEAM_CONTEXT_MISMATCH");
     }
     return tx.pressureReading.create({ data: { operationId: input.operationId, steamIntervalId: input.intervalId ?? undefined, boilerSessionId: session.id, originalValue: value, originalUnit: input.unit, canonicalPsi: pressureToPsi(value, input.unit), occurredAt: date(input.occurredAt ?? new Date()), actorId: input.actorId, source: input.source ?? BoilerSource.MANUAL, notes: input.notes ?? null } });
   });
@@ -139,10 +150,16 @@ export async function stopSteamInterval(input: { operationId: string; cookingId:
     if (!active) throw new BoilerDomainError("No hay vapor activo", "STEAM_NOT_ACTIVE");
     const endedAt = date(input.occurredAt ?? new Date());
     const closed = await tx.steamInjectionInterval.update({ where: { id: active.id }, data: { endedAt, stopOperationId: input.operationId } });
+    await tx.boilerProcessLink.updateMany({ where: { boilerSessionId: active.boilerSessionId, processId: cooking.id, processType: "COCIMIENTO", endedAt: null }, data: { endedAt } });
     await tx.steamInjectionInterval.create({ data: { startOperationId: `${input.operationId}:sin-inyeccion`, cookingId: cooking.id, boilerSessionId: active.boilerSessionId, state: SteamInjectionState.SIN_INYECCION, startedAt: endedAt, createdById: input.actorId, source: input.source ?? BoilerSource.MANUAL } });
     await tx.boilerEvent.create({ data: { operationId: `${input.operationId}:event`, sessionId: active.boilerSessionId, type: BoilerEventType.VAPOR_DETENIDO, occurredAt: endedAt, actorId: input.actorId, source: input.source ?? BoilerSource.MANUAL, notes: input.notes ?? null } });
     return closed;
   });
+}
+
+export async function closeCookingSteamState(tx: Prisma.TransactionClient, cookingId: string, endedAt: Date) {
+  await tx.steamInjectionInterval.updateMany({ where: { cookingId, endedAt: null }, data: { endedAt } });
+  await tx.boilerProcessLink.updateMany({ where: { processId: cookingId, processType: "COCIMIENTO", endedAt: null }, data: { endedAt } });
 }
 
 export async function createSweetHoneyRecovery(input: { operationId: string; lotId: string; sourceCookingId: string; destinationTankId?: string | null; liters: Prisma.Decimal.Value; brix?: Prisma.Decimal.Value | null; actorId: string; recoveredAt?: Date | string; source?: BoilerSource; notes?: string | null }) {

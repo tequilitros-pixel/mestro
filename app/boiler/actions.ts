@@ -33,7 +33,7 @@ export async function createGasReadingAction(form: FormData) {
 
 export async function createBoilerEventAction(form: FormData) {
   const user = await requireModuleActionAccess("/boiler");
-  await createBoilerEvent({ operationId: crypto.randomUUID(), sessionId: text(form, "sessionId"), actorId: user.id, type: required(form, "type") as BoilerEventType, occurredAt: text(form, "occurredAt") ?? undefined, source: source(form), notes: text(form, "notes") });
+  await createBoilerEvent({ operationId: crypto.randomUUID(), sessionId: required(form, "sessionId"), actorId: user.id, type: required(form, "type") as BoilerEventType, occurredAt: text(form, "occurredAt") ?? undefined, source: source(form), notes: text(form, "notes") });
   revalidate();
 }
 

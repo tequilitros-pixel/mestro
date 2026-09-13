@@ -179,7 +179,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       href: "/boiler",
       label: "Caldera",
       icon: FlameIcon,
-      iconVariant: "orange",
+      iconVariant: "slate",
     },
     {
       href: "/milling",

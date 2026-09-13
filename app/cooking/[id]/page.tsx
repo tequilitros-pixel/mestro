@@ -10,6 +10,7 @@ import { startSteamAction, changeSteamPressureAction, stopSteamAction, createSwe
 import { notFound, redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
 import { businessDayStart, formatBusinessDateOnly } from "@/lib/dateTime";
+import { closeCookingSteamState } from "@/lib/boiler/service";
 
 import CookingCharts from "@/components/CookingCharts";
 import FinishCookingModal from "@/components/FinishCookingModal";
@@ -404,6 +405,8 @@ export default async function CookingDetailPage({
         if (updatedCooking.count === 0) {
           return updatedCooking;
         }
+
+        await closeCookingSteamState(transaction, id, finishedAt);
 
         await transaction.cookingEvent.create({
           data: {
