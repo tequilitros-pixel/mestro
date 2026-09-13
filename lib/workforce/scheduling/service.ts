@@ -1,0 +1,1142 @@
+import "server-only";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { assertActiveBranch } from "@/lib/workforce/branchLifecycle";
+import { setRlsContext } from "@/lib/rls";
+import { reconcileAttendanceForEmployment } from "@/lib/workforce/attendance/reconcile";
+import { resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
+import {
+  dateOnly,
+  effectiveAvailability,
+} from "@/lib/workforce/availability/rules";
+import {
+  assertSchedulingBranchAccess,
+  availabilityWarning,
+  calculateCoverage,
+  dateKey,
+  overtimeRisk,
+  scheduledHours,
+  shiftInstants,
+  validateShiftFacts,
+  weekEnd,
+  type ShiftWindow,
+} from "./rules";
+import { scheduleEligibleEmploymentWhere } from "./eligibility";
+
+export type SchedulingActor = {
+  id: string;
+  role: string;
+  accessibleBranchIds: string[] | null;
+};
+export type ShiftCommand = {
+  periodId: string;
+  branchId?: string;
+  shiftId?: string;
+  expectedVersion?: number;
+  employmentId: string | null;
+  businessDate: Date;
+  startTime: string;
+  endTime: string;
+  expectedBreakMinutes: number;
+  reason?: string | null;
+};
+
+function serializable<T>(
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  timeout = 30_000,
+) {
+  return prisma.$transaction(fn, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    maxWait: 5_000,
+    timeout,
+  });
+}
+function ensureReason(reason: string | null | undefined) {
+  const value = reason?.trim();
+  if (!value)
+    throw new Error("La razón del cambio es obligatoria después de publicar.");
+  return value;
+}
+
+async function validateAssignedShift(
+  tx: Prisma.TransactionClient,
+  input: {
+    employmentId: string;
+    branchId: string;
+    businessDate: Date;
+    startAt: Date;
+    endAt: Date;
+    periodStart: Date;
+    periodEnd: Date;
+    excludeShiftId?: string;
+  },
+) {
+  const employment = await tx.employment.findUnique({
+    where: { id: input.employmentId },
+    include: { branchAssignments: true, employee: true },
+  });
+  const branchAuthorized = Boolean(
+    employment?.branchAssignments.some(
+      (item) =>
+        item.branchId === input.branchId &&
+        item.effectiveFrom <= input.startAt &&
+        (!item.effectiveTo || item.effectiveTo >= input.endAt),
+    ),
+  );
+  const baseFacts = validateShiftFacts({
+    shift: {
+      employmentId: input.employmentId,
+      branchId: input.branchId,
+      businessDate: input.businessDate,
+      startAt: input.startAt,
+      endAt: input.endAt,
+    },
+    periodStart: input.periodStart,
+    periodEnd: input.periodEnd,
+    employmentStatus: employment?.status,
+    branchAuthorized,
+    overlaps: false,
+  });
+  if (baseFacts.blockers.length)
+    throw new Error(`Bloqueado: ${baseFacts.blockers.join(", ")}`);
+  const overlap = await tx.shift.findFirst({
+    where: {
+      employmentId: input.employmentId,
+      status: { not: "CANCELLED" },
+      id: input.excludeShiftId ? { not: input.excludeShiftId } : undefined,
+      startAt: { lt: input.endAt },
+      endAt: { gt: input.startAt },
+    },
+  });
+  if (overlap) {
+    const branch = await tx.branch.findUniqueOrThrow({ where: { id: overlap.branchId } });
+    const time = (date: Date) => new Intl.DateTimeFormat("es-MX", { timeZone: branch.timezone ?? "America/Mexico_City", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
+    throw new Error(`${employment?.employee.displayName ?? "El empleado"} ya tiene un turno en ${branch.name} de ${time(overlap.startAt)} a ${time(overlap.endAt)}. (OVERLAPPING_SHIFT)`);
+  }
+  return employment!;
+}
+
+export async function listSchedulingBranches(actor: SchedulingActor) {
+  const where =
+    actor.role === "ADMIN"
+      ? { active: true }
+      : { active: true, id: { in: actor.accessibleBranchIds ?? [] } };
+  return prisma.branch.findMany({ where, orderBy: { name: "asc" } });
+}
+
+export async function getScheduleBoard(
+  actor: SchedulingActor,
+  branchId: string,
+  weekStartInput: Date,
+) {
+  assertSchedulingBranchAccess(actor.role, actor.accessibleBranchIds, branchId);
+  const start = dateOnly(weekStartInput),
+    end = weekEnd(start);
+  const [branch, period, employments, requirements, workforcePolicy] =
+    await Promise.all([
+      prisma.branch.findUnique({ where: { id: branchId } }),
+      prisma.schedulePeriod.findUnique({
+        where: {
+          branchId_periodStart_periodEnd: {
+            branchId,
+            periodStart: start,
+            periodEnd: end,
+          },
+        },
+        include: {
+          publications: { orderBy: { version: "desc" } },
+          shifts: {
+            include: {
+              employment: {
+                include: {
+                  employee: true,
+                  availabilityRules: true,
+                  availabilityExceptions: {
+                    where: { date: { gte: start, lte: end } },
+                  },
+                },
+              },
+              revisions: {
+                include: { changedBy: { select: { name: true } } },
+                orderBy: { revisionNumber: "desc" },
+              },
+            },
+            orderBy: [{ businessDate: "asc" }, { startAt: "asc" }],
+          },
+        },
+      }),
+      prisma.employment.findMany({
+        where: scheduleEligibleEmploymentWhere(branchId, start, end),
+        include: {
+          employee: true,
+          availabilityRules: true,
+          availabilityExceptions: { where: { date: { gte: start, lte: end } } },
+          branchAssignments: true,
+        },
+        orderBy: { employee: { displayName: "asc" } },
+      }),
+      prisma.staffingRequirement.findMany({
+        where: { branchId, businessDate: { gte: start, lte: end } },
+        orderBy: [{ businessDate: "asc" }, { startTime: "asc" }],
+      }),
+      resolveWorkforcePolicy(start),
+    ]);
+  if (!branch) throw new Error("Sucursal no encontrada.");
+  const timezone = branch.timezone ?? workforcePolicy.companyTimezone;
+  const threshold = workforcePolicy.scheduledHoursWarningMinutes / 60;
+  const shifts = period?.shifts ?? [];
+  const hours = scheduledHours(shifts);
+  const availability = new Map<
+    string,
+    ReturnType<typeof effectiveAvailability>
+  >();
+  for (const employment of employments)
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(start.getTime() + i * 86_400_000);
+      const exception = employment.availabilityExceptions.find(
+        (item) => dateKey(item.date) === dateKey(day),
+      );
+      availability.set(
+        `${employment.id}|${dateKey(day)}`,
+        effectiveAvailability({
+          date: day,
+          rules: employment.availabilityRules,
+          exception,
+        }),
+      );
+    }
+  const coverage = requirements.map((item) => {
+    const window = shiftInstants({
+      businessDate: item.businessDate,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      timezone,
+    });
+    return {
+      ...item,
+      ...calculateCoverage(
+        { ...window, requiredCount: item.requiredCount },
+        shifts as ShiftWindow[],
+      ),
+    };
+  });
+  const shiftWarnings = new Map<string, string[]>();
+  for (const shift of shifts) {
+    const list: string[] = [];
+    if (!shift.employmentId) list.push("UNASSIGNED");
+    else {
+      const value = availability.get(
+        `${shift.employmentId}|${dateKey(shift.businessDate)}`,
+      );
+      if (value) {
+        const warning = availabilityWarning(value);
+        if (warning) list.push(warning);
+      }
+      if (overtimeRisk(hours.get(shift.employmentId) ?? 0, threshold).risk)
+        list.push("OVERTIME_RISK");
+    }
+    shiftWarnings.set(shift.id, list);
+  }
+  return {
+    branch,
+    timezone,
+    start,
+    end,
+    period,
+    employments,
+    requirements,
+    coverage,
+    hours,
+    threshold,
+    publicationPolicy: {
+      allowUnassigned: workforcePolicy.allowUnassignedShiftPublication,
+      allowAvailabilityWarnings:
+        workforcePolicy.allowAvailabilityWarningPublication,
+    },
+    availability,
+    shiftWarnings,
+  };
+}
+
+export async function getGlobalScheduleBoard(
+  actor: SchedulingActor,
+  branchId: string | null,
+  weekStartInput: Date,
+) {
+  const start = dateOnly(weekStartInput);
+  const end = weekEnd(start);
+  const branches = await listSchedulingBranches(actor);
+  const accessibleBranchIds = branches.map((branch) => branch.id);
+  if (branchId) {
+    assertSchedulingBranchAccess(actor.role, actor.accessibleBranchIds, branchId);
+    if (!accessibleBranchIds.includes(branchId))
+      throw new Error("Sucursal no encontrada.");
+  }
+
+  const employmentScope =
+    actor.role === "ADMIN"
+      ? { status: "ACTIVE" as const }
+      : {
+          status: "ACTIVE" as const,
+          branchAssignments: {
+            some: {
+              branchId: { in: accessibleBranchIds },
+              effectiveFrom: { lte: end },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
+            },
+          },
+        };
+  const previousStart = new Date(start.getTime() - 7 * 86_400_000);
+  const previousEnd = weekEnd(previousStart);
+  const [periods, previousPeriods, employments, requirements, workforcePolicy, templates] =
+    await Promise.all([
+      prisma.schedulePeriod.findMany({
+        where: {
+          branchId: { in: accessibleBranchIds },
+          periodStart: start,
+          periodEnd: end,
+        },
+        include: {
+          branch: true,
+          publications: { orderBy: { version: "desc" }, take: 1 },
+          shifts: {
+            include: {
+              employment: { include: { employee: true } },
+              branch: true,
+              revisions: {
+                include: { changedBy: { select: { name: true } } },
+                orderBy: { revisionNumber: "desc" },
+              },
+            },
+            orderBy: [{ businessDate: "asc" }, { startAt: "asc" }],
+          },
+        },
+        orderBy: { branch: { name: "asc" } },
+      }),
+      prisma.schedulePeriod.findMany({
+        where: {
+          branchId: { in: accessibleBranchIds },
+          periodStart: previousStart,
+          periodEnd: previousEnd,
+        },
+        include: {
+          shifts: {
+            where: { status: { not: "CANCELLED" } },
+            include: { employment: { include: { employee: true } } },
+            orderBy: [{ businessDate: "asc" }, { startAt: "asc" }],
+          },
+        },
+      }),
+      prisma.employment.findMany({
+        where: employmentScope,
+        include: {
+          employee: true,
+          availabilityRules: true,
+          availabilityExceptions: { where: { date: { gte: start, lte: end } } },
+          branchAssignments: {
+            where: {
+              branchId: { in: accessibleBranchIds },
+              effectiveFrom: { lte: end },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
+            },
+            include: { branch: true },
+            orderBy: [{ type: "asc" }, { effectiveFrom: "desc" }],
+          },
+        },
+        orderBy: { employee: { displayName: "asc" } },
+      }),
+      prisma.staffingRequirement.findMany({
+        where: {
+          branchId: { in: branchId ? [branchId] : accessibleBranchIds },
+          businessDate: { gte: start, lte: end },
+        },
+        include: { branch: true },
+        orderBy: [{ businessDate: "asc" }, { startTime: "asc" }],
+      }),
+      resolveWorkforcePolicy(start),
+      prisma.scheduleTemplate.findMany({
+        where: { active: true, branchId: { in: accessibleBranchIds } },
+        include: {
+          branch: { select: { id: true, name: true } },
+          shifts: { orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }] },
+        },
+        orderBy: [{ branch: { name: "asc" } }, { name: "asc" }],
+      }),
+    ]);
+
+  const allShifts = periods.flatMap((period) => period.shifts);
+  const hours = scheduledHours(allShifts);
+  const availability = new Map<
+    string,
+    ReturnType<typeof effectiveAvailability>
+  >();
+  for (const employment of employments)
+    for (let index = 0; index < 7; index++) {
+      const day = new Date(start.getTime() + index * 86_400_000);
+      const exception = employment.availabilityExceptions.find(
+        (item) => dateKey(item.date) === dateKey(day),
+      );
+      availability.set(
+        `${employment.id}|${dateKey(day)}`,
+        effectiveAvailability({
+          date: day,
+          rules: employment.availabilityRules,
+          exception,
+        }),
+      );
+    }
+
+  const threshold = workforcePolicy.scheduledHoursWarningMinutes / 60;
+  const shiftWarnings = new Map<string, string[]>();
+  for (const shift of allShifts) {
+    const warnings: string[] = [];
+    if (!shift.employmentId) warnings.push("UNASSIGNED");
+    else {
+      const state = availability.get(
+        `${shift.employmentId}|${dateKey(shift.businessDate)}`,
+      );
+      if (state) {
+        const warning = availabilityWarning(state);
+        if (warning) warnings.push(warning);
+      }
+      if (overtimeRisk(hours.get(shift.employmentId) ?? 0, threshold).risk)
+        warnings.push("OVERTIME_RISK");
+    }
+    shiftWarnings.set(shift.id, warnings);
+  }
+  const coverage = requirements.map((requirement) => {
+    const timezone =
+      requirement.branch.timezone ?? workforcePolicy.companyTimezone;
+    const window = shiftInstants({
+      businessDate: requirement.businessDate,
+      startTime: requirement.startTime,
+      endTime: requirement.endTime,
+      timezone,
+    });
+    return {
+      ...requirement,
+      ...calculateCoverage(
+        { ...window, requiredCount: requirement.requiredCount },
+        allShifts.filter(
+          (shift) => shift.branchId === requirement.branchId,
+        ) as ShiftWindow[],
+      ),
+    };
+  });
+
+  return {
+    branches,
+    start,
+    end,
+    periods,
+    previousPeriods,
+    employments,
+    requirements,
+    coverage,
+    hours,
+    threshold,
+    availability,
+    shiftWarnings,
+    companyTimezone: workforcePolicy.companyTimezone,
+    templates,
+  };
+}
+
+export async function getPreviousWeekSchedulePreview(
+  actor: SchedulingActor,
+  branchId: string,
+  weekStartInput: Date,
+) {
+  assertSchedulingBranchAccess(actor.role, actor.accessibleBranchIds, branchId);
+  const targetStart = dateOnly(weekStartInput);
+  const sourceStart = new Date(targetStart.getTime() - 7 * 86_400_000);
+  const sourceEnd = weekEnd(sourceStart);
+  const period = await prisma.schedulePeriod.findUnique({
+    where: {
+      branchId_periodStart_periodEnd: {
+        branchId,
+        periodStart: sourceStart,
+        periodEnd: sourceEnd,
+      },
+    },
+    include: {
+      shifts: {
+        where: { status: { not: "CANCELLED" } },
+        include: { employment: { include: { employee: true } } },
+        orderBy: [{ businessDate: "asc" }, { startAt: "asc" }],
+      },
+    },
+  });
+  return {
+    weekStart: sourceStart,
+    shifts: period?.shifts ?? [],
+  };
+}
+
+export async function createOrUpdateShift(
+  actor: SchedulingActor,
+  input: ShiftCommand,
+  transactionTimeoutMs = 30_000,
+) {
+  return serializable(async (tx) => {
+    const sourcePeriod = await tx.schedulePeriod.findUnique({
+      where: { id: input.periodId },
+      include: { branch: true, publications: { select: { id: true } } },
+    });
+    if (!sourcePeriod) throw new Error("Semana no encontrada.");
+    assertSchedulingBranchAccess(
+      actor.role,
+      actor.accessibleBranchIds,
+      sourcePeriod.branchId,
+    );
+    const targetBranchId = input.branchId || sourcePeriod.branchId;
+    await assertActiveBranch(tx, sourcePeriod.branchId);
+    await assertActiveBranch(tx, targetBranchId);
+    assertSchedulingBranchAccess(
+      actor.role,
+      actor.accessibleBranchIds,
+      targetBranchId,
+    );
+    const period = targetBranchId === sourcePeriod.branchId
+      ? sourcePeriod
+      : await tx.schedulePeriod.upsert({
+          where: {
+            branchId_periodStart_periodEnd: {
+              branchId: targetBranchId,
+              periodStart: sourcePeriod.periodStart,
+              periodEnd: sourcePeriod.periodEnd,
+            },
+          },
+          update: {},
+          create: {
+            branchId: targetBranchId,
+            periodStart: sourcePeriod.periodStart,
+            periodEnd: sourcePeriod.periodEnd,
+            createdById: actor.id,
+          },
+          include: { branch: true, publications: { select: { id: true } } },
+        });
+    const businessDate = dateOnly(input.businessDate);
+    const workforcePolicy = await resolveWorkforcePolicy(businessDate, tx);
+    const timezone = period.branch.timezone ?? workforcePolicy.companyTimezone;
+    const { startAt, endAt } = shiftInstants({
+      businessDate,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      timezone,
+    });
+    if (!Number.isInteger(input.expectedBreakMinutes) || input.expectedBreakMinutes < 0 || input.expectedBreakMinutes >= (endAt.getTime() - startAt.getTime()) / 60000)
+      throw new Error("El descanso debe ser menor que la duración del turno y no puede ser negativo.");
+    if (input.employmentId)
+      await validateAssignedShift(tx, {
+        employmentId: input.employmentId,
+        branchId: period.branchId,
+        businessDate,
+        startAt,
+        endAt,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        excludeShiftId: input.shiftId,
+      });
+    else {
+      const facts = validateShiftFacts({
+        shift: {
+          employmentId: null,
+          branchId: period.branchId,
+          businessDate,
+          startAt,
+          endAt,
+        },
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+      });
+      if (facts.blockers.length)
+        throw new Error(`Bloqueado: ${facts.blockers.join(", ")}`);
+    }
+    const published =
+      sourcePeriod.publications.length > 0 ||
+      sourcePeriod.status === "PUBLISHED" ||
+      period.publications.length > 0 ||
+      period.status === "PUBLISHED";
+    if (!input.shiftId) {
+      const reason = published ? ensureReason(input.reason) : null;
+      const shift = await tx.shift.create({
+        data: {
+          schedulePeriodId: period.id,
+          employmentId: input.employmentId,
+          branchId: period.branchId,
+          businessDate,
+          startAt,
+          endAt,
+          expectedBreakMinutes: input.expectedBreakMinutes,
+          status: published ? "PUBLISHED" : "DRAFT",
+          createdById: actor.id,
+        },
+      });
+      if (published)
+        await tx.shiftRevision.create({
+          data: {
+            shiftId: shift.id,
+            revisionNumber: 1,
+            employmentId: input.employmentId,
+            branchId: period.branchId,
+            businessDate,
+            startAt,
+            endAt,
+            expectedBreakMinutes: input.expectedBreakMinutes,
+            status: "PUBLISHED",
+            reason: reason!,
+            changedById: actor.id,
+          },
+        });
+      if (published && input.employmentId)
+        await reconcileAttendanceForEmployment(tx, input.employmentId);
+      if (published) await tx.schedulePeriod.update({ where: { id: period.id }, data: { status: "DRAFT" } });
+      return shift;
+    }
+    const current = await tx.shift.findUnique({
+      where: { id: input.shiftId },
+      include: {
+        revisions: { orderBy: { revisionNumber: "desc" }, take: 1 },
+        publicationLinks: { select: { id: true } },
+      },
+    });
+    if (!current || current.schedulePeriodId !== sourcePeriod.id)
+      throw new Error("Turno no encontrado.");
+    if (current.version !== input.expectedVersion)
+      throw new Error(
+        "STALE_VERSION: el turno cambió; recarga antes de guardar.",
+      );
+    const result = await tx.shift.updateMany({
+      where: { id: current.id, version: input.expectedVersion },
+      data: {
+        schedulePeriodId: period.id,
+        branchId: period.branchId,
+        employmentId: input.employmentId,
+        businessDate,
+        startAt,
+        endAt,
+        expectedBreakMinutes: input.expectedBreakMinutes,
+        version: { increment: 1 },
+        status: published ? "PUBLISHED" : "DRAFT",
+      },
+    });
+    if (result.count !== 1)
+      throw new Error(
+        "STALE_VERSION: el turno cambió; recarga antes de guardar.",
+      );
+    if (published || current.publicationLinks.length) {
+      const reason = ensureReason(input.reason);
+      await tx.shiftRevision.create({
+        data: {
+          shiftId: current.id,
+          revisionNumber: (current.revisions[0]?.revisionNumber ?? 0) + 1,
+          employmentId: input.employmentId,
+          branchId: period.branchId,
+          businessDate,
+          startAt,
+          endAt,
+          expectedBreakMinutes: input.expectedBreakMinutes,
+          status: "PUBLISHED",
+          reason,
+          changedById: actor.id,
+        },
+      });
+      const employmentIds = new Set(
+        [current.employmentId, input.employmentId].filter(
+          (id): id is string => Boolean(id),
+        ),
+      );
+      for (const employmentId of employmentIds)
+        await reconcileAttendanceForEmployment(tx, employmentId);
+    }
+    if (published) await tx.schedulePeriod.updateMany({ where: { id: { in: [sourcePeriod.id, period.id] } }, data: { status: "DRAFT" } });
+    return tx.shift.findUniqueOrThrow({ where: { id: current.id } });
+  }, transactionTimeoutMs).catch((error) => {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2034"
+    )
+      throw new Error("Conflicto concurrente; vuelve a intentar.");
+    throw error;
+  });
+}
+
+export async function deleteOrCancelShift(
+  actor: SchedulingActor,
+  input: { shiftId: string; expectedVersion: number; reason?: string | null },
+) {
+  return serializable(async (tx) => {
+    const shift = await tx.shift.findUnique({
+      where: { id: input.shiftId },
+      include: {
+        schedulePeriod: true,
+        publicationLinks: true,
+        revisions: { orderBy: { revisionNumber: "desc" }, take: 1 },
+      },
+    });
+    if (!shift) throw new Error("Turno no encontrado.");
+    assertSchedulingBranchAccess(
+      actor.role,
+      actor.accessibleBranchIds,
+      shift.branchId,
+    );
+    if (shift.version !== input.expectedVersion)
+      throw new Error(
+        "STALE_VERSION: el turno cambió; recarga antes de guardar.",
+      );
+    if (
+      !shift.publicationLinks.length &&
+      shift.schedulePeriod.status === "DRAFT"
+    ) {
+      await tx.shift.delete({ where: { id: shift.id } });
+      return { deleted: true, cancelled: false };
+    }
+    const reason = ensureReason(input.reason);
+    const updated = await tx.shift.updateMany({
+      where: { id: shift.id, version: input.expectedVersion },
+      data: { status: "CANCELLED", version: { increment: 1 } },
+    });
+    if (updated.count !== 1)
+      throw new Error(
+        "STALE_VERSION: el turno cambió; recarga antes de guardar.",
+      );
+    await tx.shiftRevision.create({
+      data: {
+        shiftId: shift.id,
+        revisionNumber: (shift.revisions[0]?.revisionNumber ?? 0) + 1,
+        employmentId: shift.employmentId,
+        branchId: shift.branchId,
+        businessDate: shift.businessDate,
+        startAt: shift.startAt,
+        endAt: shift.endAt,
+        expectedBreakMinutes: shift.expectedBreakMinutes,
+        status: "CANCELLED",
+        reason,
+        changedById: actor.id,
+      },
+    });
+    if (shift.employmentId)
+      await reconcileAttendanceForEmployment(tx, shift.employmentId);
+    await tx.schedulePeriod.update({ where: { id: shift.schedulePeriodId }, data: { status: "DRAFT" } });
+    return { deleted: false, cancelled: true };
+  });
+}
+
+export async function publishSchedulePeriod(
+  actor: SchedulingActor,
+  periodId: string,
+) {
+  return serializable(async (tx) => {
+    const period = await tx.schedulePeriod.findUnique({
+      where: { id: periodId },
+      include: {
+        shifts: true,
+        publications: { orderBy: { version: "desc" }, take: 1 },
+      },
+    });
+    if (!period) throw new Error("Semana no encontrada.");
+    assertSchedulingBranchAccess(
+      actor.role,
+      actor.accessibleBranchIds,
+      period.branchId,
+    );
+    if (period.status === "PUBLISHED" && period.publications[0])
+      return { id: period.publications[0].id, idempotent: true };
+    const policy = await resolveWorkforcePolicy(period.periodStart, tx);
+    const activeShifts = period.shifts.filter(
+      (shift) => shift.status !== "CANCELLED",
+    );
+    if (!activeShifts.length)
+      throw new Error("Agrega al menos un turno antes de publicar.");
+    const blockers: string[] = [];
+    for (const shift of activeShifts) {
+      if (!shift.employmentId) {
+        if (!policy.allowUnassignedShiftPublication)
+          blockers.push(`${shift.id}: UNASSIGNED_NOT_ALLOWED_BY_POLICY`);
+      } else {
+        try {
+          await validateAssignedShift(tx, {
+            employmentId: shift.employmentId,
+            branchId: period.branchId,
+            businessDate: shift.businessDate,
+            startAt: shift.startAt,
+            endAt: shift.endAt,
+            periodStart: period.periodStart,
+            periodEnd: period.periodEnd,
+            excludeShiftId: shift.id,
+          });
+        } catch (error) {
+          blockers.push(
+            `${shift.id}: ${error instanceof Error ? error.message : "inválido"}`,
+          );
+        }
+        if (!policy.allowAvailabilityWarningPublication) {
+          const employment = await tx.employment.findUniqueOrThrow({
+            where: { id: shift.employmentId },
+            include: {
+              availabilityRules: true,
+              availabilityExceptions: { where: { date: shift.businessDate } },
+            },
+          });
+          const warning = availabilityWarning(
+            effectiveAvailability({
+              date: shift.businessDate,
+              rules: employment.availabilityRules,
+              exception: employment.availabilityExceptions[0],
+            }),
+          );
+          if (warning) blockers.push(`${shift.id}: ${warning}_NOT_ALLOWED_BY_POLICY`);
+        }
+      }
+    }
+    if (blockers.length)
+      throw new Error(`Publicación bloqueada: ${blockers.join("; ")}`);
+    const version = (period.publications[0]?.version ?? 0) + 1;
+    const publication = await tx.schedulePublication.create({
+      data: { schedulePeriodId: period.id, version, publishedById: actor.id },
+    });
+    for (const shift of period.shifts) {
+      const latest = await tx.shiftRevision.findFirst({
+        where: { shiftId: shift.id },
+        orderBy: { revisionNumber: "desc" },
+      });
+      const revision = await tx.shiftRevision.create({
+        data: {
+          shiftId: shift.id,
+          revisionNumber: (latest?.revisionNumber ?? 0) + 1,
+          employmentId: shift.employmentId,
+          branchId: shift.branchId,
+          businessDate: shift.businessDate,
+          startAt: shift.startAt,
+          endAt: shift.endAt,
+          expectedBreakMinutes: shift.expectedBreakMinutes,
+          status: shift.status === "CANCELLED" ? "CANCELLED" : "PUBLISHED",
+          reason: version === 1 ? "Publicación inicial de semana" : "Publicación de cambios",
+          changedById: actor.id,
+        },
+      });
+      await tx.schedulePublicationShift.create({
+        data: {
+          publicationId: publication.id,
+          shiftId: shift.id,
+          shiftRevisionId: revision.id,
+        },
+      });
+    }
+    await tx.shift.updateMany({
+      where: { schedulePeriodId: period.id, status: "DRAFT" },
+      data: { status: "PUBLISHED" },
+    });
+    await tx.schedulePeriod.update({
+      where: { id: period.id },
+      data: { status: "PUBLISHED", version: { increment: 1 } },
+    });
+    for (const employmentId of new Set(
+      period.shifts
+        .map((shift) => shift.employmentId)
+        .filter((id): id is string => Boolean(id)),
+    ))
+      await reconcileAttendanceForEmployment(tx, employmentId);
+    return { id: publication.id, idempotent: false };
+  }, 60_000).catch((error) => {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === "P2002" || error.code === "P2034")
+    )
+      throw new Error(
+        "La semana ya se publicó o cambió concurrentemente; recarga.",
+      );
+    throw error;
+  });
+}
+
+export async function ensureSchedulePeriod(
+  actor: SchedulingActor,
+  branchId: string,
+  weekStartInput: Date,
+) {
+  assertSchedulingBranchAccess(actor.role, actor.accessibleBranchIds, branchId);
+  const periodStart = dateOnly(weekStartInput),
+    periodEnd = weekEnd(periodStart);
+  return prisma.schedulePeriod.upsert({
+    where: {
+      branchId_periodStart_periodEnd: { branchId, periodStart, periodEnd },
+    },
+    update: {},
+    create: { branchId, periodStart, periodEnd, createdById: actor.id },
+  });
+}
+
+export async function copyPreviousScheduleWeek(
+  actor: SchedulingActor,
+  targetPeriodId: string,
+) {
+  return serializable(async (tx) => {
+    const target = await tx.schedulePeriod.findUnique({
+      where: { id: targetPeriodId },
+      include: { shifts: true, branch: true },
+    });
+    if (!target) throw new Error("Semana destino no encontrada.");
+    await assertActiveBranch(tx, target.branchId);
+    assertSchedulingBranchAccess(
+      actor.role,
+      actor.accessibleBranchIds,
+      target.branchId,
+    );
+    if (target.status !== "DRAFT")
+      throw new Error("Copy Week sólo crea borradores.");
+    if (target.shifts.length)
+      return { copied: target.shifts.length, skipped: 0, idempotent: true };
+    const sourceStart = new Date(target.periodStart.getTime() - 7 * 86_400_000),
+      sourceEnd = new Date(target.periodEnd.getTime() - 7 * 86_400_000);
+    const source = await tx.schedulePeriod.findUnique({
+      where: {
+        branchId_periodStart_periodEnd: {
+          branchId: target.branchId,
+          periodStart: sourceStart,
+          periodEnd: sourceEnd,
+        },
+      },
+      include: { shifts: true },
+    });
+    if (!source) return { copied: 0, skipped: 0, idempotent: false };
+    let copied = 0,
+      skipped = 0;
+    for (const shift of source.shifts.filter(
+      (item) => item.status !== "CANCELLED",
+    )) {
+      const businessDate = new Date(
+          shift.businessDate.getTime() + 7 * 86_400_000,
+        ),
+        startAt = new Date(shift.startAt.getTime() + 7 * 86_400_000),
+        endAt = new Date(shift.endAt.getTime() + 7 * 86_400_000);
+      try {
+        if (shift.employmentId)
+          await validateAssignedShift(tx, {
+            employmentId: shift.employmentId,
+            branchId: target.branchId,
+            businessDate,
+            startAt,
+            endAt,
+            periodStart: target.periodStart,
+            periodEnd: target.periodEnd,
+          });
+        await tx.shift.create({
+          data: {
+            schedulePeriodId: target.id,
+            employmentId: shift.employmentId,
+            branchId: target.branchId,
+            businessDate,
+            startAt,
+            endAt,
+            expectedBreakMinutes: shift.expectedBreakMinutes,
+            status: "DRAFT",
+            createdById: actor.id,
+          },
+        });
+        copied++;
+      } catch {
+        skipped++;
+      }
+    }
+    return { copied, skipped, idempotent: false };
+  });
+}
+
+export async function applyScheduleTemplate(
+  actor: SchedulingActor,
+  input: {
+    templateId: string;
+    employmentIds: string[];
+    weekStart: Date;
+  },
+) {
+  const employmentIds = [...new Set(input.employmentIds.filter(Boolean))];
+  if (!employmentIds.length) throw new Error("Selecciona al menos un empleado.");
+  return serializable(async (tx) => {
+    await setRlsContext(tx, actor);
+    const template = await tx.scheduleTemplate.findUnique({
+      where: { id: input.templateId },
+      include: {
+        branch: true,
+        shifts: { orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }] },
+      },
+    });
+    if (!template?.active || !template.branchId || !template.branch)
+      throw new Error("Plantilla no disponible para una sucursal.");
+    await assertActiveBranch(tx, template.branchId);
+    assertSchedulingBranchAccess(
+      actor.role,
+      actor.accessibleBranchIds,
+      template.branchId,
+    );
+    const periodStart = dateOnly(input.weekStart);
+    if (periodStart.getUTCDay() !== 1) throw new Error("Selecciona el lunes de la semana.");
+    const periodEnd = weekEnd(periodStart);
+    const period = await tx.schedulePeriod.upsert({
+      where: {
+        branchId_periodStart_periodEnd: {
+          branchId: template.branchId,
+          periodStart,
+          periodEnd,
+        },
+      },
+      update: {},
+      create: {
+        branchId: template.branchId,
+        periodStart,
+        periodEnd,
+        createdById: actor.id,
+      },
+      include: { publications: { select: { id: true } } },
+    });
+    if (period.status !== "DRAFT" || period.publications.length)
+      throw new Error("No se puede aplicar una plantilla sobre una semana publicada.");
+    const blocks = template.shifts.filter(
+      (block) => block.type === "TURNO" && block.startTime && block.endTime,
+    );
+    if (!blocks.length) throw new Error("La plantilla no contiene turnos.");
+    const workforcePolicy = await resolveWorkforcePolicy(periodStart, tx);
+    const timezone = template.branch.timezone ?? workforcePolicy.companyTimezone;
+    let created = 0;
+    for (const employmentId of employmentIds) {
+      for (const block of blocks) {
+        const businessDate = new Date(
+          periodStart.getTime() + block.dayOfWeek * 86_400_000,
+        );
+        const { startAt, endAt } = shiftInstants({
+          businessDate,
+          startTime: block.startTime!,
+          endTime: block.endTime!,
+          timezone,
+        });
+        await validateAssignedShift(tx, {
+          employmentId,
+          branchId: template.branchId,
+          businessDate,
+          startAt,
+          endAt,
+          periodStart,
+          periodEnd,
+        });
+        await tx.shift.create({
+          data: {
+            schedulePeriodId: period.id,
+            employmentId,
+            branchId: template.branchId,
+            businessDate,
+            startAt,
+            endAt,
+            expectedBreakMinutes: block.breakMinutes,
+            status: "DRAFT",
+            createdById: actor.id,
+          },
+        });
+        created += 1;
+      }
+    }
+    return { created, periodId: period.id, branchId: template.branchId };
+  }, 60_000);
+}
+
+export async function upsertStaffingRequirement(
+  actor: SchedulingActor,
+  input: {
+    branchId: string;
+    businessDate: Date;
+    startTime: string;
+    endTime: string;
+    requiredCount: number;
+  },
+) {
+  assertSchedulingBranchAccess(
+    actor.role,
+    actor.accessibleBranchIds,
+    input.branchId,
+  );
+  if (!Number.isInteger(input.requiredCount) || input.requiredCount < 1)
+    throw new Error("Required debe ser al menos 1.");
+  if (input.startTime === input.endTime)
+    throw new Error("La ventana de cobertura es inválida.");
+  return prisma.staffingRequirement.upsert({
+    where: {
+      branchId_businessDate_startTime_endTime: {
+        branchId: input.branchId,
+        businessDate: dateOnly(input.businessDate),
+        startTime: input.startTime,
+        endTime: input.endTime,
+      },
+    },
+    update: { requiredCount: input.requiredCount },
+    create: {
+      branchId: input.branchId,
+      businessDate: dateOnly(input.businessDate),
+      startTime: input.startTime,
+      endTime: input.endTime,
+      requiredCount: input.requiredCount,
+      createdById: actor.id,
+    },
+  });
+}
+
+export async function getPublicationValidation(
+  actor: SchedulingActor,
+  branchId: string,
+  weekStartInput: Date,
+) {
+  const board = await getScheduleBoard(actor, branchId, weekStartInput);
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+  const activeShifts = (board.period?.shifts ?? []).filter(
+    (shift) => shift.status !== "CANCELLED",
+  );
+  if (!activeShifts.length) blockers.push("NO_SHIFTS");
+  await serializable(async (tx) => {
+    for (const shift of activeShifts) {
+      if (!shift.employmentId) continue;
+      try {
+        await validateAssignedShift(tx, {
+          employmentId: shift.employmentId,
+          branchId: shift.branchId,
+          businessDate: shift.businessDate,
+          startAt: shift.startAt,
+          endAt: shift.endAt,
+          periodStart: board.start,
+          periodEnd: board.end,
+          excludeShiftId: shift.id,
+        });
+      } catch (error) {
+        blockers.push(
+          `${shift.id}: ${error instanceof Error ? error.message : "DATA_INTEGRITY"}`,
+        );
+      }
+    }
+  });
+  for (const shift of activeShifts) {
+    for (const warning of board.shiftWarnings.get(shift.id) ?? []) {
+      if (
+        (warning === "UNASSIGNED" &&
+          !board.publicationPolicy.allowUnassigned) ||
+        ((warning === "UNAVAILABLE" ||
+          warning === "UNKNOWN_AVAILABILITY") &&
+          !board.publicationPolicy.allowAvailabilityWarnings)
+      )
+        blockers.push(`${shift.id}: ${warning}`);
+      else warnings.push(`${shift.id}: ${warning}`);
+    }
+  }
+  for (const item of board.coverage)
+    if (item.status === "UNDERSTAFFED")
+      warnings.push(`${item.id}: COVERAGE_GAP`);
+  return {
+    shiftCount: activeShifts.length,
+    employeeCount: new Set(
+      (board.period?.shifts ?? [])
+        .map((item) => item.employmentId)
+        .filter(Boolean),
+    ).size,
+    blockers,
+    warnings,
+  };
+}

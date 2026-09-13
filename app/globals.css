@@ -1,0 +1,350 @@
+@import "tailwindcss";
+
+/* =========================================================
+   SISTEMA DE DISEÑO — definido en Stitch (Material 3)
+   MAESTRO es una app siempre oscura, sin modo claro.
+   ========================================================= */
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #f5f5f7;
+  --focus-ring: #f5f5f7;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --control-sm: 32px;
+  --control-md: 36px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+
+  /* Superficies — negro profundo y neutro ("negro brillante"),
+     en vez del gris cálido anterior. La escala sube en pasos
+     pequeños para que la elevación se note por el brillo del
+     borde, no por saltos grandes de gris. */
+  --color-surface: #111111;
+  --color-surface-dim: #0a0a0a;
+  --color-surface-bright: #2c2c2e;
+  --color-surface-container-lowest: #0a0a0a;
+  --color-surface-container-low: #111111;
+  --color-surface-container: #171717;
+  --color-surface-container-high: #202020;
+  --color-surface-container-highest: #262626;
+  --color-surface-variant: #2c2c2e;
+  --color-on-surface: #f5f5f7;
+  --color-on-surface-variant: #a1a1a6;
+  --color-on-background: #f5f5f7;
+  --color-inverse-surface: #f5f5f7;
+  --color-inverse-on-surface: #1c1c1e;
+  --color-surface-tint: #f5f5f7;
+  --color-outline: #a1a1a6;
+  --color-outline-variant: #38383a;
+
+  /* Primario */
+  --color-primary: #ffffff;
+  --color-on-primary: #111111;
+  --color-primary-container: #262626;
+  --color-on-primary-container: #f5f5f7;
+  --color-primary-fixed: #ffffff;
+  --color-primary-fixed-dim: #e5e5e7;
+  --color-on-primary-fixed: #111111;
+  --color-on-primary-fixed-variant: #6e6e73;
+  --color-inverse-primary: #111111;
+
+  /* Secundario (acento cobre/ámbar de marca) */
+  --color-secondary: #ff9f0a;
+  --color-on-secondary: #2b1800;
+  --color-secondary-container: #513200;
+  --color-on-secondary-container: #ffd69a;
+  --color-secondary-fixed: #ffd69a;
+  --color-secondary-fixed-dim: #ff9f0a;
+  --color-on-secondary-fixed: #301d00;
+  --color-on-secondary-fixed-variant: #785000;
+
+  /* Terciario (verde de éxito/confirmación) */
+  --color-tertiary: #30d158;
+  --color-on-tertiary: #003919;
+  --color-tertiary-container: #143d21;
+  --color-on-tertiary-container: #007439;
+  --color-tertiary-fixed: #30d158;
+  --color-tertiary-fixed-dim: #30d158;
+  --color-on-tertiary-fixed: #00210c;
+  --color-on-tertiary-fixed-variant: #005227;
+
+  /* Error */
+  --color-error: #ff453a;
+  --color-on-error: #3a0805;
+  --color-error-container: #54100d;
+  --color-on-error-container: #ffd7d4;
+
+  /* Tipografía con escala propia */
+  --text-body-md: 16px;
+  --text-body-md--line-height: 24px;
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 28px;
+  --text-data-mono: 14px;
+  --text-data-mono--line-height: 20px;
+  --text-data-mono--font-weight: 500;
+  --text-label-caps: 12px;
+  --text-label-caps--line-height: 16px;
+  --text-label-caps--letter-spacing: 0.1em;
+  --text-label-caps--font-weight: 600;
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 32px;
+  --text-headline-md--font-weight: 600;
+  --text-headline-lg: 32px;
+  --text-headline-lg--line-height: 40px;
+  --text-headline-lg--font-weight: 700;
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 52px;
+  --text-display-lg--font-weight: 800;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+}
+
+/*
+ * El shell solo organiza la aplicación; cada pantalla conserva la
+ * responsabilidad de declarar su propio <main>. Las rutas antiguas que
+ * aún no tienen contenedor de página reciben aquí un ancho y espaciado
+ * seguros. Si la pantalla ya trae un <main>, evitamos duplicar ambos.
+ */
+.app-content {
+  width: 100%;
+  max-width: none;
+  flex: 1 1 0%;
+  margin-inline: auto;
+  padding: 1rem;
+}
+
+.page-frame { width: 100%; max-width: 80rem; margin-inline: auto; padding: var(--space-4); }
+.compact-field { min-height: var(--control-md); border-radius: var(--radius-control); padding: 0 var(--space-3); font-size: 14px; }
+.compact-table-row { min-height: 52px; }
+.compact-form-panel { border-radius: var(--radius-card); padding: var(--space-4); }
+.compact-modal-panel { max-height: 90vh; border-radius: var(--radius-card); box-shadow: 0 12px 32px rgb(0 0 0 / 0.24); }
+.compact-modal-header { padding: var(--space-4); }
+.compact-modal-body { padding: var(--space-4); }
+.compact-action { min-height: var(--control-md); border-radius: var(--radius-control); padding-inline: var(--space-3); font-size: 14px; }
+@media (min-width: 40rem) { .page-frame { padding: var(--space-5); } }
+@media (min-width: 64rem) { .page-frame { padding: var(--space-6); } }
+
+.app-content:has(> main) {
+  max-width: none;
+  padding: 0;
+}
+
+@media (min-width: 40rem) {
+  .app-content {
+    padding-inline: 1.25rem;
+  }
+
+  .app-content:has(> main) {
+    padding-inline: 0;
+  }
+}
+
+@media (min-width: 64rem) {
+  .app-content {
+    padding-inline: 1.5rem;
+  }
+
+  .app-content:has(> main) {
+    padding-inline: 0;
+  }
+}
+
+/*
+ * Foco de teclado compartido por toda la aplicación. Se aplica solo
+ * con :focus-visible para no añadir el anillo al hacer clic o tocar,
+ * y prevalece sobre los `outline-none` usados por formularios antiguos.
+ */
+:where(
+  a[href],
+  button,
+  input,
+  select,
+  textarea,
+  summary,
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+/* Conserva un indicador reconocible en modos de alto contraste. */
+@media (forced-colors: active) {
+  :where(
+    a[href],
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible {
+    outline-color: Highlight;
+  }
+}
+
+/*
+ * Movimiento respetuoso: si el usuario desactivó las animaciones
+ * en su sistema, todas las transiciones/animaciones de la app se
+ * vuelven instantáneas (sin romper el estado final).
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * Brillo sutil en el borde superior de superficies elevadas
+ * (tarjetas, paneles). Es el acabado "negro brillante": una línea
+ * de luz muy tenue, no color, la que le da profundidad a la
+ * superficie oscura.
+ */
+.surface-sheen {
+  position: relative;
+}
+
+.surface-sheen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgb(255 255 255 / 0.015);
+  pointer-events: none;
+}
+
+.shell-icon-button {
+  display: inline-flex;
+  cursor: pointer;
+  min-height: 2.25rem;
+  min-width: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: var(--color-on-surface-variant);
+  transition: color 150ms cubic-bezier(.2,.8,.2,1), background-color 150ms cubic-bezier(.2,.8,.2,1), transform 150ms cubic-bezier(.2,.8,.2,1);
+}
+
+.shell-icon-button:hover { background: var(--color-surface-container); color: var(--color-on-surface); }
+.shell-icon-button:active { transform: scale(.98); }
+.main-module-menu > summary { list-style: none; position: fixed; z-index: 60; top: 0.625rem; left: 0.75rem; }
+.main-module-menu > summary::-webkit-details-marker { display: none; }
+.main-module-menu:not([open]) > div { display: none; }
+.module-sidebar { position: sticky; top: 3.5rem; height: calc(100vh - 3.5rem); }
+.module-drawer { animation: module-drawer-in 180ms cubic-bezier(.2,.8,.2,1) both; transform-origin: left center; }
+@keyframes module-drawer-in { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
+
+@media (max-width: 639px) {
+  /* Las pestañas de Caldera y Cocimiento deben seguir siendo navegables
+     sin recortar controles en un viewport estrecho. */
+  .caldera-cocimiento-tabs [role="tablist"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-x: visible;
+  }
+
+  .caldera-cocimiento-tabs [role="tab"] {
+    min-width: 0;
+    width: 100%;
+    white-space: normal;
+    text-align: center;
+  }
+}
+
+@media (pointer: coarse) {
+  .shell-icon-button { min-height: 2.75rem; min-width: 2.75rem; }
+}
+
+/* =========================================================
+   IMPRESIÓN DE ETIQUETAS MAESTRO — 50 mm × 30 mm
+   ========================================================= */
+
+@page {
+  size: 50mm 30mm;
+  margin: 0;
+}
+
+.label-print-page {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  background: white;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  /*
+   * El ancho de 50mm es específico de las etiquetas de botella y no
+   * debe aplicarse a otras páginas imprimibles (ej. listas de
+   * resurtido), así que solo se activa cuando la página contiene
+   * .label-print-page.
+   */
+  html:has(.label-print-page),
+  body:has(.label-print-page) {
+    width: 50mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  body:has(.label-print-page) {
+    color: black !important;
+  }
+
+  .label-print-page {
+    display: block !important;
+    width: 50mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .label-card {
+    width: 50mm !important;
+    height: 30mm !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    break-after: page !important;
+    page-break-after: always !important;
+  }
+
+  .label-card:last-child {
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}

@@ -1,0 +1,5514 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                        String                     @id @default(cuid())
+  name                      String
+  username                  String                     @unique
+  email                     String?                    @unique
+  /// Teléfono en formato E.164 (ej. +524941234567) para acceso mediante SMS.
+  phone                     String?                    @unique
+  password                  String
+  /// PIN de 4 dígitos (hasheado) para el checador compartido (kiosco):
+  /// permite identificarse en una tablet/teléfono común de la sucursal
+  /// sin escribir la contraseña completa. Null = no puede usar kiosco.
+  pinHash                   String?
+  failedLoginAttempts       Int                        @default(0)
+  lockedUntil               DateTime?
+  role                      UserRole
+  active                    Boolean                    @default(true)
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  lastLogin                 DateTime?
+  cookingsFinished          Cooking[]                  @relation("CookingFinishedBy")
+  boilerSessionsStarted     BoilerSession[]            @relation("BoilerSessionStartedBy")
+  boilerSessionsEnded       BoilerSession[]            @relation("BoilerSessionEndedBy")
+  boilerEvents              BoilerEvent[]
+  boilerProcessLinksCreated BoilerProcessLink[]        @relation("BoilerProcessLinkCreatedBy")
+  steamIntervalsCreated     SteamInjectionInterval[]   @relation("SteamIntervalCreatedBy")
+  pressureReadings          PressureReading[]
+  gasReadings               GasReading[]
+  boilerMaintenances        BoilerMaintenance[]
+  boilerIncidents           BoilerIncident[]
+  sweetHoneyRecoveries      SweetHoneyRecovery[]
+  distillationsFinished     Distillation[]             @relation("DistillationFinishedBy")
+  fermentationsFinished     Fermentation[]             @relation("FermentationFinishedBy")
+  liquorBatchesCreated      LiquorBatch[]              @relation("LiquorBatchCreatedBy")
+  liquorBatchesFinished     LiquorBatch[]              @relation("LiquorBatchFinishedBy")
+  liquorBottlesSold         LiquorBottle[]             @relation("LiquorBottleSoldBy")
+  liquorBottleMovements     LiquorBottleMovement[]     @relation("LiquorBottleMovementCreatedBy")
+  liquorBatchsPaused        LiquorBatch[]              @relation("LiquorBatchPausedBy")
+  liquorEventsCreated       LiquorBatchEvent[]         @relation("LiquorBatchEventCreatedBy")
+  liquorBatchStepsCompleted LiquorBatchStep[]          @relation("LiquorBatchStepCompletedBy")
+  liquorBottlingsCreated    LiquorBottling[]           @relation("LiquorBottlingCreatedBy")
+  liquorBottlingsFinished   LiquorBottling[]           @relation("LiquorBottlingFinishedBy")
+  liquorProductsCreated     LiquorProduct[]            @relation("LiquorProductCreatedBy")
+  liquorRecipesCreated      LiquorRecipe[]             @relation("LiquorRecipeCreatedBy")
+  lots                      Lot[]
+  branches                  UserBranch[]
+  cashCutsResponsible       CashCut[]                  @relation("CashCutResponsible")
+  cashCutsCreated           CashCut[]                  @relation("CashCutCreatedBy")
+  cashCutsUpdated           CashCut[]                  @relation("CashCutUpdatedBy")
+  cashOutflowsAuthorized    CashOutflow[]              @relation("CashOutflowAuthorizedBy")
+  financialCategoriesCreated FinancialMovementCategory[] @relation("FinancialCategoryCreatedBy")
+  financialCategoriesUpdated FinancialMovementCategory[] @relation("FinancialCategoryUpdatedBy")
+  cashCutAuditEntries       CashCutAuditEntry[]        @relation("CashCutAuditBy")
+  cashSafeMovementsBy       CashSafeMovement[]         @relation("CashSafeMovementBy")
+  cashSafeEnvelopesCreated  CashSafeEnvelope[]         @relation("CashSafeEnvelopeCreatedBy")
+  cashSafeEnvelopesReceived CashSafeEnvelope[]         @relation("CashSafeEnvelopeReceivedBy")
+  cashSafeEnvelopeMovements CashSafeEnvelopeMovement[] @relation("CashSafeEnvelopeMovementBy")
+  hourlyRate                Decimal?                   @db.Decimal(10, 2)
+  timeClockEntries          TimeClockEntry[]           @relation("TimeClockEntries")
+  timeClockEntriesClosed    TimeClockEntry[]           @relation("TimeClockClosedBy")
+  timeClockEditRequests     TimeClockEditRequest[]     @relation("TimeClockEditRequestedBy")
+  timeClockEditReviews      TimeClockEditRequest[]     @relation("TimeClockEditReviewedBy")
+  scheduledShifts           ScheduledShift[]           @relation("ScheduledShifts")
+  scheduleWeeksPublished    ScheduleWeek[]             @relation("ScheduleWeekPublishedBy")
+  geofenceAlerts            GeofenceAlert[]
+  legacyWorkforceSettingsUpdated WorkforceSettings[] @relation("WorkforceSettingsUpdatedBy")
+  salaryRates               SalaryRate[]               @relation("SalaryRateOwner")
+  salaryRatesCreated        SalaryRate[]               @relation("SalaryRateCreatedBy")
+  cashTransfersCreated      CashTransfer[]             @relation("CashTransferCreatedBy")
+
+  millingsFinished   Milling[]           @relation("MillingFinishedBy")
+  millingDischarges  MillingDischarge[]
+  pushSubscriptions  PushSubscription[]
+  passwordResetCodes PasswordResetCode[]
+  modulePermissions  ModulePermission[]
+  sessions           UserSession[]
+
+  posCategoriesCreated     PosCategory[]      @relation("PosCategoryCreatedBy")
+  posProductsCreated       PosProduct[]       @relation("PosProductCreatedBy")
+  posSalesSold             PosSale[]          @relation("PosSaleSoldBy")
+  posSalesCancelled        PosSale[]          @relation("PosSaleCancelledBy")
+  posSalesAsEmployeeBuyer  PosSale[]          @relation("PosSaleEmployeeBuyer")
+  posSalesAuthorized       PosSale[]          @relation("PosSaleAuthorizedBy")
+  posSaleItemsBeneficiary  PosSaleItem[]      @relation("PosSaleItemBeneficiary")
+  posSaleItemsAuthorized   PosSaleItem[]      @relation("PosSaleItemAuthorizedBy")
+  posDiscountLimitsUpdated PosDiscountLimit[] @relation("PosDiscountLimitUpdatedBy")
+  posDiscountRulesCreated  PosDiscountRule[]  @relation("PosDiscountRuleCreatedBy")
+  posDiscountRulesUpdated  PosDiscountRule[]  @relation("PosDiscountRuleUpdatedBy")
+  posSettingsUpdated       PosSettings[]      @relation("PosSettingsUpdatedBy")
+
+  overtimeRecords         OvertimeRecord[]      @relation("OvertimeWorker")
+  overtimeRecordsReviewed OvertimeRecord[]      @relation("OvertimeReviewedBy")
+  rawMaterialMovements    RawMaterialMovement[] @relation("RawMaterialMovementBy")
+
+  payrollAdjustments        PayrollAdjustment[] @relation("PayrollAdjustmentOwner")
+  payrollAdjustmentsCreated PayrollAdjustment[] @relation("PayrollAdjustmentCreatedBy")
+
+  payrollPeriodsSubmitted PayrollPeriod[] @relation("PayrollPeriodSubmittedBy")
+  payrollPeriodsApproved  PayrollPeriod[] @relation("PayrollPeriodApprovedBy")
+  payrollPeriodsPaid      PayrollPeriod[] @relation("PayrollPeriodPaidBy")
+  payrollEntries          PayrollEntry[]  @relation("PayrollEntryOwner")
+
+  payrollIncidentJustifications   PayrollIncidentJustification[] @relation("PayrollIncidentJustificationOwner")
+  payrollIncidentJustificationsBy PayrollIncidentJustification[] @relation("PayrollIncidentJustificationBy")
+
+  scheduleTemplatesCreated    ScheduleTemplate[]              @relation("ScheduleTemplateCreatedBy")
+  scheduleTemplateShifts      ScheduleTemplateShift[]         @relation("ScheduleTemplateShiftOwner")
+  scheduleEventsCreated       ScheduleEvent[]                 @relation("ScheduleEventCreatedBy")
+  availabilityRules           EmployeeAvailabilityRule[]
+  availabilityExceptions      EmployeeAvailabilityException[]
+  availabilitySettingsUpdated AvailabilitySettings[]          @relation("AvailabilitySettingsUpdatedBy")
+  availabilityOverrides       AvailabilityOverrideAudit[]     @relation("AvailabilityOverrideEmployee")
+  availabilityOverridesBy     AvailabilityOverrideAudit[]     @relation("AvailabilityOverrideBy")
+  shiftRequests               ShiftChangeRequest[]            @relation("ShiftRequestOwner")
+  shiftRequestsAsSwapTarget   ShiftChangeRequest[]            @relation("ShiftRequestSwapTarget")
+  shiftRequestsReviewed       ShiftChangeRequest[]            @relation("ShiftRequestReviewedBy")
+
+  eventAddedProducts  EventAddedProduct[]    @relation("EventAddedBy")
+  eventAddedCancelled EventAddedProduct[]    @relation("EventAddedCancelledBy")
+  eventAddedLogs      EventAddedProductLog[] @relation("EventAddedLogBy")
+
+  workforceEmployee                     Employee?
+  workforceSchedulePeriodsCreated       SchedulePeriod[]                 @relation("WorkforceSchedulePeriodCreatedBy")
+  workforceShiftsCreated                Shift[]                          @relation("WorkforceShiftCreatedBy")
+  workforceShiftRevisionsChanged        ShiftRevision[]                  @relation("WorkforceShiftRevisionChangedBy")
+  workforceSchedulePublications         SchedulePublication[]            @relation("WorkforceSchedulePublicationPublishedBy")
+  workforceStaffingRequirementsCreated  StaffingRequirement[]            @relation("WorkforceStaffingRequirementCreatedBy")
+  workforceClockCorrectionsRequested    ClockCorrection[]                @relation("WorkforceClockCorrectionRequestedBy")
+  workforceClockCorrectionsApproved     ClockCorrection[]                @relation("WorkforceClockCorrectionApprovedBy")
+  workforceClockCorrectionsRejected     ClockCorrection[]                @relation("WorkforceClockCorrectionRejectedBy")
+  workforceAttendanceExceptionsResolved AttendanceException[]            @relation("WorkforceAttendanceExceptionResolvedBy")
+  workforceTimesheetsReviewed           Timesheet[]                      @relation("WorkforceTimesheetReviewedBy")
+  workforceTimesheetsApproved           Timesheet[]                      @relation("WorkforceTimesheetApprovedBy")
+  workforceTimesheetsLocked             Timesheet[]                      @relation("WorkforceTimesheetLockedBy")
+  workforceOvertimeCalculations         WorkforceOvertimeCalculation[]   @relation("WorkforceOvertimeCalculatedBy")
+  workforcePolicyVersionsChanged        WorkforcePolicyVersion[]         @relation("WorkforcePolicyChangedBy")
+  workforceGeolocationEvidenceReviewed  ClockGeolocationEvidence[]       @relation("WorkforceGeolocationEvidenceReviewedBy")
+  workforcePayrollLinesApproved         PayrollLine[]                    @relation("WorkforcePayrollLineApprovedBy")
+  workforcePayrollLinesPaid             PayrollLine[]                    @relation("WorkforcePayrollLinePaidBy")
+  workforcePayrollCategoriesCreated     WorkforcePayrollCategory[]       @relation("WorkforcePayrollCategoryCreatedBy")
+  workforcePayrollLineAdjustments       WorkforcePayrollLineAdjustment[] @relation("WorkforcePayrollLineAdjustmentCreatedBy")
+  workforceTimesheetAdjustmentsCreated  TimesheetAdjustment[]            @relation("WorkforceTimesheetAdjustmentCreatedBy")
+  workforceTimesheetAdjustmentsApproved TimesheetAdjustment[]            @relation("WorkforceTimesheetAdjustmentApprovedBy")
+  workforcePayrollAdjustmentsCreated    WorkforcePayrollAdjustment[]     @relation("WorkforcePayrollAdjustmentCreatedBy")
+  workforcePayrollAdjustmentsApproved   WorkforcePayrollAdjustment[]     @relation("WorkforcePayrollAdjustmentApprovedBy")
+
+  inventoryCountsClosed InventoryCount[] @relation("InventoryCountClosedBy")
+
+  registersCreated             Register[]               @relation("RegisterCreatedBy")
+  terminalsCreated             Terminal[]               @relation("TerminalCreatedBy")
+  terminalEnrollmentsCreated   TerminalEnrollment[]     @relation("TerminalEnrollmentCreatedBy")
+  cashSessionsOpened           CashSession[]            @relation("CashSessionOpenedBy")
+  cashSessionsClosed           CashSession[]            @relation("CashSessionClosedBy")
+  cashDeclarations             CashDeclaration[]        @relation("CashDeclarationActor")
+  cashMovementsV2              CashMovement[]           @relation("CashMovementActor")
+  catalogOverridesCreated      BranchProductOverride[]  @relation("BranchProductOverrideCreatedBy")
+  catalogOverridesUpdated      BranchProductOverride[]  @relation("BranchProductOverrideUpdatedBy")
+  pos2SalesCompleted           Pos2Sale[]               @relation("Pos2SaleCashier")
+  pos2PaymentsCaptured         Pos2Payment[]            @relation("Pos2PaymentActor")
+  pos2CancellationsCreated     SaleCancellation[]       @relation("SaleCancellationActor")
+  pos2ReturnsCreated           Pos2Return[]             @relation("Pos2ReturnActor")
+  pos2RefundsCreated           Pos2Refund[]             @relation("Pos2RefundActor")
+  adjustmentDefinitionsCreated AdjustmentDefinition[]  @relation("AdjustmentDefinitionCreatedBy")
+  adjustmentVersionsCreated    AdjustmentVersion[]     @relation("AdjustmentVersionCreatedBy")
+  orderAdjustmentsAuthorized   OrderAdjustment[]        @relation("OrderAdjustmentAuthorizedBy")
+  orderAdjustmentsBeneficiary  OrderAdjustment[]        @relation("OrderAdjustmentBeneficiary")
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuthThrottle {
+  key          String    @id
+  attempts     Int       @default(0)
+  windowStart  DateTime  @default(now())
+  blockedUntil DateTime?
+  updatedAt    DateTime  @updatedAt
+
+  @@index([blockedUntil])
+}
+
+model Equipment {
+  id                String             @id @default(cuid())
+  name              String
+  type              EquipmentType
+  status            EquipmentStatus    @default(DISPONIBLE)
+  capacity          Float
+  currentLoad       Float              @default(0)
+  unit              String
+  location          String?
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  cookings          Cooking[]
+  distillations     Distillation[]
+  millings          Milling[]
+  millingDischarges MillingDischarge[]
+  boilerSessions     BoilerSession[]
+  boilerMaintenances BoilerMaintenance[]
+  boilerIncidents    BoilerIncident[]
+  sweetHoneyTanks    SweetHoneyRecovery[]
+}
+
+model Lot {
+  id                  String                @id @default(cuid())
+  code                String                @unique
+  stage               LotStage
+  agaveKg             Float
+  art                 Float?
+  startedAt           DateTime
+  finishedAt          DateTime?
+  totalLitersObtained Float?
+  qrToken             String?               @unique
+  observations        String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  ownerId             String
+  cookings            Cooking[]
+  distillations       Distillation[]
+  fermentations       Fermentation[]
+  owner               User                  @relation(fields: [ownerId], references: [id])
+  expenses            LotExpense[]
+  millings            Milling[]
+  liquorBatches       LiquorBatch[]
+  rawMaterialEntries  RawMaterialMovement[]
+  boilerProcessLinks   BoilerProcessLink[]
+  sweetHoneyRecoveries SweetHoneyRecovery[]
+}
+
+model Cooking {
+  id                    String         @id @default(cuid())
+  lotId                 String
+  equipmentId           String
+  agaveKg               Float
+  status                CookingStatus  @default(ACTIVA)
+  startedAt             DateTime       @default(now())
+  finishedAt            DateTime?
+  notes                 String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  closureCode           String?        @unique
+  finalAgaveKg          Float?
+  finalNotes            String?
+  finalSweetHoneyBrix   Float?
+  finalSweetHoneyLiters Float?
+  finishedById          String?
+  equipment             Equipment      @relation(fields: [equipmentId], references: [id])
+  finishedBy            User?          @relation("CookingFinishedBy", fields: [finishedById], references: [id])
+  lot                   Lot            @relation(fields: [lotId], references: [id])
+  events                CookingEvent[]
+  steamIntervals        SteamInjectionInterval[]
+  sweetHoneyRecoveries  SweetHoneyRecovery[]
+
+  @@index([lotId])
+  @@index([equipmentId])
+  @@index([finishedById])
+}
+
+model CookingEvent {
+  id                String           @id @default(cuid())
+  cookingId         String
+  type              CookingEventType
+  temperatureTop    Float?
+  temperatureMiddle Float?
+  temperatureBottom Float?
+  liters            Float?
+  ph                Float?
+  brix              Float?
+  temperature       Float?
+  notes             String?
+  createdAt         DateTime         @default(now())
+  cooking           Cooking          @relation(fields: [cookingId], references: [id])
+
+  @@index([cookingId])
+}
+
+model BoilerSession {
+  id              String       @id @default(cuid())
+  operationId     String       @unique
+  equipmentId     String
+  startedAt       DateTime
+  endedAt         DateTime?
+  startedById     String
+  endedById       String?
+  stopOperationId String?      @unique
+  closeReason     String?
+  source          BoilerSource @default(MANUAL)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  equipment        Equipment                @relation(fields: [equipmentId], references: [id])
+  startedBy        User                     @relation("BoilerSessionStartedBy", fields: [startedById], references: [id])
+  endedBy          User?                    @relation("BoilerSessionEndedBy", fields: [endedById], references: [id])
+  events           BoilerEvent[]
+  processLinks     BoilerProcessLink[]
+  steamIntervals   SteamInjectionInterval[]
+  pressureReadings PressureReading[]
+  gasReadings      GasReading[]
+  incidents        BoilerIncident[]
+
+  @@index([equipmentId, startedAt])
+  @@index([endedAt])
+}
+
+model BoilerEvent {
+  id          String          @id @default(cuid())
+  operationId String          @unique
+  sessionId   String?
+  type        BoilerEventType
+  occurredAt  DateTime
+  createdAt   DateTime        @default(now())
+  actorId     String?
+  source      BoilerSource    @default(MANUAL)
+  notes       String?
+  metadata    Json?
+
+  session BoilerSession? @relation(fields: [sessionId], references: [id])
+  actor   User?          @relation(fields: [actorId], references: [id])
+
+  @@index([sessionId, occurredAt])
+  @@index([type, occurredAt])
+  @@index([actorId, createdAt])
+}
+
+model BoilerProcessLink {
+  id              String            @id @default(cuid())
+  boilerSessionId String
+  lotId           String
+  stage           LotStage
+  processType     BoilerProcessType
+  processId       String?
+  startedAt       DateTime
+  endedAt         DateTime?
+  createdById     String?
+  source          BoilerSource      @default(MANUAL)
+  createdAt       DateTime          @default(now())
+
+  boilerSession BoilerSession @relation(fields: [boilerSessionId], references: [id], onDelete: Cascade)
+  lot           Lot           @relation(fields: [lotId], references: [id])
+  createdBy     User?         @relation("BoilerProcessLinkCreatedBy", fields: [createdById], references: [id])
+
+  @@index([boilerSessionId, startedAt])
+  @@index([lotId, stage, startedAt])
+  @@index([processType, processId])
+}
+
+model SteamInjectionInterval {
+  id               String              @id @default(cuid())
+  startOperationId String              @unique
+  stopOperationId  String?             @unique
+  cookingId        String
+  boilerSessionId  String
+  state            SteamInjectionState
+  startedAt        DateTime
+  endedAt          DateTime?
+  createdById      String
+  source           BoilerSource        @default(MANUAL)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  cooking          Cooking           @relation(fields: [cookingId], references: [id], onDelete: Cascade)
+  boilerSession    BoilerSession     @relation(fields: [boilerSessionId], references: [id])
+  createdBy        User              @relation("SteamIntervalCreatedBy", fields: [createdById], references: [id])
+  pressureReadings PressureReading[]
+
+  @@index([cookingId, startedAt])
+  @@index([boilerSessionId, startedAt])
+  @@index([state, endedAt])
+}
+
+model PressureReading {
+  id              String       @id @default(cuid())
+  operationId     String       @unique
+  steamIntervalId String?
+  boilerSessionId String
+  originalValue   Decimal      @db.Decimal(12, 4)
+  originalUnit    PressureUnit
+  canonicalPsi    Decimal      @db.Decimal(12, 4)
+  occurredAt      DateTime
+  createdAt       DateTime     @default(now())
+  actorId         String?
+  source          BoilerSource @default(MANUAL)
+  notes           String?
+
+  steamInterval SteamInjectionInterval? @relation(fields: [steamIntervalId], references: [id], onDelete: Cascade)
+  boilerSession BoilerSession           @relation(fields: [boilerSessionId], references: [id])
+  actor         User?                   @relation(fields: [actorId], references: [id])
+
+  @@index([steamIntervalId, occurredAt])
+  @@index([boilerSessionId, occurredAt])
+  @@index([actorId, createdAt])
+}
+
+model GasReading {
+  id              String         @id @default(cuid())
+  operationId     String         @unique
+  boilerSessionId String
+  levelPercent    Decimal        @db.Decimal(6, 3)
+  levelLiters     Decimal        @db.Decimal(12, 3)
+  type            GasReadingType
+  occurredAt      DateTime
+  createdAt       DateTime       @default(now())
+  actorId         String?
+  source          BoilerSource   @default(MANUAL)
+  notes           String?
+
+  boilerSession BoilerSession @relation(fields: [boilerSessionId], references: [id], onDelete: Cascade)
+  actor         User?         @relation(fields: [actorId], references: [id])
+
+  @@index([boilerSessionId, occurredAt])
+  @@index([type, occurredAt])
+  @@index([actorId, createdAt])
+}
+
+model BoilerMaintenance {
+  id          String       @id @default(cuid())
+  operationId String       @unique
+  equipmentId String
+  occurredAt  DateTime
+  createdAt   DateTime     @default(now())
+  actorId     String
+  source      BoilerSource @default(MANUAL)
+  notes       String
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id])
+  actor     User      @relation(fields: [actorId], references: [id])
+
+  @@index([equipmentId, occurredAt])
+  @@index([actorId, createdAt])
+}
+
+model BoilerIncident {
+  id          String       @id @default(cuid())
+  operationId String       @unique
+  equipmentId String
+  sessionId   String?
+  occurredAt  DateTime
+  createdAt   DateTime     @default(now())
+  actorId     String
+  source      BoilerSource @default(MANUAL)
+  notes       String
+
+  equipment Equipment      @relation(fields: [equipmentId], references: [id])
+  session   BoilerSession? @relation(fields: [sessionId], references: [id])
+  actor     User           @relation(fields: [actorId], references: [id])
+
+  @@index([equipmentId, occurredAt])
+  @@index([sessionId, occurredAt])
+  @@index([actorId, createdAt])
+}
+
+model SweetHoneyRecovery {
+  id                String       @id @default(cuid())
+  operationId       String       @unique
+  lotId             String
+  sourceCookingId   String
+  destinationTankId String?
+  liters            Decimal      @db.Decimal(12, 3)
+  brix              Decimal?     @db.Decimal(8, 3)
+  recoveredAt       DateTime
+  createdAt         DateTime     @default(now())
+  createdById       String
+  source            BoilerSource @default(MANUAL)
+  notes             String?
+
+  lot             Lot        @relation(fields: [lotId], references: [id])
+  sourceCooking   Cooking    @relation(fields: [sourceCookingId], references: [id])
+  destinationTank Equipment? @relation(fields: [destinationTankId], references: [id])
+  createdBy       User       @relation(fields: [createdById], references: [id])
+
+  @@index([lotId, recoveredAt])
+  @@index([sourceCookingId, recoveredAt])
+  @@index([destinationTankId])
+  @@index([createdById, createdAt])
+}
+
+model Milling {
+  id                  String             @id @default(cuid())
+  lotId               String
+  equipmentId         String
+  status              MillingStatus      @default(ACTIVA)
+  operator            String?
+  cookedKg            Float
+  waterLiters         Float?
+  mashLiters          Float?
+  bagasseKg           Float?
+  brix                Float?
+  ph                  Float?
+  temperature         Float?
+  pressPasses         Int?
+  washBagasse         Boolean            @default(false)
+  washRecoveredLiters Float?
+  observations        String?
+  startedAt           DateTime           @default(now())
+  finishedAt          DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  closureCode         String?            @unique
+  finalAverageBrix    Float?
+  finalAveragePh      Float?
+  finalAverageTemp    Float?
+  finalBagasseKg      Float?
+  finalMashLiters     Float?
+  finalNotes          String?
+  finalPressPasses    Int?
+  finalWaterLiters    Float?
+  finishedById        String?
+  equipment           Equipment          @relation(fields: [equipmentId], references: [id])
+  finishedBy          User?              @relation("MillingFinishedBy", fields: [finishedById], references: [id])
+  lot                 Lot                @relation(fields: [lotId], references: [id])
+  discharges          MillingDischarge[]
+  events              MillingEvent[]
+
+  @@index([lotId])
+  @@index([equipmentId])
+  @@index([finishedById])
+}
+
+model MillingEvent {
+  id                  String           @id @default(cuid())
+  millingId           String
+  type                MillingEventType
+  value               Float?
+  brix                Float?
+  ph                  Float?
+  temperature         Float?
+  waterLiters         Float?
+  bagasseKg           Float?
+  washRecoveredLiters Float?
+  pressPasses         Int?
+  notes               String?
+  createdAt           DateTime         @default(now())
+  milling             Milling          @relation(fields: [millingId], references: [id])
+
+  @@index([millingId])
+}
+
+model Fermentation {
+  id                 String                @id @default(cuid())
+  lotId              String
+  tank               String
+  mustLiters         Float
+  initialBrix        Float
+  initialPh          Float
+  initialTemperature Float
+  yeast              String?
+  inoculatedAt       DateTime
+  status             FermentationStatus    @default(ACTIVA)
+  startedAt          DateTime              @default(now())
+  finishedAt         DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  closureCode        String?               @unique
+  finalAlcohol       Float?
+  finalBrix          Float?
+  finalNotes         String?
+  finalPh            Float?
+  finishedById       String?
+  finishedBy         User?                 @relation("FermentationFinishedBy", fields: [finishedById], references: [id])
+  lot                Lot                   @relation(fields: [lotId], references: [id])
+  readings           FermentationReading[]
+
+  @@index([lotId])
+  @@index([finishedById])
+}
+
+model FermentationReading {
+  id               String       @id @default(cuid())
+  fermentationId   String
+  brix             Float?
+  ph               Float?
+  temperature      Float?
+  alcohol          Float?
+  saccharometer    Float?
+  citricAcidGrams  Float?
+  bicarbonateGrams Float?
+  heated           Boolean      @default(false)
+  heatingMinutes   Int?
+  notes            String?
+  createdAt        DateTime     @default(now())
+  fermentation     Fermentation @relation(fields: [fermentationId], references: [id])
+
+  @@index([fermentationId])
+}
+
+model Distillation {
+  id               String              @id @default(cuid())
+  lotId            String
+  equipmentId      String
+  type             DistillationType
+  loadedLiters     Float
+  initialAlcohol   Float?
+  headsLiters      Float?
+  heartLiters      Float?
+  tailsLiters      Float?
+  finalAlcohol     Float?
+  status           DistillationStatus  @default(ACTIVA)
+  startedAt        DateTime            @default(now())
+  finishedAt       DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  closureCode      String?             @unique
+  finalHeadsLiters Float?
+  finalHeartLiters Float?
+  finalLiters      Float?
+  finalNotes       String?
+  finalTailsLiters Float?
+  finishedById     String?
+  equipment        Equipment           @relation(fields: [equipmentId], references: [id])
+  finishedBy       User?               @relation("DistillationFinishedBy", fields: [finishedById], references: [id])
+  lot              Lot                 @relation(fields: [lotId], references: [id])
+  events           DistillationEvent[]
+
+  @@index([lotId])
+  @@index([equipmentId])
+  @@index([finishedById])
+}
+
+model DistillationEvent {
+  id                String                @id @default(cuid())
+  distillationId    String
+  type              DistillationEventType
+  temperature       Float?
+  alcohol           Float?
+  liters            Float?
+  outputTemperature Float?
+  alcoholCorrected  Float?
+  notes             String?
+  createdAt         DateTime              @default(now())
+  distillation      Distillation          @relation(fields: [distillationId], references: [id])
+
+  @@index([distillationId])
+}
+
+model LotExpense {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  lotId     String
+  category  String
+  concept   String
+  amount    Float
+  notes     String?
+  lot       Lot      @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  @@index([lotId])
+}
+
+model MillingDischarge {
+  id              String     @id @default(cuid())
+  millingId       String
+  tankId          String?
+  litersRecovered Float
+  brix            Float
+  ph              Float
+  temperature     Float
+  notes           String?
+  createdById     String?
+  createdAt       DateTime   @default(now())
+  createdBy       User?      @relation(fields: [createdById], references: [id])
+  milling         Milling    @relation(fields: [millingId], references: [id], onDelete: Cascade)
+  tank            Equipment? @relation(fields: [tankId], references: [id])
+
+  @@index([millingId])
+  @@index([tankId])
+  @@index([createdById])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model RawMaterial {
+  id String @id @default(cuid())
+
+  code String @unique
+  name String @unique
+
+  category    String?
+  description String?
+
+  baseUnit String
+
+  currentStock Float @default(0)
+  minimumStock Float @default(0)
+
+  averageCost Float?
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Marca el material que recibe automáticamente el destilado de los
+  /// lotes de agave al cerrarlos. Solo uno debe tenerlo en true.
+  receivesLotOutput Boolean @default(false)
+
+  /**
+   * Configuración de embotellado.
+   * El tequila blanco NO es un licor que se elabore con receta: sale
+   * del proceso de agave y solo se embotella o se traspasa. Por eso
+   * los datos de etiquetado viven aquí y no en LiquorProduct, para
+   * mantenerlo fuera del catálogo de licores.
+   */
+  /// Habilita embotellar directamente desde esta existencia a granel.
+  bottleable            Boolean @default(false)
+  /// Prefijo de los folios de botella (ej. "TQB").
+  bottlePrefix          String?
+  /// Vida útil en días que se imprime y se usa para las alertas.
+  defaultShelfLifeDays  Int?
+  yellowAlertDays       Int?
+  redAlertDays          Int?
+  showExpirationOnLabel Boolean @default(true)
+
+  /// Producto de inventario equivalente, para abonar el stock de
+  /// sucursal al traspasar o al embotellar.
+  inventoryProductId String?
+  inventoryProduct   InventoryProduct? @relation("RawMaterialInventoryLink", fields: [inventoryProductId], references: [id])
+
+  recipeIngredients LiquorRecipeIngredient[]
+  movements         RawMaterialMovement[]
+  bottlings         LiquorBottling[]
+
+  @@index([active])
+  @@index([category])
+}
+
+/// *
+///  * Movimientos de materia prima del almacén de producción.
+///  *
+///  * `RawMaterial.currentStock` es el acumulado de estos movimientos:
+///  * las entradas van en positivo (compra, producción de un lote,
+///  * devolución) y las salidas en negativo (consumo de receta, merma,
+///  * traspaso a sucursal). Nunca se edita el stock a mano — siempre se
+///  * registra un movimiento, para que exista rastro de por qué cambió.
+model RawMaterialMovement {
+  id            String @id @default(cuid())
+  rawMaterialId String
+
+  type     RawMaterialMovementType
+  /// Positiva en entradas, negativa en salidas.
+  quantity Float
+  /// Costo unitario de la entrada; alimenta el costo promedio.
+  unitCost Float?
+
+  /// Lote de agave que originó el movimiento (entradas de producción).
+  lotId         String?
+  /// Elaboración de licor que consumió el material.
+  liquorBatchId String?
+  /// Sucursal destino cuando el movimiento es un traspaso.
+  branchId      String?
+
+  notes       String?
+  createdById String?
+
+  createdAt DateTime @default(now())
+
+  rawMaterial RawMaterial  @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  lot         Lot?         @relation(fields: [lotId], references: [id])
+  liquorBatch LiquorBatch? @relation(fields: [liquorBatchId], references: [id])
+  branch      Branch?      @relation(fields: [branchId], references: [id])
+  createdBy   User?        @relation("RawMaterialMovementBy", fields: [createdById], references: [id])
+
+  @@index([rawMaterialId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([lotId])
+  @@index([liquorBatchId])
+  @@index([branchId])
+}
+
+enum RawMaterialMovementType {
+  /// Entrada por compra a proveedor.
+  COMPRA
+  /// Entrada por destilado propio al cerrar un lote de agave.
+  PRODUCCION
+  /// Salida al agregar el ingrediente durante una elaboración.
+  CONSUMO_RECETA
+  /// Corrección manual de existencia (positiva o negativa).
+  AJUSTE
+  /// Salida por pérdida, derrame o producto no utilizable.
+  MERMA
+  /// Salida por envío a una sucursal.
+  TRASPASO_SUCURSAL
+}
+
+model LiquorProduct {
+  id             String  @id @default(cuid())
+  name           String  @unique
+  slug           String  @unique
+  prefix         String  @unique
+  description    String?
+  icon           String?
+  defaultAlcohol Float?
+
+  // Configuración de caducidad
+  defaultShelfLifeDays  Int?
+  yellowAlertDays       Int     @default(30)
+  redAlertDays          Int     @default(7)
+  showExpirationOnLabel Boolean @default(true)
+
+  // Configuración de trazabilidad
+  requiresQr           Boolean @default(true)
+  requiresSerialNumber Boolean @default(true)
+
+  active      Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  batches   LiquorBatch[]
+  createdBy User?          @relation("LiquorProductCreatedBy", fields: [createdById], references: [id])
+  recipes   LiquorRecipe[]
+
+  // Producto terminado equivalente en el inventario de sucursales:
+  // al terminar un embotellado se abonan las botellas creadas a esta
+  // ficha (ver createLiquorBottlingAction). Opcional porque no todos
+  // los productos de licores tienen todavía su contraparte de
+  // inventario configurada.
+  inventoryProductId String?           @unique
+  inventoryProduct   InventoryProduct? @relation(fields: [inventoryProductId], references: [id])
+
+  @@index([createdById])
+  @@index([active])
+}
+
+/// *
+///  * Una misma clase de licor puede tener varias versiones de receta.
+///  * Ejemplo:
+///  * Zarzamora V1
+///  * Zarzamora V2
+///  * Zarzamora V3
+///  * Los lotes anteriores conservan la receta que utilizaron.
+model LiquorRecipe {
+  id            String                   @id @default(cuid())
+  productId     String
+  name          String
+  version       Int
+  targetLiters  Float?
+  targetAlcohol Float?
+  instructions  String?
+  notes         String?
+  active        Boolean                  @default(true)
+  createdById   String?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  batches       LiquorBatch[]
+  createdBy     User?                    @relation("LiquorRecipeCreatedBy", fields: [createdById], references: [id])
+  product       LiquorProduct            @relation(fields: [productId], references: [id])
+  ingredients   LiquorRecipeIngredient[]
+  steps         LiquorRecipeStep[]
+
+  @@unique([productId, version])
+  @@index([productId])
+  @@index([createdById])
+  @@index([active])
+}
+
+model LiquorRecipeStep {
+  id                 String                  @id @default(cuid())
+  recipeId           String
+  position           Int
+  type               LiquorStepType
+  title              String
+  instruction        String?
+  actions            String[]
+  checks             String[]
+  recipeIngredientId String?
+  durationMinutes    Int?
+  minimumMinutes     Int?
+  maximumMinutes     Int?
+  measurementLabel   String?
+  measurementUnit    String?
+  minimumValue       Float?
+  maximumValue       Float?
+  required           Boolean                 @default(true)
+  active             Boolean                 @default(true)
+  notes              String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  batchSteps         LiquorBatchStep[]
+  recipe             LiquorRecipe            @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  recipeIngredient   LiquorRecipeIngredient? @relation(fields: [recipeIngredientId], references: [id])
+
+  @@unique([recipeId, position])
+  @@index([recipeId])
+  @@index([recipeIngredientId])
+  @@index([type])
+}
+
+/// *
+///  * Ingredientes oficiales de cada versión de receta.
+model LiquorRecipeIngredient {
+  id String @id @default(cuid())
+
+  recipeId String
+  recipe   LiquorRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  name String
+
+  rawMaterialId String?
+  rawMaterial   RawMaterial? @relation(fields: [rawMaterialId], references: [id], onDelete: SetNull)
+
+  quantity Float
+  unit     String
+
+  position Int     @default(0)
+  optional Boolean @default(false)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batchIngredients LiquorBatchIngredient[]
+  recipeSteps      LiquorRecipeStep[]
+
+  @@index([recipeId])
+  @@index([rawMaterialId])
+  @@index([position])
+}
+
+/// *
+///  * Cada elaboración física de un licor.
+///  * El campo sequence mantiene el consecutivo permanente global:
+///  * LZ-15-07-2026-001
+///  * LM-16-07-2026-002
+///  * LC-18-07-2026-003
+model LiquorBatch {
+  id             String              @id @default(cuid())
+  code           String              @unique
+  sequence       Int                 @unique
+  productId      String
+  recipeId       String
+  status         LiquorBatchStatus   @default(PLANEADO)
+  plannedLiters  Float
+  actualLiters   Float?
+  initialAlcohol Float?
+  finalAlcohol   Float?
+  productionDate DateTime            @default(now())
+  expirationDate DateTime?
+  qualityStatus  LiquorQualityStatus @default(PENDIENTE)
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  closureCode    String?             @unique
+  observations   String?
+  finalNotes     String?
+  createdById    String
+  finishedById   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  pauseNotes     String?
+  pauseReason    String?
+  pausedAt       DateTime?
+  pausedById     String?
+
+  /// Lote de agave (proceso cocción→destilación) del que salió el
+  /// destilado que alimenta esta elaboración. Opcional porque hay
+  /// licores que no vienen de un lote propio (sangría, preparados).
+  /// Es lo que permite responder "¿de qué lote salió esta botella?".
+  lotId String?
+  lot   Lot?    @relation(fields: [lotId], references: [id])
+
+  createdBy            User                    @relation("LiquorBatchCreatedBy", fields: [createdById], references: [id])
+  finishedBy           User?                   @relation("LiquorBatchFinishedBy", fields: [finishedById], references: [id])
+  pausedBy             User?                   @relation("LiquorBatchPausedBy", fields: [pausedById], references: [id])
+  product              LiquorProduct           @relation(fields: [productId], references: [id])
+  recipe               LiquorRecipe            @relation(fields: [recipeId], references: [id])
+  events               LiquorBatchEvent[]
+  executionIngredients LiquorBatchIngredient[]
+  steps                LiquorBatchStep[]
+  bottlings            LiquorBottling[]
+  rawMaterialMovements RawMaterialMovement[]
+
+  @@index([productId])
+  @@index([recipeId])
+  @@index([status])
+  @@index([qualityStatus])
+  @@index([productionDate])
+  @@index([createdById])
+  @@index([finishedById])
+  @@index([lotId])
+}
+
+/// *
+///  * Bitácora completa de elaboración.
+model LiquorBatchEvent {
+  id                 String               @id @default(cuid())
+  batchId            String
+  type               LiquorBatchEventType
+  temperature        Float?
+  alcohol            Float?
+  brix               Float?
+  ph                 Float?
+  liters             Float?
+  ingredientName     String?
+  ingredientQuantity Float?
+  ingredientUnit     String?
+  qualityStatus      LiquorQualityStatus?
+  notes              String?
+  createdById        String?
+  createdAt          DateTime             @default(now())
+  batch              LiquorBatch          @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  createdBy          User?                @relation("LiquorBatchEventCreatedBy", fields: [createdById], references: [id])
+
+  @@index([batchId])
+  @@index([type])
+  @@index([createdById])
+  @@index([createdAt])
+}
+
+model LiquorBatchIngredient {
+  id                 String                  @id @default(cuid())
+  batchId            String
+  recipeIngredientId String?
+  name               String
+  baseQuantity       Float
+  scaledQuantity     Float
+  unit               String
+  completed          Boolean                 @default(false)
+  actualQuantity     Float?
+  completedAt        DateTime?
+  notes              String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  batch              LiquorBatch             @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  recipeIngredient   LiquorRecipeIngredient? @relation(fields: [recipeIngredientId], references: [id])
+  batchSteps         LiquorBatchStep[]
+
+  @@index([batchId])
+  @@index([recipeIngredientId])
+}
+
+model LiquorBatchStep {
+  id                     String                 @id @default(cuid())
+  batchId                String
+  recipeStepId           String?
+  position               Int
+  type                   LiquorStepType
+  status                 LiquorBatchStepStatus  @default(PENDIENTE)
+  title                  String
+  instruction            String?
+  actions                String[]
+  checks                 String[]
+  completedActionIndexes Int[]
+  completedCheckIndexes  Int[]
+  batchIngredientId      String?
+  plannedQuantity        Float?
+  actualQuantity         Float?
+  unit                   String?
+  durationMinutes        Int?
+  minimumMinutes         Int?
+  maximumMinutes         Int?
+  actualMinutes          Int?
+  measurementLabel       String?
+  measurementUnit        String?
+  minimumValue           Float?
+  maximumValue           Float?
+  measuredValue          Float?
+  validationPassed       Boolean?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  completedById          String?
+  observations           String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  batch                  LiquorBatch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batchIngredient        LiquorBatchIngredient? @relation(fields: [batchIngredientId], references: [id])
+  completedBy            User?                  @relation("LiquorBatchStepCompletedBy", fields: [completedById], references: [id])
+  recipeStep             LiquorRecipeStep?      @relation(fields: [recipeStepId], references: [id])
+
+  @@unique([batchId, position])
+  @@index([batchId])
+  @@index([recipeStepId])
+  @@index([batchIngredientId])
+  @@index([status])
+  @@index([completedById])
+}
+
+model LiquorBottling {
+  id   String @id @default(cuid())
+  code String @unique
+
+  /// Elaboración de licor de origen. Opcional porque el tequila
+  /// blanco se embotella directo desde la existencia a granel, sin
+  /// pasar por una receta.
+  batchId       String?
+  /// Materia prima a granel de origen (tequila del proceso).
+  rawMaterialId String?
+
+  status          LiquorBottlingStatus @default(PLANEADO)
+  bottleSizeMl    Int
+  plannedBottles  Int?
+  producedBottles Int                  @default(0)
+  rejectedBottles Int                  @default(0)
+  litersUsed      Float?
+  lossLiters      Float?
+  bottledAt       DateTime?
+  expirationDate  DateTime?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  notes           String?
+  createdById     String
+  finishedById    String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  bottles         LiquorBottle[]
+  batch           LiquorBatch?         @relation(fields: [batchId], references: [id])
+  rawMaterial     RawMaterial?         @relation(fields: [rawMaterialId], references: [id])
+  createdBy       User                 @relation("LiquorBottlingCreatedBy", fields: [createdById], references: [id])
+  finishedBy      User?                @relation("LiquorBottlingFinishedBy", fields: [finishedById], references: [id])
+
+  @@index([batchId])
+  @@index([rawMaterialId])
+  @@index([status])
+  @@index([createdById])
+  @@index([finishedById])
+  @@index([bottledAt])
+}
+
+/// *
+///  * Cada botella individual tendrá identidad propia y un QR único.
+model LiquorBottle {
+  id           String @id @default(cuid())
+  bottlingId   String
+  code         String @unique
+  serialNumber Int
+  qrToken      String @unique @default(cuid())
+
+  // Se agrega inicialmente como opcional para una migración segura.
+  authenticityCode String? @unique
+
+  status LiquorBottleStatus @default(DISPONIBLE)
+
+  // Fechas propias de la botella
+  manufacturedAt DateTime?
+  bottledAt      DateTime
+  expirationDate DateTime?
+
+  // Copia histórica de las reglas aplicadas al embotellar
+  shelfLifeDays         Int?
+  yellowAlertDays       Int?
+  redAlertDays          Int?
+  showExpirationOnLabel Boolean @default(true)
+
+  // Ubicación actual
+  branchId        String?
+  currentLocation String?
+
+  // Venta y retiro
+  reservedAt DateTime?
+  soldAt     DateTime?
+  soldById   String?
+  removedAt  DateTime?
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bottling LiquorBottling @relation(fields: [bottlingId], references: [id], onDelete: Cascade)
+  branch   Branch?        @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  soldBy   User?          @relation("LiquorBottleSoldBy", fields: [soldById], references: [id], onDelete: SetNull)
+
+  movements LiquorBottleMovement[]
+
+  @@unique([bottlingId, serialNumber])
+  @@index([bottlingId])
+  @@index([status])
+  @@index([expirationDate])
+  @@index([branchId])
+  @@index([soldAt])
+  @@index([soldById])
+  @@index([manufacturedAt])
+}
+
+model LiquorBottleMovement {
+  id       String                   @id @default(cuid())
+  bottleId String
+  type     LiquorBottleMovementType
+
+  // Relaciones formales con sucursales
+  fromBranchId String?
+  toBranchId   String?
+
+  // Campos anteriores conservados temporalmente
+  fromLocation String?
+  toLocation   String?
+
+  userId    String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  bottle     LiquorBottle @relation(fields: [bottleId], references: [id], onDelete: Cascade)
+  fromBranch Branch?      @relation("LiquorMovementFromBranch", fields: [fromBranchId], references: [id], onDelete: SetNull)
+  toBranch   Branch?      @relation("LiquorMovementToBranch", fields: [toBranchId], references: [id], onDelete: SetNull)
+  user       User?        @relation("LiquorBottleMovementCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([bottleId])
+  @@index([type])
+  @@index([userId])
+  @@index([fromBranchId])
+  @@index([toBranchId])
+  @@index([createdAt])
+}
+
+model Branch {
+  id               String           @id @default(cuid())
+  name             String
+  code             String           @unique
+  address          String?
+  active           Boolean          @default(true)
+  /// Color (hex) para identificar la sucursal en la cuadrícula de
+  /// Horario. Si no tiene, la UI le asigna uno por defecto.
+  color            String?
+  /// Zona horaria IANA usada para derivar fechas de negocio locales.
+  timezone         String?
+  /**
+   * Geocerca del checador: si la sucursal tiene una geozona asignada,
+   * el checador exige que el empleado esté dentro de ese radio (en
+   * metros) para checar entrada o salida. Si no tiene geozona
+   * asignada, no se aplica ninguna restricción de ubicación.
+   */
+  geofenceId       String?
+  geofence         Geofence?        @relation(fields: [geofenceId], references: [id])
+  /// Off by default for existing branches; the relation alone never enforces location.
+  geofenceEnabled           Boolean           @default(false)
+  templateApplyMode         TemplateApplyMode @default(ASK_BEFORE_APPLY)
+  defaultScheduleTemplateId String?           @unique
+  defaultScheduleTemplate   ScheduleTemplate? @relation("WorkforceBranchDefaultScheduleTemplate", fields: [defaultScheduleTemplateId], references: [id], onDelete: SetNull)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  counts           InventoryCount[]
+  entries          InventoryEntry[]
+  timeClockEntries TimeClockEntry[]
+
+  users                         UserBranch[]
+  cashCuts                      CashCut[]
+  liquorBottles                 LiquorBottle[]
+  liquorMovementsFrom           LiquorBottleMovement[]   @relation("LiquorMovementFromBranch")
+  liquorMovementsTo             LiquorBottleMovement[]   @relation("LiquorMovementToBranch")
+  cashSafeMovements             CashSafeMovement[]
+  cashSafeEnvelopes             CashSafeEnvelope[]
+  scheduledShifts               ScheduledShift[]
+  scheduleTemplates             BranchScheduleTemplate[]
+  geofenceAlerts                GeofenceAlert[]
+  posSales                      PosSale[]
+  posDiscountRules              PosDiscountRule[]
+  overtimeRecords               OvertimeRecord[]
+  rawMaterialTransfers          RawMaterialMovement[]
+  payrollSettings               PayrollSettings?
+  scheduleWeekTemplates         ScheduleTemplate[]
+  scheduleTemplateShifts        ScheduleTemplateShift[]
+  scheduleEvents                ScheduleEvent[]
+  workforceAssignments          BranchAssignment[]
+  workforceSchedulePeriods      SchedulePeriod[]
+  workforceStaffingRequirements StaffingRequirement[]
+  workforceShifts               Shift[]
+  workforceShiftRevisions       ShiftRevision[]
+  workforceClockEvents          ClockEvent[]
+  workforceClockCorrections     ClockCorrection[]
+  workforceSessions             WorkSession[]
+  workforceAttendanceExceptions AttendanceException[]
+  workforceGeolocationEvidence  ClockGeolocationEvidence[]
+  cashTransfers                 CashTransfer[]
+
+  eventAddedSource  EventAddedProduct[] @relation("EventAddedSourceBranch")
+  eventAddedReturns EventAddedProduct[] @relation("EventAddedReturnBranch")
+  registers                    Register[]
+  terminals                    Terminal[]
+  cashSessionsV2               CashSession[]
+  cashMovementsV2              CashMovement[]
+  catalogOverrides             BranchProductOverride[]
+  priceVersions                PriceVersion[]
+  pos2Orders                   Pos2Order[]
+  inventoryBalancesV2          InventoryBalance[]
+  inventoryMovementsV2         InventoryMovement[]
+  inventoryCountDeclarationsV2 InventoryCountDeclaration[]
+  pos2SalesV2                 Pos2Sale[]
+  pos2PaymentsV2              Pos2Payment[]
+  adjustmentVersions          AdjustmentVersion[]
+
+  @@index([active])
+  @@index([geofenceId])
+}
+
+/**
+ * Geozona: círculo (centro + radio en metros) que puede asignarse a
+ * una o varias sucursales para restringir dónde se puede checar
+ * entrada/salida. Se administra desde Horario > Geozona.
+ */
+model Geofence {
+  id        String   @id @default(cuid())
+  name      String
+  latitude  Float
+  longitude Float
+  radius    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches Branch[]
+}
+
+enum TemplateApplyMode {
+  ASK_BEFORE_APPLY
+  AUTO_CREATE_DRAFT
+  DO_NOT_APPLY
+}
+
+enum GeofenceValidationResult {
+  INSIDE
+  OUTSIDE
+  UNAVAILABLE
+  PERMISSION_DENIED
+  LOW_ACCURACY
+  NOT_REQUIRED
+}
+
+enum GeofenceReviewStatus {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum GeofenceOutsideBehavior {
+  BLOCK
+  ALLOW_WITH_EXCEPTION
+}
+
+enum ClockActionType {
+  CLOCK_IN
+  CLOCK_OUT
+}
+
+/**
+ * Alerta generada cuando un empleado con turno abierto se aleja
+ * del radio permitido de su sucursal. Sirve como bitácora para
+ * que un administrador la revise (checador > turnos abiertos).
+ */
+model GeofenceAlert {
+  id          String   @id @default(cuid())
+  userId      String
+  branchId    String
+  timeClockId String?
+  distance    Int
+  createdAt   DateTime @default(now())
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch    Branch          @relation(fields: [branchId], references: [id])
+  timeClock TimeClockEntry? @relation(fields: [timeClockId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([branchId])
+  @@index([createdAt])
+}
+
+model UserBranch {
+  id       String @id @default(cuid())
+  userId   String
+  branchId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, branchId])
+  @@index([userId])
+  @@index([branchId])
+}
+
+model CashCut {
+  id       String @id @default(cuid())
+  code     String @unique
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  responsibleId String
+  responsible   User   @relation("CashCutResponsible", fields: [responsibleId], references: [id])
+
+  // Evento de salón vinculado a este turno: si se elige uno al abrir
+  // el corte, el inventario cargado a ese evento (ServiceEventItem)
+  // se descuenta automáticamente del inventario de la sucursal.
+  eventId String?
+  event   ServiceEvent? @relation(fields: [eventId], references: [id])
+
+  date     DateTime
+  openedAt DateTime      @default(now())
+  closedAt DateTime?
+  status   CashCutStatus @default(ABIERTO)
+
+  startingFund Float
+  nextFund     Float?
+
+  cashCounted  Float?
+  cashExpected Float?
+  difference   Float?
+
+  envelopeAmount Float?
+  envelopeNumber String?
+  envelopeNotes  String?
+
+  totalSales       Float?
+  totalOutflows    Float?
+  totalInflows     Float?
+  totalCostOfGoods Float?
+  netProfit        Float?
+
+  notes String?
+
+  createdById String
+  createdBy   User    @relation("CashCutCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?   @relation("CashCutUpdatedBy", fields: [updatedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  salesByMethod         CashSalePayment[]
+  outflows              CashOutflow[]
+  inflows               CashInflow[]
+  evidences             CashCutEvidence[]
+  auditEntries          CashCutAuditEntry[]
+  safeMovements         CashSafeMovement[]
+  safeEnvelope          CashSafeEnvelope?
+  safeEnvelopeMovements CashSafeEnvelopeMovement[]
+  denominations         CashCutDenomination[]
+  cashSession           CashSession?
+  posSales              PosSale[]
+
+  @@index([branchId])
+  @@index([responsibleId])
+  @@index([createdById])
+  @@index([status])
+  @@index([date])
+  @@index([eventId])
+}
+
+enum CashCutStatus {
+  ABIERTO
+  CERRADO
+  AUDITADO
+}
+
+/**
+ * Desglose de billetes/monedas contados en cada momento del corte
+ * (apertura, cierre, fondo para el siguiente turno). Se guarda para
+ * auditoría — el monto total sigue viviendo en CashCut.startingFund
+ * / cashCounted / nextFund, este detalle es de respaldo.
+ */
+enum CashCountContext {
+  APERTURA
+  CIERRE
+  SIGUIENTE_TURNO
+}
+
+model CashCutDenomination {
+  id        String  @id @default(cuid())
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
+
+  context  CashCountContext
+  value    Float
+  quantity Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cashCutId, context, value])
+  @@index([cashCutId])
+}
+
+model CashSalePayment {
+  id        String  @id @default(cuid())
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
+
+  method PaymentMethod
+  amount Float
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cashCutId, method])
+  @@index([cashCutId])
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TARJETA
+  TRANSFERENCIA
+  DIDI
+  UBER
+  RAPPI
+  VALES
+  OTRO
+}
+
+model CashOutflow {
+  id        String  @id @default(cuid())
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
+
+  concept         String
+  category        String
+  categoryId      String?
+  categoryRef     FinancialMovementCategory? @relation("CashOutflowCategory", fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryNameSnapshot String?
+  amount          Float
+  authorizedById  String?
+  authorizedBy    User?   @relation("CashOutflowAuthorizedBy", fields: [authorizedById], references: [id])
+  notes           String?
+  receiptPhotoUrl String?
+
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([cashCutId])
+  @@index([authorizedById])
+  @@index([category])
+}
+
+model CashInflow {
+  id        String  @id @default(cuid())
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
+
+  type   CashInflowType
+  categoryId      String?
+  categoryRef     FinancialMovementCategory? @relation("CashInflowCategory", fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryNameSnapshot String?
+  amount Float
+  notes  String?
+  receiptPhotoUrl String?
+
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([cashCutId])
+}
+
+enum CashInflowType {
+  CAMBIO_RECIBIDO
+  REEMBOLSO
+  AJUSTE
+  PRESTAMO
+  OTRO
+}
+
+model CashCutEvidence {
+  id        String  @id @default(cuid())
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
+
+  type  CashEvidenceType
+  url   String
+  notes String?
+
+  createdAt DateTime @default(now())
+
+  @@index([cashCutId])
+  @@index([type])
+}
+
+enum CashEvidenceType {
+  DINERO_CONTADO
+  SOBRE
+  TICKET
+  NOTA
+  FACTURA
+  OTRO
+}
+
+model CashCutAuditEntry {
+  id        String  @id @default(cuid())
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
+
+  action   String
+  field    String?
+  oldValue String?
+  newValue String?
+
+  userId String
+  user   User   @relation("CashCutAuditBy", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([cashCutId])
+  @@index([userId])
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  GERENTE
+  ENCARGADO
+  CONSULTA
+}
+
+enum EquipmentType {
+  HORNO
+  DESGARRADORA
+  PRENSA
+  TINA
+  ALAMBIQUE
+  BOMBA
+  TANQUE
+  CALDERA
+  OTRO
+}
+
+enum EquipmentStatus {
+  DISPONIBLE
+  OPERANDO
+  ESPERANDO
+  LAVADO
+  MANTENIMIENTO
+}
+
+enum LotStage {
+  RECEPCION
+  COCCION
+  MOLIENDA
+  FERMENTACION
+  DESTILACION
+  RECTIFICACION
+  TERMINADO
+}
+
+enum CookingStatus {
+  ACTIVA
+  PAUSADA
+  TERMINADA
+}
+
+enum CookingEventType {
+  INICIO_COCCION
+  INICIO_VAPOR
+  TEMPERATURA
+  MIELES_AMARGAS
+  MIELES_DULCES
+  BAJAR_VAPOR
+  AUMENTAR_VAPOR
+  SUSPENDER_VAPOR
+  FIN_COCCION
+  OBSERVACION
+}
+
+enum BoilerSource {
+  MANUAL
+  SENSOR
+  PLC
+  IMPORT
+  API
+}
+
+enum SteamInjectionState {
+  SIN_INYECCION
+  INYECTANDO
+}
+
+enum PressureUnit {
+  PSI
+  KG_CM2
+}
+
+enum GasReadingType {
+  INITIAL
+  FINAL
+  REFILL
+  CHECK
+}
+
+enum BoilerEventType {
+  ENCENDIDO
+  APAGADO
+  CIERRE_FORZADO
+  MANTENIMIENTO
+  INCIDENTE
+  RECARGA_GAS
+  VAPOR_INICIADO
+  VAPOR_DETENIDO
+  CAMBIO_PRESION
+  LECTURA_GAS
+  OBSERVACION
+}
+
+enum BoilerProcessType {
+  COCIMIENTO
+  MOLIENDA
+  FERMENTACION
+  DESTILACION
+}
+
+enum MillingStatus {
+  ACTIVA
+  PAUSADA
+  TERMINADA
+}
+
+enum MillingEventType {
+  INICIO_MOLIENDA
+  REGISTRO_BRIX
+  REGISTRO_PH
+  REGISTRO_TEMPERATURA
+  AGREGAR_AGUA
+  CAMBIO_PRENSA
+  LAVADO_BAGAZO
+  REGISTRO_BAGAZO
+  FIN_MOLIENDA
+  OBSERVACION
+}
+
+enum FermentationStatus {
+  ACTIVA
+  TERMINADA
+}
+
+enum DistillationStatus {
+  ACTIVA
+  TERMINADA
+}
+
+enum DistillationType {
+  DESTROZADO
+  RECTIFICACION
+}
+
+enum DistillationEventType {
+  INICIO_CALENTAMIENTO
+  TEMPERATURA
+  ALCOHOL
+  LITROS
+  CORTE_CABEZAS
+  INICIO_CORAZON
+  FIN_CORAZON
+  INICIO_COLAS
+  FIN_DESTILACION
+  OBSERVACION
+}
+
+enum LiquorBatchStatus {
+  PLANEADO
+  EN_ELABORACION
+  EN_REPOSO
+  LISTO_PARA_EMBOTELLAR
+  TERMINADO
+  CANCELADO
+  PAUSADO
+  EMBOTELLANDO
+}
+
+enum LiquorBatchEventType {
+  INICIO_ELABORACION
+  INGREDIENTE_AGREGADO
+  MEZCLADO
+  MEDICION
+  CORRECCION
+  FILTRADO
+  INICIO_REPOSO
+  FIN_REPOSO
+  CONTROL_CALIDAD
+  OBSERVACION
+  FIN_ELABORACION
+}
+
+enum LiquorQualityStatus {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
+enum LiquorBottlingStatus {
+  PLANEADO
+  ACTIVO
+  TERMINADO
+  CANCELADO
+}
+
+enum LiquorBottleStatus {
+  DISPONIBLE
+  RESERVADA
+  VENDIDA
+  MERMA
+  RETIRADA
+}
+
+enum LiquorStepType {
+  PREPARATION
+  INGREDIENT
+  MIXING
+  WAIT
+  MEASUREMENT
+  QUALITY_CHECK
+  FINISH
+}
+
+enum LiquorBatchStepStatus {
+  PENDIENTE
+  EN_PROCESO
+  COMPLETADO
+  OMITIDO
+}
+
+enum LiquorBottleMovementType {
+  CREADA
+  RESERVADA
+  LIBERADA
+  TRASPASADA
+  VENDIDA
+  DEVUELTA
+  MERMA
+  RETIRADA
+  AJUSTE
+}
+
+model PasswordResetCode {
+  id        String   @id @default(cuid())
+  userId    String
+  // `code` queda temporalmente nullable para un despliegue compatible;
+  // el código nuevo escribe y verifica exclusivamente `codeHash`.
+  code      String?
+  codeHash  String?
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum CashSafeMovementType {
+  DEPOSITO_SOBRE
+  RETIRO
+}
+
+model CashSafeMovement {
+  id       String @id @default(cuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  type   CashSafeMovementType
+  amount Float
+
+  cashCutId String?
+  cashCut   CashCut? @relation(fields: [cashCutId], references: [id])
+
+  notes String?
+
+  userId String
+  user   User   @relation("CashSafeMovementBy", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([branchId])
+  @@index([cashCutId])
+}
+
+enum CashSafeEnvelopeStatus {
+  /// Generado al cerrar el corte. Aun NO confirmado como recibido
+  /// fisicamente en la caja fuerte de la sucursal. No suma al saldo
+  /// de "Caja fuerte" mientras este en este estado.
+  PENDIENTE
+  /// Recibido. saldo == monto original, sin retiros todavia.
+  EN_CAJA_FUERTE
+  /// Recibido, con retiro(s) parcial(es). 0 < saldo < original.
+  PARCIAL
+  /// saldo == 0. Retirado por completo. NUNCA se elimina: queda
+  /// para auditoria.
+  VACIO
+}
+
+enum CashSafeEnvelopeMovementType {
+  /// Creacion del sobre desde el cierre de un corte. Carga el
+  /// monto original como saldo inicial.
+  INGRESO
+  /// Confirmacion de llegada fisica a caja fuerte. Si el monto
+  /// contado difiere del original, genera ademas un AJUSTE_* con
+  /// nota automatica -- la diferencia nunca se oculta.
+  RECEPCION
+  /// Retiro parcial o total. Un retiro que deja saldo en 0 es
+  /// simplemente un RETIRO cuyo newBalance es 0.
+  RETIRO
+  /// Correccion administrativa que incrementa el saldo. Motivo
+  /// obligatorio, restringido por rol.
+  AJUSTE_POSITIVO
+  /// Correccion administrativa que reduce el saldo. Motivo
+  /// obligatorio, restringido por rol.
+  AJUSTE_NEGATIVO
+}
+
+/**
+ * Un sobre fisico de dinero, identificable, que nace en el cierre
+ * de un corte y vive para siempre (nunca se borra). La unidad
+ * principal de control de Caja fuerte -- el saldo de una sucursal
+ * se calcula sumando los sobres validos, nunca al reves.
+ * @@unique en cashCutId es la garantia de que un reintento del
+ * cierre de corte (doble clic, retry de red) jamas produce dos
+ * sobres para el mismo corte: la creacion usa upsert sobre este
+ * campo.
+ */
+model CashSafeEnvelope {
+  id   String @id @default(cuid())
+  /// Codigo legible unico, ej. HUE-20260819-001. Generado
+  /// automaticamente -- ver lib/cash-cuts/safeEnvelopes.ts.
+  code String @unique
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  /// Un sobre por corte. Backbone de la idempotencia.
+  cashCutId String   @unique
+  cashCut   CashCut  @relation(fields: [cashCutId], references: [id])
+  /// Copiado de CashCut.date al crear el sobre -- denormalizado
+  /// a proposito para reportes rapidos sin join.
+  cutDate   DateTime
+
+  /// Nunca cambia una vez creado. La cantidad que se escribe en
+  /// el sobre fisico.
+  originalAmount Float
+  /// Se mueve con cada CashSafeEnvelopeMovement. Siempre debe
+  /// coincidir con newBalance del ultimo movimiento -- se valida
+  /// en el helper de dominio, no aqui.
+  currentBalance Float
+
+  status CashSafeEnvelopeStatus @default(PENDIENTE)
+
+  createdById String
+  createdBy   User     @relation("CashSafeEnvelopeCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  /// Cuando se confirma la llegada fisica a la caja fuerte.
+  receivedById   String?
+  receivedBy     User?     @relation("CashSafeEnvelopeReceivedBy", fields: [receivedById], references: [id])
+  receivedAt     DateTime?
+  /// Lo efectivamente contado al recibir. Si difiere de
+  /// originalAmount, el movimiento RECEPCION viene acompanado de
+  /// un AJUSTE_* automatico.
+  receivedAmount Float?
+
+  movements CashSafeEnvelopeMovement[]
+
+  @@index([branchId])
+  @@index([status])
+  @@index([cutDate])
+}
+
+/**
+ * Ledger inmutable de un sobre. Una fila por cada cambio de
+ * saldo. NUNCA se edita ni se borra una fila existente -- toda
+ * correccion es una fila nueva de tipo AJUSTE_POSITIVO/NEGATIVO.
+ */
+model CashSafeEnvelopeMovement {
+  id         String           @id @default(cuid())
+  envelopeId String
+  envelope   CashSafeEnvelope @relation(fields: [envelopeId], references: [id])
+
+  type   CashSafeEnvelopeMovementType
+  /// Siempre positivo. El signo lo da `type`.
+  amount Float
+
+  previousBalance Float
+  newBalance      Float
+
+  /// Motivo. Obligatorio en el servidor para RETIRO y AJUSTE_*
+  /// (no se fuerza aqui a nivel de schema porque INGRESO/RECEPCION
+  /// pueden no necesitarlo).
+  notes String?
+  categoryId String?
+  categoryRef FinancialMovementCategory? @relation("EnvelopeMovementCategory", fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryNameSnapshot String?
+  receiptPhotoUrl String?
+
+  /// Referencia al corte de origen cuando aplica (tipicamente en
+  /// el movimiento INGRESO).
+  cashCutId String?
+  cashCut   CashCut? @relation(fields: [cashCutId], references: [id])
+
+  userId String
+  user   User   @relation("CashSafeEnvelopeMovementBy", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([envelopeId])
+  @@index([cashCutId])
+  @@index([type])
+}
+
+model InventoryProduct {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+
+  category                 String
+  unit                     String
+  /// Canonical V2 ledger dimension. Null means not configured for Inventory V2.
+  inventoryBaseUnit        CatalogBaseUnit?
+  /// Cómo se captura y muestra el producto. Nulo conserva compatibilidad histórica.
+  handlingUnit             InventoryHandlingUnit?
+  contentPerUnit           Decimal?               @db.Decimal(12, 3)
+  contentUnit              InventoryContentUnit?
+  normalizedContentPerUnit Decimal?               @db.Decimal(14, 3)
+
+  unitCost     Decimal? @db.Decimal(12, 4)
+  minimumStock Decimal  @default(0) @db.Decimal(12, 3)
+
+  itemType InventoryItemType
+
+  trackStock      Boolean              @default(true)
+  trackBatch      Boolean              @default(false)
+  trackExpiration Boolean              @default(false)
+  canBeSold       Boolean              @default(false)
+  mustReturn      Boolean              @default(false)
+  countItems      InventoryCountItem[]
+  entries         InventoryEntry[]
+
+  isActive Boolean @default(true)
+  /// Estado archivado separado de activo/inactivo. Archivar nunca elimina
+  /// referencias, movimientos, conteos ni balances históricos.
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  packageItems      EventPackageItem[]
+  eventItems        ServiceEventItem[]
+  equipmentKitItems EquipmentKitItem[]
+  posIngredientOf   PosVariantIngredient[]
+  inventoryBalances InventoryBalance[]
+  inventoryMovements InventoryMovement[]
+  inventoryCountDeclarations InventoryCountDeclaration[]
+  liquorProduct     LiquorProduct?
+  rawMaterialLinks  RawMaterial[]          @relation("RawMaterialInventoryLink")
+
+  eventAddedProducts EventAddedProduct[]
+
+  @@index([name])
+  @@index([category])
+  @@index([itemType])
+  @@index([isActive])
+  @@index([archivedAt])
+}
+
+enum InventoryMovementTypeV2 {
+  OPENING_BALANCE
+  RECEIPT
+  SALE_CONSUMPTION
+  SALE_REVERSAL
+  TRANSFER_OUT
+  TRANSFER_IN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  COUNT_CORRECTION
+  EVENT_LOAD
+  EVENT_RETURN
+}
+
+enum InventoryMovementSourceType {
+  LEGACY_OPENING
+  RECEIPT
+  MANUAL_ADJUSTMENT
+  COUNT
+  TRANSFER
+  SALE
+  RETURN
+  EVENT
+  RECIPE_CONSUMPTION
+  CANCELLATION
+}
+
+model InventoryBalance {
+  id String @id @default(cuid())
+  branchId String
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  inventoryProductId String
+  inventoryProduct InventoryProduct @relation(fields: [inventoryProductId], references: [id], onDelete: Restrict)
+  quantity Decimal @default(0) @db.Decimal(18, 6)
+  unit CatalogBaseUnit
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([branchId, inventoryProductId])
+  @@index([branchId])
+}
+
+model InventoryMovement {
+  id String @id @default(cuid())
+  branchId String
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  inventoryProductId String
+  inventoryProduct InventoryProduct @relation(fields: [inventoryProductId], references: [id], onDelete: Restrict)
+  movementType InventoryMovementTypeV2
+  quantityDelta Decimal @db.Decimal(18, 6)
+  unit CatalogBaseUnit
+  balanceBefore Decimal @db.Decimal(18, 6)
+  balanceAfter Decimal @db.Decimal(18, 6)
+  sourceType InventoryMovementSourceType
+  sourceId String
+  sourceLineId String?
+  actorId String
+  operationId String @db.Uuid
+  reasonCode String
+  metadata Json?
+  createdAt DateTime @default(now())
+  @@index([branchId, createdAt])
+  @@index([inventoryProductId, createdAt])
+  @@index([sourceType, sourceId])
+  @@index([operationId])
+  @@index([movementType, createdAt])
+}
+
+model InventoryCountDeclaration {
+  id String @id @default(cuid())
+  branchId String
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  countId String?
+  count InventoryCount? @relation(fields: [countId], references: [id], onDelete: SetNull)
+  inventoryProductId String
+  inventoryProduct InventoryProduct @relation(fields: [inventoryProductId], references: [id], onDelete: Restrict)
+  expectedQuantity Decimal @db.Decimal(18, 6)
+  declaredQuantity Decimal @db.Decimal(18, 6)
+  unit CatalogBaseUnit
+  movementId String? @unique
+  actorId String
+  operationId String @unique @db.Uuid
+  notes String?
+  createdAt DateTime @default(now())
+  @@index([branchId, createdAt])
+  @@index([inventoryProductId, createdAt])
+  @@index([countId])
+}
+
+enum InventoryItemType {
+  CONSUMABLE
+  RETURNABLE
+  EQUIPMENT
+}
+
+enum InventoryHandlingUnit {
+  BOTELLA
+  GARRAFA
+  CAJA
+  PAQUETE
+  PIEZA
+  KILOGRAMO
+  LITRO
+  OTRA
+}
+
+enum InventoryContentUnit {
+  ML
+  L
+  G
+  KG
+  PIEZAS
+}
+
+model EventPackage {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  pricePerPerson Decimal? @db.Decimal(10, 2)
+  includedHours  Int?
+  minimumGuests  Int?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  items  EventPackageItem[]
+  events ServiceEvent[]
+}
+
+model EventPackageItem {
+  id              String                     @id @default(cuid())
+  packageId       String
+  productId       String
+  quantity        Decimal                    @db.Decimal(12, 3)
+  calculationType PackageItemCalculationType
+  guestsPerBlock  Int?
+  isRequired      Boolean                    @default(true)
+  sortOrder       Int                        @default(0)
+  notes           String?
+
+  package EventPackage     @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  product InventoryProduct @relation(fields: [productId], references: [id])
+
+  @@unique([packageId, productId])
+}
+
+enum PackageItemCalculationType {
+  FIXED
+  PER_GUEST
+  PER_GUEST_BLOCK
+  MANUAL
+}
+
+model ServiceEvent {
+  id             String             @id @default(cuid())
+  code           String             @unique
+  packageId      String?
+  equipmentKitId String?
+  clientName     String
+  clientPhone    String?
+  location       String
+  eventDate      DateTime
+  guestCount     Int
+  saleAmount     Decimal?           @db.Decimal(12, 2)
+  status         ServiceEventStatus @default(DRAFT)
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  // Se marca cuando el inventario cargado a este evento ya se
+  // descontó del inventario de una sucursal (al abrir un corte de
+  // caja eligiendo este evento). Evita descontarlo dos veces.
+  stockDeductedAt       DateTime?
+  checkoutConfirmedAt   DateTime?
+  checkoutConfirmedById String?
+  returnConfirmedAt     DateTime?
+  returnConfirmedById   String?
+
+  package       EventPackage?       @relation(fields: [packageId], references: [id])
+  equipmentKit  EquipmentKit?       @relation(fields: [equipmentKitId], references: [id])
+  items         ServiceEventItem[]
+  recounts      EventRecount[]
+  cashCuts      CashCut[]
+  addedProducts EventAddedProduct[]
+}
+
+model ServiceEventItem {
+  id        String @id @default(cuid())
+  eventId   String
+  productId String
+
+  productName          String
+  unit                 String
+  itemType             InventoryItemType
+  unitCost             Decimal?               @db.Decimal(12, 4)
+  handlingUnit         InventoryHandlingUnit?
+  contentPerUnit       Decimal?               @db.Decimal(12, 3)
+  contentUnit          InventoryContentUnit?
+  returnedOpenQuantity Decimal?               @db.Decimal(12, 3)
+  checkoutStatus       String                 @default("PENDIENTE")
+  returnStatus         String                 @default("PENDIENTE")
+  checkoutNotes        String?
+  returnNotes          String?
+
+  plannedQuantity  Decimal  @db.Decimal(12, 3)
+  sentQuantity     Decimal? @db.Decimal(12, 3)
+  returnedQuantity Decimal? @db.Decimal(12, 3)
+  damagedQuantity  Decimal  @default(0) @db.Decimal(12, 3)
+  lostQuantity     Decimal  @default(0) @db.Decimal(12, 3)
+
+  checkedOut Boolean @default(false)
+  checkedIn  Boolean @default(false)
+  isCustom   Boolean @default(false)
+  notes      String?
+  sortOrder  Int     @default(0)
+
+  event   ServiceEvent     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  product InventoryProduct @relation(fields: [productId], references: [id])
+
+  recountEntries EventRecountItem[]
+}
+
+/**
+ * Reconteo rápido durante un evento de varios días. Cada día del
+ * evento se cuenta el stock que queda contra lo que salió
+ * originalmente (ServiceEventItem.sentQuantity) para saber qué hay
+ * que resurtir. Se guarda un EventRecount por día para tener
+ * historial completo del evento.
+ */
+model EventRecount {
+  id          String             @id @default(cuid())
+  eventId     String
+  dayNumber   Int
+  countDate   DateTime           @default(now())
+  status      EventRecountStatus @default(PENDIENTE)
+  fulfilledAt DateTime?
+  notes       String?
+  createdAt   DateTime           @default(now())
+
+  event ServiceEvent       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  items EventRecountItem[]
+
+  @@unique([eventId, dayNumber])
+  @@index([eventId])
+}
+
+enum EventRecountStatus {
+  PENDIENTE
+  SURTIDO
+}
+
+model EventRecountItem {
+  id              String  @id @default(cuid())
+  recountId       String
+  eventItemId     String
+  countedQuantity Decimal @db.Decimal(12, 3)
+  missingQuantity Decimal @db.Decimal(12, 3)
+
+  recount   EventRecount     @relation(fields: [recountId], references: [id], onDelete: Cascade)
+  eventItem ServiceEventItem @relation(fields: [eventItemId], references: [id], onDelete: Cascade)
+
+  @@unique([recountId, eventItemId])
+  @@index([recountId])
+  @@index([eventItemId])
+}
+
+enum ServiceEventStatus {
+  DRAFT
+  PREPARING
+  READY
+  IN_PROGRESS
+  RETURN_PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model EquipmentKit {
+  id          String   @id @default(cuid())
+  name        String   @unique // "Toldo", "Remolque", y a futuro lo que sea
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items  EquipmentKitItem[]
+  events ServiceEvent[]
+}
+
+model EquipmentKitItem {
+  id         String  @id @default(cuid())
+  kitId      String
+  productId  String
+  quantity   Decimal @db.Decimal(12, 3)
+  isRequired Boolean @default(true)
+  notes      String?
+  sortOrder  Int     @default(0)
+
+  kit     EquipmentKit     @relation(fields: [kitId], references: [id], onDelete: Cascade)
+  product InventoryProduct @relation(fields: [productId], references: [id])
+
+  @@unique([kitId, productId])
+}
+
+enum InventoryEntryType {
+  COMPRA
+  TRASPASO
+  AJUSTE
+  // Descuento/reversión automática por una venta del Punto de Venta.
+  // Se suman igual que cualquier otra entrada en computeStockMatrix,
+  // así que el stock por sucursal queda correcto sin tocar ese cálculo.
+  VENTA_POS
+  DEVOLUCION_POS
+  // Salida automática al abrir un corte de caja vinculado a un
+  // evento: descuenta lo cargado (ServiceEventItem) del inventario
+  // de la sucursal donde se abre el corte.
+  SALIDA_EVENTO
+  // Regreso de producto que se habia enviado a un evento. Contraparte
+  // de SALIDA_EVENTO: reingresa a la sucursal lo que no se consumio.
+  REGRESO_EVENTO
+  // Entrada automática al terminar un embotellado (createLiquorBottlingAction):
+  // abona las botellas recién creadas a la sucursal de resguardo del
+  // producto terminado (LiquorProduct.inventoryProductId).
+  PRODUCCION
+}
+
+model InventoryEntry {
+  id               String                 @id @default(cuid())
+  branchId         String
+  productId        String
+  type             InventoryEntryType
+  quantity         Decimal                @db.Decimal(12, 3)
+  unitCost         Decimal?               @db.Decimal(12, 4)
+  originalQuantity Decimal?               @db.Decimal(12, 3)
+  originalUnit     String?
+  handlingUnit     InventoryHandlingUnit?
+  contentPerUnit   Decimal?               @db.Decimal(12, 3)
+  contentUnit      InventoryContentUnit?
+  entryDate        DateTime               @default(now())
+  notes            String?
+  createdAt        DateTime               @default(now())
+
+  branch  Branch           @relation(fields: [branchId], references: [id])
+  product InventoryProduct @relation(fields: [productId], references: [id])
+
+  @@index([branchId])
+  @@index([productId])
+  @@index([entryDate])
+}
+
+enum InventoryCountStatus {
+  BORRADOR
+  CERRADO
+}
+
+model InventoryCount {
+  id        String               @id @default(cuid())
+  code      String               @unique
+  branchId  String
+  countDate DateTime
+  status    InventoryCountStatus @default(BORRADOR)
+  notes     String?
+  closedAt   DateTime?
+  closedById String?
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  branch   Branch               @relation(fields: [branchId], references: [id])
+  closedBy User?                @relation("InventoryCountClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  items        InventoryCountItem[]
+  declarations InventoryCountDeclaration[]
+
+  @@index([branchId])
+  @@index([countDate])
+  @@index([closedById])
+}
+
+model InventoryCountItem {
+  id               String   @id @default(cuid())
+  countId          String
+  productId        String
+  quantityCounted  Decimal  @db.Decimal(12, 3)
+  previousQuantity Decimal? @db.Decimal(12, 3)
+  entriesQuantity  Decimal  @default(0) @db.Decimal(12, 3)
+  quantityConsumed Decimal? @db.Decimal(12, 3)
+  unitCostAtTime   Decimal? @db.Decimal(12, 4)
+  costTotal        Decimal? @db.Decimal(12, 2)
+  notes            String?
+
+  count   InventoryCount   @relation(fields: [countId], references: [id], onDelete: Cascade)
+  product InventoryProduct @relation(fields: [productId], references: [id])
+
+  @@unique([countId, productId])
+}
+
+model ModulePermission {
+  id        String   @id @default(cuid())
+  userId    String
+  moduleKey String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleKey])
+  @@index([userId])
+}
+
+model TimeClockEntry {
+  id                  String    @id @default(cuid())
+  userId              String
+  branchId            String
+  clockIn             DateTime
+  clockOut            DateTime?
+  confirmedByEmployee Boolean   @default(false)
+  closedManuallyById  String?
+  notes               String?
+  createdAt           DateTime  @default(now())
+
+  /// De dónde salió el registro: CHECADOR = el empleado checó él mismo
+  /// (o se editó/cerró desde ese flujo); MANUAL = un admin/gerente lo
+  /// creó directamente (p. ej. alguien olvidó checar por completo).
+  source TimeClockSource @default(CHECADOR)
+
+  /// Turno programado con el que coincide esta checada, si se pudo
+  /// emparejar automáticamente al checar entrada. Permite comparar
+  /// PROGRAMADO vs REAL con precisión aunque la persona tenga más de
+  /// un turno el mismo día. Puede quedar nulo (checó sin turno
+  /// programado, o el emparejamiento automático no encontró uno).
+  scheduledShiftId String?
+
+  user             User                   @relation("TimeClockEntries", fields: [userId], references: [id])
+  branch           Branch                 @relation(fields: [branchId], references: [id])
+  closedManuallyBy User?                  @relation("TimeClockClosedBy", fields: [closedManuallyById], references: [id])
+  scheduledShift   ScheduledShift?        @relation(fields: [scheduledShiftId], references: [id], onDelete: SetNull)
+  geofenceAlerts   GeofenceAlert[]
+  legacyGeolocationEvidence ClockGeolocationEvidence[]
+  editRequests     TimeClockEditRequest[]
+
+  @@index([userId])
+  @@index([branchId])
+  @@index([clockIn])
+  @@index([scheduledShiftId])
+}
+
+enum TimeClockSource {
+  CHECADOR
+  MANUAL
+}
+
+/**
+ * Solicitud del empleado para corregir las horas de un turno ya
+ * cerrado en el checador. No se aplica de inmediato: queda
+ * pendiente hasta que un administrador la aprueba o la rechaza
+ * (checador > turnos abiertos > solicitudes de edición).
+ */
+model TimeClockEditRequest {
+  id          String @id @default(cuid())
+  timeClockId String
+  userId      String
+
+  /// Horas originales del turno al momento de crear la solicitud
+  /// (para poder mostrar "antes / después" aunque el turno cambie).
+  originalClockIn  DateTime
+  originalClockOut DateTime?
+
+  requestedClockIn  DateTime
+  requestedClockOut DateTime
+  reason            String?
+
+  status TimeClockEditStatus @default(PENDIENTE)
+
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNotes  String?
+
+  createdAt DateTime @default(now())
+
+  timeClock  TimeClockEntry @relation(fields: [timeClockId], references: [id], onDelete: Cascade)
+  user       User           @relation("TimeClockEditRequestedBy", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User?          @relation("TimeClockEditReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([timeClockId])
+  @@index([userId])
+  @@index([status])
+}
+
+enum TimeClockEditStatus {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
+model ScheduledShift {
+  id       String   @id @default(cuid())
+  userId   String
+  /// Nulo cuando type = DESCANSO (día libre, no tiene sucursal).
+  branchId String?
+  date     DateTime
+
+  /// TURNO = turno normal de trabajo. DESCANSO = día libre, sin
+  /// sucursal ni horas.
+  type ShiftType @default(TURNO)
+
+  /// Nulos cuando type = DESCANSO.
+  startTime String?
+  endTime   String?
+
+  /// Puesto/función de este turno (texto libre), ej. "Bartender".
+  position String?
+
+  notes String?
+
+  /// Si este turno es la asignación de un empleado a un evento puntual
+  /// (boda, XV años, feria, etc.), apunta al ScheduleEvent que trae el
+  /// nombre/descripción/ubicación/instrucciones compartidos por todos
+  /// los empleados asignados. Nulo = turno normal, sin evento.
+  eventId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user                  User                        @relation("ScheduledShifts", fields: [userId], references: [id], onDelete: Cascade)
+  branch                Branch?                     @relation(fields: [branchId], references: [id])
+  event                 ScheduleEvent?              @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  timeClockEntries      TimeClockEntry[]
+  availabilityOverrides AvailabilityOverrideAudit[]
+  changeRequests        ShiftChangeRequest[]
+
+  @@index([userId])
+  @@index([branchId])
+  @@index([date])
+  @@index([eventId])
+}
+
+model AvailabilityOverrideAudit {
+  id                   String   @id @default(cuid())
+  shiftId              String
+  userId               String
+  overriddenById       String
+  availabilitySnapshot Json
+  reason               String?
+  createdAt            DateTime @default(now())
+
+  shift        ScheduledShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  user         User           @relation("AvailabilityOverrideEmployee", fields: [userId], references: [id], onDelete: Cascade)
+  overriddenBy User           @relation("AvailabilityOverrideBy", fields: [overriddenById], references: [id])
+
+  @@index([shiftId])
+  @@index([userId, createdAt])
+}
+
+enum ShiftChangeRequestType {
+  CANNOT_WORK
+  CHANGE_TIME
+  SWAP
+  DAY_OFF
+}
+
+enum ShiftChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model ShiftChangeRequest {
+  id                String                   @id @default(cuid())
+  shiftId           String
+  requestedById     String
+  type              ShiftChangeRequestType
+  proposedStartTime String?
+  proposedEndTime   String?
+  swapTargetUserId  String?
+  reason            String
+  status            ShiftChangeRequestStatus @default(PENDING)
+  reviewedById      String?
+  reviewedAt        DateTime?
+  reviewNotes       String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  shift          ScheduledShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  requestedBy    User           @relation("ShiftRequestOwner", fields: [requestedById], references: [id], onDelete: Cascade)
+  swapTargetUser User?          @relation("ShiftRequestSwapTarget", fields: [swapTargetUserId], references: [id])
+  reviewedBy     User?          @relation("ShiftRequestReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([requestedById, status])
+  @@index([shiftId, status])
+  @@index([status, createdAt])
+}
+
+enum ShiftType {
+  TURNO
+  DESCANSO
+}
+
+/**
+ * Historial de sueldo por empleado. Cambiar el sueldo hoy crea un
+ * registro nuevo con `effectiveFrom` desde hoy; los anteriores se
+ * cierran con `effectiveTo`. Así, calcular la nómina de una semana
+ * pasada usa la tarifa que estaba vigente ENTONCES, no la actual.
+ * `User.hourlyRate` se mantiene como caché de la tarifa HORA vigente
+ * (lo sigue usando el checador y el dashboard de nómina actual) y se
+ * sincroniza automáticamente cada vez que se registra una tarifa
+ * nueva de tipo HORA.
+ */
+model SalaryRate {
+  id     String           @id @default(cuid())
+  userId String
+  scheme SalarySchemeType @default(HORA)
+
+  /// Monto según el esquema: tarifa por hora, sueldo diario o sueldo
+  /// semanal — la unidad la da `scheme`, no hay tres campos sueltos.
+  amount Decimal @db.Decimal(10, 2)
+
+  effectiveFrom DateTime
+  /// Nulo = es la tarifa vigente actualmente.
+  effectiveTo   DateTime?
+
+  createdById String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  user      User  @relation("SalaryRateOwner", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("SalaryRateCreatedBy", fields: [createdById], references: [id])
+
+  @@index([userId, effectiveFrom])
+}
+
+enum SalarySchemeType {
+  HORA
+  DIA
+  SEMANA
+}
+
+/**
+ * Estado de publicación del horario semanal (una fila por semana,
+ * global para toda la empresa). Mientras está en DRAFT, solo los
+ * administradores lo ven en la cuadrícula de Horario. Al publicarlo,
+ * los empleados empiezan a verlo en su calendario (/timeclock/calendar).
+ */
+model ScheduleWeek {
+  id        String             @id @default(cuid())
+  weekStart DateTime           @unique
+  status    ScheduleWeekStatus @default(DRAFT)
+
+  publishedAt   DateTime?
+  publishedById String?
+  publishedBy   User?     @relation("ScheduleWeekPublishedBy", fields: [publishedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+enum ScheduleWeekStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum AvailabilityType {
+  AVAILABLE_ALL_DAY
+  AVAILABLE_PARTIAL
+  UNAVAILABLE
+  PREFER_OFF
+}
+
+enum AvailabilityReason {
+  MEDICAL
+  SCHOOL
+  FAMILY
+  TRAVEL
+  ERRAND
+  OTHER
+}
+
+/// Regla semanal recurrente. dayOfWeek usa lunes=0…domingo=6.
+model EmployeeAvailabilityRule {
+  id          String              @id @default(cuid())
+  userId      String
+  dayOfWeek   Int
+  type        AvailabilityType
+  startTime   String?
+  endTime     String?
+  reason      AvailabilityReason?
+  reasonNotes String?
+  active      Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dayOfWeek])
+  @@index([userId])
+}
+
+/// Excepción para una fecha concreta; siempre tiene prioridad sobre la regla recurrente.
+model EmployeeAvailabilityException {
+  id          String              @id @default(cuid())
+  userId      String
+  date        DateTime
+  type        AvailabilityType
+  startTime   String?
+  endTime     String?
+  reason      AvailabilityReason?
+  reasonNotes String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+/// Regla global de cierre para capturar la disponibilidad de la semana siguiente.
+model AvailabilitySettings {
+  id              String   @id @default("default")
+  deadlineWeekday Int      @default(3)
+  deadlineTime    String   @default("18:00")
+  weeksAhead      Int      @default(1)
+  timezone        String   @default("America/Mexico_City")
+  updatedById     String?
+  updatedAt       DateTime @updatedAt
+
+  updatedBy User? @relation("AvailabilitySettingsUpdatedBy", fields: [updatedById], references: [id])
+}
+
+/**
+ * Plantilla de horario por sucursal.
+ * Define el horario estándar (entrada/salida) de una sucursal
+ * para cada día de la semana (0 = lunes ... 6 = domingo, igual
+ * que en ScheduleBuilder). Se usa para autocompletar horas al
+ * agregar un turno y así no capturarlas a mano cada vez.
+ */
+model BranchScheduleTemplate {
+  id        String   @id @default(cuid())
+  branchId  String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, dayOfWeek])
+  @@index([branchId])
+}
+
+/**
+ * Plantilla de SEMANA completa y reutilizable (distinta de
+ * BranchScheduleTemplate, que solo es el horario estándar por día).
+ * Guarda una "foto" de lunes a domingo: qué empleado trabaja qué día,
+ * en qué sucursal, con qué horario y puesto. Es independiente de la
+ * semana real de la que se creó — modificar esa semana después NO
+ * cambia la plantilla, porque ScheduleTemplateShift no tiene relación
+ * de vuelta a ScheduledShift, solo copia sus valores.
+ */
+model ScheduleTemplate {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  active      Boolean @default(true)
+
+  /// Sucursal principal de la plantilla, solo informativo/filtro (los
+  /// turnos dentro de la plantilla pueden tener su propia sucursal).
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  createdById String?
+  createdBy   User?   @relation("ScheduleTemplateCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shifts           ScheduleTemplateShift[]
+  defaultForBranch Branch?                 @relation("WorkforceBranchDefaultScheduleTemplate")
+
+  @@index([branchId])
+}
+
+/// Un turno dentro de una ScheduleTemplate. `dayOfWeek` es relativo
+/// (0 = lunes ... 6 = domingo, igual que BranchScheduleTemplate) en
+/// vez de una fecha absoluta, para poder aplicarse a cualquier semana.
+model ScheduleTemplateShift {
+  id         String @id @default(cuid())
+  templateId String
+
+  dayOfWeek Int
+
+  /// Nulo = "sin asignar todavía"; se puede completar al aplicar la
+  /// plantilla (sustitución de empleados) o quedar pendiente.
+  userId String?
+
+  branchId String?
+  type     ShiftType @default(TURNO)
+
+  startTime String?
+  endTime   String?
+  breakMinutes Int @default(0)
+  position  String?
+  notes     String?
+
+  template ScheduleTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  user     User?            @relation("ScheduleTemplateShiftOwner", fields: [userId], references: [id], onDelete: SetNull)
+  branch   Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@index([templateId])
+  @@index([userId])
+  @@index([branchId])
+}
+
+/**
+ * Evento puntual (boda, XV años, feria, servicio de barra, etc.): un
+ * trabajo real en una fecha determinada, distinto de una plantilla
+ * reutilizable. La info (nombre, descripción, ubicación, instrucciones)
+ * vive UNA sola vez aquí; cada empleado asignado tiene su propio
+ * ScheduledShift (con este id en `eventId`), así que el checador y la
+ * nómina siguen viendo turnos normales sin ningún cambio.
+ * Un evento nunca se convierte automáticamente en plantilla — eso
+ * requiere la acción explícita "Guardar como plantilla" sobre la
+ * semana, que además ignora los turnos que tengan eventId.
+ */
+model ScheduleEvent {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  date      DateTime
+  startTime String
+  endTime   String
+
+  location String?
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  position String?
+
+  /// Instrucciones para el personal (visibles también al empleado).
+  instructions  String?
+  /// Notas internas, solo para administración.
+  internalNotes String?
+
+  createdById String?
+  createdBy   User?   @relation("ScheduleEventCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shifts ScheduledShift[]
+
+  @@index([date])
+  @@index([branchId])
+}
+
+/// *
+///  * Tiempo extra.
+///  *
+///  * El sistema DETECTA solo las horas extra comparando lo checado
+///  * (TimeClockEntry) contra el umbral semanal configurado, pero NO las
+///  * cuenta como costo hasta que un administrador las aprueba. Por eso
+///  * cada registro nace en estado PENDIENTE.
+///  *
+///  * Se guarda un registro por persona + sucursal + semana. Los montos
+///  * (`amount`) y la tarifa (`hourlyRate`) se congelan al momento de
+///  * aprobar, para que un cambio posterior de sueldo no altere una
+///  * nómina ya autorizada.
+model OvertimeRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  branchId  String
+  /// Lunes de la semana a la que corresponde el tiempo extra.
+  weekStart DateTime
+
+  /// Horas trabajadas en la semana por encima del umbral configurado.
+  overtimeHours Decimal @db.Decimal(10, 2)
+  /// Horas pagadas al primer multiplicador (por ley, las primeras 9).
+  doubleHours   Decimal @default(0) @db.Decimal(10, 2)
+  /// Horas pagadas al segundo multiplicador (a partir de la 10a).
+  tripleHours   Decimal @default(0) @db.Decimal(10, 2)
+
+  /// Tarifa base por hora usada en el cálculo (se congela al aprobar).
+  hourlyRate Decimal? @db.Decimal(10, 2)
+  /// Importe total del tiempo extra (se congela al aprobar).
+  amount     Decimal? @db.Decimal(12, 2)
+
+  status OvertimeStatus @default(PENDIENTE)
+
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNotes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User   @relation("OvertimeWorker", fields: [userId], references: [id], onDelete: Cascade)
+  branch     Branch @relation(fields: [branchId], references: [id])
+  reviewedBy User?  @relation("OvertimeReviewedBy", fields: [reviewedById], references: [id])
+
+  @@unique([userId, branchId, weekStart])
+  @@index([weekStart])
+  @@index([status])
+  @@index([userId])
+  @@index([branchId])
+}
+
+enum OvertimeStatus {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
+/// Bonos y deducciones manuales de nómina (propinas repartidas,
+/// préstamos, faltas de caja, premios, etc). Se capturan por semana
+/// y se suman/restan al pago estimado de esa semana.
+model PayrollAdjustment {
+  id        String   @id @default(cuid())
+  userId    String
+  /// Lunes de la semana a la que corresponde el ajuste (mismo grano
+  /// que OvertimeRecord.weekStart).
+  weekStart DateTime
+
+  type    PayrollAdjustmentType
+  concept String
+  amount  Decimal               @db.Decimal(10, 2)
+  notes   String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+
+  user      User @relation("PayrollAdjustmentOwner", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User @relation("PayrollAdjustmentCreatedBy", fields: [createdById], references: [id])
+
+  @@index([userId, weekStart])
+  @@index([weekStart])
+}
+
+enum PayrollAdjustmentType {
+  BONO
+  DEDUCCION
+}
+
+/// *
+///  * "El horario programa, el reloj checador demuestra y la nómina
+///  * paga." Mientras un periodo está en BORRADOR (o no existe fila
+///  * todavía — se crea perezosamente, igual que ScheduleWeek), la
+///  * tabla y el expediente de Nómina se calculan EN VIVO desde
+///  * TimeClockEntry/ScheduledShift/PayrollAdjustment. Al enviarlo a
+///  * revisión, esos números se congelan en PayrollEntry: aunque
+///  * después alguien corrija una checada vieja, la nómina ya
+///  * decidida no cambia sola.
+model PayrollPeriod {
+  id        String   @id @default(cuid())
+  /// Lunes de la semana (mismo grano que OvertimeRecord/PayrollAdjustment).
+  weekStart DateTime @unique
+  weekEnd   DateTime
+
+  status PayrollPeriodStatus @default(BORRADOR)
+
+  submittedById String?
+  submittedAt   DateTime?
+  approvedById  String?
+  approvedAt    DateTime?
+  paidById      String?
+  paidAt        DateTime?
+  rejectedNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submittedBy          User?                        @relation("PayrollPeriodSubmittedBy", fields: [submittedById], references: [id])
+  approvedBy           User?                        @relation("PayrollPeriodApprovedBy", fields: [approvedById], references: [id])
+  paidBy               User?                        @relation("PayrollPeriodPaidBy", fields: [paidById], references: [id])
+  entries              PayrollEntry[]
+  workforceLines       PayrollLine[]
+  workforceAdjustments WorkforcePayrollAdjustment[] @relation("WorkforcePayrollAdjustmentAppliedPeriod")
+  workforceTimesheets  Timesheet[]
+
+  @@index([status])
+}
+
+enum PayrollPeriodStatus {
+  BORRADOR
+  REVISION
+  APROBADA
+  PAGADA
+}
+
+/// Snapshot congelado del pago de un empleado dentro de un periodo ya
+/// enviado a revisión. `hoursByDay` y `daysSnapshot` guardan la misma
+/// forma que devuelven en vivo `getPayrollWeekTable` /
+/// `getEmployeePayrollDetail`, para que abrir una semana ya cerrada
+/// no dependa de que los datos de origen sigan intactos.
+model PayrollEntry {
+  id       String @id @default(cuid())
+  periodId String
+  userId   String
+
+  hourlyRate       Decimal? @db.Decimal(10, 2)
+  regularHours     Decimal  @db.Decimal(10, 2)
+  overtimeHours    Decimal  @db.Decimal(10, 2)
+  totalHours       Decimal  @db.Decimal(10, 2)
+  basePay          Decimal  @db.Decimal(12, 2)
+  overtimePay      Decimal  @db.Decimal(12, 2)
+  adjustmentsTotal Decimal  @default(0) @db.Decimal(12, 2)
+  totalPay         Decimal  @db.Decimal(12, 2)
+
+  hoursByDay          Json
+  daysSnapshot        Json
+  adjustmentsSnapshot Json @default("[]")
+
+  createdAt DateTime @default(now())
+
+  period PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  user   User          @relation("PayrollEntryOwner", fields: [userId], references: [id])
+
+  @@unique([periodId, userId])
+  @@index([userId])
+}
+
+/// Justificación de una incidencia del expediente (llegada tarde,
+/// turno no trabajado, etc.) para un día específico. Es independiente
+/// de si la semana ya se congeló en PayrollEntry o no: justificar es
+/// una nota de documentación, no cambia el pago.
+model PayrollIncidentJustification {
+  id     String   @id @default(cuid())
+  userId String
+  /// Día calendario (medianoche UTC, mismo formato que ScheduledShift.date).
+  date   DateTime
+  notes  String?
+
+  justifiedById String
+  justifiedAt   DateTime @default(now())
+
+  user        User @relation("PayrollIncidentJustificationOwner", fields: [userId], references: [id], onDelete: Cascade)
+  justifiedBy User @relation("PayrollIncidentJustificationBy", fields: [justifiedById], references: [id])
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+/// *
+///  * Ajustes de nómina configurables por el administrador. La fila
+///  * global (id fijo "default", branchId null) aplica a cualquier
+///  * sucursal sin una fila propia. Una sucursal puede tener su propio
+///  * override (branchId único) si su tiempo extra se calcula distinto
+///  * (ej. un turno de bar 24h vs. oficina).
+model PayrollSettings {
+  id       String  @id @default(cuid())
+  branchId String? @unique
+
+  /// Horas semanales a partir de las cuales cuenta como tiempo extra.
+  weeklyHourThreshold  Decimal @default(48) @db.Decimal(5, 2)
+  /// Horas extra por semana que se pagan al primer multiplicador.
+  firstTierHours       Decimal @default(9) @db.Decimal(5, 2)
+  /// Multiplicador de las primeras horas extra (por ley, 2x).
+  firstTierMultiplier  Decimal @default(2) @db.Decimal(5, 2)
+  /// Multiplicador de las horas extra restantes (por ley, 3x).
+  secondTierMultiplier Decimal @default(3) @db.Decimal(5, 2)
+
+  updatedAt DateTime @updatedAt
+
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * ==========================================================
+ * Workforce V1 foundation
+ * ----------------------------------------------------------
+ * Additive domain model. Legacy scheduling, clock and payroll
+ * models remain the only active runtime write path in Phase 1A.
+ * ==========================================================
+ */
+
+enum EmploymentStatus {
+  ACTIVE
+  INACTIVE
+  TERMINATED
+}
+
+enum DataConfidence {
+  KNOWN
+  LEGACY_UNKNOWN
+  ESTIMATED
+}
+
+enum WorkforceRateType {
+  HOURLY
+  DAILY
+  WEEKLY
+  SALARY
+}
+
+enum BranchAssignmentType {
+  HOME
+  ALLOWED
+}
+
+enum WorkforceAvailabilityExceptionType {
+  AVAILABLE
+  UNAVAILABLE
+}
+
+enum SchedulePeriodStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum WorkforceShiftStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+}
+
+enum ClockEventType {
+  CLOCK_IN
+  BREAK_START
+  BREAK_END
+  CLOCK_OUT
+}
+
+enum ClockCorrectionType {
+  MODIFY_OCCURRED_TIME
+  ADD_MISSING_EVENT
+  VOID_EVENT
+}
+
+enum WorkforceDecisionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum WorkSessionStatus {
+  OPEN
+  COMPLETE
+  INCOMPLETE
+}
+
+enum WorkSessionOrigin {
+  NATIVE_RECONSTRUCTED
+  LEGACY_IMPORTED
+}
+
+enum WorkforceMigrationClassification {
+  SAFE
+  SAFE_WITH_UNKNOWN
+  REVIEW_REQUIRED
+  ARCHIVE_ONLY
+  SKIPPED
+}
+
+enum WorkforceMigrationStatus {
+  PENDING
+  MIGRATED
+  REVIEW
+  SKIPPED
+  FAILED
+}
+
+enum AttendanceExceptionType {
+  LATE
+  LATE_ARRIVAL
+  EARLY_DEPARTURE
+  MISSING_PUNCH
+  MISSING_CLOCK_IN
+  MISSING_CLOCK_OUT
+  NO_SHOW
+  UNSCHEDULED_WORK
+  OVERTIME
+  BREAK_ANOMALY
+  INCOMPLETE_BREAK
+  LONG_BREAK
+  OUTSIDE_GEOFENCE
+}
+
+enum AttendanceExceptionSeverity {
+  INFO
+  WARNING
+  BLOCKING
+  CRITICAL
+}
+
+enum AttendanceExceptionStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum TimesheetStatus {
+  OPEN
+  REVIEW
+  APPROVED
+  LOCKED
+}
+
+enum TimesheetAdjustmentType {
+  ADD_PAYABLE_TIME
+  REMOVE_PAYABLE_TIME
+  RECLASSIFY_TIME
+}
+
+model Employee {
+  id             String   @id @default(cuid())
+  userId         String?  @unique
+  employeeNumber String?  @unique
+  /// Human-readable identity as supplied by its authoritative source.
+  /// Legacy names remain unsplit; native flows should also capture name parts.
+  displayName    String?
+  firstName      String?
+  lastName       String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  employments Employment[]
+
+  @@index([active])
+}
+
+model Employment {
+  id                String           @id @default(cuid())
+  employeeId        String
+  status            EmploymentStatus @default(ACTIVE)
+  startedAt         DateTime?
+  endedAt           DateTime?
+  terminationReason String?
+  dataConfidence    DataConfidence   @default(KNOWN)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  employee               Employee                  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  payRates               PayRate[]
+  branchAssignments      BranchAssignment[]
+  availabilityRules      AvailabilityRule[]
+  availabilityExceptions AvailabilityException[]
+  shifts                 Shift[]
+  shiftRevisions         ShiftRevision[]
+  clockEvents            ClockEvent[]
+  clockCorrections       ClockCorrection[]
+  workSessions           WorkSession[]
+  attendanceExceptions   AttendanceException[]
+  timesheets             Timesheet[]
+  jornadaPolicies        EmploymentJornadaPolicy[]
+  payrollLines           PayrollLine[]
+
+  @@index([employeeId, status])
+}
+
+enum WorkforceJornadaType {
+  DAY
+  NIGHT
+  MIXED
+}
+
+model EmploymentJornadaPolicy {
+  id            String               @id @default(cuid())
+  employmentId  String
+  jornadaType   WorkforceJornadaType
+  effectiveFrom DateTime             @db.Date
+  effectiveTo   DateTime?            @db.Date
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@index([employmentId, effectiveFrom, effectiveTo])
+}
+
+model WorkforcePolicyVersion {
+  id                                  String   @id @default(cuid())
+  version                             Int      @unique
+  effectiveFrom                       DateTime @unique @db.Date
+  companyTimezone                     String   @default("America/Mexico_City")
+  payWeekStartsOn                     Int      @default(1)
+  payDay                              Int      @default(1)
+  scheduledHoursWarningMinutes        Int      @default(2880)
+  preventiveOvertimeWarningMinutes    Int      @default(2880)
+  allowUnassignedShiftPublication     Boolean  @default(true)
+  allowAvailabilityWarningPublication Boolean  @default(true)
+  allowUnscheduledWork                Boolean  @default(true)
+  requireGeolocationClockIn           Boolean  @default(true)
+  requireGeolocationClockOut          Boolean  @default(true)
+  geofenceOutsideBehavior             GeofenceOutsideBehavior @default(ALLOW_WITH_EXCEPTION)
+  requireOutsideGeofenceReview        Boolean  @default(true)
+  maximumGpsAccuracyMeters            Int      @default(100)
+  shiftLinkProximityMinutes           Int      @default(720)
+  lateGraceMinutes                    Int      @default(5)
+  earlyDepartureGraceMinutes          Int      @default(5)
+  longBreakThresholdMinutes           Int      @default(60)
+  noShowThresholdMinutes              Int      @default(30)
+  missingClockOutThresholdMinutes     Int      @default(60)
+  legalDayOrdinaryLimitMinutes        Int      @default(480)
+  legalNightOrdinaryLimitMinutes      Int      @default(420)
+  legalMixedOrdinaryLimitMinutes      Int      @default(450)
+  legalWeeklyDoubleLimitMinutes       Int      @default(540)
+  legalPolicyCode                     String   @default("MX_OVERTIME_V1_2026")
+  changedById                         String?
+  changedAt                           DateTime @default(now())
+  changeReason                        String
+  criticalLegalChange                 Boolean  @default(false)
+  createdAt                           DateTime @default(now())
+
+  changedBy            User?                          @relation("WorkforcePolicyChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
+  overtimeCalculations WorkforceOvertimeCalculation[]
+
+  @@index([effectiveFrom, version])
+}
+
+model PayRate {
+  id            String            @id @default(cuid())
+  employmentId  String
+  rateType      WorkforceRateType
+  amount        Decimal           @db.Decimal(12, 2)
+  /// Native rates must provide ISO-4217 currency. NULL means unknown legacy history.
+  currency      String?           @db.Char(3)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@index([employmentId, effectiveFrom])
+}
+
+model BranchAssignment {
+  id            String               @id @default(cuid())
+  employmentId  String
+  branchId      String
+  type          BranchAssignmentType
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch     Branch     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@index([employmentId, effectiveFrom, effectiveTo])
+  @@index([branchId, effectiveFrom, effectiveTo])
+}
+
+model AvailabilityRule {
+  id            String    @id @default(cuid())
+  employmentId  String
+  dayOfWeek     Int
+  available     Boolean
+  startTime     String?
+  endTime       String?
+  effectiveFrom DateTime? @db.Date
+  effectiveTo   DateTime? @db.Date
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@index([employmentId, effectiveFrom])
+  @@index([employmentId, dayOfWeek])
+}
+
+model AvailabilityException {
+  id           String                             @id @default(cuid())
+  employmentId String
+  date         DateTime                           @db.Date
+  type         WorkforceAvailabilityExceptionType
+  startTime    String?
+  endTime      String?
+  reason       String?
+  createdAt    DateTime                           @default(now())
+  updatedAt    DateTime                           @updatedAt
+
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@unique([employmentId, date])
+}
+
+model SchedulePeriod {
+  id          String               @id @default(cuid())
+  branchId    String
+  periodStart DateTime             @db.Date
+  periodEnd   DateTime             @db.Date
+  status      SchedulePeriodStatus @default(DRAFT)
+  version     Int                  @default(1)
+  createdById String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  branch       Branch                @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy    User                  @relation("WorkforceSchedulePeriodCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  shifts       Shift[]
+  publications SchedulePublication[]
+
+  @@unique([branchId, periodStart, periodEnd])
+  @@index([branchId, status])
+}
+
+model Shift {
+  id                   String               @id @default(cuid())
+  schedulePeriodId     String
+  employmentId         String?
+  branchId             String
+  businessDate         DateTime             @db.Date
+  startAt              DateTime
+  endAt                DateTime
+  expectedBreakMinutes Int                  @default(0)
+  status               WorkforceShiftStatus @default(DRAFT)
+  version              Int                  @default(1)
+  createdById          String
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  schedulePeriod       SchedulePeriod             @relation(fields: [schedulePeriodId], references: [id], onDelete: Restrict)
+  employment           Employment?                @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch               Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy            User                       @relation("WorkforceShiftCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  revisions            ShiftRevision[]
+  publicationLinks     SchedulePublicationShift[]
+  workSessions         WorkSession[]
+  attendanceExceptions AttendanceException[]
+
+  @@index([branchId, startAt])
+  @@index([employmentId, startAt])
+  @@index([businessDate])
+  @@index([schedulePeriodId])
+}
+
+model ShiftRevision {
+  id                   String               @id @default(cuid())
+  shiftId              String
+  revisionNumber       Int
+  employmentId         String?
+  branchId             String
+  businessDate         DateTime             @db.Date
+  startAt              DateTime
+  endAt                DateTime
+  expectedBreakMinutes Int
+  status               WorkforceShiftStatus
+  reason               String
+  changedById          String
+  changedAt            DateTime             @default(now())
+
+  shift            Shift                      @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  employment       Employment?                @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch           Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  changedBy        User                       @relation("WorkforceShiftRevisionChangedBy", fields: [changedById], references: [id], onDelete: Restrict)
+  publicationLinks SchedulePublicationShift[]
+
+  @@unique([shiftId, revisionNumber])
+  @@index([employmentId, startAt])
+  @@index([branchId, startAt])
+}
+
+model SchedulePublication {
+  id               String   @id @default(cuid())
+  schedulePeriodId String
+  version          Int
+  publishedById    String
+  publishedAt      DateTime @default(now())
+
+  schedulePeriod SchedulePeriod             @relation(fields: [schedulePeriodId], references: [id], onDelete: Restrict)
+  publishedBy    User                       @relation("WorkforceSchedulePublicationPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+  shifts         SchedulePublicationShift[]
+
+  @@unique([schedulePeriodId, version])
+}
+
+model SchedulePublicationShift {
+  id              String @id @default(cuid())
+  publicationId   String
+  shiftId         String
+  shiftRevisionId String
+
+  publication   SchedulePublication @relation(fields: [publicationId], references: [id], onDelete: Restrict)
+  shift         Shift               @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  shiftRevision ShiftRevision       @relation(fields: [shiftRevisionId], references: [id], onDelete: Restrict)
+
+  @@unique([publicationId, shiftId])
+  @@index([shiftRevisionId])
+}
+
+model StaffingRequirement {
+  id            String   @id @default(cuid())
+  branchId      String
+  businessDate  DateTime @db.Date
+  startTime     String
+  endTime       String
+  requiredCount Int
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  branch    Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy User   @relation("WorkforceStaffingRequirementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([branchId, businessDate, startTime, endTime])
+  @@index([branchId, businessDate])
+}
+
+model ClockEvent {
+  id               String         @id @default(cuid())
+  employmentId     String
+  branchId         String
+  type             ClockEventType
+  deviceOccurredAt DateTime
+  serverReceivedAt DateTime       @default(now())
+  timezone         String
+  source           String
+  deviceId         String?
+  idempotencyKey   String         @unique
+  createdAt        DateTime       @default(now())
+
+  employment       Employment              @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch           Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  targetedBy       ClockCorrection[]
+  workSessionLinks WorkSessionClockEvent[]
+  geolocationEvidence ClockGeolocationEvidence?
+
+  @@index([employmentId, deviceOccurredAt])
+  @@index([branchId, serverReceivedAt])
+}
+
+/// Privacy-minimized evidence for one immutable clock observation.
+/// Exact employee coordinates are deliberately not retained.
+model ClockGeolocationEvidence {
+  id                    String                    @id @default(cuid())
+  /// Compatibility-only link created by the initial DEV migration; Workforce V1 never writes it.
+  timeClockId           String?
+  action                ClockActionType?
+  clockEventId          String?                   @unique
+  branchId              String?
+  result                GeofenceValidationResult
+  distanceMeters        Int?
+  accuracyMeters        Float?
+  checkedAt             DateTime
+  reviewStatus          GeofenceReviewStatus     @default(NOT_REQUIRED)
+  attendanceExceptionId String?                   @unique
+  reviewedById          String?
+  reviewedAt            DateTime?
+  createdAt             DateTime                  @default(now())
+
+  timeClock           TimeClockEntry?      @relation(fields: [timeClockId], references: [id], onDelete: Cascade)
+  clockEvent          ClockEvent?          @relation(fields: [clockEventId], references: [id], onDelete: Restrict)
+  branch              Branch?              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  attendanceException AttendanceException? @relation(fields: [attendanceExceptionId], references: [id], onDelete: SetNull)
+  reviewedBy          User?                @relation("WorkforceGeolocationEvidenceReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([result, checkedAt])
+  @@index([reviewStatus, checkedAt])
+  @@index([branchId, checkedAt])
+  @@unique([timeClockId, action])
+}
+
+/// Compatibility shell for the first additive migration. Runtime policy lives only in WorkforcePolicyVersion.
+model WorkforceSettings {
+  id                         String                   @id @default("default")
+  requireGeolocationClockIn  Boolean                  @default(true)
+  requireGeolocationClockOut Boolean                  @default(true)
+  outsideBehavior            GeofenceOutsideBehavior @default(ALLOW_WITH_EXCEPTION)
+  requireOutsideReview       Boolean                  @default(true)
+  maximumAccuracyMeters      Int                      @default(100)
+  updatedById                String?
+  updatedAt                  DateTime                 @updatedAt
+
+  updatedBy User? @relation("WorkforceSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model ClockCorrection {
+  id                 String                  @id @default(cuid())
+  employmentId       String
+  branchId           String?
+  targetClockEventId String?
+  targetCorrectionId String?
+  type               ClockCorrectionType
+  proposedEventType  ClockEventType?
+  proposedOccurredAt DateTime?
+  reason             String
+  status             WorkforceDecisionStatus @default(PENDING)
+  requestedById      String
+  requestedAt        DateTime                @default(now())
+  approvedById       String?
+  approvedAt         DateTime?
+  rejectedById       String?
+  rejectedAt         DateTime?
+  rejectionReason    String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  employment              Employment        @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch                  Branch?           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  targetClockEvent        ClockEvent?       @relation(fields: [targetClockEventId], references: [id], onDelete: Restrict)
+  targetCorrection        ClockCorrection?  @relation("WorkforceClockCorrectionCompensation", fields: [targetCorrectionId], references: [id], onDelete: Restrict)
+  compensatingCorrections ClockCorrection[] @relation("WorkforceClockCorrectionCompensation")
+  requestedBy             User              @relation("WorkforceClockCorrectionRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  approvedBy              User?             @relation("WorkforceClockCorrectionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedBy              User?             @relation("WorkforceClockCorrectionRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
+
+  @@index([employmentId, requestedAt])
+  @@index([branchId, requestedAt])
+  @@index([targetClockEventId])
+  @@index([targetCorrectionId])
+  @@index([status])
+}
+
+model WorkSession {
+  id                    String            @id @default(cuid())
+  employmentId          String
+  branchId              String
+  shiftId               String?
+  businessDate          DateTime          @db.Date
+  startedAt             DateTime?
+  endedAt               DateTime?
+  workedMinutes         Int               @default(0)
+  /// NULL means legacy break information is unknown; 0 means known zero.
+  breakMinutes          Int?
+  /// Legacy imports may have no ClockEvent links because the source stored a composite row.
+  origin                WorkSessionOrigin @default(NATIVE_RECONSTRUCTED)
+  reconstructionVersion Int               @default(1)
+  status                WorkSessionStatus
+  reconstructedAt       DateTime
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  employment           Employment                 @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch               Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  shift                Shift?                     @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  clockEventLinks      WorkSessionClockEvent[]
+  attendanceExceptions AttendanceException[]
+  timesheetLineLinks   TimesheetLineWorkSession[]
+
+  @@index([employmentId, businessDate])
+  @@index([branchId, businessDate])
+  @@index([shiftId])
+}
+
+/// Technical migration ledger. It is not part of normal Workforce runtime behavior.
+model WorkforceMigrationRecord {
+  id               String                           @id @default(cuid())
+  migrationVersion String
+  legacyModel      String
+  legacyId         String
+  targetModel      String?
+  targetId         String?
+  classification   WorkforceMigrationClassification
+  confidence       DataConfidence?
+  status           WorkforceMigrationStatus         @default(PENDING)
+  notes            String?
+  createdAt        DateTime                         @default(now())
+  updatedAt        DateTime                         @updatedAt
+
+  @@unique([migrationVersion, legacyModel, legacyId])
+  @@index([status, classification])
+  @@index([targetModel, targetId])
+}
+
+model WorkSessionClockEvent {
+  id            String @id @default(cuid())
+  workSessionId String
+  clockEventId  String
+  sequence      Int
+
+  workSession WorkSession @relation(fields: [workSessionId], references: [id], onDelete: Restrict)
+  clockEvent  ClockEvent  @relation(fields: [clockEventId], references: [id], onDelete: Restrict)
+
+  @@unique([workSessionId, clockEventId])
+  @@unique([workSessionId, sequence])
+  @@index([clockEventId])
+}
+
+model AttendanceException {
+  id                String                      @id @default(cuid())
+  employmentId      String
+  branchId          String
+  businessDate      DateTime                    @db.Date
+  shiftId           String?
+  workSessionId     String?
+  type              AttendanceExceptionType
+  severity          AttendanceExceptionSeverity
+  status            AttendanceExceptionStatus   @default(OPEN)
+  blocking          Boolean                     @default(false)
+  derivationKey     String
+  fingerprint       String                      @unique
+  derivationVersion Int                         @default(1)
+  scheduledStart    DateTime?
+  scheduledEnd      DateTime?
+  actualStart       DateTime?
+  actualEnd         DateTime?
+  differenceMinutes Int?
+  policySnapshot    Json
+  detectedAt        DateTime                    @default(now())
+  evaluatedAt       DateTime                    @default(now())
+  resolvedById      String?
+  resolvedAt        DateTime?
+  resolution        String?
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+
+  employment  Employment   @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  branch      Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  shift       Shift?       @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  workSession WorkSession? @relation(fields: [workSessionId], references: [id], onDelete: Restrict)
+  geolocationEvidence ClockGeolocationEvidence?
+  resolvedBy  User?        @relation("WorkforceAttendanceExceptionResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status, type])
+  @@index([branchId, businessDate, status])
+  @@index([employmentId, detectedAt])
+  @@index([derivationKey])
+  @@index([shiftId])
+  @@index([workSessionId])
+}
+
+model Timesheet {
+  id                        String          @id @default(cuid())
+  employmentId              String
+  payrollPeriodId           String
+  periodStart               DateTime        @db.Date
+  periodEnd                 DateTime        @db.Date
+  status                    TimesheetStatus @default(OPEN)
+  version                   Int             @default(1)
+  baseWorkedMinutes         Int             @default(0)
+  adjustmentMinutes         Int             @default(0)
+  effectiveMinutes          Int             @default(0)
+  sourceFingerprint         String
+  approvedSourceFingerprint String?
+  approvedBaseMinutes       Int?
+  approvedAdjustmentMinutes Int?
+  approvedEffectiveMinutes  Int?
+  approvedIssuesSnapshot    Json?
+  requiresAdjustment        Boolean         @default(false)
+  reviewedById              String?
+  reviewedAt                DateTime?
+  approvedById              String?
+  approvedAt                DateTime?
+  approvalIdempotencyKey    String?         @unique
+  lockedById                String?
+  lockedAt                  DateTime?
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
+
+  employment          Employment                    @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  payrollPeriod       PayrollPeriod                 @relation(fields: [payrollPeriodId], references: [id], onDelete: Restrict)
+  reviewedBy          User?                         @relation("WorkforceTimesheetReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  approvedBy          User?                         @relation("WorkforceTimesheetApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  lockedBy            User?                         @relation("WorkforceTimesheetLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
+  lines               TimesheetLine[]
+  payrollLine         PayrollLine?
+  overtimeCalculation WorkforceOvertimeCalculation?
+
+  @@unique([employmentId, periodStart, periodEnd])
+  @@unique([employmentId, payrollPeriodId])
+  @@index([employmentId, periodStart])
+  @@index([status])
+}
+
+model TimesheetLine {
+  id                    String   @id @default(cuid())
+  timesheetId           String
+  businessDate          DateTime @db.Date
+  workedMinutes         Int      @default(0)
+  breakMinutes          Int      @default(0)
+  sessionCount          Int      @default(0)
+  scheduledMinutes      Int      @default(0)
+  attendanceIssueCount  Int      @default(0)
+  needsReview           Boolean  @default(false)
+  sourceFingerprint     String
+  adjustmentMinutes     Int      @default(0)
+  regularPayableMinutes Int      @default(0)
+  overtimeTier1Minutes  Int      @default(0)
+  overtimeTier2Minutes  Int      @default(0)
+  totalPayableMinutes   Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  timesheet        Timesheet                  @relation(fields: [timesheetId], references: [id], onDelete: Restrict)
+  workSessionLinks TimesheetLineWorkSession[]
+  adjustments      TimesheetAdjustment[]
+  overtimeLines    WorkforceOvertimeLine[]
+
+  @@unique([timesheetId, businessDate])
+}
+
+model TimesheetLineWorkSession {
+  id              String @id @default(cuid())
+  timesheetLineId String
+  workSessionId   String
+
+  timesheetLine TimesheetLine @relation(fields: [timesheetLineId], references: [id], onDelete: Restrict)
+  workSession   WorkSession   @relation(fields: [workSessionId], references: [id], onDelete: Restrict)
+
+  @@unique([timesheetLineId, workSessionId])
+  @@index([workSessionId])
+}
+
+model TimesheetAdjustment {
+  id              String                  @id @default(cuid())
+  timesheetLineId String
+  type            TimesheetAdjustmentType
+  minutes         Int
+  reason          String
+  status          WorkforceDecisionStatus @default(PENDING)
+  createdById     String
+  createdAt       DateTime                @default(now())
+  approvedById    String?
+  approvedAt      DateTime?
+  idempotencyKey  String                  @unique
+
+  timesheetLine TimesheetLine @relation(fields: [timesheetLineId], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("WorkforceTimesheetAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy    User?         @relation("WorkforceTimesheetAdjustmentApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([timesheetLineId, status])
+}
+
+enum WorkforceOvertimeCalculationStatus {
+  FINAL
+  STALE
+}
+
+model WorkforceOvertimeCalculation {
+  id                       String                             @id @default(cuid())
+  timesheetId              String                             @unique
+  timesheetVersion         Int
+  timesheetApprovedAt      DateTime
+  approvedMinutes          Int
+  ordinaryMinutes          Int
+  doubleMinutes            Int
+  tripleMinutes            Int
+  weeklyDoubleLimitMinutes Int
+  policyVersion            String
+  workforcePolicyVersionId String
+  sourceFingerprint        String
+  status                   WorkforceOvertimeCalculationStatus @default(FINAL)
+  calculatedById           String
+  calculatedAt             DateTime                           @default(now())
+  createdAt                DateTime                           @default(now())
+  updatedAt                DateTime                           @updatedAt
+
+  timesheet              Timesheet               @relation(fields: [timesheetId], references: [id], onDelete: Restrict)
+  calculatedBy           User                    @relation("WorkforceOvertimeCalculatedBy", fields: [calculatedById], references: [id], onDelete: Restrict)
+  workforcePolicyVersion WorkforcePolicyVersion  @relation(fields: [workforcePolicyVersionId], references: [id], onDelete: Restrict)
+  lines                  WorkforceOvertimeLine[]
+  payrollLines           PayrollLine[]
+
+  @@index([status, calculatedAt])
+}
+
+model WorkforceOvertimeLine {
+  id                           String               @id @default(cuid())
+  calculationId                String
+  timesheetLineId              String
+  businessDate                 DateTime             @db.Date
+  jornadaType                  WorkforceJornadaType
+  ordinaryLimitMinutes         Int
+  approvedMinutes              Int
+  ordinaryMinutes              Int
+  doubleMinutes                Int
+  tripleMinutes                Int
+  weeklyOvertimeBeforeMinutes  Int
+  remainingDoubleBeforeMinutes Int
+  explanation                  String
+
+  calculation   WorkforceOvertimeCalculation @relation(fields: [calculationId], references: [id], onDelete: Restrict)
+  timesheetLine TimesheetLine                @relation(fields: [timesheetLineId], references: [id], onDelete: Restrict)
+
+  @@unique([calculationId, businessDate])
+  @@index([timesheetLineId])
+}
+
+enum WorkforcePayrollLineStatus {
+  DRAFT
+  READY
+  APPROVED
+  PAID
+}
+
+enum WorkforcePayrollAdjustmentDirection {
+  EARNING
+  DEDUCTION
+}
+
+enum WorkforcePayrollAdjustmentKind {
+  EARNING
+  DEDUCTION
+  RETROACTIVE
+}
+
+model PayrollLine {
+  id                      String                     @id @default(cuid())
+  payrollPeriodId         String
+  employmentId            String
+  timesheetId             String                     @unique
+  overtimeCalculationId   String
+  status                  WorkforcePayrollLineStatus @default(DRAFT)
+  version                 Int                        @default(1)
+  employeeNameSnapshot    String
+  rateTypeSnapshot        WorkforceRateType
+  payRateAmountSnapshot   Decimal                    @db.Decimal(12, 2)
+  currencySnapshot        String                     @db.Char(3)
+  regularMinutes          Int                        @default(0)
+  overtimeTier1Minutes    Int                        @default(0)
+  overtimeTier2Minutes    Int                        @default(0)
+  overtimeTier1Multiplier Decimal                    @db.Decimal(5, 2)
+  overtimeTier2Multiplier Decimal                    @db.Decimal(5, 2)
+  ordinaryPay             Decimal                    @default(0) @db.Decimal(12, 2)
+  doublePay               Decimal                    @default(0) @db.Decimal(12, 2)
+  triplePay               Decimal                    @default(0) @db.Decimal(12, 2)
+  earningsAmount          Decimal                    @default(0) @db.Decimal(12, 2)
+  deductionsAmount        Decimal                    @default(0) @db.Decimal(12, 2)
+  adjustmentAmount        Decimal                    @default(0) @db.Decimal(12, 2)
+  grossAmount             Decimal                    @db.Decimal(12, 2)
+  operationalPayable      Decimal                    @default(0) @db.Decimal(12, 2)
+  timesheetVersion        Int
+  overtimePolicyVersion   String
+  sourceFingerprint       String
+  calculatedAt            DateTime                   @default(now())
+  approvedById            String?
+  approvedAt              DateTime?
+  approvalIdempotencyKey  String?                    @unique
+  paidById                String?
+  paidAt                  DateTime?
+  paymentReference        String?
+  paymentIdempotencyKey   String?                    @unique
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+
+  payrollPeriod       PayrollPeriod                    @relation(fields: [payrollPeriodId], references: [id], onDelete: Restrict)
+  employment          Employment                       @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  timesheet           Timesheet                        @relation(fields: [timesheetId], references: [id], onDelete: Restrict)
+  overtimeCalculation WorkforceOvertimeCalculation     @relation(fields: [overtimeCalculationId], references: [id], onDelete: Restrict)
+  approvedBy          User?                            @relation("WorkforcePayrollLineApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  paidBy              User?                            @relation("WorkforcePayrollLinePaidBy", fields: [paidById], references: [id], onDelete: Restrict)
+  rateSegments        WorkforcePayrollRateSegment[]
+  adjustments         WorkforcePayrollLineAdjustment[]
+  retroAdjustments    WorkforcePayrollAdjustment[]     @relation("WorkforcePayrollAdjustmentOriginalLine")
+
+  @@unique([payrollPeriodId, employmentId])
+}
+
+model WorkforcePayrollRateSegment {
+  id              String            @id @default(cuid())
+  payrollLineId   String
+  payRateId       String
+  businessDate    DateTime          @db.Date
+  rateType        WorkforceRateType
+  hourlyRate      Decimal           @db.Decimal(12, 2)
+  currency        String            @db.Char(3)
+  ordinaryMinutes Int
+  doubleMinutes   Int
+  tripleMinutes   Int
+  ordinaryPay     Decimal           @db.Decimal(12, 2)
+  doublePay       Decimal           @db.Decimal(12, 2)
+  triplePay       Decimal           @db.Decimal(12, 2)
+
+  payrollLine PayrollLine @relation(fields: [payrollLineId], references: [id], onDelete: Restrict)
+
+  @@unique([payrollLineId, businessDate])
+  @@index([payRateId])
+}
+
+model WorkforcePayrollCategory {
+  id          String                              @id @default(cuid())
+  name        String
+  direction   WorkforcePayrollAdjustmentDirection
+  active      Boolean                             @default(true)
+  createdById String?
+  createdAt   DateTime                            @default(now())
+  updatedAt   DateTime                            @updatedAt
+
+  createdBy   User?                            @relation("WorkforcePayrollCategoryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  adjustments WorkforcePayrollLineAdjustment[]
+
+  @@unique([name, direction])
+  @@index([active, direction])
+}
+
+model WorkforcePayrollLineAdjustment {
+  id             String                              @id @default(cuid())
+  payrollLineId  String
+  categoryId     String
+  categoryName   String
+  direction      WorkforcePayrollAdjustmentDirection
+  amount         Decimal                             @db.Decimal(12, 2)
+  reason         String
+  createdById    String
+  createdAt      DateTime                            @default(now())
+  idempotencyKey String                              @unique
+
+  payrollLine PayrollLine              @relation(fields: [payrollLineId], references: [id], onDelete: Restrict)
+  category    WorkforcePayrollCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  createdBy   User                     @relation("WorkforcePayrollLineAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([payrollLineId, direction])
+}
+
+/// Ajuste retroactivo de una línea histórica; no reemplaza PayrollAdjustment legacy.
+model WorkforcePayrollAdjustment {
+  id                     String                         @id @default(cuid())
+  originalPayrollLineId  String
+  appliedPayrollPeriodId String
+  minutes                Int?
+  amount                 Decimal?                       @db.Decimal(12, 2)
+  kind                   WorkforcePayrollAdjustmentKind @default(RETROACTIVE)
+  reason                 String
+  idempotencyKey         String                         @unique
+  status                 WorkforceDecisionStatus        @default(PENDING)
+  createdById            String
+  createdAt              DateTime                       @default(now())
+  approvedById           String?
+  approvedAt             DateTime?
+
+  originalPayrollLine  PayrollLine   @relation("WorkforcePayrollAdjustmentOriginalLine", fields: [originalPayrollLineId], references: [id], onDelete: Restrict)
+  appliedPayrollPeriod PayrollPeriod @relation("WorkforcePayrollAdjustmentAppliedPeriod", fields: [appliedPayrollPeriodId], references: [id], onDelete: Restrict)
+  createdBy            User          @relation("WorkforcePayrollAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy           User?         @relation("WorkforcePayrollAdjustmentApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([originalPayrollLineId])
+  @@index([appliedPayrollPeriodId, status])
+}
+
+/**
+ * ==========================================================
+ * Punto de Venta (POS)
+ * ----------------------------------------------------------
+ * Categorías > Productos > Variantes (ej. Mediano/Grande, o
+ * "Único" si el producto no tiene variantes reales). Cada
+ * variante puede tener su propia receta de ingredientes
+ * (PosVariantIngredient), que apunta a InventoryProduct — el
+ * mismo catálogo que ya usa Administración > Inventario — así
+ * que vender descuenta del mismo stock por sucursal.
+ * El descuento/reversión de inventario se hace creando
+ * InventoryEntry con type VENTA_POS / DEVOLUCION_POS: se suman
+ * igual que cualquier otra entrada en computeStockMatrix, sin
+ * necesidad de tocar ese cálculo.
+ * ==========================================================
+ */
+model PosCategory {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String?  @unique
+  description String?
+  icon      String?
+  imageAlt  String?
+  position  Int      @default(0)
+  active    Boolean  @default(true)
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById String?
+  createdBy   User?   @relation("PosCategoryCreatedBy", fields: [createdById], references: [id])
+
+  products PosProduct[]
+
+  @@index([position])
+  @@index([active, position])
+}
+
+enum CatalogBaseUnit {
+  UNIT
+  ML
+  G
+}
+
+model PosProduct {
+  id         String      @id @default(cuid())
+  categoryId String
+  category   PosCategory @relation(fields: [categoryId], references: [id])
+
+  name             String
+  description      String?
+  sku              String? @unique
+  internalCode     String? @unique
+  barcode          String? @unique
+  icon             String?
+  imageAlt         String?
+  active           Boolean @default(true)
+  sellable         Boolean @default(true)
+  inventoryTracked Boolean @default(false)
+  baseUnit         CatalogBaseUnit @default(UNIT)
+  archivedAt       DateTime?
+  position         Int     @default(0)
+  version          Int     @default(1)
+
+  // Marca productos sujetos a la política de límite mensual de
+  // botellas por empleado (configurable en PosSettings). No aplica
+  // a bebidas preparadas ni cobros normales.
+  isBottleItem Boolean @default(false)
+
+  createdById String?
+  createdBy   User?   @relation("PosProductCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants PosProductVariant[]
+  branchOverrides BranchProductOverride[]
+  priceVersions PriceVersion[]
+  pos2OrderLines Pos2OrderLine[]
+  pos2SaleLines Pos2SaleLine[]
+
+  @@index([categoryId])
+  @@index([active, sellable])
+  @@index([name])
+  @@index([categoryId, position])
+}
+
+model PosProductVariant {
+  id        String     @id @default(cuid())
+  productId String
+  product   PosProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // "Único" cuando el producto no maneja variantes reales.
+  name     String
+  sku      String? @unique
+  internalCode String? @unique
+  barcode  String? @unique
+  baseUnit CatalogBaseUnit @default(UNIT)
+  price    Float
+  position Int     @default(0)
+  active   Boolean @default(true)
+  version  Int     @default(1)
+
+  // Precio especial de empleado. Si es null, la venta a empleado
+  // usa el descuento genérico (PosSettings.employeeDiscountPercent)
+  // sobre `price`. Nunca se combinan los dos beneficios.
+  employeePrice Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ingredients PosVariantIngredient[]
+  saleItems   PosSaleItem[]
+  priceVersions PriceVersion[]
+  pos2OrderLines Pos2OrderLine[]
+  pos2SaleLines Pos2SaleLine[]
+
+  @@index([productId])
+  @@index([productId, active, position])
+  @@index([name])
+}
+
+enum BranchProductAvailability {
+  AVAILABLE
+  TEMPORARILY_UNAVAILABLE
+}
+
+model BranchProductOverride {
+  id           String                    @id @default(cuid())
+  branchId     String
+  branch       Branch                    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  productId    String
+  product      PosProduct                @relation(fields: [productId], references: [id], onDelete: Restrict)
+  enabled      Boolean                   @default(true)
+  visibleInPos Boolean                   @default(true)
+  availability BranchProductAvailability @default(AVAILABLE)
+  sortOrder    Int?
+  version      Int                       @default(1)
+  createdById  String
+  createdBy    User                      @relation("BranchProductOverrideCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById  String?
+  updatedBy    User?                     @relation("BranchProductOverrideUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@unique([branchId, productId])
+  @@index([branchId, enabled, visibleInPos])
+  @@index([productId])
+}
+
+enum PriceTargetType {
+  PRODUCT
+  VARIANT
+}
+
+enum PriceScope {
+  GLOBAL
+  BRANCH
+}
+
+/**
+ * An immutable, published POS 2.0 base-price version. Scheduling state is
+ * derived from validFrom/validTo; an early end is recorded separately.
+ */
+model PriceVersion {
+  id          String          @id @default(cuid())
+  targetType  PriceTargetType
+  targetKey   String
+  productId   String?
+  product     PosProduct?     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId   String?
+  variant     PosProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  scope       PriceScope
+  branchId    String?
+  branch      Branch?         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  branchKey   String
+  amount      Decimal         @db.Decimal(18, 2)
+  currency    String          @default("MXN")
+  taxIncluded Boolean         @default(true)
+  validFrom   DateTime
+  validTo     DateTime?
+  createdById String
+  operationId String          @unique @db.Uuid
+  createdAt   DateTime        @default(now())
+  termination PriceVersionTermination?
+  orderLines   Pos2OrderLine[]
+  saleLines    Pos2SaleLine[]
+
+  @@index([targetKey, branchKey, currency, validFrom])
+  @@index([productId, validFrom])
+  @@index([variantId, validFrom])
+  @@index([branchId, validFrom])
+}
+
+/** Append-only early termination; the published PriceVersion never changes. */
+model PriceVersionTermination {
+  id             String       @id @default(cuid())
+  priceVersionId String       @unique
+  priceVersion   PriceVersion @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  effectiveAt    DateTime
+  reason         String
+  createdById    String
+  operationId    String       @unique @db.Uuid
+  createdAt      DateTime     @default(now())
+
+  @@index([effectiveAt])
+}
+
+model PosVariantIngredient {
+  id        String            @id @default(cuid())
+  variantId String
+  variant   PosProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  inventoryProductId String
+  inventoryProduct   InventoryProduct @relation(fields: [inventoryProductId], references: [id])
+
+  quantity Decimal @db.Decimal(12, 3)
+  unit CatalogBaseUnit?
+  unitStatus RecipeIngredientUnitStatus @default(UNRESOLVED)
+
+  @@unique([variantId, inventoryProductId])
+  @@index([variantId])
+  @@index([inventoryProductId])
+}
+
+enum RecipeIngredientUnitStatus {
+  RESOLVED
+  UNRESOLVED
+}
+
+enum PosSaleStatus {
+  COMPLETADA
+  CANCELADA
+}
+
+/**
+ * Distingue el TIPO de beneficio aplicado a una venta o línea:
+ * un descuento normal, el precio/beneficio de empleado, o una
+ * cortesía. Aunque el resultado económico pueda coincidir (p. ej.
+ * un descuento del 100% y una cortesía ambos cobran $0), nunca se
+ * tratan como lo mismo — la cortesía siempre queda identificada
+ * explícitamente para auditoría, inventario y reportes.
+ */
+enum PosDiscountKind {
+  DESCUENTO_NORMAL
+  DESCUENTO_EMPLEADO
+  CORTESIA
+}
+
+enum PosBenefitReason {
+  CLIENTE_FRECUENTE
+  PROMOCION
+  COMPENSACION
+  CONVENIO
+  AUTORIZACION_GERENTE
+  CUMPLEANOS
+  EVENTO
+  INVITADO
+  OTRO
+}
+
+model PosSale {
+  id       String @id @default(cuid())
+  code     String @unique
+  // Hash canónico del payload asociado al id generado por el cliente.
+  // Null conserva compatibilidad con ventas anteriores a POS 2.0 phase 3A.
+  clientPayloadHash String?
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  cashCutId String
+  cashCut   CashCut @relation(fields: [cashCutId], references: [id])
+
+  soldById String
+  soldBy   User   @relation("PosSaleSoldBy", fields: [soldById], references: [id])
+
+  subtotal       Float
+  discountAmount Float   @default(0)
+  discountReason String?
+  total          Float
+
+  // Tipo/motivo estructurado del descuento aplicado a TODA la venta
+  // (independiente de los beneficios por línea en PosSaleItem).
+  discountKind       PosDiscountKind?
+  discountReasonCode PosBenefitReason?
+
+  // "Venta a empleado": el empleado beneficiado por los precios de
+  // empleado aplicados en esta venta (ver PosSaleItem.beneficiaryEmployeeId
+  // para el detalle por línea).
+  employeeBuyerId String?
+  employeeBuyer   User?   @relation("PosSaleEmployeeBuyer", fields: [employeeBuyerId], references: [id])
+
+  // Autorización en el mismo dispositivo cuando el descuento supera
+  // el límite del cajero (PosDiscountLimit).
+  authorizedById String?
+  authorizedBy   User?     @relation("PosSaleAuthorizedBy", fields: [authorizedById], references: [id])
+  authorizedAt   DateTime?
+
+  status PosSaleStatus @default(COMPLETADA)
+
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelledBy   User?     @relation("PosSaleCancelledBy", fields: [cancelledById], references: [id])
+  cancelReason  String?
+
+  createdAt DateTime @default(now())
+
+  items    PosSaleItem[]
+  payments PosSalePayment[]
+
+  @@index([branchId])
+  @@index([cashCutId])
+  @@index([soldById])
+  @@index([status])
+  @@index([createdAt])
+  @@index([employeeBuyerId])
+  @@index([discountKind])
+}
+
+model PosSaleItem {
+  id     String  @id @default(cuid())
+  saleId String
+  sale   PosSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  variantId String?
+  variant   PosProductVariant? @relation(fields: [variantId], references: [id])
+
+  // Copia del nombre/precio al momento de la venta, para que el
+  // recibo y el historial no cambien si el catálogo cambia después.
+  name      String
+  unitPrice Float
+  quantity  Int
+  lineTotal Float
+
+  // Cobro personalizado con el teclado (sin producto de catálogo).
+  isCustom    Boolean @default(false)
+  description String?
+
+  // Beneficio aplicado a esta línea específica (descuento por
+  // producto, precio de empleado, o cortesía). Null = línea normal
+  // sin beneficio.
+  discountKind       PosDiscountKind?
+  discountReason     PosBenefitReason?
+  discountReasonNote String?
+
+  // Snapshot del precio de catálogo antes de aplicar el beneficio,
+  // para poder calcular su valor económico aunque el precio cambie
+  // después. benefitAmount = (originalUnitPrice - unitPrice) × quantity.
+  originalUnitPrice Float?
+  benefitAmount     Float?
+
+  beneficiaryEmployeeId String?
+  beneficiaryEmployee   User?   @relation("PosSaleItemBeneficiary", fields: [beneficiaryEmployeeId], references: [id])
+
+  authorizedById String?
+  authorizedBy   User?   @relation("PosSaleItemAuthorizedBy", fields: [authorizedById], references: [id])
+
+  @@index([saleId])
+  @@index([variantId])
+  @@index([discountKind])
+  @@index([beneficiaryEmployeeId])
+}
+
+model PosSalePayment {
+  id     String  @id @default(cuid())
+  saleId String
+  sale   PosSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  method PaymentMethod
+  amount Float
+
+  @@index([saleId])
+}
+
+// Descuento máximo (%) que puede aplicar cada rol sin necesitar
+// autorización de un superior. Si el rol no tiene fila, se asume
+// sin límite (solo debería pasar con ADMIN).
+model PosDiscountLimit {
+  id         String   @id @default(cuid())
+  role       UserRole @unique
+  maxPercent Float
+  updatedAt  DateTime @updatedAt
+
+  updatedById String?
+  updatedBy   User?   @relation("PosDiscountLimitUpdatedBy", fields: [updatedById], references: [id])
+}
+
+enum PosDiscountRuleMode {
+  DISCOUNT
+  BLOCK
+}
+
+model PosDiscountRule {
+  id        String              @id @default(cuid())
+  name      String
+  mode      PosDiscountRuleMode @default(DISCOUNT)
+  percent   Float?
+  active    Boolean             @default(true)
+  startDate DateTime?
+  endDate   DateTime?
+  branches  Branch[]
+
+  createdById String
+  createdBy   User     @relation("PosDiscountRuleCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?    @relation("PosDiscountRuleUpdatedBy", fields: [updatedById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active, mode])
+  @@index([startDate, endDate])
+}
+
+// Configuración global del Punto de Venta editable desde
+// Administración. Fila única (id fijo) — mismo patrón que
+// PayrollSettings.
+model PosSettings {
+  id                         String   @id @default("default")
+  employeeDiscountPercent    Float    @default(50)
+  employeeBottleMonthlyLimit Int      @default(2)
+  updatedAt                  DateTime @updatedAt
+
+  updatedById String?
+  updatedBy   User?   @relation("PosSettingsUpdatedBy", fields: [updatedById], references: [id])
+}
+
+/**
+ * Reglas de notificaciones push configurables desde Personal.
+ * Un solo cron (GitHub Action, cada hora) llama a
+ * /api/push/check-rules, que recorre las reglas activas y solo
+ * evalúa las que ya cumplieron su propia frecuencia
+ * (lastCheckedAt + checkFrequencyMinutes) — así cada regla puede
+ * tener su propio "cuándo" sin necesitar un cron distinto.
+ */
+enum NotificationTriggerType {
+  STOCK_BAJO
+  LICOR_CADUCIDAD
+  RECONTEO_PENDIENTE
+  CORTE_DIFERENCIA
+  PROCESO_ATRASADO
+}
+
+model NotificationRule {
+  id          String                  @id @default(cuid())
+  name        String
+  triggerType NotificationTriggerType
+  active      Boolean                 @default(true)
+
+  // Destinatarios: roles que reciben esta notificación.
+  recipientRoles UserRole[]
+
+  // Cada cuánto se vuelve a evaluar esta regla (minutos).
+  checkFrequencyMinutes Int @default(60)
+
+  // Parámetros propios de cada tipo de disparador, ej. para
+  // LICOR_CADUCIDAD: { "daysBeforeExpiration": 7 }; para
+  // CORTE_DIFERENCIA: { "minDifference": 10 }.
+  thresholdConfig Json?
+
+  lastCheckedAt DateTime?
+  lastSentAt    DateTime?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active])
+  @@index([triggerType])
+}
+
+/**
+ * ============================================================
+ * Productos conseguidos DURANTE el evento
+ * ------------------------------------------------------------
+ * No toca ServiceEventItem ni los paquetes originales: es una
+ * fuente paralela de existencia para el mismo evento.
+ * El inventario NO se guarda como saldo en ninguna tabla; se
+ * calcula desde InventoryEntry (ver lib/.../stock.ts). Por eso
+ * un envio desde sucursal genera un InventoryEntry negativo
+ * (SALIDA_EVENTO) al mandarlo y uno positivo (REGRESO_EVENTO)
+ * al regresarlo, y aqui solo se guarda la referencia.
+ * Una compra externa NO genera InventoryEntry: nunca salio de
+ * una sucursal, solo suma existencia al evento y costo.
+ * ============================================================
+ */
+model EventAddedProduct {
+  id      String @id @default(cuid())
+  eventId String
+
+  /// Nulo solo cuando es un producto temporal aun sin catalogar.
+  productId String?
+
+  /// Datos del producto temporal. Requieren autorizacion de GERENTE/ADMIN.
+  temporaryName     String?
+  temporaryCategory String?
+
+  sourceType     EventAddedSourceType
+  /// Obligatorio cuando sourceType es ENVIO_SUCURSAL o ENVIO_ALMACEN.
+  sourceBranchId String?
+
+  /// Cantidad en unidad de manejo (ej. 4 botellas).
+  quantityOriginal   Decimal                @db.Decimal(12, 3)
+  handlingUnit       InventoryHandlingUnit?
+  contentPerUnit     Decimal?               @db.Decimal(12, 3)
+  contentUnit        InventoryContentUnit?
+  /// Equivalencia interna (ml, g o piezas). Los calculos usan esta.
+  normalizedQuantity Decimal                @db.Decimal(14, 3)
+
+  /// Costo. Se valida en el servidor, nunca se confia en el navegador.
+  unitCost  Decimal? @db.Decimal(12, 4)
+  totalCost Decimal? @db.Decimal(12, 2)
+
+  /// Regreso. consumedQuantity NO se guarda: es quantityOriginal - returnedQuantity.
+  returnedQuantity     Decimal  @default(0) @db.Decimal(12, 3)
+  returnedOpenQuantity Decimal? @db.Decimal(12, 3)
+  /// Sucursal a la que se devolvio, cuando aplica.
+  returnBranchId       String?
+
+  supplier  String?
+  reference String?
+  notes     String?
+
+  status        EventAddedStatus @default(ACTIVO)
+  cancelReason  String?
+  cancelledById String?
+  cancelledAt   DateTime?
+
+  addedById String
+  addedAt   DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Movimiento de salida generado si vino de una sucursal o almacen.
+  movementId       String?
+  /// Movimiento de regreso, cuando ya se devolvio.
+  returnMovementId String?
+
+  event        ServiceEvent      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  product      InventoryProduct? @relation(fields: [productId], references: [id])
+  sourceBranch Branch?           @relation("EventAddedSourceBranch", fields: [sourceBranchId], references: [id])
+  returnBranch Branch?           @relation("EventAddedReturnBranch", fields: [returnBranchId], references: [id])
+  addedBy      User              @relation("EventAddedBy", fields: [addedById], references: [id])
+  cancelledBy  User?             @relation("EventAddedCancelledBy", fields: [cancelledById], references: [id])
+
+  logs EventAddedProductLog[]
+
+  @@index([eventId])
+  @@index([productId])
+  @@index([status])
+  @@index([sourceBranchId])
+}
+
+/// Bitacora de correcciones. Nada se borra fisicamente.
+model EventAddedProductLog {
+  id             String   @id @default(cuid())
+  addedProductId String
+  field          String
+  oldValue       String?
+  newValue       String?
+  reason         String?
+  changedById    String
+  changedAt      DateTime @default(now())
+
+  addedProduct EventAddedProduct @relation(fields: [addedProductId], references: [id], onDelete: Cascade)
+  changedBy    User              @relation("EventAddedLogBy", fields: [changedById], references: [id])
+
+  @@index([addedProductId])
+}
+
+enum EventAddedSourceType {
+  COMPRA_EVENTO
+  ENVIO_SUCURSAL
+  ENVIO_ALMACEN
+  PRESTAMO
+  OTRO
+}
+
+enum EventAddedStatus {
+  ACTIVO
+  CANCELADO
+}
+
+/**
+ * POS 2.0 phase 3A infrastructure. These tables are additive and do not
+ * replace any legacy POS, inventory or cash model.
+ */
+enum OperationReceiptStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED_FINAL
+}
+
+model OperationReceipt {
+  operationId String                 @id @db.Uuid
+  command     String
+  payloadHash String
+  status      OperationReceiptStatus @default(IN_PROGRESS)
+  result      Json?
+  resultType  String?
+  resultId    String?
+  actorId     String?
+  branchId    String?
+  context     Json?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  completedAt DateTime?
+
+  @@index([command, createdAt])
+  @@index([actorId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([status, createdAt])
+}
+
+model AuditEvent {
+  id            String   @id @default(cuid())
+  actorId       String?
+  branchId      String?
+  terminalId    String?
+  action        String
+  entityType    String
+  entityId      String
+  operationId   String?  @db.Uuid
+  correlationId String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([operationId])
+  @@index([action, createdAt])
+}
+
+enum OutboxEventStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+model OutboxEvent {
+  id          String            @id @default(cuid())
+  topic       String
+  aggregate   String
+  aggregateId String
+  operationId String?           @db.Uuid
+  payload     Json
+  status      OutboxEventStatus @default(PENDING)
+  attempts    Int               @default(0)
+  createdAt   DateTime          @default(now())
+  availableAt DateTime          @default(now())
+  processedAt DateTime?
+  lastError   String?
+
+  @@index([status, availableAt, createdAt])
+  @@index([aggregate, aggregateId])
+  @@index([operationId])
+}
+
+enum CapabilityScope {
+  SELF
+  BRANCH
+  MULTI_BRANCH
+  GLOBAL
+}
+
+model Capability {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  grants CapabilityGrant[]
+}
+
+model CapabilityGrant {
+  id           String          @id @default(cuid())
+  capabilityId String
+  capability   Capability      @relation(fields: [capabilityId], references: [id], onDelete: Restrict)
+  userId       String?
+  role         UserRole?
+  scope        CapabilityScope
+  branchId     String?
+  constraints  Json?
+  validFrom    DateTime        @default(now())
+  validTo      DateTime?
+  createdAt    DateTime        @default(now())
+  createdById  String?
+
+  @@index([capabilityId, userId, validFrom, validTo])
+  @@index([capabilityId, role, validFrom, validTo])
+  @@index([branchId])
+}
+
+/** POS 2.0 phase 3B: logical cash register, independent from devices. */
+model Register {
+  id          String   @id @default(cuid())
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  code        String
+  name        String
+  active      Boolean  @default(true)
+  createdById String
+  createdBy   User     @relation("RegisterCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cashSessions CashSession[]
+  cashMovements CashMovement[]
+  pos2Orders Pos2Order[]
+  pos2Sales Pos2Sale[]
+
+  @@unique([branchId, code])
+  @@index([branchId])
+  @@index([active])
+}
+
+enum TerminalStatus {
+  ACTIVE
+  DISABLED
+  REVOKED
+}
+
+/** Authorized device. Register selection happens per CashSession. */
+model Terminal {
+  id                 String         @id @default(cuid())
+  branchId           String
+  branch             Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  name               String
+  deviceIdentifier   String?        @unique
+  credentialHash     String?
+  status             TerminalStatus @default(DISABLED)
+  enrolledAt         DateTime?
+  credentialIssuedAt DateTime?
+  lastSeenAt         DateTime?
+  createdById        String
+  createdBy          User           @relation("TerminalCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  enrollments     TerminalEnrollment[]
+  sessionsOpened  CashSession[]     @relation("CashSessionOpeningTerminal")
+  sessionsClosed  CashSession[]     @relation("CashSessionClosingTerminal")
+  declarations    CashDeclaration[]
+  pos2Orders      Pos2Order[]
+  pos2Sales       Pos2Sale[]
+  pos2Payments    Pos2Payment[]
+  pos2Cancellations SaleCancellation[]
+  pos2Returns Pos2Return[]
+  pos2Refunds Pos2Refund[]
+
+  @@index([branchId])
+  @@index([status])
+}
+
+model TerminalEnrollment {
+  id          String   @id @default(cuid())
+  terminalId  String
+  terminal    Terminal @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  createdById String
+  createdBy   User     @relation("TerminalEnrollmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+
+  @@index([terminalId, expiresAt])
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSING
+  CLOSED
+  CANCELLED
+}
+
+model CashSession {
+  id                String            @id @default(cuid())
+  branchId          String
+  branch            Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  registerId        String
+  register          Register          @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  openingTerminalId String
+  openingTerminal   Terminal          @relation("CashSessionOpeningTerminal", fields: [openingTerminalId], references: [id], onDelete: Restrict)
+  openedById        String
+  openedBy          User              @relation("CashSessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  openedAt          DateTime          @default(now())
+  status            CashSessionStatus @default(OPEN)
+  closingTerminalId String?
+  closingTerminal   Terminal?         @relation("CashSessionClosingTerminal", fields: [closingTerminalId], references: [id], onDelete: Restrict)
+  closedById        String?
+  closedBy          User?             @relation("CashSessionClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
+  closedAt          DateTime?
+  expectedCash      Decimal?          @db.Decimal(18, 2)
+  difference        Decimal?          @db.Decimal(18, 2)
+  cashCutId         String?           @unique
+  cashCut           CashCut?          @relation(fields: [cashCutId], references: [id], onDelete: Restrict)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  declarations CashDeclaration[]
+  movements    CashMovement[]
+  pos2Orders   Pos2Order[]
+  pos2Sales    Pos2Sale[]
+  cancellationCompensations SaleCancellation[]
+  refundCompensations Pos2Refund[]
+
+  @@index([registerId, status])
+  @@index([branchId, openedAt])
+  @@index([openedById])
+}
+
+enum Pos2OrderStatus {
+  OPEN
+  PAYMENT_PENDING
+  FINALIZED
+  VOIDED
+  EXPIRED
+}
+
+enum Pos2PricingExplanation {
+  GLOBAL_BASE_PRICE
+  BRANCH_OVERRIDE
+}
+
+enum AdjustmentKind {
+  PROMOTION
+  DISCOUNT
+  COURTESY
+}
+
+enum AdjustmentMechanic {
+  PERCENT_OFF
+  FIXED_AMOUNT_OFF
+  FIXED_BUNDLE_PRICE
+}
+
+enum AdjustmentScope {
+  GLOBAL
+  BRANCH
+}
+
+enum AdjustmentTargetType {
+  PRODUCT
+  VARIANT
+  CATEGORY
+  ENTIRE_ORDER
+}
+
+enum AdjustmentStacking {
+  STACKABLE
+  EXCLUSIVE
+}
+
+enum OrderAdjustmentStatus {
+  APPLIED
+  REVOKED
+}
+
+model AdjustmentDefinition {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  description String?
+  active Boolean @default(true)
+  createdById String
+  createdBy User @relation("AdjustmentDefinitionCreatedBy",fields:[createdById],references:[id],onDelete:Restrict)
+  createdAt DateTime @default(now())
+  versions AdjustmentVersion[]
+  @@index([active,name])
+}
+
+model AdjustmentVersion {
+  id String @id @default(cuid())
+  definitionId String
+  definition AdjustmentDefinition @relation(fields:[definitionId],references:[id],onDelete:Restrict)
+  version Int
+  kind AdjustmentKind
+  mechanic AdjustmentMechanic
+  scope AdjustmentScope
+  branchId String?
+  branch Branch? @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  targetType AdjustmentTargetType
+  targetId String?
+  percentage Decimal? @db.Decimal(7,4)
+  amount Decimal? @db.Decimal(18,2)
+  bundleQuantity Decimal? @db.Decimal(18,6)
+  priority Int @default(0)
+  stacking AdjustmentStacking @default(EXCLUSIVE)
+  excludedProductIds String[] @default([])
+  excludedCategoryIds String[] @default([])
+  requiresBeneficiary Boolean @default(false)
+  requiresAuthorization Boolean @default(false)
+  maxAmount Decimal? @db.Decimal(18,2)
+  validFrom DateTime
+  validTo DateTime?
+  weekdays Int[] @default([])
+  startMinute Int?
+  endMinute Int?
+  timezone String @default("America/Mexico_City")
+  createdById String
+  createdBy User @relation("AdjustmentVersionCreatedBy",fields:[createdById],references:[id],onDelete:Restrict)
+  operationId String @unique @db.Uuid
+  createdAt DateTime @default(now())
+  orderAdjustments OrderAdjustment[]
+  saleAdjustments SaleAdjustment[]
+  termination AdjustmentVersionTermination?
+  @@unique([definitionId,version])
+  @@index([kind,scope,branchId,validFrom,validTo,priority])
+  @@index([targetType,targetId])
+}
+
+model AdjustmentVersionTermination {
+  id String @id @default(cuid())
+  versionId String @unique
+  version AdjustmentVersion @relation(fields:[versionId],references:[id],onDelete:Restrict)
+  effectiveAt DateTime
+  reason String
+  actorId String
+  operationId String @unique @db.Uuid
+  createdAt DateTime @default(now())
+  @@index([effectiveAt])
+}
+
+model OrderAdjustment {
+  id String @id @default(cuid())
+  orderId String
+  order Pos2Order @relation(fields:[orderId],references:[id],onDelete:Restrict)
+  orderLineId String?
+  ruleVersionId String
+  ruleVersion AdjustmentVersion @relation(fields:[ruleVersionId],references:[id],onDelete:Restrict)
+  kind AdjustmentKind
+  amount Decimal @db.Decimal(18,2)
+  percentage Decimal? @db.Decimal(7,4)
+  reason String?
+  automatic Boolean @default(false)
+  beneficiaryId String?
+  beneficiary User? @relation("OrderAdjustmentBeneficiary",fields:[beneficiaryId],references:[id],onDelete:Restrict)
+  authorizedById String?
+  authorizedBy User? @relation("OrderAdjustmentAuthorizedBy",fields:[authorizedById],references:[id],onDelete:Restrict)
+  status OrderAdjustmentStatus @default(APPLIED)
+  operationId String @db.Uuid
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  revokedById String?
+  @@index([orderId,status,kind])
+  @@index([orderLineId,status])
+  @@index([operationId])
+}
+
+model SaleAdjustment {
+  id String @id @default(cuid())
+  saleId String
+  sale Pos2Sale @relation(fields:[saleId],references:[id],onDelete:Restrict)
+  saleLineId String?
+  saleLine Pos2SaleLine? @relation(fields:[saleLineId],references:[id],onDelete:Restrict)
+  orderAdjustmentId String
+  ruleVersionId String
+  ruleVersion AdjustmentVersion @relation(fields:[ruleVersionId],references:[id],onDelete:Restrict)
+  kind AdjustmentKind
+  ruleCodeSnapshot String
+  ruleNameSnapshot String
+  mechanic AdjustmentMechanic
+  amount Decimal @db.Decimal(18,2)
+  percentage Decimal? @db.Decimal(7,4)
+  reason String?
+  beneficiaryId String?
+  authorizedById String?
+  createdAt DateTime @default(now())
+  @@unique([saleId,orderAdjustmentId])
+  @@index([saleId,kind])
+  @@index([saleLineId])
+  @@index([ruleVersionId])
+}
+
+/** Mutable pre-sale cart. It has no financial, payment or inventory effect. */
+model Pos2Order {
+  id               String          @id @default(cuid())
+  orderNumber      String          @unique
+  branchId         String
+  branch           Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  registerId       String
+  register         Register        @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  terminalId       String
+  terminal         Terminal        @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+  cashSessionId    String
+  cashSession      CashSession     @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  createdById      String
+  lastModifiedById String
+  status           Pos2OrderStatus @default(OPEN)
+  currency         String          @default("MXN")
+  subtotal         Decimal         @default(0) @db.Decimal(18, 2)
+  discountTotal    Decimal         @default(0) @db.Decimal(18, 2)
+  total            Decimal         @default(0) @db.Decimal(18, 2)
+  pricingTimestamp DateTime
+  version          Int             @default(1)
+  expiresAt        DateTime?
+  finalizedAt      DateTime?
+  voidedAt         DateTime?
+  voidReason       String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  lines            Pos2OrderLine[]
+  sale             Pos2Sale?
+  adjustments      OrderAdjustment[]
+
+  @@index([branchId, status, createdAt])
+  @@index([registerId, status])
+  @@index([cashSessionId, status])
+  @@index([createdById, status])
+}
+
+enum Pos2SaleStatus {
+  COMPLETED
+  PARTIALLY_RETURNED
+  RETURNED
+  CANCELLED
+}
+
+enum Pos2PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+}
+
+enum Pos2PaymentStatus {
+  CAPTURED
+  VOIDED
+}
+
+/** Immutable financial fact created only by CompleteSale. */
+model Pos2Sale {
+  id              String         @id @default(cuid())
+  saleNumber      String         @unique
+  orderId         String         @unique
+  order           Pos2Order      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  branchId        String
+  branch          Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  registerId      String
+  register        Register       @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  terminalId      String
+  terminal        Terminal       @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+  cashSessionId   String
+  cashSession     CashSession    @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  cashierId       String
+  cashier         User           @relation("Pos2SaleCashier", fields: [cashierId], references: [id], onDelete: Restrict)
+  currency        String         @default("MXN")
+  subtotal        Decimal        @db.Decimal(18, 2)
+  discountTotal   Decimal        @db.Decimal(18, 2)
+  total           Decimal        @db.Decimal(18, 2)
+  status          Pos2SaleStatus @default(COMPLETED)
+  operationId     String         @unique @db.Uuid
+  completedAt     DateTime       @default(now())
+  createdAt       DateTime       @default(now())
+  lines           Pos2SaleLine[]
+  payments        Pos2Payment[]
+  cancellation    SaleCancellation?
+  returns         Pos2Return[]
+  refunds         Pos2Refund[]
+  adjustments     SaleAdjustment[]
+
+  @@index([branchId, completedAt])
+  @@index([registerId, completedAt])
+  @@index([cashSessionId, completedAt])
+}
+
+model Pos2SaleLine {
+  id                   String                 @id @default(cuid())
+  saleId               String
+  sale                 Pos2Sale               @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  orderLineId          String                 @unique
+  productId            String?
+  product              PosProduct?            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId            String?
+  variant              PosProductVariant?     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  productNameSnapshot  String
+  variantNameSnapshot  String?
+  skuSnapshot          String?
+  quantity             Decimal                @db.Decimal(18, 6)
+  unit                 CatalogBaseUnit
+  unitPrice            Decimal                @db.Decimal(18, 2)
+  lineSubtotal         Decimal                @db.Decimal(18, 2)
+  discountTotal        Decimal                @db.Decimal(18, 2)
+  lineTotal            Decimal                @db.Decimal(18, 2)
+  priceVersionId       String
+  priceVersion         PriceVersion           @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  pricingExplanation   Pos2PricingExplanation
+  taxIncluded          Boolean                @default(true)
+  position             Int
+  createdAt            DateTime               @default(now())
+
+  @@index([saleId, position])
+  @@index([productId])
+  @@index([variantId])
+  returnLines ReturnLine[]
+  adjustments SaleAdjustment[]
+}
+
+model Pos2Payment {
+  id             String            @id @default(cuid())
+  saleId         String
+  sale           Pos2Sale          @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  branchId       String
+  branch         Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  terminalId     String
+  terminal       Terminal          @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+  actorId        String
+  actor          User              @relation("Pos2PaymentActor", fields: [actorId], references: [id], onDelete: Restrict)
+  method         Pos2PaymentMethod
+  status         Pos2PaymentStatus @default(CAPTURED)
+  amount         Decimal           @db.Decimal(18, 2)
+  cashTendered   Decimal?          @db.Decimal(18, 2)
+  changeGiven    Decimal?          @db.Decimal(18, 2)
+  currency       String            @default("MXN")
+  reference      String?
+  position       Int
+  operationId    String            @db.Uuid
+  capturedAt     DateTime          @default(now())
+  createdAt      DateTime          @default(now())
+
+  @@unique([saleId, position])
+  @@index([branchId, capturedAt])
+  @@index([operationId])
+  reversals PaymentReversal[]
+  refundAllocations RefundAllocation[]
+}
+
+enum SaleCancellationReasonCode {
+  WRONG_ORDER
+  DUPLICATE
+  OPERATOR_ERROR
+  CUSTOMER_REQUEST
+  OTHER
+}
+enum ReturnReasonCode {
+  DEFECTIVE
+  WRONG_ITEM
+  CUSTOMER_RETURN
+  OTHER
+}
+enum RefundReasonCode {
+  RETURN
+  SERVICE_RECOVERY
+  PRICE_CORRECTION
+  OTHER
+}
+enum InventoryDisposition {
+  RESTOCK
+  DAMAGED
+  DISCARD
+}
+
+model SaleCancellation {
+  id String @id @default(cuid())
+  saleId String @unique
+  sale Pos2Sale @relation(fields:[saleId],references:[id],onDelete:Restrict)
+  reasonCode SaleCancellationReasonCode
+  reasonText String?
+  actorId String
+  actor User @relation("SaleCancellationActor",fields:[actorId],references:[id],onDelete:Restrict)
+  terminalId String
+  terminal Terminal @relation(fields:[terminalId],references:[id],onDelete:Restrict)
+  cashSessionId String?
+  cashSession CashSession? @relation(fields:[cashSessionId],references:[id],onDelete:Restrict)
+  operationId String @unique @db.Uuid
+  createdAt DateTime @default(now())
+  paymentReversals PaymentReversal[]
+  @@index([createdAt])
+}
+
+model PaymentReversal {
+  id String @id @default(cuid())
+  cancellationId String
+  cancellation SaleCancellation @relation(fields:[cancellationId],references:[id],onDelete:Restrict)
+  paymentId String @unique
+  payment Pos2Payment @relation(fields:[paymentId],references:[id],onDelete:Restrict)
+  method Pos2PaymentMethod
+  amount Decimal @db.Decimal(18,2)
+  currency String @default("MXN")
+  reference String?
+  createdAt DateTime @default(now())
+  @@index([cancellationId])
+}
+
+model Pos2Return {
+  id String @id @default(cuid())
+  saleId String
+  sale Pos2Sale @relation(fields:[saleId],references:[id],onDelete:Restrict)
+  reasonCode ReturnReasonCode
+  reasonText String?
+  actorId String
+  actor User @relation("Pos2ReturnActor",fields:[actorId],references:[id],onDelete:Restrict)
+  terminalId String
+  terminal Terminal @relation(fields:[terminalId],references:[id],onDelete:Restrict)
+  operationId String @unique @db.Uuid
+  createdAt DateTime @default(now())
+  lines ReturnLine[]
+  @@index([saleId,createdAt])
+}
+
+model ReturnLine {
+  id String @id @default(cuid())
+  returnId String
+  returnDocument Pos2Return @relation(fields:[returnId],references:[id],onDelete:Restrict)
+  saleLineId String
+  saleLine Pos2SaleLine @relation(fields:[saleLineId],references:[id],onDelete:Restrict)
+  quantity Decimal @db.Decimal(18,6)
+  unit CatalogBaseUnit
+  disposition InventoryDisposition
+  reasonText String?
+  createdAt DateTime @default(now())
+  @@unique([returnId,saleLineId])
+  @@index([saleLineId])
+}
+
+model Pos2Refund {
+  id String @id @default(cuid())
+  saleId String
+  sale Pos2Sale @relation(fields:[saleId],references:[id],onDelete:Restrict)
+  amount Decimal @db.Decimal(18,2)
+  currency String @default("MXN")
+  reasonCode RefundReasonCode
+  reasonText String?
+  actorId String
+  actor User @relation("Pos2RefundActor",fields:[actorId],references:[id],onDelete:Restrict)
+  terminalId String
+  terminal Terminal @relation(fields:[terminalId],references:[id],onDelete:Restrict)
+  cashSessionId String?
+  cashSession CashSession? @relation(fields:[cashSessionId],references:[id],onDelete:Restrict)
+  operationId String @unique @db.Uuid
+  createdAt DateTime @default(now())
+  allocations RefundAllocation[]
+  @@index([saleId,createdAt])
+}
+
+model RefundAllocation {
+  id String @id @default(cuid())
+  refundId String
+  refund Pos2Refund @relation(fields:[refundId],references:[id],onDelete:Restrict)
+  paymentId String
+  payment Pos2Payment @relation(fields:[paymentId],references:[id],onDelete:Restrict)
+  method Pos2PaymentMethod
+  amount Decimal @db.Decimal(18,2)
+  currency String @default("MXN")
+  reference String?
+  createdAt DateTime @default(now())
+  @@unique([refundId,paymentId])
+  @@index([paymentId])
+}
+
+model Pos2OrderLine {
+  id                 String                 @id @default(cuid())
+  orderId            String
+  order              Pos2Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  productId           String?
+  product             PosProduct?            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId           String?
+  variant             PosProductVariant?     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  targetKey           String
+  displayName         String
+  catalogVersion      Int
+  quantity            Decimal                @db.Decimal(18, 6)
+  unit                CatalogBaseUnit
+  unitPrice           Decimal                @db.Decimal(18, 2)
+  lineSubtotal        Decimal                @db.Decimal(18, 2)
+  discountTotal       Decimal                @default(0) @db.Decimal(18, 2)
+  lineTotal           Decimal                @db.Decimal(18, 2)
+  priceVersionId      String
+  priceVersion        PriceVersion           @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  pricingExplanation  Pos2PricingExplanation
+  position            Int
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([orderId, position])
+  @@index([productId])
+  @@index([variantId])
+  @@index([priceVersionId])
+}
+
+enum CashDeclarationType {
+  OPENING
+  CLOSING
+  RECOUNT
+}
+
+model CashDeclaration {
+  id             String              @id @default(cuid())
+  cashSessionId  String
+  cashSession    CashSession         @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  type           CashDeclarationType
+  amount         Decimal             @db.Decimal(18, 2)
+  actorId        String
+  actor          User                @relation("CashDeclarationActor", fields: [actorId], references: [id], onDelete: Restrict)
+  terminalId     String
+  terminal       Terminal            @relation(fields: [terminalId], references: [id], onDelete: Restrict)
+  reason         String?
+  supersedesId   String?
+  supersedes     CashDeclaration?    @relation("CashDeclarationRecounts", fields: [supersedesId], references: [id], onDelete: Restrict)
+  recounts       CashDeclaration[]    @relation("CashDeclarationRecounts")
+  createdAt      DateTime            @default(now())
+
+  @@index([cashSessionId, createdAt])
+  @@index([supersedesId])
+}
+
+enum CashMovementType {
+  OPENING_FLOAT
+  SALE_CASH
+  CASH_IN
+  CASH_OUT
+  REFUND_CASH
+  SALE_CANCEL_REVERSAL
+  ADJUSTMENT
+  SAFE_TRANSFER
+}
+
+enum CashMovementDirection {
+  IN
+  OUT
+}
+
+enum CashTransferEndpointType {
+  CASH_SESSION
+  ENVELOPE
+}
+
+model CashTransfer {
+  id              String                   @id @default(cuid())
+  operationId     String                   @unique @db.Uuid
+  branchId        String
+  branch          Branch                   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  sourceType      CashTransferEndpointType
+  sourceId        String
+  destinationType CashTransferEndpointType
+  destinationId   String
+  amount          Decimal                  @db.Decimal(18, 2)
+  reason          String
+  actorId         String
+  actor           User                     @relation("CashTransferCreatedBy", fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt       DateTime                 @default(now())
+
+  @@index([branchId, createdAt])
+  @@index([sourceType, sourceId])
+  @@index([destinationType, destinationId])
+}
+
+model CashMovement {
+  id            String                @id @default(cuid())
+  cashSessionId String
+  cashSession   CashSession           @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  branchId      String
+  branch        Branch                @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  registerId    String
+  register      Register              @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  type          CashMovementType
+  direction     CashMovementDirection
+  amount        Decimal               @db.Decimal(18, 2)
+  sourceType    String?
+  sourceId      String?
+  actorId       String
+  actor         User                  @relation("CashMovementActor", fields: [actorId], references: [id], onDelete: Restrict)
+  operationId   String?               @unique @db.Uuid
+  metadata      Json?
+  categoryId    String?
+  categoryRef  FinancialMovementCategory? @relation("CashMovementCategory", fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryNameSnapshot String?
+  createdAt     DateTime              @default(now())
+
+  @@index([cashSessionId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([operationId])
+  @@index([sourceType, sourceId])
+}
+
+enum FinancialMovementDirection {
+  INCOME
+  EXPENSE
+}
+
+enum FinancialMovementScope {
+  CASH
+  ENVELOPE
+  BOTH
+}
+
+/// Global, administrable taxonomy for manual cash/envelope movements.
+/// Historical movement rows keep their categoryId and name snapshot; rows
+/// created before this catalog remains compatible with nullable references.
+model FinancialMovementCategory {
+  id              String                    @id @default(cuid())
+  name            String
+  code            String                    @unique
+  direction       FinancialMovementDirection
+  scope           FinancialMovementScope
+  group           String?
+  requiresReason  Boolean                   @default(false)
+  requiresReceipt Boolean                   @default(false)
+  isActive        Boolean                   @default(true)
+  sortOrder       Int                       @default(0)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  createdById     String?
+  createdBy       User?                     @relation("FinancialCategoryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById     String?
+  updatedBy       User?                     @relation("FinancialCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  cashOutflows    CashOutflow[]             @relation("CashOutflowCategory")
+  cashInflows     CashInflow[]              @relation("CashInflowCategory")
+  cashMovements   CashMovement[]            @relation("CashMovementCategory")
+  envelopeMovements CashSafeEnvelopeMovement[] @relation("EnvelopeMovementCategory")
+
+  @@index([direction, scope, isActive, sortOrder])
+  @@index([isActive, name])
+}

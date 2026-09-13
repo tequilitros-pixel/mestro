@@ -1,0 +1,1794 @@
+import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
+import {
+  CookingEventType,
+  CookingStatus,
+  EquipmentStatus,
+  LotStage,
+} from "@prisma/client";
+import { startSteamAction, changeSteamPressureAction, stopSteamAction, createSweetHoneyRecoveryAction } from "../actions";
+import { notFound, redirect } from "next/navigation";
+import { advanceLotStage } from "@/lib/lotStage";
+import { businessDayStart, formatBusinessDateOnly } from "@/lib/dateTime";
+
+import CookingCharts from "@/components/CookingCharts";
+import FinishCookingModal from "@/components/FinishCookingModal";
+import PageTabs from "@/components/ui/PageTabs";
+import OfflineCookingForm from "@/components/offline/OfflineCookingForm";
+import OfflineBoilerForm from "@/components/offline/OfflineBoilerForm";
+import SuccessToast from "@/components/ui/SuccessToast";
+import {
+  FlameIcon,
+  ClipboardIcon,
+  HomeIcon,
+  ChartLineIcon,
+  BookIcon,
+  type IconProps,
+} from "@/components/ui/icons";
+import { Suspense, type ComponentType } from "react";
+import {
+  buildCookingMessages,
+  calculateCookingProgress,
+  formatDateTime,
+  formatDuration,
+  formatNumber,
+  formatStatus,
+  getCookingHealth,
+  getCookingHealthTitle,
+  getTemperatureStatus,
+  isTemperatureWarning,
+} from "@/lib/cooking/cookingMetrics";
+
+type Props = {
+  params: Promise<{ id: string }>;
+};
+
+export default async function CookingDetailPage({
+  params,
+}: Props) {
+  const { id } = await params;
+
+  const cooking = await prisma.cooking.findUnique({
+    where: { id },
+    include: {
+      lot: true,
+      equipment: true,
+      finishedBy: true,
+      events: {
+        orderBy: {
+          createdAt: "asc",
+        },
+      },
+      steamIntervals: { orderBy: { startedAt: "asc" }, include: { pressureReadings: { orderBy: { occurredAt: "asc" } } } },
+      sweetHoneyRecoveries: { orderBy: { recoveredAt: "asc" } },
+    },
+  });
+
+  if (!cooking) notFound();
+
+  const cookingEquipmentId = cooking.equipmentId;
+  const cookingLotId = cooking.lotId;
+
+  const activeBoilers = await prisma.boilerSession.findMany({ where: { endedAt: null, equipment: { type: "CALDERA", active: true } }, orderBy: { startedAt: "asc" }, include: { equipment: true } });
+
+  const currentSteam = cooking.steamIntervals.find((interval) => !interval.endedAt) ?? null;
+  const hasStartedVapor = cooking.steamIntervals.some((interval) => interval.state === "INYECTANDO") || cooking.events.some((event) => event.type === CookingEventType.INICIO_VAPOR);
+
+  const hasFinished =
+    cooking.status === CookingStatus.TERMINADA;
+
+  const temperatureEvents = cooking.events.filter(
+    (event) =>
+      event.type === CookingEventType.TEMPERATURA
+  );
+
+  const lastTemperature =
+    temperatureEvents.at(-1) ?? null;
+
+  const bitterHoneyEvents = cooking.events.filter(
+    (event) =>
+      event.type === CookingEventType.MIELES_AMARGAS
+  );
+
+  const sweetHoneyEvents = cooking.events.filter(
+    (event) =>
+      event.type === CookingEventType.MIELES_DULCES
+  );
+
+  const bitterHoneyLiters = bitterHoneyEvents.reduce(
+    (total, event) =>
+      total + Number(event.liters ?? 0),
+    0
+  );
+
+  const sweetHoneyLiters = sweetHoneyEvents.reduce(
+    (total, event) =>
+      total + Number(event.liters ?? 0),
+    0
+  );
+
+  const lastSweetHoneyBrix =
+    [...sweetHoneyEvents]
+      .reverse()
+      .find((event) => event.brix !== null)?.brix ??
+    null;
+
+  const lastSweetHoneyPh =
+    [...sweetHoneyEvents]
+      .reverse()
+      .find((event) => event.ph !== null)?.ph ??
+    null;
+
+  const lastSweetHoneyTemperature =
+    [...sweetHoneyEvents]
+      .reverse()
+      .find((event) => event.temperature !== null)
+      ?.temperature ?? null;
+
+  const cookingProgress = calculateCookingProgress({
+    startedAt: cooking.startedAt,
+    finishedAt: cooking.finishedAt,
+    hasFinished,
+  });
+
+  const cookingHealth = getCookingHealth({
+    hasFinished,
+    hasStartedVapor,
+    lastTemperature,
+  });
+
+  async function addSimpleEvent(
+    formData: FormData
+  ) {
+    "use server";
+
+    const currentCooking =
+      await prisma.cooking.findUnique({
+        where: { id },
+        select: {
+          status: true,
+          closureCode: true,
+        },
+      });
+
+    if (
+      !currentCooking ||
+      currentCooking.status ===
+        CookingStatus.TERMINADA ||
+      currentCooking.closureCode
+    ) {
+      redirect(`/cooking/${id}`);
+    }
+
+    const typeValue = formData.get("type");
+
+    if (
+      typeof typeValue !== "string" ||
+      !isCookingEventType(typeValue)
+    ) {
+      redirect(`/cooking/${id}`);
+    }
+
+    const type = typeValue as CookingEventType;
+
+    /*
+     * FIN_COCCION ya no puede registrarse desde
+     * un evento normal. El cierre debe realizarse
+     * mediante el Acta de Cierre.
+     */
+    if (type === CookingEventType.FIN_COCCION) {
+      redirect(`/cooking/${id}`);
+    }
+
+    const liters = parseOptionalNumber(
+      formData.get("liters")
+    );
+
+    const ph = parseOptionalNumber(
+      formData.get("ph")
+    );
+
+    const brix = parseOptionalNumber(
+      formData.get("brix")
+    );
+
+    const temperature = parseOptionalNumber(
+      formData.get("temperature")
+    );
+
+    const notesValue = formData.get("notes");
+
+    const notes =
+      typeof notesValue === "string" &&
+      notesValue.trim()
+        ? notesValue.trim()
+        : null;
+
+    const needsAdditionalInformation =
+      type === CookingEventType.MIELES_AMARGAS ||
+      type === CookingEventType.MIELES_DULCES ||
+      type === CookingEventType.OBSERVACION;
+
+    const hasAdditionalInformation =
+      liters !== null ||
+      ph !== null ||
+      brix !== null ||
+      temperature !== null ||
+      notes !== null;
+
+    if (
+      needsAdditionalInformation &&
+      !hasAdditionalInformation
+    ) {
+      redirect(`/cooking/${id}`);
+    }
+
+    await prisma.cookingEvent.create({
+      data: {
+        cookingId: id,
+        type,
+        liters,
+        ph,
+        brix,
+        temperature,
+        notes,
+      },
+    });
+
+    redirect(`/cooking/${id}?saved=1`);
+  }
+
+  async function addTemperatureEvent(
+    formData: FormData
+  ) {
+    "use server";
+
+    const currentCooking =
+      await prisma.cooking.findUnique({
+        where: { id },
+        select: {
+          status: true,
+          closureCode: true,
+        },
+      });
+
+    if (
+      !currentCooking ||
+      currentCooking.status ===
+        CookingStatus.TERMINADA ||
+      currentCooking.closureCode
+    ) {
+      redirect(`/cooking/${id}`);
+    }
+
+    const temperatureTop = parseRequiredNumber(
+      formData.get("temperatureTop")
+    );
+
+    const temperatureMiddle =
+      parseRequiredNumber(
+        formData.get("temperatureMiddle")
+      );
+
+    const temperatureBottom =
+      parseRequiredNumber(
+        formData.get("temperatureBottom")
+      );
+
+    if (
+      temperatureTop === null ||
+      temperatureMiddle === null ||
+      temperatureBottom === null
+    ) {
+      redirect(`/cooking/${id}`);
+    }
+
+    if (
+      temperatureTop < 0 ||
+      temperatureMiddle < 0 ||
+      temperatureBottom < 0
+    ) {
+      redirect(`/cooking/${id}`);
+    }
+
+    const notesValue = formData.get("notes");
+
+    const notes =
+      typeof notesValue === "string" &&
+      notesValue.trim()
+        ? notesValue.trim()
+        : null;
+
+    await prisma.cookingEvent.create({
+      data: {
+        cookingId: id,
+        type: CookingEventType.TEMPERATURA,
+        temperatureTop,
+        temperatureMiddle,
+        temperatureBottom,
+        notes,
+      },
+    });
+
+    redirect(`/cooking/${id}?saved=1`);
+  }
+
+  async function finishCooking(
+    formData: FormData
+  ) {
+    "use server";
+
+    const user = await getCurrentUser();
+
+    if (!user) {
+      redirect("/login");
+    }
+
+    const finalAgaveKg = parseRequiredNumber(
+      formData.get("finalAgaveKg")
+    );
+
+    const finalSweetHoneyLiters = parseOptionalNumber(formData.get("finalSweetHoneyLiters"));
+    const finalSweetHoneyBrix = parseOptionalNumber(formData.get("finalSweetHoneyBrix"));
+
+    const finalNotesValue =
+      formData.get("finalNotes");
+
+    const finalNotes =
+      typeof finalNotesValue === "string" &&
+      finalNotesValue.trim()
+        ? finalNotesValue.trim()
+        : null;
+
+    if (finalAgaveKg === null) {
+      redirect(`/cooking/${id}`);
+    }
+
+    if (
+      finalAgaveKg < 0 ||
+      (finalSweetHoneyLiters !== null && finalSweetHoneyLiters < 0) ||
+      (finalSweetHoneyBrix !== null && finalSweetHoneyBrix < 0)
+    ) {
+      redirect(`/cooking/${id}`);
+    }
+
+    const existingCooking =
+      await prisma.cooking.findUnique({
+        where: { id },
+        select: {
+          status: true,
+          closureCode: true,
+        },
+      });
+
+    if (!existingCooking) {
+      notFound();
+    }
+
+    if (
+      existingCooking.status ===
+        CookingStatus.TERMINADA ||
+      existingCooking.closureCode
+    ) {
+      redirect(`/cooking/${id}`);
+    }
+
+    const finishedAt = new Date();
+
+    const closureCode =
+      await createCookingClosureCode(finishedAt);
+
+    const result = await prisma.$transaction(
+      async (transaction) => {
+        const updatedCooking =
+          await transaction.cooking.updateMany({
+            where: {
+              id,
+              status: {
+                not: CookingStatus.TERMINADA,
+              },
+              closureCode: null,
+            },
+            data: {
+              status: CookingStatus.TERMINADA,
+              finishedAt,
+              finalAgaveKg,
+              finalSweetHoneyLiters,
+              finalSweetHoneyBrix,
+              finalNotes,
+              closureCode,
+              finishedById: user.id,
+            },
+          });
+
+        if (updatedCooking.count === 0) {
+          return updatedCooking;
+        }
+
+        await transaction.cookingEvent.create({
+          data: {
+            cookingId: id,
+            type: CookingEventType.FIN_COCCION,
+            liters: finalSweetHoneyLiters,
+            brix: finalSweetHoneyBrix,
+            notes:
+              finalNotes ??
+              `Cocción cerrada mediante ${closureCode}.`,
+          },
+        });
+
+        await transaction.equipment.update({
+          where: { id: cookingEquipmentId },
+          data: {
+            status: EquipmentStatus.DISPONIBLE,
+            currentLoad: 0,
+          },
+        });
+
+        await advanceLotStage(
+          transaction,
+          cookingLotId,
+          LotStage.MOLIENDA
+        );
+
+        return updatedCooking;
+      }
+    );
+
+    if (result.count === 0) {
+      redirect(`/cooking/${id}`);
+    }
+
+    redirect(`/cooking/${id}?finished=1`);
+  }
+
+  const homeTabContent = (
+    <>
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Kpi
+            title="Horno"
+            value={cooking.equipment.name}
+            detail="Equipo asignado"
+          />
+
+          <Kpi
+            title="Kg cargados"
+            value={`${formatNumber(
+              cooking.agaveKg,
+              0
+            )} kg`}
+            detail="Carga inicial"
+          />
+
+          <Kpi
+            title="Estado"
+            value={formatStatus(cooking.status)}
+            detail={
+              hasFinished
+                ? "Proceso cerrado"
+                : "Proceso activo"
+            }
+            highlight={!hasFinished}
+          />
+
+          <Kpi
+            title="Vapor"
+            value={
+              hasStartedVapor
+                ? "Iniciado"
+                : "Pendiente"
+            }
+            detail={
+              hasStartedVapor
+                ? "Existe registro de inicio"
+                : "Aún no ha comenzado"
+            }
+          />
+        </section>
+
+        <section className="mt-6 overflow-hidden rounded-2xl border border-outline-variant bg-surface-container">
+          <div className="p-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-sm text-on-surface-variant">
+                  Avance estimado de cocción
+                </p>
+
+                <div className="mt-1 flex items-end gap-3">
+                  <h2 className="text-4xl font-bold">
+                    {cookingProgress.percentage}%
+                  </h2>
+
+                  <p className="pb-1 text-sm text-on-surface-variant">
+                    Meta operativa: 32 horas
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-sm text-on-surface-variant sm:text-right">
+                <p>
+                  Tiempo transcurrido:{" "}
+                  {cookingProgress.duration}
+                </p>
+
+                <p>
+                  {cooking.events.length} eventos
+                  registrados
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 h-4 overflow-hidden rounded-full bg-surface-container-high">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-500"
+                style={{
+                  width: `${cookingProgress.percentage}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="grid border-t border-outline-variant sm:grid-cols-3">
+            <ProcessIndicator
+              title="Temperatura"
+              value={getTemperatureStatus(
+                lastTemperature
+              )}
+              warning={isTemperatureWarning(
+                lastTemperature
+              )}
+            />
+
+            <ProcessIndicator
+              title="Vapor"
+              value={
+                hasStartedVapor
+                  ? "INICIADO"
+                  : "PENDIENTE"
+              }
+              warning={!hasStartedVapor}
+            />
+
+            <ProcessIndicator
+              title="Proceso"
+              value={formatStatus(cooking.status)}
+              warning={false}
+            />
+          </div>
+        </section>
+
+        <section
+          className={`mt-6 rounded-2xl border p-6 ${
+            cookingHealth === "ATENCION"
+              ? "border-error/30 bg-error/10"
+              : cookingHealth === "TERMINADA"
+                ? "border-on-surface-variant/30 bg-on-surface-variant/10"
+                : cookingHealth === "LISTA"
+                  ? "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10"
+                  : "border-secondary/30 bg-secondary/10"
+          }`}
+        >
+          <p className="font-mono text-sm font-semibold uppercase tracking-[0.3em] text-on-surface-variant">
+            Análisis de MAESTRO
+          </p>
+
+          <h2
+            className={`mt-3 text-2xl font-bold sm:text-3xl ${
+              cookingHealth === "ATENCION"
+                ? "text-error"
+                : cookingHealth === "TERMINADA"
+                  ? "text-on-surface-variant"
+                  : cookingHealth === "LISTA"
+                    ? "text-tertiary-fixed-dim"
+                    : "text-secondary"
+            }`}
+          >
+            {getCookingHealthTitle(cookingHealth)}
+          </h2>
+
+          <div className="mt-5 space-y-3">
+            {buildCookingMessages({
+              hasFinished,
+              hasStartedVapor,
+              lastTemperature,
+              sweetHoneyLiters,
+              lastSweetHoneyBrix,
+            }).map((message) => (
+              <div
+                key={message}
+                className="flex items-start gap-3 rounded-xl bg-surface-dim/40 p-3"
+              >
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-on-surface-variant" />
+
+                <p className="text-on-surface">
+                  {message}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-6 sm:p-8">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">
+                Última temperatura
+              </h2>
+
+              <p className="mt-1 text-sm text-on-surface-variant">
+                Lectura más reciente del horno.
+              </p>
+            </div>
+
+            {lastTemperature && (
+              <p className="text-sm text-outline">
+                {formatDateTime(
+                  lastTemperature.createdAt
+                )}
+              </p>
+            )}
+          </div>
+
+          {lastTemperature ? (
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              <TemperatureCard
+                title="Superior"
+                value={
+                  lastTemperature.temperatureTop
+                }
+              />
+
+              <TemperatureCard
+                title="Media"
+                value={
+                  lastTemperature.temperatureMiddle
+                }
+              />
+
+              <TemperatureCard
+                title="Inferior"
+                value={
+                  lastTemperature.temperatureBottom
+                }
+              />
+            </div>
+          ) : (
+            <div className="mt-6 rounded-2xl border border-dashed border-outline-variant p-8 text-center">
+              <p className="text-on-surface-variant">
+                Todavía no hay temperaturas
+                registradas.
+              </p>
+            </div>
+          )}
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-6 sm:p-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold">
+              Resumen del cocimiento
+            </h2>
+
+            <p className="mt-2 text-sm text-on-surface-variant">
+              Extracciones y valores acumulados del
+              proceso.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Kpi
+              title="Mieles amargas"
+              value={`${formatNumber(
+                bitterHoneyLiters
+              )} L`}
+              detail={`${bitterHoneyEvents.length} registros`}
+            />
+
+            <Kpi
+              title="Mieles dulces"
+              value={`${formatNumber(
+                sweetHoneyLiters
+              )} L`}
+              detail={`${sweetHoneyEvents.length} registros`}
+            />
+
+            <Kpi
+              title="Último °Brix dulce"
+              value={formatNumber(
+                lastSweetHoneyBrix
+              )}
+              detail={
+                lastSweetHoneyBrix !== null
+                  ? "Última extracción registrada"
+                  : "Sin registro"
+              }
+            />
+
+            <Kpi
+              title="Eventos"
+              value={cooking.events.length}
+              detail={`${temperatureEvents.length} lecturas de temperatura`}
+            />
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Kpi
+              title="Último pH de miel dulce"
+              value={formatNumber(
+                lastSweetHoneyPh
+              )}
+              detail="Último valor válido"
+            />
+
+            <Kpi
+              title="Temperatura de miel dulce"
+              value={
+                lastSweetHoneyTemperature !== null
+                  ? `${formatNumber(
+                      lastSweetHoneyTemperature
+                    )} °C`
+                  : "-"
+              }
+              detail="Último valor válido"
+            />
+          </div>
+        </section>
+
+        {hasFinished && (
+          <>
+          <CookingClosureAct
+            closureCode={cooking.closureCode}
+            lotCode={cooking.lot.code}
+            equipmentName={
+              cooking.equipment.name
+            }
+            initialAgaveKg={cooking.agaveKg}
+            finalAgaveKg={
+              cooking.finalAgaveKg
+            }
+            finalSweetHoneyLiters={
+              cooking.finalSweetHoneyLiters
+            }
+            finalSweetHoneyBrix={
+              cooking.finalSweetHoneyBrix
+            }
+            finalNotes={cooking.finalNotes}
+            bitterHoneyLiters={
+              bitterHoneyLiters
+            }
+            startedAt={cooking.startedAt}
+            finishedAt={cooking.finishedAt}
+            finishedByName={
+              cooking.finishedBy?.name
+            }
+            eventsCount={cooking.events.length}
+          />
+          <div className="mt-6"><SweetHoneyRecoveryForm cookingId={id} lotId={cooking.lotId} action={createSweetHoneyRecoveryAction.bind(null, id)} /></div>
+          </>
+        )}
+    </>
+  );
+
+  const registrarTabContent = (
+    <>
+        {!hasFinished && (
+          <section className="rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold">
+                Acciones de cocción
+              </h2>
+
+              <p className="mt-2 text-sm text-on-surface-variant">
+                Registra únicamente lo que ocurra en
+                el horno.
+              </p>
+            </div>
+
+            {!hasStartedVapor ? <SteamActionPanel cookingId={id} intervals={cooking.steamIntervals} currentSteam={currentSteam} activeBoilers={activeBoilers} /> : (
+              <div className="space-y-8">
+                <OfflineCookingForm
+                  cookingId={id}
+                  fallbackAction={addTemperatureEvent}
+                  className="rounded-2xl border border-outline-variant bg-surface-container-high p-5 sm:p-6"
+                >
+                  <input
+                    type="hidden"
+                    name="type"
+                    value={CookingEventType.TEMPERATURA}
+                  />
+                  <h3 className="mb-4 text-xl font-bold">
+                    Registrar temperaturas
+                  </h3>
+
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <NumberField
+                      name="temperatureTop"
+                      placeholder="Superior"
+                      suffix="°C"
+                      step="0.1"
+                      min="0"
+                      required
+                    />
+
+                    <NumberField
+                      name="temperatureMiddle"
+                      placeholder="Media"
+                      suffix="°C"
+                      step="0.1"
+                      min="0"
+                      required
+                    />
+
+                    <NumberField
+                      name="temperatureBottom"
+                      placeholder="Inferior"
+                      suffix="°C"
+                      step="0.1"
+                      min="0"
+                      required
+                    />
+                  </div>
+
+                  <input
+                    name="notes"
+                    placeholder="Observaciones opcionales"
+                    className="mt-4 w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+                  />
+
+                  <button className="mt-4 w-full rounded-xl bg-primary px-6 py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]">
+                    Guardar temperaturas
+                  </button>
+                </OfflineCookingForm>
+
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  <SteamActionPanel
+                    cookingId={id}
+                    intervals={cooking.steamIntervals}
+                    currentSteam={currentSteam}
+                    activeBoilers={activeBoilers}
+                  />
+
+                  <HoneyActionForm
+                    action={addSimpleEvent}
+                    cookingId={id}
+                    type={
+                      CookingEventType.MIELES_AMARGAS
+                    }
+                    icon={FlameIcon}
+                    label="Extraer mieles amargas"
+                  />
+
+                  <SweetHoneyRecoveryForm cookingId={id} lotId={cooking.lotId} action={createSweetHoneyRecoveryAction.bind(null, id)} />
+
+                  <SimpleActionForm
+                    action={addSimpleEvent}
+                    cookingId={id}
+                    type={
+                      CookingEventType.OBSERVACION
+                    }
+                    icon={ClipboardIcon}
+                    label="Guardar observación"
+                    notesRequired
+                  />
+                </div>
+
+                <div className="border-t border-outline-variant pt-6">
+                  <p className="mb-3 text-sm text-on-surface-variant">
+                    Finaliza únicamente después de
+                    confirmar los resultados oficiales.
+                  </p>
+
+                  <FinishCookingModal
+                    lotCode={cooking.lot.code}
+                    equipmentName={
+                      cooking.equipment.name
+                    }
+                    initialAgaveKg={
+                      cooking.agaveKg
+                    }
+                    currentAgaveKg={
+                      cooking.agaveKg
+                    }
+                    sweetHoneyLiters={
+                      sweetHoneyLiters
+                    }
+                    sweetHoneyBrix={
+                      lastSweetHoneyBrix
+                    }
+                    bitterHoneyLiters={
+                      bitterHoneyLiters
+                    }
+                    eventsCount={
+                      cooking.events.length
+                    }
+                    action={finishCooking}
+                  />
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+            {hasFinished && (
+          <section className="rounded-2xl border border-outline-variant bg-surface-container p-8 text-center">
+            <h2 className="text-xl font-bold text-on-surface">
+              Esta etapa ya está cerrada
+            </h2>
+
+            <p className="mx-auto mt-2 max-w-md text-sm text-on-surface-variant">
+              Ya no se pueden registrar más datos. Consulta lo capturado en las
+              pestañas Home, Gráficas y Bitácora.
+            </p>
+          </section>
+        )}
+    </>
+  );
+
+  const graficasTabContent = (
+    <CookingCharts events={cooking.events} steamIntervals={cooking.steamIntervals} />
+  );
+
+  const bitacoraTabContent = (
+    <>
+        <section className="rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold">
+              Bitácora de cocción
+            </h2>
+
+            <p className="mt-2 text-sm text-on-surface-variant">
+              Historial completo del proceso, del
+              registro más reciente al más antiguo.
+            </p>
+          </div>
+
+          {cooking.events.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-outline-variant p-8 text-center">
+              <p className="text-on-surface-variant">
+                Aún no hay eventos registrados.
+              </p>
+            </div>
+          ) : (
+            <div className="relative space-y-5 before:absolute before:bottom-3 before:left-[11px] before:top-3 before:w-px before:bg-surface-container-highest">
+              {[...cooking.events]
+                .reverse()
+                .map((event, index) => (
+                  <article
+                    key={event.id}
+                    className="relative pl-9"
+                  >
+                    <div
+                      className={`absolute left-0 top-6 h-6 w-6 rounded-full border-4 border-outline-variant ${
+                        index === 0
+                          ? "bg-primary"
+                          : "bg-surface-container-highest"
+                      }`}
+                    />
+
+                    <div className="rounded-2xl border border-outline-variant bg-surface-container-high p-5">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="font-semibold text-primary">
+                          {getCookingEventLabel(
+                            event.type
+                          )}
+                        </p>
+
+                        <p className="text-sm text-on-surface-variant">
+                          {formatDateTime(
+                            event.createdAt
+                          )}
+                        </p>
+                      </div>
+
+                      {event.type ===
+                        CookingEventType.TEMPERATURA && (
+                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          <Mini
+                            title="Superior"
+                            value={`${formatNumber(
+                              event.temperatureTop
+                            )} °C`}
+                          />
+
+                          <Mini
+                            title="Media"
+                            value={`${formatNumber(
+                              event.temperatureMiddle
+                            )} °C`}
+                          />
+
+                          <Mini
+                            title="Inferior"
+                            value={`${formatNumber(
+                              event.temperatureBottom
+                            )} °C`}
+                          />
+                        </div>
+                      )}
+
+                      {(event.liters !== null ||
+                        event.temperature !== null ||
+                        event.ph !== null ||
+                        event.brix !== null) && (
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          {event.liters !== null && (
+                            <Mini
+                              title="Litros"
+                              value={`${formatNumber(
+                                event.liters
+                              )} L`}
+                            />
+                          )}
+
+                          {event.temperature !==
+                            null && (
+                            <Mini
+                              title="Temperatura"
+                              value={`${formatNumber(
+                                event.temperature
+                              )} °C`}
+                            />
+                          )}
+
+                          {event.ph !== null && (
+                            <Mini
+                              title="pH"
+                              value={formatNumber(
+                                event.ph
+                              )}
+                            />
+                          )}
+
+                          {event.brix !== null && (
+                            <Mini
+                              title="°Brix"
+                              value={formatNumber(
+                                event.brix
+                              )}
+                            />
+                          )}
+                        </div>
+                      )}
+
+                      {event.notes && (
+                        <div className="mt-4 rounded-xl bg-surface-container p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-outline">
+                            Observaciones
+                          </p>
+
+                          <p className="mt-2 whitespace-pre-wrap text-on-surface-variant">
+                            {event.notes}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </article>
+                ))}
+            </div>
+          )}
+        </section>
+    </>
+  );
+
+  const tabs = [
+    {
+      key: "home",
+      label: "Home",
+      icon: <HomeIcon className="h-4 w-4" />,
+      content: homeTabContent,
+    },
+    {
+      key: "registrar",
+      label: "Registrar datos",
+      icon: <ClipboardIcon className="h-4 w-4" />,
+      content: registrarTabContent,
+    },
+    {
+      key: "graficas",
+      label: "Gráficas",
+      icon: <ChartLineIcon className="h-4 w-4" />,
+      content: graficasTabContent,
+    },
+    {
+      key: "bitacora",
+      label: "Bitácora",
+      icon: <BookIcon className="h-4 w-4" />,
+      content: bitacoraTabContent,
+    },
+  ];
+
+  return (
+    <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-10">
+      <Suspense fallback={null}>
+        <SuccessToast
+          params={{
+            created: "Cocción iniciada exitosamente",
+            saved: "Datos guardados exitosamente",
+            finished: "Cocción cerrada exitosamente",
+          }}
+        />
+      </Suspense>
+
+      <div className="mx-auto max-w-6xl">
+        <header className="mt-8">
+          <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">
+            MAESTRO
+          </p>
+
+          <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold sm:text-4xl">
+                Cocción {cooking.lot.code}
+              </h1>
+
+              <p className="mt-2 text-sm text-on-surface-variant">
+                Horno {cooking.equipment.name} · Inicio{" "}
+                {formatDateTime(cooking.startedAt)}
+              </p>
+            </div>
+
+            <CookingStatusBadge
+              status={cookingHealth}
+            />
+          </div>
+        </header>
+
+        <div className="caldera-cocimiento-tabs mt-8">
+          <PageTabs tabs={tabs} />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function CookingClosureAct({
+  closureCode,
+  lotCode,
+  equipmentName,
+  initialAgaveKg,
+  finalAgaveKg,
+  finalSweetHoneyLiters,
+  finalSweetHoneyBrix,
+  finalNotes,
+  bitterHoneyLiters,
+  startedAt,
+  finishedAt,
+  finishedByName,
+  eventsCount,
+}: {
+  closureCode: string | null;
+  lotCode: string;
+  equipmentName: string;
+  initialAgaveKg: number;
+  finalAgaveKg: number | null;
+  finalSweetHoneyLiters: number | null;
+  finalSweetHoneyBrix: number | null;
+  finalNotes: string | null;
+  bitterHoneyLiters: number;
+  startedAt: Date;
+  finishedAt: Date | null;
+  finishedByName: string | undefined;
+  eventsCount: number;
+}) {
+  const duration =
+    finishedAt !== null
+      ? formatDuration(startedAt, finishedAt)
+      : "-";
+
+  return (
+    <section className="mt-8 overflow-hidden rounded-3xl border border-tertiary-fixed-dim/30 bg-surface-container">
+      <header className="border-b border-tertiary-fixed-dim/20 bg-tertiary-fixed-dim/10 p-6 sm:p-8">
+        <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-tertiary-fixed-dim">
+          Acta de cierre
+        </p>
+
+        <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-on-surface sm:text-3xl">
+              Cocción terminada
+            </h2>
+
+            <p className="mt-2 text-sm text-on-surface-variant">
+              El horno quedó cerrado y bloqueado para
+              nuevos registros.
+            </p>
+          </div>
+
+          <div className="w-fit rounded-full border border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 px-4 py-2 font-mono text-sm font-bold text-tertiary-fixed-dim">
+            {closureCode ?? "Acta sin folio"}
+          </div>
+        </div>
+      </header>
+
+      <div className="p-6 sm:p-8">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <ActValue
+            title="Lote"
+            value={lotCode}
+          />
+
+          <ActValue
+            title="Horno"
+            value={equipmentName}
+          />
+
+          <ActValue
+            title="Eventos"
+            value={eventsCount}
+          />
+
+          <ActValue
+            title="Mieles amargas"
+            value={`${formatNumber(
+              bitterHoneyLiters
+            )} L`}
+          />
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <ActValue
+            title="Carga inicial"
+            value={`${formatNumber(
+              initialAgaveKg,
+              0
+            )} kg`}
+          />
+
+          <ActValue
+            title="Agave cocido final"
+            value={
+              finalAgaveKg !== null
+                ? `${formatNumber(
+                    finalAgaveKg,
+                    0
+                  )} kg`
+                : "-"
+            }
+            highlight
+          />
+
+          <ActValue
+            title="Mieles dulces"
+            value={
+              finalSweetHoneyLiters !== null
+                ? `${formatNumber(
+                    finalSweetHoneyLiters
+                  )} L`
+                : "-"
+            }
+            highlight
+          />
+
+          <ActValue
+            title="°Brix final"
+            value={formatNumber(
+              finalSweetHoneyBrix
+            )}
+            highlight
+          />
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <ActValue
+            title="Fecha de cierre"
+            value={
+              finishedAt
+                ? formatDateTime(finishedAt)
+                : "-"
+            }
+          />
+
+          <ActValue
+            title="Duración"
+            value={duration}
+          />
+
+          <ActValue
+            title="Cerrado por"
+            value={
+              finishedByName ??
+              "Usuario no identificado"
+            }
+          />
+        </div>
+
+        {finalNotes && (
+          <div className="mt-4 rounded-2xl border border-outline-variant bg-background p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-outline">
+              Observaciones finales
+            </p>
+
+            <p className="mt-2 whitespace-pre-wrap text-on-surface-variant">
+              {finalNotes}
+            </p>
+          </div>
+        )}
+
+        <div className="mt-6 rounded-2xl border border-outline-variant bg-surface-container-high/60 p-5">
+          <p className="font-bold text-primary">
+            Siguiente etapa: Molienda
+          </p>
+
+          <p className="mt-1 text-sm text-on-surface-variant">
+            La cocción quedó documentada y disponible
+            para continuar con la descarga y molienda
+            del agave.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Kpi({
+  title,
+  value,
+  detail,
+  highlight = false,
+}: {
+  title: string;
+  value: string | number;
+  detail?: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+      <p className="text-sm text-on-surface-variant">
+        {title}
+      </p>
+
+      <p
+        className={`mt-2 text-2xl font-bold ${
+          highlight
+            ? "text-tertiary-fixed-dim"
+            : "text-on-surface"
+        }`}
+      >
+        {value}
+      </p>
+
+      {detail && (
+        <p className="mt-2 text-xs text-outline">
+          {detail}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TemperatureCard({
+  title,
+  value,
+}: {
+  title: string;
+  value: number | null;
+}) {
+  const numericValue =
+    value !== null ? Number(value) : null;
+
+  const status =
+    numericValue === null
+      ? "Sin lectura"
+      : numericValue >= 90
+        ? "En rango"
+        : "Calentando";
+
+  return (
+    <div className="rounded-2xl border border-outline-variant bg-surface-container-high p-5">
+      <p className="text-sm text-on-surface-variant">
+        {title}
+      </p>
+
+      <p className="mt-2 text-3xl font-bold">
+        {numericValue !== null
+          ? `${formatNumber(numericValue)} °C`
+          : "-"}
+      </p>
+
+      <p
+        className={`mt-2 text-xs font-semibold ${
+          numericValue !== null &&
+          numericValue >= 90
+            ? "text-tertiary-fixed-dim"
+            : "text-secondary"
+        }`}
+      >
+        {status}
+      </p>
+    </div>
+  );
+}
+
+function ProcessIndicator({
+  title,
+  value,
+  warning,
+}: {
+  title: string;
+  value: string;
+  warning: boolean;
+}) {
+  return (
+    <div className="border-outline-variant p-5 sm:border-r sm:last:border-r-0">
+      <p className="text-xs uppercase tracking-wider text-outline">
+        {title}
+      </p>
+
+      <p
+        className={`mt-1 font-bold ${
+          warning
+            ? "text-secondary"
+            : "text-tertiary-fixed-dim"
+        }`}
+      >
+        {warning ? "● " : "✓ "}
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function CookingStatusBadge({
+  status,
+}: {
+  status:
+    | "ATENCION"
+    | "CALENTANDO"
+    | "LISTA"
+    | "TERMINADA";
+}) {
+  const styles = {
+    ATENCION:
+      "border-error/40 bg-error/10 text-error",
+    CALENTANDO:
+      "border-secondary/40 bg-secondary/10 text-secondary",
+    LISTA:
+      "border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 text-tertiary-fixed-dim",
+    TERMINADA:
+      "border-on-surface-variant/40 bg-on-surface-variant/10 text-on-surface-variant",
+  };
+
+  const dotStyles: Record<
+    | "ATENCION"
+    | "CALENTANDO"
+    | "LISTA"
+    | "TERMINADA",
+    string
+  > = {
+    ATENCION: "bg-error",
+    CALENTANDO: "bg-secondary",
+    LISTA: "bg-tertiary-fixed-dim",
+    TERMINADA: "bg-on-surface-variant",
+  };
+
+  return (
+    <div
+      className={`flex w-fit items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold ${styles[status]}`}
+    >
+      <span
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotStyles[status]}`}
+      />
+
+      {status === "ATENCION" &&
+        "Requiere atención"}
+
+      {status === "CALENTANDO" &&
+        "Cocción en proceso"}
+
+      {status === "LISTA" &&
+        "Temperatura alcanzada"}
+
+      {status === "TERMINADA" &&
+        "Cocción terminada"}
+    </div>
+  );
+}
+
+function SimpleActionForm({
+  action,
+  cookingId,
+  type,
+  icon: Icon,
+  label,
+  notesRequired = false,
+}: {
+  action: (formData: FormData) => Promise<void>;
+  cookingId: string;
+  type: CookingEventType;
+  icon: ComponentType<IconProps>;
+  label: string;
+  notesRequired?: boolean;
+}) {
+  return (
+    <OfflineCookingForm
+      cookingId={cookingId}
+      fallbackAction={action}
+      className="rounded-2xl border border-outline-variant bg-surface-container-high p-4"
+    >
+      <input
+        type="hidden"
+        name="type"
+        value={type}
+      />
+
+      <input
+        name="notes"
+        required={notesRequired}
+        placeholder={
+          notesRequired
+            ? "Escribe la observación"
+            : "Observación opcional"
+        }
+        className="mb-3 w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+      />
+
+      <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-surface-container-highest px-5 py-4 font-bold transition duration-150 ease-out hover:scale-[1.04] hover:bg-surface-container-highest active:scale-[0.97]">
+        <Icon className="h-4 w-4" />
+        {label}
+      </button>
+    </OfflineCookingForm>
+  );
+}
+
+function SteamActionPanel({ cookingId, currentSteam, activeBoilers }: { cookingId: string; intervals: Array<{ id: string; state: string }>; currentSteam: { id: string; state: string; boilerSessionId: string } | null; activeBoilers: Array<{ id: string; equipment: { name: string } }> }) {
+  const starting = startSteamAction.bind(null, cookingId);
+  const changing = changeSteamPressureAction.bind(null, cookingId);
+  const stopping = stopSteamAction.bind(null, cookingId);
+  const injecting = currentSteam?.state === "INYECTANDO";
+  return <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 md:col-span-2 lg:col-span-3"><h3 className="text-lg font-bold">Vapor por intervalo</h3><p className="mt-1 text-sm text-on-surface-variant">Cada cambio conserva hora, unidad original y presión canónica PSI; al refrescar se reconstruye el estado.</p>{!injecting ? <OfflineBoilerForm kind="steam.interval.start" entityField="cookingId" entityId={cookingId} fallbackAction={starting} className="mt-4 grid gap-3 sm:grid-cols-4"><label className="grid gap-1 text-sm font-semibold">Caldera<select name="boilerSessionId" required className="rounded-xl border border-outline-variant bg-surface px-3 py-2">{activeBoilers.map((boiler) => <option key={boiler.id} value={boiler.id}>{boiler.equipment.name}</option>)}</select></label><label className="grid gap-1 text-sm font-semibold">Presión<input name="pressureValue" type="number" min="0" step="0.001" required className="rounded-xl border border-outline-variant bg-surface px-3 py-2" /></label><label className="grid gap-1 text-sm font-semibold">Unidad<select name="pressureUnit" className="rounded-xl border border-outline-variant bg-surface px-3 py-2"><option value="PSI">PSI</option><option value="KG_CM2">kg/cm²</option></select></label><button className="self-end rounded-xl bg-primary px-4 py-2 font-bold text-on-primary">Iniciar inyección</button></OfflineBoilerForm> : <div className="mt-4 grid gap-3 sm:grid-cols-3"><OfflineBoilerForm kind="steam.pressure.create" entityField="cookingId" entityId={cookingId} fallbackAction={changing} className="grid gap-2 sm:col-span-2 sm:grid-cols-3"><input type="hidden" name="boilerSessionId" value={currentSteam.boilerSessionId} /><input type="hidden" name="intervalId" value={currentSteam.id} /><input name="pressureValue" type="number" min="0" step="0.001" required placeholder="Nueva presión" className="rounded-xl border border-outline-variant bg-surface px-3 py-2" /><select name="pressureUnit" className="rounded-xl border border-outline-variant bg-surface px-3 py-2"><option value="PSI">PSI</option><option value="KG_CM2">kg/cm²</option></select><button className="rounded-xl border border-primary px-4 py-2 font-bold text-primary">Registrar cambio</button></OfflineBoilerForm><OfflineBoilerForm kind="steam.interval.stop" entityField="cookingId" entityId={cookingId} fallbackAction={stopping}><button className="w-full rounded-xl bg-surface-container-highest px-4 py-2 font-bold">Detener vapor</button></OfflineBoilerForm></div>}</div>;
+}
+
+function SweetHoneyRecoveryForm({ cookingId, lotId, action }: { cookingId: string; lotId: string; action: (formData: FormData) => Promise<void> }) {
+  return <OfflineBoilerForm kind="sweet-honey.recovery.create" entityField="sourceCookingId" entityId={cookingId} fallbackAction={action} className="rounded-2xl border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/5 p-4"><h3 className="font-bold">Recuperar miel dulce</h3><p className="mt-1 text-xs text-on-surface-variant">Registro independiente; no crea un evento histórico de Cocimiento ni una descarga de Molienda.</p><input type="hidden" name="lotId" value={lotId} /><div className="mt-3 grid gap-3 sm:grid-cols-3"><input name="liters" type="number" min="0.001" step="0.001" required placeholder="Litros" className="rounded-xl border border-outline-variant bg-surface px-3 py-2" /><input name="brix" type="number" min="0" step="0.001" placeholder="°Brix opcional" className="rounded-xl border border-outline-variant bg-surface px-3 py-2" /><button className="rounded-xl bg-primary px-4 py-2 font-bold text-on-primary">Guardar recuperación</button></div></OfflineBoilerForm>;
+}
+
+function HoneyActionForm({
+  action,
+  cookingId,
+  type,
+  icon: Icon,
+  label,
+}: {
+  action: (formData: FormData) => Promise<void>;
+  cookingId: string;
+  type:
+    | typeof CookingEventType.MIELES_AMARGAS
+    | typeof CookingEventType.MIELES_DULCES;
+  icon: ComponentType<IconProps>;
+  label: string;
+}) {
+  return (
+    <OfflineCookingForm
+      cookingId={cookingId}
+      fallbackAction={action}
+      className="rounded-2xl border border-outline-variant bg-surface-container-high p-4"
+    >
+      <input
+        type="hidden"
+        name="type"
+        value={type}
+      />
+
+      <div className="space-y-3">
+        <NumberField
+          name="liters"
+          placeholder="Litros extraídos"
+          suffix="L"
+          step="0.01"
+          min="0"
+        />
+
+        <NumberField
+          name="temperature"
+          placeholder="Temperatura"
+          suffix="°C"
+          step="0.01"
+          min="0"
+        />
+
+        <NumberField
+          name="ph"
+          placeholder="pH"
+          step="0.01"
+          min="0"
+          max="14"
+        />
+
+        <NumberField
+          name="brix"
+          placeholder="°Brix"
+          step="0.01"
+          min="0"
+        />
+
+        <input
+          name="notes"
+          placeholder="Observación opcional"
+          className="w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+        />
+      </div>
+
+      <button className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-surface-container-highest px-5 py-4 font-bold transition duration-150 ease-out hover:scale-[1.04] hover:bg-surface-container-highest active:scale-[0.97]">
+        <Icon className="h-4 w-4" />
+        {label}
+      </button>
+    </OfflineCookingForm>
+  );
+}
+
+function NumberField({
+  name,
+  placeholder,
+  suffix,
+  step,
+  min,
+  max,
+  required = false,
+}: {
+  name: string;
+  placeholder: string;
+  suffix?: string;
+  step: string;
+  min?: string;
+  max?: string;
+  required?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <input
+        name={name}
+        type="number"
+        inputMode="decimal"
+        step={step}
+        min={min}
+        max={max}
+        required={required}
+        placeholder={placeholder}
+        className={`w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary ${
+          suffix ? "pr-14" : ""
+        }`}
+      />
+
+      {suffix && (
+        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-outline">
+          {suffix}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Mini({
+  title,
+  value,
+}: {
+  title: string | number;
+  value: string | number;
+}) {
+  return (
+    <div className="rounded-xl bg-surface-container p-3">
+      <p className="text-xs text-on-surface-variant">
+        {title}
+      </p>
+
+      <p className="mt-1 font-bold">{value}</p>
+    </div>
+  );
+}
+
+function ActValue({
+  title,
+  value,
+  highlight = false,
+}: {
+  title: string;
+  value: string | number;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-outline-variant bg-background p-4">
+      <p className="text-xs uppercase tracking-wider text-outline">
+        {title}
+      </p>
+
+      <p
+        className={`mt-2 font-bold ${
+          highlight
+            ? "text-tertiary-fixed-dim"
+            : "text-on-surface"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+async function createCookingClosureCode(
+  date: Date
+) {
+  const year = Number(formatBusinessDateOnly(date).slice(0, 4));
+  const startOfYear = businessDayStart(`${year}-01-01`);
+  const startOfNextYear = businessDayStart(`${year + 1}-01-01`);
+
+  const closuresThisYear =
+    await prisma.cooking.count({
+      where: {
+        closureCode: {
+          not: null,
+        },
+        finishedAt: {
+          gte: startOfYear,
+          lt: startOfNextYear,
+        },
+      },
+    });
+
+  const consecutive = String(
+    closuresThisYear + 1
+  ).padStart(6, "0");
+
+  return `ACTA-COC-${year}-${consecutive}`;
+}
+
+function isCookingEventType(
+  value: string
+): value is CookingEventType {
+  return Object.values(
+    CookingEventType
+  ).includes(value as CookingEventType);
+}
+
+function parseOptionalNumber(
+  value: FormDataEntryValue | null
+) {
+  if (
+    typeof value !== "string" ||
+    value.trim() === ""
+  ) {
+    return null;
+  }
+
+  const number = Number(value);
+
+  return Number.isFinite(number)
+    ? number
+    : null;
+}
+
+function parseRequiredNumber(
+  value: FormDataEntryValue | null
+) {
+  if (
+    typeof value !== "string" ||
+    value.trim() === ""
+  ) {
+    return null;
+  }
+
+  const number = Number(value);
+
+  return Number.isFinite(number)
+    ? number
+    : null;
+}
+
+function getCookingEventLabel(
+  type: CookingEventType
+) {
+  const labels: Record<
+    CookingEventType,
+    string
+  > = {
+    INICIO_COCCION: "Inicio de cocción",
+    INICIO_VAPOR: "Inicio de vapor",
+    TEMPERATURA: "Temperatura",
+    MIELES_AMARGAS: "Mieles amargas",
+    MIELES_DULCES: "Mieles dulces",
+    BAJAR_VAPOR: "Disminuir vapor",
+    AUMENTAR_VAPOR: "Aumentar vapor",
+    SUSPENDER_VAPOR: "Suspender vapor",
+    FIN_COCCION: "Cierre de cocción",
+    OBSERVACION: "Observación",
+  };
+
+  return labels[type];
+}

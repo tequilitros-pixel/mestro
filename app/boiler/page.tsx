@@ -1,0 +1,12 @@
+import Link from "next/link";
+import { EquipmentType } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { formatBusinessDateTime } from "@/lib/dateTime";
+
+export default async function BoilerPage() {
+  const equipment = await prisma.equipment.findMany({ where: { type: EquipmentType.CALDERA, active: true }, orderBy: { name: "asc" }, include: { boilerSessions: { where: { endedAt: null }, orderBy: { startedAt: "desc" }, take: 1, include: { gasReadings: { orderBy: { occurredAt: "desc" }, take: 1 }, processLinks: { where: { endedAt: null }, include: { lot: { select: { code: true } } } } } } } });
+  return <main className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
+    <header><p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Operación de planta</p><h1 className="mt-2 text-3xl font-bold">Caldera</h1><p className="mt-2 text-on-surface-variant">Sesiones reales, consumidores simultáneos, presión y gas. La Caldera no se reserva por proceso.</p></header>
+    {equipment.length === 0 ? <section className="rounded-2xl border border-dashed border-outline-variant p-8">No hay una Caldera activa. Ejecuta el seed idempotente para crear “Caldera 1”.</section> : <div className="grid gap-4 md:grid-cols-2">{equipment.map((item) => { const session = item.boilerSessions[0]; return <Link key={item.id} href={`/boiler/${item.id}`} className="rounded-2xl border border-outline-variant bg-surface-container p-5 transition hover:border-primary"><div className="flex items-center justify-between"><h2 className="text-xl font-bold">{item.name}</h2><span className={`rounded-full px-3 py-1 text-xs font-bold ${session ? "bg-primary/15 text-primary" : "bg-surface-container-high text-on-surface-variant"}`}>{session ? "Encendida" : "Apagada"}</span></div>{session ? <><p className="mt-3 text-sm text-on-surface-variant">Desde {formatBusinessDateTime(session.startedAt)}</p><p className="mt-2 text-sm">Gas: <strong>{session.gasReadings[0] ? `${Number(session.gasReadings[0].levelPercent)}% (${Number(session.gasReadings[0].levelLiters)} L)` : "sin lectura"}</strong></p><p className="mt-2 text-sm">Consumidores: <strong>{session.processLinks.length}</strong>{session.processLinks.length ? ` · ${session.processLinks.map((link) => link.lot.code).join(", ")}` : ""}</p></> : <p className="mt-3 text-sm text-on-surface-variant">Abrir resumen y registrar encendido.</p>}</Link>; })}</div>}
+  </main>;
+}

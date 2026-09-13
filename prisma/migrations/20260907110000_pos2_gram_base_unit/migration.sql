@@ -1,0 +1,1 @@
+ALTER TYPE "CatalogBaseUnit" ADD VALUE IF NOT EXISTS 'G';

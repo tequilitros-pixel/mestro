@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "plugins": []
+  },
+  "include": [
+    "next-env.d.ts",
+    "lib/domain/**/*.ts",
+    "lib/pos2/**/*.ts",
+    "lib/pos/cancelSale.ts",
+    "lib/pos/v1InventoryGuard.ts",
+    "app/api/pos/sales/route.ts",
+    "app/api/pos/sales/[id]/cancel/route.ts",
+    "components/pos/PosSellClient.tsx",
+    "tests/money.test.ts",
+    "tests/quantity.test.ts",
+    "tests/domainErrors.test.ts",
+    "tests/pos2Foundations.test.ts",
+    "tests/concurrencyModel.test.ts"
+  ],
+  "exclude": ["node_modules", ".next"]
+}

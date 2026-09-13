@@ -1,0 +1,23 @@
+{
+  "name": "Sistema Operativo de Destiladora del Norte",
+  "short_name": "Destiladora del Norte",
+  "description": "Sistema Operativo de Destiladora del Norte",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

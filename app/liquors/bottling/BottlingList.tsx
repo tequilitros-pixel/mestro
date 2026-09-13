@@ -1,0 +1,11 @@
+"use client";
+
+import ProcessTable from "@/components/production/ProcessTable";
+
+export type BottlingCard = { id: string; code: string; status: string; productName: string; productIcon: string | null; recipeName: string; actualLiters: number | null; bottlingsCount: number; latest: { code: string; status: string; bottleSizeMl: number; plannedBottles: number | null; producedBottles: number; rejectedBottles: number; startedAt: string | null; finishedAt: string | null } | null };
+
+const label = (value: string) => value.toLowerCase().replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
+
+export default function BottlingList({ batches }: { batches: BottlingCard[] }) {
+  return <ProcessTable emptyLabel="No hay lotes que coincidan con los filtros." columns={[{ key: "code", label: "Código de embotellado", width: "14%" }, { key: "lot", label: "Lote", width: "12%" }, { key: "product", label: "Producto", width: "15%" }, { key: "presentation", label: "Presentación", width: "12%" }, { key: "produced", label: "Producidas", width: "11%" }, { key: "rejected", label: "Rechazadas", width: "11%" }, { key: "liters", label: "Litros usados", width: "12%" }, { key: "startedAt", label: "Fecha", width: "13%" }, { key: "status", label: "Estado", width: "10%" }]} filters={[{ key: "product", label: "Producto", options: [...new Set(batches.map((item) => item.productName))] }, { key: "presentation", label: "Presentación", options: [...new Set(batches.flatMap((item) => item.latest ? [`${item.latest.bottleSizeMl} ml`] : []))] }]} rows={batches.map((item) => { const latest = item.latest; const completed = item.status === "TERMINADO"; return { id: item.id, href: `/liquors/batches/${item.id}/bottling`, code: latest?.code ?? "—", search: `${latest?.code ?? ""} ${item.code} ${item.productName} ${item.recipeName}`, startedAt: latest?.startedAt ?? latest?.finishedAt ?? "1970-01-01T00:00:00.000Z", status: label(latest?.status ?? item.status), finished: completed, values: { lot: item.code, product: item.productName, presentation: latest ? `${latest.bottleSizeMl} ml` : "—", produced: String(latest?.producedBottles ?? 0), rejected: String(latest?.rejectedBottles ?? 0), liters: item.actualLiters === null ? "—" : `${item.actualLiters} L` }, filters: { product: item.productName, presentation: latest ? `${latest.bottleSizeMl} ml` : "—" } }; })} />;
+}

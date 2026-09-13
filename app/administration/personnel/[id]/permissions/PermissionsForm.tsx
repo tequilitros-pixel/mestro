@@ -1,0 +1,224 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import {
+  setModulePermissionAction,
+  setGroupPermissionAction,
+} from "@/app/actions/permissions";
+import {
+  PERMISSION_GROUPS,
+  isConfigurablePermissionKey,
+} from "@/lib/permission-modules";
+import { ClockIcon, CrownIcon, LockIcon } from "@/components/ui/icons";
+import { useToast } from "@/components/ui/Toast";
+
+export default function PermissionsForm({
+  userId,
+  userName,
+  userRole,
+  initialKeys,
+}: {
+  userId: string;
+  userName: string;
+  userRole: string;
+  initialKeys: string[];
+}) {
+  const [granted, setGranted] = useState<Set<string>>(
+    new Set(initialKeys.filter(isConfigurablePermissionKey)),
+  );
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const { showToast } = useToast();
+
+  const isAdmin = userRole === "ADMIN";
+
+  const totalModules = useMemo(
+    () => PERMISSION_GROUPS.reduce((sum, g) => sum + g.modules.length, 0),
+    []
+  );
+
+  async function toggleOne(key: string) {
+    const willGrant = !granted.has(key);
+    setSavingKey(key);
+
+    setGranted((prev) => {
+      const next = new Set(prev);
+      if (willGrant) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+
+    const result = await setModulePermissionAction(userId, key, willGrant);
+    setSavingKey(null);
+
+    if (!result.success) {
+      setGranted((prev) => {
+        const next = new Set(prev);
+        if (willGrant) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      showToast(result.error ?? "No se pudo guardar el permiso.", "error");
+      return;
+    }
+
+    showToast(willGrant ? "Permiso concedido correctamente." : "Permiso quitado correctamente.");
+  }
+
+  async function toggleGroup(keys: string[], willGrant: boolean) {
+    setSavingKey(keys[0]);
+
+    setGranted((prev) => {
+      const next = new Set(prev);
+      keys.forEach((k) => (willGrant ? next.add(k) : next.delete(k)));
+      return next;
+    });
+
+    const result = await setGroupPermissionAction(userId, keys, willGrant);
+    setSavingKey(null);
+
+    if (!result.success) {
+      setGranted((prev) => {
+        const next = new Set(prev);
+        keys.forEach((k) => (willGrant ? next.delete(k) : next.add(k)));
+        return next;
+      });
+      showToast(result.error ?? "No se pudo guardar el permiso.", "error");
+      return;
+    }
+
+    showToast(willGrant ? "Permisos concedidos correctamente." : "Permisos quitados correctamente.");
+  }
+
+  if (isAdmin) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 p-4">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-tertiary-fixed-dim/15">
+          <CrownIcon className="h-6 w-6" />
+        </span>
+        <p className="text-tertiary-fixed-dim">
+          <span className="font-bold">{userName}</span> es Administrador y
+          tiene acceso total a todos los módulos automáticamente. No
+          necesita permisos individuales.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-xl border border-outline-variant bg-surface-container px-4 py-3">
+        <p className="text-sm text-on-surface-variant">Acceso concedido</p>
+        <p className="text-lg font-bold text-on-surface">
+          {granted.size}
+          <span className="text-on-surface-variant"> / {totalModules}</span>
+        </p>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="flex gap-3 rounded-2xl border border-outline-variant bg-surface-container p-4">
+          <ClockIcon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+          <div>
+            <p className="text-sm font-bold text-on-surface">Acceso personal permanente</p>
+            <p className="mt-1 text-xs leading-5 text-on-surface-variant">
+              Checador, calendario propio y perfil están disponibles para todos los usuarios activos.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-3 rounded-2xl border border-outline-variant bg-surface-container p-4">
+          <LockIcon className="mt-0.5 h-5 w-5 shrink-0 text-secondary" />
+          <div>
+            <p className="text-sm font-bold text-on-surface">Exclusivo de administradores</p>
+            <p className="mt-1 text-xs leading-5 text-on-surface-variant">
+              Personal, catálogo del Punto de Venta, programación, nómina y geozonas no se pueden delegar.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {PERMISSION_GROUPS.map((group) => {
+        const groupKeys = group.modules.map((m) => m.key);
+        const grantedCount = groupKeys.filter((k) => granted.has(k)).length;
+        const allGranted = grantedCount === groupKeys.length;
+        const someGranted = grantedCount > 0 && !allGranted;
+
+        return (
+          <div
+            key={group.group}
+            className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-outline-variant bg-surface-container-high px-4 py-3">
+              <div className="flex items-center gap-3">
+                <h3 className="font-bold text-on-surface">{group.group}</h3>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                    allGranted
+                      ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
+                      : someGranted
+                        ? "bg-secondary/15 text-secondary"
+                        : "bg-surface-container-highest text-outline"
+                  }`}
+                >
+                  {grantedCount}/{groupKeys.length}
+                </span>
+              </div>
+
+              <button
+                onClick={() => toggleGroup(groupKeys, !allGranted)}
+                className="text-xs font-semibold text-on-surface-variant transition hover:text-primary"
+              >
+                {allGranted ? "Quitar todos" : "Marcar todos"}
+              </button>
+            </div>
+
+            <div className="grid gap-2 p-4 sm:grid-cols-2">
+              {group.modules.map((mod) => {
+                const isChecked = granted.has(mod.key);
+                const isSaving = savingKey === mod.key;
+
+                return (
+                  <button
+                    key={mod.key}
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => toggleOne(mod.key)}
+                    className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition disabled:opacity-60 ${
+                      isChecked
+                        ? "border-primary/30 bg-primary/5"
+                        : "border-outline-variant bg-background hover:border-outline"
+                    }`}
+                  >
+                    <span
+                      className={`text-sm font-medium ${
+                        isChecked ? "text-on-surface" : "text-on-surface-variant"
+                      }`}
+                    >
+                      {mod.label}
+                    </span>
+
+                    <Switch checked={isChecked} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Switch({ checked }: { checked: boolean }) {
+  return (
+    <span
+      className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition ${
+        checked ? "bg-primary" : "bg-surface-container-highest"
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 h-4 w-4 transform rounded-full shadow transition-transform ${
+          checked ? "translate-x-4 bg-on-primary" : "translate-x-0 bg-white"
+        }`}
+      />
+    </span>
+  );
+}
