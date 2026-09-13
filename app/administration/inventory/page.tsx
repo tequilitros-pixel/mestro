@@ -30,7 +30,7 @@ const sections = [
   },
   {
     title: "Inventario de sucursales",
-    description: "Stock por sucursal, entradas, traspasos y conteos semanales.",
+    description: "Stock por sucursal, entradas, traspasos y conteos semanales o mensuales.",
     href: "/administration/inventory/sucursales",
     icon: <StoreIcon className="h-6 w-6 text-on-surface-variant" />,
   },

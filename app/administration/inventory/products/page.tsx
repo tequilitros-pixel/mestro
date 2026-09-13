@@ -18,6 +18,7 @@ export default async function InventoryProductsPage() {
     unit: p.unit,
     unitCost: p.unitCost !== null ? Number(p.unitCost) : null,
     itemType: p.itemType,
+    countFrequency: p.countFrequency,
     isActive: p.isActive,
     archivedAt: p.archivedAt?.toISOString() ?? null,
   }));

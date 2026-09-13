@@ -11,6 +11,11 @@ import {
   normalizeInventoryCountCapture,
 } from "@/lib/inventory/countCapture";
 import type { InventoryCaptureUnit } from "@/lib/inventory/units";
+import {
+  isInventoryCountType,
+  isProductIncludedInInventoryCount,
+  inventoryCountTypeLabel,
+} from "@/lib/inventory/countScope";
 
 const INVENTORY_COUNTS_PERMISSION = "/administration/inventory/branch-counts";
 
@@ -36,9 +41,13 @@ export async function createInventoryCountAction(
   try {
     const branchId = formData.get("branchId")?.toString() ?? "";
     const countDateRaw = formData.get("countDate")?.toString() ?? "";
+    const countTypeRaw = formData.get("countType")?.toString() ?? "WEEKLY";
 
     if (!branchId) {
       return { success: false, error: "Selecciona una sucursal." };
+    }
+    if (!isInventoryCountType(countTypeRaw)) {
+      return { success: false, error: "Selecciona un tipo de conteo válido." };
     }
     await authorizeCountBranch(branchId);
 
@@ -54,7 +63,7 @@ export async function createInventoryCountAction(
     }
 
     const openCount = await prisma.inventoryCount.findFirst({
-      where: { branchId, status: "BORRADOR" },
+      where: { branchId, status: "BORRADOR", countType: countTypeRaw },
       select: { id: true },
     });
 
@@ -66,21 +75,28 @@ export async function createInventoryCountAction(
     }
 
     const previousCount = await prisma.inventoryCount.findFirst({
-      where: { branchId, status: "CERRADO" },
+      where: { branchId, status: "CERRADO", countType: countTypeRaw },
       orderBy: { countDate: "desc" },
       include: { items: true },
     });
 
-    const products = await prisma.inventoryProduct.findMany({
-      where: { isActive: true, archivedAt: null, trackStock: true },
+    const products = (await prisma.inventoryProduct.findMany({
+      where: {
+        isActive: true,
+        archivedAt: null,
+        trackStock: true,
+        ...(countTypeRaw === "WEEKLY" ? { countFrequency: "WEEKLY" } : {}),
+      },
       orderBy: { name: "asc" },
-    });
+    })).filter((product) =>
+      isProductIncludedInInventoryCount(product, countTypeRaw),
+    );
 
     const code = `CNT-${Date.now()}`;
 
     const count = await prisma.$transaction(async (tx) => {
       const created = await tx.inventoryCount.create({
-        data: { code, branchId, countDate, status: "BORRADOR" },
+        data: { code, branchId, countDate, countType: countTypeRaw, status: "BORRADOR" },
         select: { id: true },
       });
 
@@ -105,7 +121,11 @@ export async function createInventoryCountAction(
 
     revalidatePath("/administration/inventory/branch-counts");
 
-    return { success: true, message: "Conteo creado.", id: count.id };
+    return {
+      success: true,
+      message: `${inventoryCountTypeLabel(countTypeRaw)} creado.`,
+      id: count.id,
+    };
   } catch (error) {
     console.error("Error creating inventory count:", error);
     return { success: false, error: "No fue posible crear el conteo." };

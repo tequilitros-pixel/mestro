@@ -71,8 +71,14 @@ export async function reconcileWeeklyCountCutover(
           sourceId: input.countId,
           actorId: input.actorId,
           operationId: input.operationId,
-          reasonCode: "WEEKLY_PHYSICAL_COUNT_CUTOVER",
-          metadata: { countId: input.countId, authoritative: true },
+          reasonCode: count.countType === "MONTHLY"
+            ? "MONTHLY_PHYSICAL_COUNT_CUTOVER"
+            : "WEEKLY_PHYSICAL_COUNT_CUTOVER",
+          metadata: {
+            countId: input.countId,
+            countType: count.countType,
+            authoritative: true,
+          },
         },
       });
       movementId = movement.id;
@@ -136,6 +142,7 @@ export async function reconcileWeeklyCountCutover(
     operationId: input.operationId,
     metadata: {
       countId: input.countId,
+      countType: count.countType,
       closedAt: closedAt.toISOString(),
       reconciled,
     },

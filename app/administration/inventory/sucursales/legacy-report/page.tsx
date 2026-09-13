@@ -77,7 +77,7 @@ export default async function LegacyInventoryReportPage() {
 
   const branchIds = branches.map((branch) => branch.id);
   const productIds = products.map((product) => product.id);
-  const [matrix, balances, entries, latestCounts] = await Promise.all([
+  const [matrix, balances, entries, closedCounts] = await Promise.all([
     computeStockMatrix(productIds, allowedBranchIds),
     prisma.inventoryBalance.findMany({
       where: {
@@ -100,16 +100,23 @@ export default async function LegacyInventoryReportPage() {
         entryDate: true,
       },
     }),
-    Promise.all(branchIds.map((branchId) => prisma.inventoryCount.findFirst({
-      where: { branchId, status: "CERRADO" },
-      orderBy: { countDate: "desc" },
+    prisma.inventoryCount.findMany({
+      where: {
+        branchId: { in: branchIds },
+        status: "CERRADO",
+        items: { some: { productId: { in: productIds } } },
+      },
+      orderBy: [{ countDate: "desc" }, { id: "desc" }],
       select: {
         id: true,
         branchId: true,
         countDate: true,
-        items: { select: { productId: true } },
+        items: {
+          where: { productId: { in: productIds } },
+          select: { productId: true },
+        },
       },
-    }))),
+    }),
   ]);
 
   const balanceKeys = new Set(balances.map((balance) => `${balance.branchId}:${balance.inventoryProductId}`));
@@ -120,17 +127,22 @@ export default async function LegacyInventoryReportPage() {
     current.push(entry);
     entriesByKey.set(key, current);
   }
-  const lastCountByBranch = new Map(latestCounts.filter(Boolean).map((count) => [count!.branchId, count!]));
+  const latestCountByProduct = new Map<string, (typeof closedCounts)[number]>();
+  for (const count of closedCounts) {
+    for (const item of count.items) {
+      const key = `${count.branchId}:${item.productId}`;
+      if (!latestCountByProduct.has(key)) latestCountByProduct.set(key, count);
+    }
+  }
   const rows: ReportRow[] = [];
 
   for (const branch of branches) {
-    const count = lastCountByBranch.get(branch.id);
-    const countProductIds = new Set(count?.items.map((item) => item.productId) ?? []);
     for (const product of products as ReportProduct[]) {
       const key = `${branch.id}:${product.id}`;
+      const count = latestCountByProduct.get(key);
       const productEntries = entriesByKey.get(key) ?? [];
       const hasV2Balance = balanceKeys.has(key);
-      const hasLegacyEvidence = countProductIds.has(product.id) || productEntries.length > 0;
+      const hasLegacyEvidence = Boolean(count) || productEntries.length > 0;
       const config = {
         productName: product.name,
         unit: product.unit,

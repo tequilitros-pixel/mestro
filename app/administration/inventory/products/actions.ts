@@ -1,12 +1,18 @@
 "use server";
 
-import { InventoryContentUnit, InventoryHandlingUnit, InventoryItemType } from "@prisma/client";
+import {
+  InventoryContentUnit,
+  InventoryCountFrequency,
+  InventoryHandlingUnit,
+  InventoryItemType,
+} from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { PRODUCT_CATEGORIES } from "./categories";
 import { requireAdminAction } from "@/lib/auth";
 import { appendAuditEvent } from "@/lib/pos2/audit";
 import { computeStockMatrix } from "../lib/stock";
+import { isInventoryCountFrequency } from "@/lib/inventory/countScope";
 
 export type CreateInventoryProductResult =
   | {
@@ -25,6 +31,11 @@ export type ArchiveInventoryProductResult =
 
 function readBoolean(formData: FormData, field: string) {
   return formData.get(field) === "on";
+}
+
+function readCountFrequency(formData: FormData): InventoryCountFrequency | null {
+  const value = formData.get("countFrequency")?.toString() ?? "UNCLASSIFIED";
+  return isInventoryCountFrequency(value) ? value : null;
 }
 
 function readOptionalNumber(value: FormDataEntryValue | null) {
@@ -61,6 +72,7 @@ export async function createInventoryProductAction(
     const category = formData.get("category")?.toString().trim() ?? "";
     const unit = formData.get("unit")?.toString().trim() ?? "";
     const itemTypeValue = formData.get("itemType")?.toString() ?? "";
+    const countFrequency = readCountFrequency(formData);
 
     const unitCost = readOptionalNumber(formData.get("unitCost"));
     const minimumStock =
@@ -92,6 +104,13 @@ export async function createInventoryProductAction(
       return {
         success: false,
         error: "Selecciona una unidad de medida.",
+      };
+    }
+
+    if (!countFrequency) {
+      return {
+        success: false,
+        error: "Selecciona un alcance de conteo válido.",
       };
     }
 
@@ -147,6 +166,7 @@ export async function createInventoryProductAction(
           unitCost,
           minimumStock,
           itemType: itemTypeValue as InventoryItemType,
+          countFrequency,
           trackStock: readBoolean(formData, "trackStock"),
           trackBatch: readBoolean(formData, "trackBatch"),
           trackExpiration: readBoolean(formData, "trackExpiration"),
@@ -363,6 +383,7 @@ export async function updateInventoryProductAction(
     const category = formData.get("category")?.toString().trim() ?? "";
     const unit = formData.get("unit")?.toString().trim() ?? "";
     const itemTypeValue = formData.get("itemType")?.toString() ?? "";
+    const countFrequency = readCountFrequency(formData);
     const unitCost = readOptionalNumber(formData.get("unitCost"));
     const minimumStock = readOptionalNumber(formData.get("minimumStock")) ?? 0;
     const presentation = readPresentation(formData, unit);
@@ -377,6 +398,13 @@ export async function updateInventoryProductAction(
 
     if (!unit) {
       return { success: false, error: "Selecciona una unidad de medida." };
+    }
+
+    if (!countFrequency) {
+      return {
+        success: false,
+        error: "Selecciona un alcance de conteo válido.",
+      };
     }
 
     if (!Object.values(InventoryItemType).includes(itemTypeValue as InventoryItemType)) {
@@ -402,6 +430,7 @@ export async function updateInventoryProductAction(
         unitCost,
         minimumStock,
         itemType: itemTypeValue as InventoryItemType,
+        countFrequency,
         trackStock: readBoolean(formData, "trackStock"),
         trackBatch: readBoolean(formData, "trackBatch"),
         trackExpiration: readBoolean(formData, "trackExpiration"),

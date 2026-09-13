@@ -157,7 +157,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       },
       {
         key: "/administration/inventory/branch-counts",
-        label: "Conteo semanal",
+        label: "Conteos de inventario",
       },
     ],
   },

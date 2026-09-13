@@ -465,7 +465,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
         },
         {
           href: "/administration/inventory/branch-counts",
-          label: "Conteos semanales",
+          label: "Conteos de inventario",
           icon: ListChecksIcon,
         },
       ],

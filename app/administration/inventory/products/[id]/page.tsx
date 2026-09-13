@@ -42,6 +42,7 @@ export default async function EditProductPage({
             category: product.category,
             unit: product.unit,
             itemType: product.itemType,
+            countFrequency: product.countFrequency,
             unitCost: product.unitCost !== null ? Number(product.unitCost) : null,
             minimumStock: Number(product.minimumStock),
             trackStock: product.trackStock,
@@ -62,6 +63,7 @@ export default async function EditProductPage({
             <div><dt className="text-on-surface-variant">Categoría</dt><dd>{product.category}</dd></div>
             <div><dt className="text-on-surface-variant">Unidad comercial</dt><dd>{product.unit}</dd></div>
             <div><dt className="text-on-surface-variant">Tipo</dt><dd>{product.itemType}</dd></div>
+            <div><dt className="text-on-surface-variant">Alcance de conteo</dt><dd>{product.countFrequency === "WEEKLY" ? "Conteo semanal" : product.countFrequency === "MONTHLY_ONLY" ? "Sólo conteo mensual" : "Pendiente de clasificar"}</dd></div>
             <div className="sm:col-span-2"><dt className="text-on-surface-variant">Presentación</dt><dd>{formatCommercialPresentation({ productName: product.name, handlingUnit: product.handlingUnit, contentPerUnit: product.contentPerUnit, contentUnit: product.contentUnit }) ?? "Sin presentación comercial configurada"}</dd></div>
             <div className="sm:col-span-2"><dt className="text-on-surface-variant">Referencia de una unidad base</dt><dd>{formatCommercialQuantity(1, { productName: product.name, trackStock: product.trackStock, itemType: product.itemType, inventoryBaseUnit: product.inventoryBaseUnit, handlingUnit: product.handlingUnit, contentPerUnit: product.contentPerUnit, contentUnit: product.contentUnit, normalizedContentPerUnit: product.normalizedContentPerUnit })}</dd></div>
             <div><dt className="text-on-surface-variant">Estado</dt><dd>{getInventoryProductState(product) === "ARCHIVED" ? "Archivado" : product.isActive ? "Activo" : "Inactivo"}</dd></div>

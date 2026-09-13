@@ -35,8 +35,13 @@ const quickActions = [
     permissionKey: "/administration/inventory/sucursales/traspasos",
   },
   {
-    label: "Nuevo conteo",
-    href: "/administration/inventory/branch-counts/new",
+    label: "Nuevo conteo semanal",
+    href: "/administration/inventory/branch-counts/new?type=WEEKLY",
+    permissionKey: "/administration/inventory/branch-counts",
+  },
+  {
+    label: "Nuevo conteo mensual",
+    href: "/administration/inventory/branch-counts/new?type=MONTHLY",
     permissionKey: "/administration/inventory/branch-counts",
   },
 ];

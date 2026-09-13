@@ -12,7 +12,7 @@ const shortcuts = [
     permissionKey: "/administration/inventory/sucursales/stock",
   },
   {
-    label: "Conteos semanales",
+    label: "Conteos de inventario",
     href: "/administration/inventory/branch-counts",
     permissionKey: "/administration/inventory/branch-counts",
   },
@@ -122,20 +122,21 @@ export default async function AdministrationPage() {
         <section className="rounded-2xl border border-outline-variant bg-surface-container p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold">Conteos semanales</h2>
+              <h2 className="text-lg font-bold">Conteos de inventario</h2>
               <p className="mt-1 text-sm text-on-surface-variant">Últimos conteos por ubicación, fecha y estado.</p>
             </div>
             {canOpen("/administration/inventory/branch-counts") && <Link href="/administration/inventory/branch-counts" className="text-sm font-semibold text-primary hover:underline">Ver historial →</Link>}
           </div>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
-              <thead><tr className="border-b border-outline-variant text-left text-xs text-on-surface-variant"><th className="px-2 py-2">Conteo</th><th className="px-2 py-2">Ubicación</th><th className="px-2 py-2">Fecha</th><th className="px-2 py-2">Estado</th><th className="px-2 py-2">Cierre</th></tr></thead>
+              <thead><tr className="border-b border-outline-variant text-left text-xs text-on-surface-variant"><th className="px-2 py-2">Conteo</th><th className="px-2 py-2">Ubicación</th><th className="px-2 py-2">Tipo</th><th className="px-2 py-2">Fecha</th><th className="px-2 py-2">Estado</th><th className="px-2 py-2">Cierre</th></tr></thead>
               <tbody>
-                {data.weeklyCounts.length === 0 && <tr><td colSpan={5} className="px-2 py-6 text-center text-on-surface-variant">Aún no hay conteos.</td></tr>}
-                {data.weeklyCounts.map((count) => (
+                {data.counts.length === 0 && <tr><td colSpan={6} className="px-2 py-6 text-center text-on-surface-variant">Aún no hay conteos.</td></tr>}
+                {data.counts.map((count) => (
                   <tr key={count.id} className="border-b border-outline-variant last:border-0">
                     <td className="px-2 py-3 font-semibold">{canOpen("/administration/inventory/branch-counts") ? <Link href={`/administration/inventory/branch-counts/${count.id}`} className="hover:underline">{count.code}</Link> : count.code}</td>
                     <td className="px-2 py-3">{count.branchName}</td>
+                    <td className="px-2 py-3">{count.countTypeLabel}</td>
                     <td className="px-2 py-3">{formatBusinessDate(count.countDate)}</td>
                     <td className="px-2 py-3"><span className={count.status === "CERRADO" ? "text-tertiary-fixed-dim" : "font-semibold text-secondary"}>{count.status === "CERRADO" ? "Cerrado" : "Pendiente"}</span></td>
                     <td className="px-2 py-3 text-on-surface-variant">{count.closedAt ? formatBusinessDateTime(count.closedAt) : "—"}</td>

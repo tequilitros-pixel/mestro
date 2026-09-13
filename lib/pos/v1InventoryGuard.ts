@@ -31,15 +31,25 @@ export async function consumePosInventory(
     `;
   }
 
-  const [products, lastCount] = await Promise.all([
+  const [products, closedCounts] = await Promise.all([
     tx.inventoryProduct.findMany({
       where: { id: { in: productIds } },
       select: { id: true, name: true, trackStock: true, inventoryBaseUnit: true, archivedAt: true },
     }),
-    tx.inventoryCount.findFirst({
-      where: { branchId: input.branchId, status: "CERRADO" },
-      orderBy: { countDate: "desc" },
-      include: { items: { where: { productId: { in: productIds } }, select: { productId: true, quantityCounted: true } } },
+    tx.inventoryCount.findMany({
+      where: {
+        branchId: input.branchId,
+        status: "CERRADO",
+        items: { some: { productId: { in: productIds } } },
+      },
+      orderBy: [{ countDate: "desc" }, { id: "desc" }],
+      select: {
+        countDate: true,
+        items: {
+          where: { productId: { in: productIds } },
+          select: { productId: true, quantityCounted: true },
+        },
+      },
     }),
   ]);
   const productById = new Map(products.map((product) => [product.id, product]));
@@ -81,14 +91,36 @@ export async function consumePosInventory(
     return;
   }
 
-  const periodStart = lastCount?.countDate ?? new Date(0);
-  const baseline = new Map((lastCount?.items ?? []).map((item) => [item.productId, item.quantityCounted]));
-  const entries = await tx.inventoryEntry.groupBy({
-    by: ["productId"],
-    where: { branchId: input.branchId, productId: { in: [...tracked.keys()] }, entryDate: { gt: periodStart } },
-    _sum: { quantity: true },
+  const baseline = new Map<string, Prisma.Decimal>();
+  const periodStartByProduct = new Map<string, Date>();
+  for (const count of closedCounts) {
+    for (const item of count.items) {
+      if (baseline.has(item.productId)) continue;
+      baseline.set(item.productId, new Prisma.Decimal(item.quantityCounted));
+      periodStartByProduct.set(item.productId, count.countDate);
+    }
+  }
+  const periodStarts = [...periodStartByProduct.values()];
+  const earliestPeriodStart = periodStarts.length > 0
+    ? periodStarts.reduce((earliest, value) => (value < earliest ? value : earliest))
+    : new Date(0);
+  const entries = await tx.inventoryEntry.findMany({
+    where: {
+      branchId: input.branchId,
+      productId: { in: [...tracked.keys()] },
+      entryDate: { gt: earliestPeriodStart },
+    },
+    select: { productId: true, entryDate: true, quantity: true },
   });
-  const movementTotals = new Map(entries.map((entry) => [entry.productId, entry._sum.quantity ?? new Prisma.Decimal(0)]));
+  const movementTotals = new Map<string, Prisma.Decimal>();
+  for (const entry of entries) {
+    const periodStart = periodStartByProduct.get(entry.productId) ?? new Date(0);
+    if (entry.entryDate <= periodStart) continue;
+    movementTotals.set(
+      entry.productId,
+      (movementTotals.get(entry.productId) ?? new Prisma.Decimal(0)).plus(entry.quantity),
+    );
+  }
 
   for (const productId of productIds) {
     const product = tracked.get(productId);

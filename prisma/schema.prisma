@@ -2035,6 +2035,10 @@ model InventoryProduct {
 
   itemType InventoryItemType
 
+  /// Alcance explícito del conteo. UNCLASSIFIED queda fuera del semanal
+  /// hasta que un administrador lo revise.
+  countFrequency InventoryCountFrequency @default(UNCLASSIFIED)
+
   trackStock      Boolean              @default(true)
   trackBatch      Boolean              @default(false)
   trackExpiration Boolean              @default(false)
@@ -2066,6 +2070,7 @@ model InventoryProduct {
   @@index([name])
   @@index([category])
   @@index([itemType])
+  @@index([countFrequency])
   @@index([isActive])
   @@index([archivedAt])
 }
@@ -2163,6 +2168,12 @@ enum InventoryItemType {
   CONSUMABLE
   RETURNABLE
   EQUIPMENT
+}
+
+enum InventoryCountFrequency {
+  UNCLASSIFIED
+  WEEKLY
+  MONTHLY_ONLY
 }
 
 enum InventoryHandlingUnit {
@@ -2430,6 +2441,7 @@ model InventoryCount {
   branchId  String
   countDate DateTime
   status    InventoryCountStatus @default(BORRADOR)
+  countType InventoryCountType @default(WEEKLY)
   notes     String?
   closedAt   DateTime?
   closedById String?
@@ -2443,7 +2455,13 @@ model InventoryCount {
 
   @@index([branchId])
   @@index([countDate])
+  @@index([countType])
   @@index([closedById])
+}
+
+enum InventoryCountType {
+  WEEKLY
+  MONTHLY
 }
 
 model InventoryCountItem {

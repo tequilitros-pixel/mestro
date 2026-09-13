@@ -8,6 +8,7 @@ import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility
 import { generateOperationId } from "@/lib/pos2/operationId";
 import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresentation";
 import { formatBusinessDateTime } from "@/lib/dateTime";
+import { inventoryCountTypeLabel } from "@/lib/inventory/countScope";
 
 export default async function CountDetailPage({
   params,
@@ -48,7 +49,7 @@ export default async function CountDetailPage({
       <div className="mx-auto max-w-6xl space-y-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">{count.branch.name}</h1>
+            <h1 className="text-3xl font-bold">{inventoryCountTypeLabel(count.countType)} · {count.branch.name}</h1>
             <p className="mt-2 text-on-surface-variant">
               {formatDateOnly(count.countDate)}
             </p>

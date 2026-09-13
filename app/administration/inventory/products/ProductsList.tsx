@@ -11,6 +11,7 @@ import {
 import { PRODUCT_CATEGORIES } from "./categories";
 import Link from "next/link";
 import { getInventoryProductState } from "@/lib/inventory/productState";
+import { inventoryCountFrequencyLabel } from "@/lib/inventory/countScope";
 
 
 type Product = {
@@ -21,6 +22,7 @@ type Product = {
   unit: string;
   unitCost: number | null;
   itemType: string;
+  countFrequency: "UNCLASSIFIED" | "WEEKLY" | "MONTHLY_ONLY";
   isActive: boolean;
   archivedAt: string | null;
 };
@@ -59,10 +61,16 @@ export default function ProductsList({ products: initialProducts, readOnly = fal
       { name: "Inactivos", count: products.filter((p) => getInventoryProductState(p) === "INACTIVE").length },
       { name: "Archivados", count: products.filter((p) => getInventoryProductState(p) === "ARCHIVED").length },
     ];
+    const frequencyTabs = [
+      { name: "Conteo semanal", count: products.filter((p) => p.countFrequency === "WEEKLY").length },
+      { name: "Sólo mensual", count: products.filter((p) => p.countFrequency === "MONTHLY_ONLY").length },
+      { name: "Pendientes", count: products.filter((p) => p.countFrequency === "UNCLASSIFIED").length },
+    ];
 
     return [
       { name: "Todos", count: products.length },
       ...statusTabs,
+      ...frequencyTabs,
       ...categoriesWithProducts.map((c) => ({ name: c, count: counts.get(c) ?? 0 })),
     ];
   }, [products]);
@@ -71,7 +79,10 @@ export default function ProductsList({ products: initialProducts, readOnly = fal
     if (activeTab === "Activos" && getInventoryProductState(p) !== "ACTIVE") return false;
     if (activeTab === "Inactivos" && getInventoryProductState(p) !== "INACTIVE") return false;
     if (activeTab === "Archivados" && getInventoryProductState(p) !== "ARCHIVED") return false;
-    if (!["Todos", "Activos", "Inactivos", "Archivados"].includes(activeTab) && p.category !== activeTab) return false;
+    if (activeTab === "Conteo semanal" && p.countFrequency !== "WEEKLY") return false;
+    if (activeTab === "Sólo mensual" && p.countFrequency !== "MONTHLY_ONLY") return false;
+    if (activeTab === "Pendientes" && p.countFrequency !== "UNCLASSIFIED") return false;
+    if (!["Todos", "Activos", "Inactivos", "Archivados", "Conteo semanal", "Sólo mensual", "Pendientes"].includes(activeTab) && p.category !== activeTab) return false;
 
     const term = search.toLowerCase();
     return (
@@ -176,11 +187,12 @@ export default function ProductsList({ products: initialProducts, readOnly = fal
       />
 
       <div className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container">
-        <div className="hidden grid-cols-[1fr_2fr_1.2fr_1fr_1fr_auto] gap-3 border-b border-outline-variant px-4 py-3 text-xs font-medium text-outline md:grid">
+        <div className="hidden grid-cols-[1fr_2fr_1.2fr_1fr_1fr_1.25fr_auto] gap-3 border-b border-outline-variant px-4 py-3 text-xs font-medium text-outline md:grid">
           <span>Código</span>
           <span>Nombre</span>
           <span>Categoría</span>
           <span>Tipo</span>
+          <span>Conteo</span>
           <span>Costo</span>
           <span>Estado</span>
         </div>
@@ -192,7 +204,7 @@ export default function ProductsList({ products: initialProducts, readOnly = fal
         {filtered.map((p) => (
           <div
             key={p.id}
-            className={`grid gap-2 border-b border-outline-variant px-4 py-3 last:border-b-0 md:grid-cols-[1fr_2fr_1.2fr_1fr_1fr_auto] md:items-center ${p.archivedAt ? "bg-surface-container-high/40" : ""}`}
+            className={`grid gap-2 border-b border-outline-variant px-4 py-3 last:border-b-0 md:grid-cols-[1fr_2fr_1.2fr_1fr_1fr_1.25fr_auto] md:items-center ${p.archivedAt ? "bg-surface-container-high/40" : ""}`}
           >
             <span className="text-sm text-on-surface-variant">{p.code}</span>
             <Link
@@ -216,6 +228,9 @@ export default function ProductsList({ products: initialProducts, readOnly = fal
             </select>}
 
             <span className="text-sm text-on-surface-variant">{itemTypeLabels[p.itemType]}</span>
+            <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-medium ${p.countFrequency === "UNCLASSIFIED" ? "bg-secondary/15 text-secondary" : "bg-surface-container-high text-on-surface-variant"}`}>
+              {inventoryCountFrequencyLabel(p.countFrequency)}
+            </span>
             <span className="text-sm text-on-surface-variant">
               {p.unitCost !== null ? `$${p.unitCost.toFixed(2)}` : "—"}
             </span>

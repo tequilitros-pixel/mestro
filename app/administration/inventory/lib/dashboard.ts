@@ -8,6 +8,7 @@ import {
 } from "@/lib/inventory/units";
 import { computeStockMatrix } from "./stock";
 import { getInventoryAnalytics, type InventoryAnalytics } from "./analytics";
+import { inventoryCountTypeLabel } from "@/lib/inventory/countScope";
 
 type DashboardProduct = {
   id: string;
@@ -26,12 +27,14 @@ type DashboardProduct = {
 export type InventoryDashboardData = {
   analytics: InventoryAnalytics;
   branches: Array<{ id: string; name: string }>;
-  pendingCounts: Array<{ id: string; code: string; branchName: string; countDate: string }>;
-  weeklyCounts: Array<{
+  pendingCounts: Array<{ id: string; code: string; branchName: string; countDate: string; countType: "WEEKLY" | "MONTHLY" }>;
+  counts: Array<{
     id: string;
     code: string;
     branchName: string;
     countDate: string;
+    countType: "WEEKLY" | "MONTHLY";
+    countTypeLabel: string;
     status: "BORRADOR" | "CERRADO";
     closedAt: string | null;
   }>;
@@ -128,6 +131,7 @@ export async function getInventoryDashboardData(
         code: true,
         countDate: true,
         status: true,
+        countType: true,
         closedAt: true,
         branch: { select: { name: true } },
       },
@@ -229,12 +233,14 @@ export async function getInventoryDashboardData(
     branches,
     pendingCounts: counts
       .filter((count) => count.status === "BORRADOR")
-      .map((count) => ({ id: count.id, code: count.code, branchName: count.branch.name, countDate: count.countDate.toISOString() })),
-    weeklyCounts: counts.map((count) => ({
+      .map((count) => ({ id: count.id, code: count.code, branchName: count.branch.name, countDate: count.countDate.toISOString(), countType: count.countType })),
+    counts: counts.map((count) => ({
       id: count.id,
       code: count.code,
       branchName: count.branch.name,
       countDate: count.countDate.toISOString(),
+      countType: count.countType,
+      countTypeLabel: inventoryCountTypeLabel(count.countType),
       status: count.status,
       closedAt: count.closedAt?.toISOString() ?? null,
     })),
