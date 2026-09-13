@@ -55,7 +55,7 @@ export async function computeStockMatrix(productIds: string[], allowedBranchIds:
       for (const count of closedCounts) {
         for (const item of count.items) {
           if (baseline.has(item.productId)) continue;
-          baseline.set(item.productId, Number(item.quantityCounted));
+          baseline.set(item.productId, item.quantityCounted === null ? 0 : Number(item.quantityCounted));
           periodStartByProduct.set(item.productId, count.countDate);
         }
       }

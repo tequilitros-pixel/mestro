@@ -24,6 +24,7 @@ test("los cierres por alcance sólo ajustan las partidas del conteo", async () =
   const actor = { id: adminId, role: "ADMIN" as const };
 
   await owner.$transaction(async (tx) => {
+    const countedAt = new Date();
     await tx.branch.create({
       data: { id: branchId, name: "Scope Test Branch", code: `SC${suffix}` },
     });
@@ -109,10 +110,10 @@ test("los cierres por alcance sólo ajustan las partidas del conteo", async () =
         branchId,
         countDate: new Date(),
         countType: "WEEKLY",
-        items: {
-          create: [
-            { productId: weeklyIngredientId, quantityCounted: 7 },
-            { productId: weeklyDrinkId, quantityCounted: 8 },
+          items: {
+            create: [
+            { productId: weeklyIngredientId, quantityCounted: 7, countedAt },
+            { productId: weeklyDrinkId, quantityCounted: 8, countedAt },
           ],
         },
       },
@@ -152,6 +153,41 @@ test("los cierres por alcance sólo ajustan las partidas del conteo", async () =
   assert.equal(await owner.inventoryMovement.count({ where: { sourceId: weeklyCountId } }), 2);
   assert.equal(await owner.inventoryCountDeclaration.count({ where: { countId: weeklyCountId } }), 2);
 
+  const pendingCountId = `scope-pending-count-${suffix}`;
+  await owner.inventoryCount.create({
+    data: {
+      id: pendingCountId,
+      code: `SCOPE-P-${suffix}`,
+      branchId,
+      countDate: new Date(Date.now() + 500),
+      countType: "WEEKLY",
+      items: {
+        create: [weeklyIngredientId, weeklyDrinkId].map((productId) => ({
+          productId,
+          quantityCounted: null,
+          countedAt: null,
+        })),
+      },
+    },
+  });
+  await assert.rejects(
+    close(pendingCountId, generateOperationId()),
+    (error: unknown) => error instanceof Error && error.message === "COUNT_ITEMS_PENDING:2",
+  );
+  assert.equal(
+    (await owner.inventoryCount.findUniqueOrThrow({ where: { id: pendingCountId } })).status,
+    "BORRADOR",
+  );
+  const pendingBalances = await owner.inventoryBalance.findMany({
+    where: { branchId, inventoryProductId: { in: [weeklyIngredientId, weeklyDrinkId] } },
+  });
+  assert.deepEqual(
+    new Map(pendingBalances.map((balance) => [balance.inventoryProductId, balance.quantity.toString()])),
+    new Map([[weeklyIngredientId, "7"], [weeklyDrinkId, "8"]]),
+  );
+  assert.equal(await owner.inventoryMovement.count({ where: { sourceId: pendingCountId } }), 0);
+  assert.equal(await owner.inventoryCountDeclaration.count({ where: { countId: pendingCountId } }), 0);
+
   await owner.inventoryCount.create({
     data: {
       id: monthlyCountId,
@@ -161,7 +197,7 @@ test("los cierres por alcance sólo ajustan las partidas del conteo", async () =
       countType: "MONTHLY",
       items: {
         create: [weeklyIngredientId, weeklyDrinkId, monthlyTableId, monthlyMulticontactId].map(
-          (productId) => ({ productId, quantityCounted: 6 }),
+          (productId) => ({ productId, quantityCounted: 6, countedAt: new Date() }),
         ),
       },
     },

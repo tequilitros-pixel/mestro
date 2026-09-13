@@ -104,13 +104,14 @@ export async function createInventoryCountAction(
         const previousItem = previousCount?.items.find(
           (i) => i.productId === product.id,
         );
-        const previousQuantity = previousItem ? previousItem.quantityCounted : 0;
+        const previousQuantity = previousItem?.quantityCounted ?? 0;
 
         await tx.inventoryCountItem.create({
           data: {
             countId: created.id,
             productId: product.id,
-            quantityCounted: 0,
+            quantityCounted: null,
+            countedAt: null,
             previousQuantity,
           },
         });
@@ -167,7 +168,7 @@ export async function updateCountItemQuantityAction(
 
       await tx.inventoryCountItem.update({
         where: { id: item.id },
-        data: { quantityCounted: normalized.baseQuantity },
+        data: { quantityCounted: normalized.baseQuantity, countedAt: new Date() },
       });
 
       return normalized;
@@ -230,6 +231,16 @@ export async function closeInventoryCountAction(
     console.error("Error closing inventory count:", error);
     if (error instanceof Error && error.message === "COUNT_ALREADY_CLOSED") {
       return { success: false, error: "Este conteo ya está cerrado." };
+    }
+    const pendingMatch = error instanceof Error
+      ? /^COUNT_ITEMS_PENDING:(\d+)$/.exec(error.message)
+      : null;
+    if (pendingMatch) {
+      const pendingCount = Number(pendingMatch[1]);
+      return {
+        success: false,
+        error: `Faltan ${pendingCount} productos por contar. Captura cada producto antes de cerrar.`,
+      };
     }
     return { success: false, error: "No fue posible cerrar el conteo." };
   }

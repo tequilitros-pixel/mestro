@@ -11,9 +11,11 @@ import {
   formatCommercialQuantity,
   getInventoryBaseUnitLabel,
   getInventoryCaptureDescriptor,
-  getInventoryCaptureInputValue,
 } from "@/lib/inventory/units";
-import type { InventoryCountItemClientView } from "@/lib/inventory/countPresentation";
+import {
+  getInventoryCountInputValue,
+  type InventoryCountItemClientView,
+} from "@/lib/inventory/countPresentation";
 
 type Item = InventoryCountItemClientView;
 
@@ -34,7 +36,7 @@ export default function CountItemRow({
   const { showToast } = useToast();
   const capture = getInventoryCaptureDescriptor(item.quantityCounted, item);
   const [quantity, setQuantity] = useState(() =>
-    getInventoryCaptureInputValue(item.quantityCounted, item),
+    getInventoryCountInputValue(item),
   );
   const [saving, setSaving] = useState(false);
 
@@ -69,9 +71,16 @@ export default function CountItemRow({
     : null;
 
   return (
-    <div className="grid gap-3 border-b border-outline-variant p-4 md:grid-cols-[1.5fr_repeat(4,minmax(0,1fr))] md:items-center">
+    <div className={`grid gap-3 border-b border-outline-variant p-4 md:grid-cols-[1.5fr_repeat(4,minmax(0,1fr))] md:items-center ${editable && !item.isCaptured ? "bg-secondary/5" : ""}`}>
       <div>
-        <p className="font-medium text-on-surface">{item.productName}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-medium text-on-surface">{item.productName}</p>
+          {editable && !item.isCaptured && (
+            <span className="rounded-full bg-secondary/15 px-2 py-0.5 text-[11px] font-semibold text-secondary">
+              Pendiente
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-xs text-on-surface-variant">{presentation}</p>
         {captureHint && <p className="mt-1 text-xs text-on-surface-variant">{captureHint}</p>}
       </div>

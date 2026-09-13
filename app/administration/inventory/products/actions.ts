@@ -51,7 +51,7 @@ function readOptionalNumber(value: FormDataEntryValue | null) {
 
   return number;
 }
-const handlingUnits: Record<string, InventoryHandlingUnit> = { Pieza: "PIEZA", Botella: "BOTELLA", Caja: "CAJA", Paquete: "PAQUETE", Garrafa: "GARRAFA", Kilogramo: "KILOGRAMO", Litro: "LITRO", Costal: "OTRA", Bolsa: "OTRA", Mililitro: "OTRA", Gramo: "OTRA", Metro: "OTRA" };
+const handlingUnits: Record<string, InventoryHandlingUnit> = { Pieza: "PIEZA", Botella: "BOTELLA", Caja: "CAJA", Paquete: "PAQUETE", Garrafa: "GARRAFA", Kilogramo: "KILOGRAMO", Bolsa: "BOLSA", Litro: "LITRO", Costal: "OTRA", Mililitro: "OTRA", Gramo: "OTRA", Metro: "OTRA" };
 function readPresentation(formData: FormData, unit: string) {
   const contentPerUnit = readOptionalNumber(formData.get("contentPerUnit")); const contentUnitValue = formData.get("contentUnit")?.toString() ?? "";
   if (contentPerUnit === null && !contentUnitValue) return { handlingUnit: handlingUnits[unit] ?? "OTRA", contentPerUnit: null, contentUnit: null, normalizedContentPerUnit: null };

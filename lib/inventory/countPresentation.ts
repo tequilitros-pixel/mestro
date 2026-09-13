@@ -1,8 +1,11 @@
+import { getInventoryCaptureInputValue } from "@/lib/inventory/units";
+
 type DecimalLike = number | string | { toString(): string };
 
 export type InventoryCountItemRecord = {
   id: string;
-  quantityCounted: DecimalLike;
+  quantityCounted: DecimalLike | null;
+  countedAt: Date | null;
   previousQuantity: DecimalLike | null;
   entriesQuantity: DecimalLike | null;
   quantityConsumed: DecimalLike | null;
@@ -28,6 +31,7 @@ export type InventoryCountItemClientView = {
   contentUnit: string | null;
   normalizedContentPerUnit: number | null;
   quantityCounted: number;
+  isCaptured: boolean;
   previousQuantity?: number;
   entriesQuantity?: number | null;
   quantityConsumed?: number | null;
@@ -53,7 +57,8 @@ export function buildInventoryCountItemClientView(
     contentPerUnit: asNumber(item.product.contentPerUnit),
     contentUnit: item.product.contentUnit,
     normalizedContentPerUnit: asNumber(item.product.normalizedContentPerUnit),
-    quantityCounted: asNumber(item.quantityCounted),
+    quantityCounted: asNumber(item.quantityCounted ?? 0),
+    isCaptured: options.status === "CERRADO" || item.countedAt !== null,
   };
 
   if (options.status !== "CERRADO" || !options.canViewHistory) return view;
@@ -65,4 +70,9 @@ export function buildInventoryCountItemClientView(
     quantityConsumed: asNumber(item.quantityConsumed),
     costTotal: asNumber(item.costTotal),
   };
+}
+
+export function getInventoryCountInputValue(item: InventoryCountItemClientView) {
+  if (!item.isCaptured) return "";
+  return getInventoryCaptureInputValue(item.quantityCounted, item);
 }

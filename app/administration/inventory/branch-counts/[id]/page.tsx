@@ -39,6 +39,9 @@ export default async function CountDetailPage({
   }
 
   const editable = count.status === "BORRADOR";
+  const pendingItems = editable
+    ? count.items.filter((item) => item.quantityCounted === null || item.countedAt === null)
+    : [];
   const totalCost = count.items.reduce(
     (sum, item) => sum + (item.costTotal !== null ? Number(item.costTotal) : 0),
     0,
@@ -80,6 +83,26 @@ export default async function CountDetailPage({
             <p className="mt-1 text-2xl font-bold text-tertiary-fixed-dim">
               ${totalCost.toFixed(2)}
             </p>
+          </div>
+        )}
+
+        {editable && pendingItems.length > 0 && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-2xl border border-secondary/40 bg-secondary/10 p-5 text-sm text-on-surface"
+          >
+            <p className="font-semibold text-secondary">
+              Faltan {pendingItems.length} productos por contar.
+            </p>
+            <p className="mt-1 text-on-surface-variant">
+              Captura una cantidad explícita, incluido 0, en cada renglón antes de cerrar.
+            </p>
+            <ul className="mt-3 grid gap-1 text-on-surface-variant sm:grid-cols-2">
+              {pendingItems.map((item) => (
+                <li key={item.id}>• {item.product.name}</li>
+              ))}
+            </ul>
           </div>
         )}
 

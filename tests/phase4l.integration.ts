@@ -25,6 +25,7 @@ test("FASE 4L: cutover autoritativo, replay, rollback, locking y vasos legacy", 
   const actor = { id: adminId, role: "ADMIN" as const };
 
   await owner.$transaction(async (tx) => {
+    const countedAt = new Date();
     await tx.branch.createMany({ data: [{ id: branchId, name: "4L Branch", code: `4L${suffix}` }, { id: otherBranchId, name: "4L Other", code: `4O${suffix}` }] });
     await tx.user.create({ data: { id: adminId, name: "4L Admin", username: `4l-${suffix}`, password: "fixture", role: "ADMIN" } });
     const capability = await tx.capability.upsert({ where: { key: "inventory.view" }, create: { key: "inventory.view", description: "4L test inventory read" }, update: {} });
@@ -37,10 +38,10 @@ test("FASE 4L: cutover autoritativo, replay, rollback, locking y vasos legacy", 
     ] });
     await tx.inventoryBalance.create({ data: { branchId, inventoryProductId: productId, quantity: 167, unit: "UNIT" } });
     await tx.inventoryCount.create({ data: { id: countId, code: `4L-C-${suffix}`, branchId, countDate: new Date(), items: { create: [
-      { productId, quantityCounted: 120, previousQuantity: 999 },
-      { productId: vasoGrandeId, quantityCounted: 10 },
-      { productId: vasoMedianoId, quantityCounted: 8 },
-      { productId: vasosLegacyId, quantityCounted: 25 },
+      { productId, quantityCounted: 120, previousQuantity: 999, countedAt },
+      { productId: vasoGrandeId, quantityCounted: 10, countedAt },
+      { productId: vasoMedianoId, quantityCounted: 8, countedAt },
+      { productId: vasosLegacyId, quantityCounted: 25, countedAt },
     ] } } });
   });
 
@@ -67,7 +68,7 @@ test("FASE 4L: cutover autoritativo, replay, rollback, locking y vasos legacy", 
 
   const rollbackCountId = `4l-rollback-${suffix}`;
   const rollbackOp = id(`${suffix.slice(-6)}1`);
-  await owner.inventoryCount.create({ data: { id: rollbackCountId, code: `4L-R-${suffix}`, branchId, countDate: new Date(), items: { create: { productId, quantityCounted: 111 } } } });
+  await owner.inventoryCount.create({ data: { id: rollbackCountId, code: `4L-R-${suffix}`, branchId, countDate: new Date(), items: { create: { productId, quantityCounted: 111, countedAt: new Date() } } } });
   await assert.rejects(run(rollbackOp, rollbackCountId, { failAfterProductId: productId }));
   assert.equal((await owner.inventoryCount.findUniqueOrThrow({ where: { id: rollbackCountId } })).status, "BORRADOR");
   assert.equal((await owner.inventoryBalance.findUniqueOrThrow({ where: { branchId_inventoryProductId: { branchId, inventoryProductId: productId } } })).quantity.toString(), "120");
@@ -77,7 +78,7 @@ test("FASE 4L: cutover autoritativo, replay, rollback, locking y vasos legacy", 
   const concurrentCountId = `4l-concurrent-${suffix}`;
   const concurrentOpA = id(`${suffix.slice(-6)}2`);
   const concurrentOpB = id(`${suffix.slice(-6)}3`);
-  await owner.inventoryCount.create({ data: { id: concurrentCountId, code: `4L-N-${suffix}`, branchId, countDate: new Date(), items: { create: { productId, quantityCounted: 100 } } } });
+  await owner.inventoryCount.create({ data: { id: concurrentCountId, code: `4L-N-${suffix}`, branchId, countDate: new Date(), items: { create: { productId, quantityCounted: 100, countedAt: new Date() } } } });
   const results = await Promise.allSettled([concurrentOpA, concurrentOpB].map((operationId) => run(operationId, concurrentCountId)));
   assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
   assert.equal((await owner.inventoryBalance.findUniqueOrThrow({ where: { branchId_inventoryProductId: { branchId, inventoryProductId: productId } } })).quantity.toString(), "100");

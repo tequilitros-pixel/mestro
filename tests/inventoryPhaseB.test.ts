@@ -4,7 +4,10 @@ import {
   classifyStock,
   resolveStockBranchSelection,
 } from "@/lib/inventory/stockSelection";
-import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresentation";
+import {
+  buildInventoryCountItemClientView,
+  getInventoryCountInputValue,
+} from "@/lib/inventory/countPresentation";
 import {
   getInventoryCaptureDescriptor,
   getInventoryCaptureInputValue,
@@ -40,6 +43,7 @@ test("stock negativo conserva el signo y tiene prioridad como alerta", () => {
 const countItem = {
   id: "item-1",
   quantityCounted: "12.500",
+  countedAt: null,
   previousQuantity: "17.500",
   entriesQuantity: "4",
   quantityConsumed: "9",
@@ -65,6 +69,8 @@ test("el payload de un conteo abierto omite todo dato teórico e histórico", ()
   assert.equal("entriesQuantity" in open, false);
   assert.equal("quantityConsumed" in open, false);
   assert.equal("costTotal" in open, false);
+  assert.equal(open.isCaptured, false);
+  assert.equal(getInventoryCountInputValue(open), "");
 });
 
 test("el historial cerrado conserva contraste y unidad comercial", () => {
@@ -79,6 +85,22 @@ test("el historial cerrado conserva contraste y unidad comercial", () => {
   assert.equal(closed.costTotal, 90);
   assert.equal(formatCommercialPresentation(closed), "Paquete de 25 vasos");
   assert.equal(formatCommercialQuantity(50, closed), "2 paquetes (50 vasos)");
+});
+
+test("el cero explícito se distingue de un renglón todavía vacío", () => {
+  const pending = buildInventoryCountItemClientView(
+    { ...countItem, quantityCounted: "0", countedAt: null },
+    { status: "BORRADOR", canViewHistory: true },
+  );
+  assert.equal(pending.isCaptured, false);
+  assert.equal(getInventoryCountInputValue(pending), "");
+
+  const explicitZero = buildInventoryCountItemClientView(
+    { ...countItem, quantityCounted: "0", countedAt: new Date("2026-09-12T18:00:00.000Z") },
+    { status: "BORRADOR", canViewHistory: true },
+  );
+  assert.equal(explicitZero.isCaptured, true);
+  assert.equal(getInventoryCountInputValue(explicitZero), "0");
 });
 
 test("la captura comercial de botella normaliza una sola vez y se puede reabrir", () => {
@@ -157,6 +179,56 @@ test("la captura de paquetes usa la conversión configurada", () => {
   });
   assert.equal(normalized.baseQuantity.toString(), "50");
   assert.equal(getInventoryCaptureInputValue("50", vasos), "2");
+});
+
+test("las presentaciones físicas convierten hielo, jugo y agua sin alterar el factor", () => {
+  const hielo = {
+    isActive: true,
+    trackStock: true,
+    inventoryBaseUnit: "G",
+    handlingUnit: "BOLSA",
+    contentPerUnit: 5,
+    contentUnit: "KG",
+    normalizedContentPerUnit: 5000,
+  };
+  const jugo = {
+    isActive: true,
+    trackStock: true,
+    inventoryBaseUnit: "ML",
+    handlingUnit: "PIEZA",
+    contentPerUnit: 3750,
+    contentUnit: "ML",
+    normalizedContentPerUnit: 3750,
+  };
+  const agua = {
+    isActive: true,
+    trackStock: true,
+    inventoryBaseUnit: "ML",
+    handlingUnit: "PIEZA",
+    contentPerUnit: 1000,
+    contentUnit: "ML",
+    normalizedContentPerUnit: 1000,
+  };
+
+  assert.equal(formatCommercialPresentation(hielo), "Bolsa de 5 kg");
+  assert.equal(
+    normalizeInventoryCountCapture({ quantity: "3", captureUnit: "PRESENTATION", product: hielo }).baseQuantity.toString(),
+    "15000",
+  );
+  assert.equal(formatCommercialQuantity(15000, hielo), "3 bolsas");
+  assert.equal(getInventoryCaptureInputValue("15000", hielo), "3");
+
+  assert.equal(
+    normalizeInventoryCountCapture({ quantity: "2", captureUnit: "PRESENTATION", product: jugo }).baseQuantity.toString(),
+    "7500",
+  );
+  assert.equal(formatCommercialQuantity(7500, jugo), "2 piezas");
+  assert.equal(getInventoryCaptureInputValue("7500", jugo), "2");
+
+  assert.equal(
+    normalizeInventoryCountCapture({ quantity: "6", captureUnit: "PRESENTATION", product: agua }).baseQuantity.toString(),
+    "6000",
+  );
 });
 
 test("la captura base explícita conserva un borrador existente", () => {

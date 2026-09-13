@@ -96,7 +96,7 @@ export async function consumePosInventory(
   for (const count of closedCounts) {
     for (const item of count.items) {
       if (baseline.has(item.productId)) continue;
-      baseline.set(item.productId, new Prisma.Decimal(item.quantityCounted));
+      baseline.set(item.productId, new Prisma.Decimal(item.quantityCounted ?? 0));
       periodStartByProduct.set(item.productId, count.countDate);
     }
   }

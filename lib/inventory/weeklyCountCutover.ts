@@ -42,11 +42,19 @@ export async function reconcileWeeklyCountCutover(
   });
   if (!count) throw new Error("COUNT_NOT_FOUND");
 
+  const pendingItems = count.items.filter(
+    (item) => item.quantityCounted === null || item.countedAt === null,
+  );
+  if (pendingItems.length > 0) {
+    throw new Error(`COUNT_ITEMS_PENDING:${pendingItems.length}`);
+  }
+
   const reconciled: ReconciledItem[] = [];
   for (const item of count.items) {
     const product = item.product;
     if (!product.isActive || !product.trackStock || !product.inventoryBaseUnit) continue;
 
+    if (item.quantityCounted === null) throw new Error("COUNT_ITEMS_PENDING:1");
     const counted = new Prisma.Decimal(item.quantityCounted);
     if (counted.isNegative()) throw new Error("INVALID_COUNT");
 

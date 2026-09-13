@@ -2180,6 +2180,7 @@ enum InventoryHandlingUnit {
   BOTELLA
   GARRAFA
   CAJA
+  BOLSA
   PAQUETE
   PIEZA
   KILOGRAMO
@@ -2468,7 +2469,9 @@ model InventoryCountItem {
   id               String   @id @default(cuid())
   countId          String
   productId        String
-  quantityCounted  Decimal  @db.Decimal(12, 3)
+  /// Null means the item is still pending capture. Explicit zero is stored as 0.
+  quantityCounted  Decimal? @db.Decimal(12, 3)
+  countedAt        DateTime?
   previousQuantity Decimal? @db.Decimal(12, 3)
   entriesQuantity  Decimal  @default(0) @db.Decimal(12, 3)
   quantityConsumed Decimal? @db.Decimal(12, 3)
