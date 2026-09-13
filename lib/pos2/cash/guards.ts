@@ -1,8 +1,8 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { DomainError } from "@/lib/domain/errors";
-import type { CommandActor } from "@/lib/pos2/authorization";
 import { requirePos2ContextEnabled } from "@/lib/pos2/certification/rollout";
+export { requireActorBranch } from "@/lib/pos2/branchAccess";
 
 export async function requireActiveTerminal(
   tx: Prisma.TransactionClient,
@@ -13,12 +13,6 @@ export async function requireActiveTerminal(
     throw new DomainError("PERMISSION_DENIED", { terminalId: input.terminalId });
   }
   return terminal;
-}
-
-export function requireActorBranch(actor: CommandActor, branchId: string) {
-  if (actor.branchIds !== null && !actor.branchIds.includes(branchId)) {
-    throw new DomainError("PERMISSION_DENIED", { branchId });
-  }
 }
 
 export async function lockCashSession(tx: Prisma.TransactionClient, sessionId: string) {

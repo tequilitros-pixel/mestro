@@ -1,14 +1,14 @@
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { evaluateCapability, PHASE3A_CAPABILITIES, type CapabilityKey } from "@/lib/pos2/capabilityPolicy";
 import { resolveBranchCatalog } from "@/lib/pos2/catalog/resolveBranchCatalog";
 import { resolvePricesBatch } from "@/lib/pos2/pricing/resolvePrice";
 import Pos2CashierApp from "@/components/pos2/Pos2CashierApp";
-import type { AdjustmentRuleDto, CatalogCategoryDto, PosContextDto } from "@/lib/pos2/ui/types";
-import { isPos2ContextEnabled, readPos2RolloutConfig } from "@/lib/pos2/certification/rollout";
+import type { AdjustmentRuleDto, CatalogCategoryDto } from "@/lib/pos2/ui/types";
+import { readPos2RolloutConfig } from "@/lib/pos2/certification/rollout";
 import { getPosAccessibleBranchIds } from "@/lib/pos2/currentActor";
 import { canAccessModule } from "@/lib/permission-modules";
+import { buildPos2Contexts, initialPos2ContextIndex } from "@/lib/pos2/context";
 
 export const dynamic = "force-dynamic";
 
@@ -39,33 +39,30 @@ async function loadCatalog(branchId: string): Promise<CatalogCategoryDto[]> {
 }
 
 export default async function Pos2Page() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  const user = await requireModuleAccess("/pos");
   const branchIds = await getPosAccessibleBranchIds();
   const branches = await prisma.branch.findMany({
-    where: { active: true, id: { in: branchIds } },
+    where: { active: true, ...(branchIds === null ? {} : { id: { in: branchIds } }) },
     orderBy: { name: "asc" },
     include: {
       registers: { where: { active: true }, orderBy: { name: "asc" } },
-      terminals: { where: { status: "ACTIVE" }, orderBy: { name: "asc" } },
+      terminals: { orderBy: { name: "asc" } },
       cashSessionsV2: { where: { status: { in: ["OPEN", "CLOSING"] } }, select: { id: true, registerId: true, openingTerminalId: true, status: true } },
+      cashCuts: { where: { status: "ABIERTO" }, select: { id: true }, orderBy: { openedAt: "asc" } },
     },
   });
   const rollout = readPos2RolloutConfig();
-  const contexts: PosContextDto[] = branches.flatMap((branch) => branch.terminals.flatMap((terminal) => branch.registers.filter((register) => isPos2ContextEnabled(rollout, branch.id, register.id)).map((register) => ({
-    branchId: branch.id, branchName: branch.name, registerId: register.id, registerName: register.name,
-    terminalId: terminal.id, terminalName: terminal.name,
-    cashSessionId: branch.cashSessionsV2.find((session) => session.registerId === register.id && session.status === "OPEN")?.id ?? null,
-  }))));
-  const initialBranchId = contexts[0]?.branchId ?? branches[0]?.id;
+  const contexts = buildPos2Contexts(branches, rollout);
+  const initialContextIndex = initialPos2ContextIndex(contexts);
+  const initialBranchId = contexts[initialContextIndex]?.branchId;
   const now = new Date();
   const [catalog, adjustmentVersions, people, grants] = await Promise.all([
     initialBranchId ? loadCatalog(initialBranchId) : Promise.resolve([]),
-    initialBranchId ? prisma.adjustmentVersion.findMany({
+    prisma.adjustmentVersion.findMany({
       where: { kind: { in: ["DISCOUNT", "COURTESY"] }, validFrom: { lte: now }, OR: [{ validTo: null }, { validTo: { gt: now } }],
-        AND: [{ OR: [{ scope: "GLOBAL" }, { scope: "BRANCH", branchId: initialBranchId }] }], definition: { active: true }, termination: null },
+        AND: [{ OR: [{ scope: "GLOBAL" }, { scope: "BRANCH", ...(branchIds === null ? {} : { branchId: { in: branchIds } }) }] }], definition: { active: true }, termination: null },
       include: { definition: { select: { name: true } } }, orderBy: [{ kind: "asc" }, { priority: "desc" }],
-    }) : Promise.resolve([]),
+    }),
     prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.capabilityGrant.findMany({
       where: { capability: { key: { in: [...PHASE3A_CAPABILITIES] }, active: true }, OR: [{ userId: user.id }, { role: user.role }], validFrom: { lte: now }, AND: [{ OR: [{ validTo: null }, { validTo: { gt: now } }] }] },
@@ -74,7 +71,12 @@ export default async function Pos2Page() {
   ]);
   const actor = { id: user.id, role: user.role, branchIds };
   const capabilityRows = grants.map((grant) => ({ ...grant, capabilityKey: grant.capability.key }));
-  const capabilities = Object.fromEntries(PHASE3A_CAPABILITIES.map((key) => [key, evaluateCapability(actor, key, initialBranchId, capabilityRows)])) as Record<CapabilityKey, boolean>;
+  const capabilitiesByBranch = Object.fromEntries(
+    [...new Set(contexts.map((context) => context.branchId))].map((branchId) => [
+      branchId,
+      Object.fromEntries(PHASE3A_CAPABILITIES.map((key) => [key, evaluateCapability(actor, key, branchId, capabilityRows)])) as Record<CapabilityKey, boolean>,
+    ]),
+  ) as Record<string, Record<CapabilityKey, boolean>>;
   const legacyNavigationKeys = [
     "/cash-cuts",
     "/pos/sales",
@@ -91,7 +93,14 @@ export default async function Pos2Page() {
   const legacyNavigation = Object.fromEntries(
     legacyNavigationKeys.map((key) => [key, canAccessModule(user.role, legacyNavigationPermissions, key)]),
   );
-  const rules: AdjustmentRuleDto[] = adjustmentVersions.map((version) => ({ id: version.id, kind: version.kind as "DISCOUNT" | "COURTESY", name: version.definition.name, requiresBeneficiary: version.requiresBeneficiary, requiresAuthorization: version.requiresAuthorization }));
+  const rulesByBranch = Object.fromEntries(
+    [...new Set(contexts.map((context) => context.branchId))].map((branchId) => [
+      branchId,
+      adjustmentVersions
+        .filter((version) => version.scope === "GLOBAL" || version.branchId === branchId)
+        .map((version) => ({ id: version.id, kind: version.kind as "DISCOUNT" | "COURTESY", name: version.definition.name, requiresBeneficiary: version.requiresBeneficiary, requiresAuthorization: version.requiresAuthorization } satisfies AdjustmentRuleDto)),
+    ]),
+  ) as Record<string, AdjustmentRuleDto[]>;
 
-  return <Pos2CashierApp userId={user.id} userName={user.name} contexts={contexts} initialCatalog={catalog} rules={rules} people={people} capabilities={capabilities} legacyNavigation={legacyNavigation} />;
+  return <Pos2CashierApp userId={user.id} userName={user.name} contexts={contexts} initialContextIndex={initialContextIndex} initialCatalog={catalog} rulesByBranch={rulesByBranch} people={people} capabilitiesByBranch={capabilitiesByBranch} legacyNavigation={legacyNavigation} />;
 }

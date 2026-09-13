@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentCommandActor } from "@/lib/pos2/currentActor";
 import { requireCapability } from "@/lib/pos2/authorization";
+import { requireActorBranch } from "@/lib/pos2/cash/guards";
 import { pos2ErrorResponse, requireTerminalBranch, requireTerminalRequest } from "@/lib/pos2/http";
 import { resolveBranchCatalog } from "@/lib/pos2/catalog/resolveBranchCatalog";
 import { resolvePricesBatch, type ResolvePriceInput } from "@/lib/pos2/pricing/resolvePrice";
@@ -15,6 +16,7 @@ export async function GET(request: Request) {
     const terminalId = await requireTerminalRequest(request);
     const branchId = new URL(request.url).searchParams.get("branchId") ?? "";
     await requireTerminalBranch(terminalId, branchId);
+    requireActorBranch(actor, branchId);
     await prisma.$transaction((tx) => requireCapability(tx, actor, "catalog.view", branchId));
     const at = new Date();
     const categories = await resolveBranchCatalog(branchId);

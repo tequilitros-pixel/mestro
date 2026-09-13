@@ -24,6 +24,17 @@ export async function openCashSession(input: {
     execute: async (tx) => {
       requireActorBranch(input.actor, input.branchId);
       await requireCapability(tx, input.actor, "cash.session.open", input.branchId);
+      const legacyOpenCut = await tx.cashCut.findFirst({
+        where: { branchId: input.branchId, status: "ABIERTO" },
+        select: { id: true },
+      });
+      if (legacyOpenCut) {
+        throw new DomainError(
+          "CASH_SESSION_NOT_OPEN",
+          { branchId: input.branchId },
+          "Existe un corte abierto en Corte de Caja; continúa ese corte antes de abrir una sesión POS2.",
+        );
+      }
       const register = await tx.register.findUnique({ where: { id: input.registerId } });
       if (!register || !register.active || register.branchId !== input.branchId) throw new DomainError("VALIDATION_ERROR", { field: "registerId" });
       await requireActiveTerminal(tx, { terminalId: input.terminalId, branchId: input.branchId });
