@@ -12,7 +12,7 @@ import { createLocalDraft, getDraft, getMapping, listDrafts, saveDraft } from "@
 import { httpSyncTransport, processPos2Queue, withSyncLeader } from "@/lib/pos2/offline/coordinator";
 import type { Pos2LocalDraft } from "@/lib/pos2/offline/types";
 import { generateClientOperationId } from "@/lib/pos2/offline/canonical";
-import styles from "./pos2.module.css";
+import styles from "./pos2.visual.module.css";
 import RecentSalesPanel from "./RecentSalesPanel";
 
 type Notice={tone:"error"|"success"|"info";title:string;message:string}|null;
