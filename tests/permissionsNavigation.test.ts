@@ -9,6 +9,8 @@ import {
 import {
   MAIN_MODULES,
   SUBMENUS,
+  getMainModuleDestination,
+  getCurrentModule,
   getSubmenuItemDestination,
   isMainModuleVisible,
   isSubmenuItemVisible,
@@ -24,6 +26,17 @@ function leaves(items: SubMenuItem[]): SubMenuItem[] {
 }
 
 const allLeaves = Object.values(SUBMENUS).flatMap(leaves);
+
+test("Punto de Venta principal abre POS2 y conserva el POS legacy como fallback", () => {
+  const main = MAIN_MODULES.find((module) => module.module === "pos");
+  const legacySale = SUBMENUS.pos.find((item) => item.label === "Vender");
+
+  assert.equal(main?.href, "/pos2");
+  assert.equal(legacySale?.href, "/pos");
+  assert.equal(getMainModuleDestination("GERENTE", ["/pos"], main!), "/pos2");
+  assert.equal(getMainModuleDestination("GERENTE", ["/pos/sales"], main!), "/pos/sales");
+  assert.equal(getCurrentModule("/pos2"), "pos");
+});
 
 test("cada permiso configurable tiene una pestaña y se resuelve exactamente", () => {
   for (const key of configurableKeys) {

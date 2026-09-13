@@ -129,7 +129,7 @@ export const MAIN_MODULES: MainModule[] = [
     module: "administration",
   },
   {
-    href: "/pos",
+    href: "/pos2",
     label: "Punto de Venta",
     shortLabel: "Ventas",
     icon: CashRegisterIcon,
@@ -592,7 +592,7 @@ export function getCurrentModule(pathname: string): AppModule {
     return "cash-cuts";
   }
 
-  if (matchesRoute(pathname, "/pos")) {
+  if (matchesRoute(pathname, "/pos") || matchesRoute(pathname, "/pos2")) {
     return "pos";
   }
 
@@ -720,6 +720,27 @@ export function isMainModuleVisible(
   const items = SUBMENUS[module.module as Exclude<AppModule, "home">] ?? [];
 
   return items.some((item) => isSubmenuItemVisible(role, moduleKeys, item));
+}
+
+export function getMainModuleDestination(
+  role: string,
+  moduleKeys: string[],
+  module: MainModule,
+): string {
+  if (module.module === "home") return module.href;
+
+  const items = SUBMENUS[module.module];
+  if (module.module === "pos") {
+    const sale = items.find((item) => item.href === "/pos");
+    if (sale && isSubmenuItemVisible(role, moduleKeys, sale)) return "/pos2";
+  }
+
+  const firstVisible = items.find((item) =>
+    isSubmenuItemVisible(role, moduleKeys, item),
+  );
+  return firstVisible
+    ? getSubmenuItemDestination(role, moduleKeys, firstVisible)
+    : module.href;
 }
 
 /** Ruta segura de un tab padre: abre el primer hijo realmente autorizado. */

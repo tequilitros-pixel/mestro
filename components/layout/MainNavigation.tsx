@@ -7,11 +7,9 @@ import { GridIcon, XIcon } from "@/components/ui/icons";
 import AppIcon from "@/components/ui/AppIcon";
 import {
   MAIN_MODULES,
-  SUBMENUS,
   getCurrentModule,
-  getSubmenuItemDestination,
+  getMainModuleDestination,
   isMainModuleVisible,
-  isSubmenuItemVisible,
 } from "./navigation";
 
 export default function MainNavigation({ role, moduleKeys }: { role: string; moduleKeys: string[] }) {
@@ -33,13 +31,7 @@ export default function MainNavigation({ role, moduleKeys }: { role: string; mod
   }, []);
 
   function destinationFor(module: (typeof MAIN_MODULES)[number]) {
-    if (module.module === "home") return module.href;
-    const firstVisible = SUBMENUS[module.module].find((item) =>
-      isSubmenuItemVisible(role, moduleKeys, item),
-    );
-    return firstVisible
-      ? getSubmenuItemDestination(role, moduleKeys, firstVisible)
-      : module.href;
+    return getMainModuleDestination(role, moduleKeys, module);
   }
 
   return (
