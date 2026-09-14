@@ -334,10 +334,11 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
 
   pos: [
     {
-      href: "/pos",
+      href: "/pos2",
       label: "Vender",
       icon: CashRegisterIcon,
       iconVariant: "cyan",
+      permissionKey: "/pos",
     },
     {
       href: "/pos/sales",
@@ -731,7 +732,9 @@ export function getMainModuleDestination(
 
   const items = SUBMENUS[module.module];
   if (module.module === "pos") {
-    const sale = items.find((item) => item.href === "/pos");
+    const sale = items.find(
+      (item) => item.href === "/pos" || item.permissionKey === "/pos",
+    );
     if (sale && isSubmenuItemVisible(role, moduleKeys, sale)) return "/pos2";
   }
 

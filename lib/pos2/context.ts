@@ -69,7 +69,8 @@ export function canOperatePos2Context(context: PosContextDto | null | undefined)
 
 export function initialPos2ContextIndex(contexts: readonly PosContextDto[]) {
   const index = contexts.findIndex((context) => canOperatePos2Context(context));
-  return index >= 0 ? index : 0;
+  if (index >= 0) return index;
+  return contexts.length === 1 ? 0 : null;
 }
 
 export function pos2ContextStatus(context: PosContextDto) {

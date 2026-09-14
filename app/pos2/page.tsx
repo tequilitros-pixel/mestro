@@ -54,7 +54,7 @@ export default async function Pos2Page() {
   const rollout = readPos2RolloutConfig();
   const contexts = buildPos2Contexts(branches, rollout);
   const initialContextIndex = initialPos2ContextIndex(contexts);
-  const initialBranchId = contexts[initialContextIndex]?.branchId;
+  const initialBranchId = initialContextIndex === null ? undefined : contexts[initialContextIndex]?.branchId;
   const now = new Date();
   const [catalog, adjustmentVersions, people, grants] = await Promise.all([
     initialBranchId ? loadCatalog(initialBranchId) : Promise.resolve([]),
@@ -102,5 +102,5 @@ export default async function Pos2Page() {
     ]),
   ) as Record<string, AdjustmentRuleDto[]>;
 
-  return <Pos2CashierApp userId={user.id} userName={user.name} contexts={contexts} initialContextIndex={initialContextIndex} initialCatalog={catalog} rulesByBranch={rulesByBranch} people={people} capabilitiesByBranch={capabilitiesByBranch} legacyNavigation={legacyNavigation} />;
+  return <Pos2CashierApp userId={user.id} contexts={contexts} initialContextIndex={initialContextIndex} initialCatalog={catalog} rulesByBranch={rulesByBranch} people={people} capabilitiesByBranch={capabilitiesByBranch} legacyNavigation={legacyNavigation} />;
 }

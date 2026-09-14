@@ -32,7 +32,9 @@ test("Punto de Venta principal abre POS2 y conserva el POS legacy como fallback"
   const legacySale = SUBMENUS.pos.find((item) => item.label === "Vender");
 
   assert.equal(main?.href, "/pos2");
-  assert.equal(legacySale?.href, "/pos");
+  assert.equal(legacySale?.href, "/pos2");
+  assert.equal(legacySale?.permissionKey, "/pos");
+  assert.equal(getSubmenuItemDestination("GERENTE", ["/pos"], legacySale!), "/pos2");
   assert.equal(getMainModuleDestination("GERENTE", ["/pos"], main!), "/pos2");
   assert.equal(getMainModuleDestination("GERENTE", ["/pos/sales"], main!), "/pos/sales");
   assert.equal(getCurrentModule("/pos2"), "pos");
@@ -41,7 +43,7 @@ test("Punto de Venta principal abre POS2 y conserva el POS legacy como fallback"
 test("cada permiso configurable tiene una pestaña y se resuelve exactamente", () => {
   for (const key of configurableKeys) {
     assert.ok(
-      allLeaves.some((item) => item.href === key),
+      allLeaves.some((item) => item.href === key || item.permissionKey === key),
       `Falta una pestaña de navegación para ${key}`,
     );
     assert.equal(getModuleKeyForPath(key), key, `Resolución incorrecta para ${key}`);

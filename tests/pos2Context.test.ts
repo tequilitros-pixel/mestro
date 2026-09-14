@@ -23,8 +23,17 @@ test("construye solo los contextos permitidos por la fuente de sucursal y caja",
   assert.equal(contexts[0].branchId, "branch-a");
   assert.equal(contexts[0].registerId, "register-a");
   assert.equal(contexts[0].cashSessionId, null);
+  assert.equal(initialPos2ContextIndex(contexts), 0);
   assert.equal(pos2ContextStatus(contexts[0]), "Caja cerrada");
   assert.equal(canOperatePos2Context(contexts[0]), false);
+});
+
+test("no elige una sucursal cerrada cuando existen varias opciones permitidas", () => {
+  const contexts = buildPos2Contexts([
+    branch(),
+    branch({ id: "branch-b", name: "Sucursal B", registers: [{ id: "register-b", name: "Caja B" }], terminals: [{ id: "terminal-b", name: "Terminal B", status: "ACTIVE" }] }),
+  ], rollout);
+  assert.equal(initialPos2ContextIndex(contexts), null);
 });
 
 test("prioriza una caja V2 abierta sobre una caja cerrada y conserva su terminal real", () => {
