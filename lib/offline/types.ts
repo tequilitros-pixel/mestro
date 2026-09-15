@@ -1,4 +1,4 @@
-export type OfflineOperationStatus = "pending" | "syncing" | "failed";
+export type OfflineOperationStatus = "pending" | "syncing" | "failed" | "cancelled";
 
 export type CookingEventPayload = {
   cookingId: string;

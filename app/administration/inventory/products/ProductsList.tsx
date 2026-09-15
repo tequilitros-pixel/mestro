@@ -2,9 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toggleProductActiveAction, updateProductCategoryAction } from "./actions";
+import {
+  archiveInventoryProductAction,
+  restoreInventoryProductAction,
+  toggleProductActiveAction,
+  updateProductCategoryAction,
+} from "./actions";
 import { PRODUCT_CATEGORIES } from "./categories";
 import Link from "next/link";
+import { getInventoryProductState } from "@/lib/inventory/productState";
+import { inventoryCountFrequencyLabel } from "@/lib/inventory/countScope";
 
 
 type Product = {
@@ -15,7 +22,9 @@ type Product = {
   unit: string;
   unitCost: number | null;
   itemType: string;
+  countFrequency: "UNCLASSIFIED" | "WEEKLY" | "MONTHLY_ONLY";
   isActive: boolean;
+  archivedAt: string | null;
 };
 
 const itemTypeLabels: Record<string, string> = {
@@ -32,6 +41,7 @@ export default function ProductsList({ products: initialProducts, readOnly = fal
   const [activeTab, setActiveTab] = useState("Todos");
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [categorySavingId, setCategorySavingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   if (initialProducts !== syncedProducts) {
     setSyncedProducts(initialProducts);
@@ -46,14 +56,33 @@ export default function ProductsList({ products: initialProducts, readOnly = fal
 
     const categoriesWithProducts = PRODUCT_CATEGORIES.filter((c) => counts.has(c));
 
+    const statusTabs = [
+      { name: "Activos", count: products.filter((p) => getInventoryProductState(p) === "ACTIVE").length },
+      { name: "Inactivos", count: products.filter((p) => getInventoryProductState(p) === "INACTIVE").length },
+      { name: "Archivados", count: products.filter((p) => getInventoryProductState(p) === "ARCHIVED").length },
+    ];
+    const frequencyTabs = [
+      { name: "Conteo semanal", count: products.filter((p) => p.countFrequency === "WEEKLY").length },
+      { name: "Sólo mensual", count: products.filter((p) => p.countFrequency === "MONTHLY_ONLY").length },
+      { name: "Pendientes", count: products.filter((p) => p.countFrequency === "UNCLASSIFIED").length },
+    ];
+
     return [
       { name: "Todos", count: products.length },
+      ...statusTabs,
+      ...frequencyTabs,
       ...categoriesWithProducts.map((c) => ({ name: c, count: counts.get(c) ?? 0 })),
     ];
   }, [products]);
 
   const filtered = products.filter((p) => {
-    if (activeTab !== "Todos" && p.category !== activeTab) return false;
+    if (activeTab === "Activos" && getInventoryProductState(p) !== "ACTIVE") return false;
+    if (activeTab === "Inactivos" && getInventoryProductState(p) !== "INACTIVE") return false;
+    if (activeTab === "Archivados" && getInventoryProductState(p) !== "ARCHIVED") return false;
+    if (activeTab === "Conteo semanal" && p.countFrequency !== "WEEKLY") return false;
+    if (activeTab === "Sólo mensual" && p.countFrequency !== "MONTHLY_ONLY") return false;
+    if (activeTab === "Pendientes" && p.countFrequency !== "UNCLASSIFIED") return false;
+    if (!["Todos", "Activos", "Inactivos", "Archivados", "Conteo semanal", "Sólo mensual", "Pendientes"].includes(activeTab) && p.category !== activeTab) return false;
 
     const term = search.toLowerCase();
     return (
@@ -64,9 +93,39 @@ export default function ProductsList({ products: initialProducts, readOnly = fal
   });
 
   async function handleToggle(id: string, current: boolean) {
+    setActionError(null);
     setLoadingId(id);
-    await toggleProductActiveAction(id, !current);
+    const response = await toggleProductActiveAction(id, !current);
     setLoadingId(null);
+    if (!response.success) setActionError(response.error);
+    router.refresh();
+  }
+
+  async function handleArchive(id: string) {
+    setActionError(null);
+    setLoadingId(id);
+    let response = await archiveInventoryProductAction(id);
+    if (!response.success && response.requiresConfirmation) {
+      const confirmed = window.confirm(response.error);
+      if (confirmed) response = await archiveInventoryProductAction(id, true);
+    }
+    setLoadingId(null);
+    if (!response.success) {
+      setActionError(response.error);
+      return;
+    }
+    router.refresh();
+  }
+
+  async function handleRestore(id: string) {
+    setActionError(null);
+    setLoadingId(id);
+    const response = await restoreInventoryProductAction(id);
+    setLoadingId(null);
+    if (!response.success) {
+      setActionError(response.error);
+      return;
+    }
     router.refresh();
   }
 
@@ -89,6 +148,11 @@ export default function ProductsList({ products: initialProducts, readOnly = fal
 
   return (
     <div className="space-y-4">
+      {actionError && (
+        <div role="alert" className="rounded-xl border border-error/40 bg-error/10 p-3 text-sm text-error">
+          {actionError}
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 border-b border-outline-variant">
         {tabs.map((tab) => (
           <button
@@ -123,11 +187,12 @@ export default function ProductsList({ products: initialProducts, readOnly = fal
       />
 
       <div className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container">
-        <div className="hidden grid-cols-[1fr_2fr_1.2fr_1fr_1fr_auto] gap-3 border-b border-outline-variant px-4 py-3 text-xs font-medium text-outline md:grid">
+        <div className="hidden grid-cols-[1fr_2fr_1.2fr_1fr_1fr_1.25fr_auto] gap-3 border-b border-outline-variant px-4 py-3 text-xs font-medium text-outline md:grid">
           <span>Código</span>
           <span>Nombre</span>
           <span>Categoría</span>
           <span>Tipo</span>
+          <span>Conteo</span>
           <span>Costo</span>
           <span>Estado</span>
         </div>
@@ -139,12 +204,12 @@ export default function ProductsList({ products: initialProducts, readOnly = fal
         {filtered.map((p) => (
           <div
             key={p.id}
-            className="grid gap-2 border-b border-outline-variant px-4 py-3 last:border-b-0 md:grid-cols-[1fr_2fr_1.2fr_1fr_1fr_auto] md:items-center"
+            className={`grid gap-2 border-b border-outline-variant px-4 py-3 last:border-b-0 md:grid-cols-[1fr_2fr_1.2fr_1fr_1fr_1.25fr_auto] md:items-center ${p.archivedAt ? "bg-surface-container-high/40" : ""}`}
           >
             <span className="text-sm text-on-surface-variant">{p.code}</span>
             <Link
               href={`/administration/inventory/products/${p.id}`}
-              className={`font-medium hover:underline ${p.isActive ? "text-on-surface" : "text-outline"}`}
+              className={`font-medium hover:underline ${p.archivedAt ? "text-outline" : p.isActive ? "text-on-surface" : "text-outline"}`}
             >
               {p.name}
             </Link>
@@ -163,20 +228,50 @@ export default function ProductsList({ products: initialProducts, readOnly = fal
             </select>}
 
             <span className="text-sm text-on-surface-variant">{itemTypeLabels[p.itemType]}</span>
+            <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-medium ${p.countFrequency === "UNCLASSIFIED" ? "bg-secondary/15 text-secondary" : "bg-surface-container-high text-on-surface-variant"}`}>
+              {inventoryCountFrequencyLabel(p.countFrequency)}
+            </span>
             <span className="text-sm text-on-surface-variant">
               {p.unitCost !== null ? `$${p.unitCost.toFixed(2)}` : "—"}
             </span>
-            {readOnly ? <span className="w-fit rounded-full bg-surface-container-high px-3 py-1 text-xs font-medium text-on-surface-variant">{p.isActive ? "Activo" : "Inactivo"}</span> : <button
-              onClick={() => handleToggle(p.id, p.isActive)}
-              disabled={loadingId === p.id}
-              className={`w-fit rounded-full px-3 py-1 text-xs font-medium transition ${
-                p.isActive
-                  ? "bg-tertiary-fixed-dim/20 text-tertiary-fixed-dim hover:bg-error/20 hover:text-error"
-                  : "bg-surface-container-high text-on-surface-variant hover:bg-tertiary-fixed-dim/20 hover:text-tertiary-fixed-dim"
-              }`}
-            >
-              {loadingId === p.id ? "..." : p.isActive ? "Activo" : "Inactivo"}
-            </button>}
+            {readOnly ? (
+              <span className="w-fit rounded-full bg-surface-container-high px-3 py-1 text-xs font-medium text-on-surface-variant">
+                {getInventoryProductState(p) === "ARCHIVED" ? "Archivado" : p.isActive ? "Activo" : "Inactivo"}
+              </span>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                {p.archivedAt ? (
+                  <button
+                    onClick={() => handleRestore(p.id)}
+                    disabled={loadingId === p.id}
+                    className="w-fit rounded-full bg-secondary/15 px-3 py-1 text-xs font-medium text-secondary transition hover:bg-secondary/25 disabled:opacity-60"
+                  >
+                    {loadingId === p.id ? "..." : "Restaurar"}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => handleToggle(p.id, p.isActive)}
+                      disabled={loadingId === p.id}
+                      className={`w-fit rounded-full px-3 py-1 text-xs font-medium transition ${
+                        p.isActive
+                          ? "bg-tertiary-fixed-dim/20 text-tertiary-fixed-dim hover:bg-error/20 hover:text-error"
+                          : "bg-surface-container-high text-on-surface-variant hover:bg-tertiary-fixed-dim/20 hover:text-tertiary-fixed-dim"
+                      }`}
+                    >
+                      {loadingId === p.id ? "..." : p.isActive ? "Activo" : "Inactivo"}
+                    </button>
+                    <button
+                      onClick={() => handleArchive(p.id)}
+                      disabled={loadingId === p.id}
+                      className="w-fit rounded-full border border-outline-variant px-3 py-1 text-xs font-medium text-on-surface-variant transition hover:border-error/40 hover:text-error disabled:opacity-60"
+                    >
+                      Archivar
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>

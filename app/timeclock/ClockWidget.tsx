@@ -7,6 +7,7 @@ import {
   getNearbyBranches,
   clockInAction,
   clockOutAction,
+  closeForgottenShiftAction,
   reportGeofenceAlert,
 } from "@/app/actions/timeclock";
 import { ClockIcon, LoginIcon, LogoutIcon } from "@/components/ui/icons";
@@ -21,6 +22,7 @@ type OpenShift = {
   branch: Branch;
 };
 type OutOfRange = { distance: number; radius: number } | null;
+const FORGOTTEN_SHIFT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 function formatElapsed(milliseconds: number) {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -296,6 +298,51 @@ export default function ClockWidget() {
 
     setError(null);
 
+    let adjustedClockIn: Date;
+    let adjustedClockOut: Date;
+    try {
+      adjustedClockIn = parseBusinessDateTimeLocal(clockInValue);
+      adjustedClockOut = parseBusinessDateTimeLocal(clockOutValue);
+    } catch {
+      setError("Las horas no son válidas.");
+      return;
+    }
+
+    const forgottenSession = Date.now() - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS;
+    if (forgottenSession) {
+      if (!navigator.onLine) {
+        await enqueueOperation({
+          id: crypto.randomUUID(),
+          kind: "timeclock.clock-out",
+          createdAt: new Date().toISOString(),
+          payload: {
+            entryId: openShift.id,
+            clockIn: adjustedClockIn.toISOString(),
+            clockOut: adjustedClockOut.toISOString(),
+            forgottenSession: true,
+          },
+        });
+        setOpenShift(null);
+        localStorage.removeItem("maestro:timeclock-open-shift");
+        setConfirming(false);
+        return;
+      }
+      setSaving(true);
+      const result = await closeForgottenShiftAction(
+        openShift.id,
+        adjustedClockIn.toISOString(),
+        adjustedClockOut.toISOString(),
+      );
+      setSaving(false);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setConfirming(false);
+      await load();
+      return;
+    }
+
     let coords: { latitude: number; longitude: number } | undefined;
 
     if (hasGeofence(openShift.branch)) {
@@ -315,20 +362,9 @@ export default function ClockWidget() {
     }
 
     setSaving(true);
-    let adjustedClockIn: Date;
-    let adjustedClockOut: Date;
-    try {
-      adjustedClockIn = parseBusinessDateTimeLocal(clockInValue);
-      adjustedClockOut = parseBusinessDateTimeLocal(clockOutValue);
-    } catch {
-      setSaving(false);
-      setError("Las horas no son válidas.");
-      return;
-    }
-
     if (!navigator.onLine) {
       const clockOut = adjustedClockOut;
-      await enqueueOperation({ id: crypto.randomUUID(), kind: "timeclock.clock-out", createdAt: new Date().toISOString(), payload: { entryId: openShift.id, clockOut: clockOut.toISOString(), coords } });
+      await enqueueOperation({ id: crypto.randomUUID(), kind: "timeclock.clock-out", createdAt: new Date().toISOString(), payload: { entryId: openShift.id, clockIn: adjustedClockIn.toISOString(), clockOut: clockOut.toISOString(), coords } });
       setOpenShift(null);
       localStorage.removeItem("maestro:timeclock-open-shift");
       setConfirming(false);
@@ -463,7 +499,9 @@ export default function ClockWidget() {
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-error py-4 text-lg font-bold text-on-surface transition duration-150 ease-out hover:opacity-90 hover:scale-[1.04] active:scale-[0.97]"
           >
             <LogoutIcon className="h-5 w-5" />
-            Checar salida
+                {Date.now() - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS
+                  ? "Cerrar sesión olvidada"
+                  : "Checar salida"}
           </button>
         </div>
       ) : (
@@ -472,6 +510,14 @@ export default function ClockWidget() {
           <p className="text-sm text-on-surface-variant">
             Revisa que las horas sean correctas antes de confirmar.
           </p>
+
+          {openShift && Date.now() - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS && (
+            <div className="rounded-xl border border-secondary/40 bg-secondary/10 p-3 text-left text-sm text-secondary">
+              Esta sesión lleva más de 24 horas abierta. Se cerrará como sesión olvidada,
+              sin pedir GPS, y quedará marcada para revisión de nómina. Ajusta la hora real
+              de salida para no registrar por error todas las horas transcurridas.
+            </div>
+          )}
 
           <label className="block space-y-2">
             <span className="text-sm font-semibold text-on-surface-variant">Entrada</span>

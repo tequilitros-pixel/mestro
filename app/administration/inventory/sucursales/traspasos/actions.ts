@@ -40,6 +40,14 @@ export async function createTransferAction(formData: FormData): Promise<ActionRe
       return { success: false, error: "No tienes acceso a una de las sucursales seleccionadas." };
     }
 
+    const product = await prisma.inventoryProduct.findFirst({
+      where: { id: productId, isActive: true, archivedAt: null, trackStock: true },
+      select: { id: true },
+    });
+    if (!product) {
+      return { success: false, error: "No se puede traspasar un producto inactivo, archivado o no inventariable." };
+    }
+
     const quantity = Number(quantityRaw);
     if (!Number.isFinite(quantity) || quantity <= 0) {
       return { success: false, error: "La cantidad debe ser mayor a cero." };

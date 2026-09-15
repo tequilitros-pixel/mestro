@@ -136,11 +136,21 @@ const formatCurrency = (value: number) =>
 export default function PosSellClient({
   branchOptions,
   canManageCatalog,
+  initialBranchId,
+  title = "Punto de Venta",
+  inventoryMode = "legacy",
 }: {
   branchOptions: BranchOption[];
   canManageCatalog: boolean;
+  initialBranchId?: string;
+  title?: string;
+  inventoryMode?: "legacy" | "v2";
 }) {
-  const [branchId, setBranchId] = useState(branchOptions[0]?.id ?? "");
+  const [branchId, setBranchId] = useState(
+    initialBranchId && branchOptions.some((branch) => branch.id === initialBranchId)
+      ? initialBranchId
+      : branchOptions[0]?.id ?? "",
+  );
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
@@ -165,12 +175,24 @@ export default function PosSellClient({
   const [configuredDiscounts, setConfiguredDiscounts] = useState<Array<{ id: string; name: string; percent: number }>>([]);
   const [discountBlockedBy, setDiscountBlockedBy] = useState<string | null>(null);
   const [localOpenBranches, setLocalOpenBranches] = useState<Set<string>>(new Set());
+  const [isOnline, setIsOnline] = useState(true);
   const { showToast } = useToast();
 
   useEffect(() => {
     let cancelled = false;
+    const syncConnectionState = () => setIsOnline(navigator.onLine);
+    syncConnectionState();
+    window.addEventListener("online", syncConnectionState);
+    window.addEventListener("offline", syncConnectionState);
+
     window.setTimeout(() => {
-      const open = new Set(branchOptions.filter((branch) => localStorage.getItem(`maestro:open-cash-cut:${branch.id}`)).map((branch) => branch.id));
+      const open = navigator.onLine
+        ? new Set<string>()
+        : new Set(
+            branchOptions
+              .filter((branch) => localStorage.getItem(`maestro:open-cash-cut:${branch.id}`))
+              .map((branch) => branch.id),
+          );
       if (!cancelled) setLocalOpenBranches(open);
     }, 0);
     const cachedCatalog = localStorage.getItem("maestro:pos-catalog");
@@ -226,6 +248,8 @@ export default function PosSellClient({
 
     return () => {
       cancelled = true;
+      window.removeEventListener("online", syncConnectionState);
+      window.removeEventListener("offline", syncConnectionState);
     };
   }, [branchOptions]);
 
@@ -241,7 +265,7 @@ export default function PosSellClient({
   }, [branchId]);
 
   const branch = branchOptions.find((b) => b.id === branchId) ?? null;
-  const hasOpenCut = Boolean(branch?.openCashCutId) || localOpenBranches.has(branchId);
+  const hasOpenCut = Boolean(branch?.openCashCutId) || (!isOnline && localOpenBranches.has(branchId));
 
   const activeCategory = categories?.find((c) => c.id === activeCategoryId) ?? null;
 
@@ -364,7 +388,7 @@ export default function PosSellClient({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant p-4">
           <div className="flex items-center gap-2">
             <CashRegisterIcon className="h-5 w-5 text-primary" />
-            <h1 className="text-lg font-bold text-on-surface">Punto de Venta</h1>
+            <h1 className="text-lg font-bold text-on-surface">{title}</h1>
           </div>
 
           <div className="flex items-center gap-2">
@@ -382,7 +406,7 @@ export default function PosSellClient({
 
             {canManageCatalog && (
               <Link
-                href="/pos/products"
+                href="/administration/inventory/products"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
               >
                 <GearIcon className="h-4 w-4" />
@@ -390,27 +414,34 @@ export default function PosSellClient({
               </Link>
             )}
 
-            {canManageCatalog && (
-              <Link
-                href="/pos/settings"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
-              >
-                Configuración
-              </Link>
-            )}
-
             <Link
-              href="/pos/sales"
+              href="/pospress/transactions"
               className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
             >
               <ReceiptIcon className="h-4 w-4" />
-              Ventas
+              Transacciones
             </Link>
+            {inventoryMode === "v2" && (
+              <>
+                <Link
+                  href="/pospress/transactions"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+                >
+                  Transacciones
+                </Link>
+                <Link
+                  href="/pospress/tables"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+                >
+                  Mesas
+                </Link>
+              </>
+            )}
             <Link
-              href="/pos/discounts/courtesies"
+              href="/cash-cuts"
               className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
             >
-              Descuentos
+              Corte de caja
             </Link>
           </div>
         </div>
@@ -468,7 +499,7 @@ export default function PosSellClient({
               </p>
               {canManageCatalog && (
                 <Link
-                  href="/pos/categories"
+                  href="/administration/inventory/products"
                   className="text-sm font-semibold text-primary hover:underline"
                 >
                   Crear la primera categoría
@@ -811,6 +842,7 @@ export default function PosSellClient({
           employeeBuyerId={employeeMode ? employeeBuyerId : ""}
           needsAuthorization={needsAuthorization}
           managers={managers}
+          inventoryMode={inventoryMode}
           onClose={() => setShowPayment(false)}
           onSuccess={() => {
             setShowPayment(false);
@@ -1236,6 +1268,7 @@ function PaymentModal({
   employeeBuyerId,
   needsAuthorization,
   managers,
+  inventoryMode,
   onClose,
   onSuccess,
 }: {
@@ -1248,6 +1281,7 @@ function PaymentModal({
   employeeBuyerId: string;
   needsAuthorization: boolean;
   managers: Employee[];
+  inventoryMode: "legacy" | "v2";
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -1288,11 +1322,13 @@ function PaymentModal({
     const salePayload = {
       clientOperationId,
       clientCreatedAt,
+      displayTotal: total,
       branchId,
       discountAmount,
       discountReasonCode,
       discountReason: discountReasonNote,
       employeeBuyerId: employeeBuyerId || undefined,
+      inventoryMode,
       ...(needsAuthorization ? { authorization: { managerId: authManagerId, pin: authPin } } : {}),
       items: cart.map((line) =>
         line.isCustom

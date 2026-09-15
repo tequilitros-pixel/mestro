@@ -10,11 +10,12 @@ export type PermissionGroup = {
 
 /** Pantallas personales disponibles para cualquier usuario con sesión. */
 export const ALWAYS_AVAILABLE_PATHS = [
-  "/workforce",
-  "/workforce/availability",
-  "/workforce/clock",
-  "/workforce/timesheet",
-  "/workforce/payroll",
+  "/timeclock",
+  "/timeclock/calendar",
+  "/timeclock/availability",
+  "/timeclock/hours",
+  "/timeclock/history",
+  "/timeclock/requests",
 ] as const;
 
 /** Acceso histórico para operadores que aún no tienen permisos configurados. */
@@ -44,7 +45,6 @@ const ADMIN_ONLY_PATHS = [
   "/administration/workforce/availability",
   "/administration/workforce/attendance",
   "/administration/workforce/clock-corrections",
-  "/administration/workforce/schedule",
   "/administration/workforce/timesheets",
   "/administration/workforce/overtime",
   "/administration/workforce/payroll",
@@ -71,7 +71,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "/plant", label: "Planta" },
       { key: "/lots", label: "Lotes" },
       { key: "/cooking", label: "Cocción" },
-      { key: "/boiler", label: "Caldera" },
       { key: "/milling", label: "Molienda" },
       { key: "/fermentation", label: "Fermentación" },
       { key: "/distillation", label: "Destilación" },
@@ -190,6 +189,12 @@ export function canAccessModule(
 }
 
 export function getModuleKeyForPath(pathname: string): string | null {
+  // POSpress is the new POS1-based workspace. It intentionally shares
+  // the existing POS permission while its workflow is being introduced.
+  if (pathname === "/pospress" || pathname.startsWith("/pospress/")) {
+    return "/pos";
+  }
+
   const allKeys = PERMISSION_GROUPS.flatMap((g) => g.modules.map((m) => m.key));
 
   const matches = allKeys.filter(
@@ -208,6 +213,7 @@ export function isInventoryManagerReadPath(pathname: string): boolean {
     pathname.startsWith("/administration/inventory/products/") ||
     pathname === "/administration/inventory/sucursales" ||
     pathname === "/administration/inventory/sucursales/stock" ||
+    pathname === "/administration/inventory/sucursales/legacy-report" ||
     pathname === "/administration/inventory/branch-counts" ||
     (pathname.startsWith("/administration/inventory/branch-counts/") &&
       !pathname.startsWith("/administration/inventory/branch-counts/new"));
@@ -219,5 +225,9 @@ export function getDefaultPathForModuleKeys(moduleKeys: string[]): string {
     group.modules.map((module) => module.key),
   );
 
-  return orderedKeys.find((key) => moduleKeys.includes(key)) ?? "/profile";
+  const defaultKey = orderedKeys.find((key) => moduleKeys.includes(key));
+
+  // /pos remains the stored permission key for existing users, while
+  // POSpress is the only canonical UI entry point.
+  return defaultKey === "/pos" ? "/pospress" : (defaultKey ?? "/profile");
 }

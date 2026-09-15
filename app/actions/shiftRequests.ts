@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { formatDateOnly, mondayOfWeek, parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
+import { formatDateOnly, parseDateOnly } from "@/lib/dateOnly";
 import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/periodLock";
 
 export type ShiftRequestKind = "CANNOT_WORK" | "CHANGE_TIME" | "SWAP" | "DAY_OFF";
@@ -22,12 +22,10 @@ export async function getMyPublishedUpcomingShifts() {
   const user = await getCurrentUser();
   if (!user) return [];
   const shifts = await prisma.scheduledShift.findMany({
-    where: { userId: user.id, type: "TURNO", date: { gte: parseDateOnly(todayDateOnly()) } },
+    where: { userId: user.id, type: "TURNO", date: { gte: parseDateOnly(formatDateOnly(new Date())) } },
     include: { branch: { select: { name: true } } }, orderBy: { date: "asc" }, take: 30,
   });
-  const weeks = await prisma.scheduleWeek.findMany({ where: { weekStart: { in: [...new Set(shifts.map((s) => mondayOfWeek(formatDateOnly(s.date))))].map(parseDateOnly) } } });
-  const status = new Map(weeks.map((w) => [formatDateOnly(w.weekStart), w.status]));
-  return shifts.filter((shift) => status.get(mondayOfWeek(formatDateOnly(shift.date))) !== "DRAFT");
+  return shifts.filter((shift) => shift.publicationStatus === "PUBLISHED");
 }
 
 export async function getSwapCandidates() {
@@ -46,8 +44,7 @@ export async function createShiftRequestAction(input: { shiftId: string; type: S
   const shift = await prisma.scheduledShift.findUnique({ where: { id: input.shiftId } });
   if (!shift || shift.userId !== user.id) return { error: "Turno no encontrado." };
   if (await isPayrollDateLocked(shift.date)) return { error: PAYROLL_LOCKED_MESSAGE };
-  const week = await prisma.scheduleWeek.findUnique({ where: { weekStart: parseDateOnly(mondayOfWeek(formatDateOnly(shift.date))) } });
-  if (week?.status === "DRAFT") return { error: "Solo puedes solicitar cambios sobre horarios publicados." };
+  if (shift.publicationStatus === "DRAFT") return { error: "Solo puedes solicitar cambios sobre horarios publicados." };
   if (!input.reason.trim()) return { error: "Explica el motivo de la solicitud." };
   if (input.type === "CHANGE_TIME" && (!input.proposedStartTime || !input.proposedEndTime)) return { error: "Indica el horario solicitado." };
   if (input.type === "SWAP" && !input.swapTargetUserId) return { error: "Selecciona con quién deseas intercambiar." };

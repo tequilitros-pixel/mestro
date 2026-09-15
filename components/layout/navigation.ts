@@ -28,6 +28,7 @@ import {
   CalendarIcon,
   ChartLineIcon,
   ChartBarIcon,
+  ReceiptIcon,
   StoreIcon,
   UploadIcon,
   MailIcon,
@@ -85,6 +86,11 @@ export type SubMenuItem = {
    * convención apunta al primer hijo.
    */
   children?: SubMenuItem[];
+  /**
+   * Historical permission-route compatibility. These entries keep existing
+   * grants resolvable while the visible destination is POSpress.
+   */
+  legacyAlias?: boolean;
 };
 
 export const MAIN_MODULES: MainModule[] = [
@@ -129,7 +135,7 @@ export const MAIN_MODULES: MainModule[] = [
     module: "administration",
   },
   {
-    href: "/pos2",
+    href: "/pospress",
     label: "Punto de Venta",
     shortLabel: "Ventas",
     icon: CashRegisterIcon,
@@ -137,9 +143,9 @@ export const MAIN_MODULES: MainModule[] = [
     module: "pos",
   },
   {
-    href: "/workforce",
-    label: "Workforce",
-    shortLabel: "Workforce",
+    href: "/administration/schedule",
+    label: "Horario",
+    shortLabel: "Horario",
     icon: ClockIcon,
     iconVariant: "blue",
     module: "timeclock",
@@ -174,12 +180,6 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: FlameIcon,
       iconVariant: "orange",
       operatorAllowed: true,
-    },
-    {
-      href: "/boiler",
-      label: "Caldera",
-      icon: FlameIcon,
-      iconVariant: "orange",
     },
     {
       href: "/milling",
@@ -334,47 +334,73 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
 
   pos: [
     {
-      href: "/pos2",
+      href: "/pospress",
+      label: "POSpress",
+      icon: CashRegisterIcon,
+      iconVariant: "cyan",
+    },
+    {
+      href: "/pospress/transactions",
+      label: "Transacciones",
+      icon: ReceiptIcon,
+      iconVariant: "green",
+    },
+    {
+      href: "/pospress/tables",
+      label: "Mesas",
+      icon: StoreIcon,
+      iconVariant: "purple",
+    },
+    // Keep the old permission keys represented for existing grants. These
+    // aliases are never rendered; next.config.ts sends them to POSpress.
+    {
+      href: "/pos",
       label: "Vender",
       icon: CashRegisterIcon,
       iconVariant: "cyan",
-      permissionKey: "/pos",
+      legacyAlias: true,
     },
     {
       href: "/pos/sales",
       label: "Ventas",
       icon: ChartLineIcon,
       iconVariant: "green",
+      legacyAlias: true,
     },
     {
       href: "/pos/discounts/courtesies",
       label: "Descuentos",
       icon: TagIcon,
       iconVariant: "blue",
+      legacyAlias: true,
       children: [
         {
           href: "/pos/discounts/rules",
           label: "Administrar",
           icon: GearIcon,
           iconVariant: "blue",
+          legacyAlias: true,
         },
         {
           href: "/pos/discounts/courtesies",
           label: "Cortesías",
           icon: PartyIcon,
           iconVariant: "purple",
+          legacyAlias: true,
         },
         {
           href: "/pos/discounts/employees",
           label: "Trabajadores",
           icon: UsersIcon,
           iconVariant: "blue",
+          legacyAlias: true,
         },
         {
           href: "/pos/discounts/products",
           label: "Productos",
           icon: PackageIcon,
           iconVariant: "orange",
+          legacyAlias: true,
         },
       ],
     },
@@ -383,12 +409,14 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "Categorías",
       icon: GridIcon,
       iconVariant: "purple",
+      legacyAlias: true,
     },
     {
       href: "/pos/products",
       label: "Productos",
       icon: PackageIcon,
       iconVariant: "orange",
+      legacyAlias: true,
     },
   ],
 
@@ -407,7 +435,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
     },
     {
       href: "/administration/inventory/eventos",
-      label: "Inventario de eventos",
+      label: "Eventos",
       icon: PartyIcon,
       iconVariant: "purple",
       children: [
@@ -435,7 +463,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
     },
     {
       href: "/administration/inventory/sucursales",
-      label: "Inventario de sucursales",
+      label: "Sucursales",
       icon: StoreIcon,
       iconVariant: "orange",
       children: [
@@ -470,93 +498,62 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
 
   timeclock: [
     {
-      href: "/workforce",
+      href: "/timeclock/calendar",
       label: "Mi horario",
       icon: ClockIcon,
       iconVariant: "blue",
       operatorAllowed: true,
     },
     {
-      href: "/workforce/availability",
+      href: "/timeclock/availability",
       label: "Mi disponibilidad",
       icon: CalendarIcon,
       iconVariant: "amber",
       operatorAllowed: true,
     },
     {
-      href: "/workforce/clock",
+      href: "/timeclock",
       label: "Checador",
       icon: CalendarIcon,
       iconVariant: "green",
       operatorAllowed: true,
     },
     {
-      href: "/workforce/timesheet",
-      label: "Mis horas",
-      icon: CalendarIcon,
-      iconVariant: "purple",
-      operatorAllowed: true,
-    },
-    {
-      href: "/workforce/payroll",
+      href: "/timeclock/hours",
       label: "Mi nómina",
       icon: CalendarIcon,
       iconVariant: "green",
       operatorAllowed: true,
     },
     {
-      href: "/administration/workforce",
+      href: "/administration/personnel",
       label: "Empleados",
       icon: UsersIcon,
       iconVariant: "purple",
     },
     {
-      href: "/administration/workforce/schedule",
-      label: "Programar horarios",
+      href: "/administration/schedule",
+      label: "Horarios",
       icon: CalendarIcon,
       iconVariant: "purple",
     },
     {
-      href: "/administration/workforce/branches",
-      label: "Sucursales Workforce",
-      icon: MapPinIcon,
-      iconVariant: "cyan",
-    },
-    {
-      href: "/administration/workforce/attendance",
-      label: "Asistencia",
+      href: "/administration/personnel/timeclock",
+      label: "Asistencia y correcciones",
       icon: ListChecksIcon,
       iconVariant: "amber",
     },
     {
-      href: "/administration/workforce/clock-corrections",
-      label: "Correcciones",
-      icon: ClockIcon,
-      iconVariant: "blue",
-    },
-    {
-      href: "/administration/workforce/timesheets",
-      label: "Timesheets",
-      icon: ListChecksIcon,
-      iconVariant: "cyan",
-    },
-    {
-      href: "/administration/workforce/overtime",
-      label: "Horas extra",
-      icon: ClockIcon,
-      iconVariant: "orange",
-    },
-    {
-      href: "/administration/workforce/payroll",
-      label: "Nómina operativa",
+      href: "/timeclock/payroll",
+      label: "Nómina semanal",
       icon: DollarIcon,
       iconVariant: "green",
     },
     {
-      href: "/administration/workforce/settings",
-      label: "Configuración",
+      href: "/timeclock/geofences",
+      label: "Geozonas",
       icon: MapPinIcon,
-      iconVariant: "slate",
+      iconVariant: "cyan",
     },
   ],
 
@@ -593,7 +590,7 @@ export function getCurrentModule(pathname: string): AppModule {
     return "cash-cuts";
   }
 
-  if (matchesRoute(pathname, "/pos") || matchesRoute(pathname, "/pos2")) {
+  if (matchesRoute(pathname, "/pospress")) {
     return "pos";
   }
 
@@ -624,7 +621,6 @@ export function getCurrentModule(pathname: string): AppModule {
     "/plant",
     "/lots",
     "/cooking",
-    "/boiler",
     "/milling",
     "/fermentation",
     "/distillation",
@@ -697,9 +693,8 @@ export function isSubmenuItemVisible(
     ? item.permissionKey
     : (getModuleKeyForPath(permissionHref) ?? permissionHref);
 
-  // Se compara el permiso resuelto de forma exacta. Así `/pos` (Vender)
-  // no concede accidentalmente `/pos/sales` (Ventas), mientras que las
-  // rutas sin permiso propio siguen heredando el módulo padre correcto.
+  // Se compara el permiso resuelto de forma exacta para que cada módulo
+  // herede únicamente el permiso que le corresponde.
   return moduleKeys.includes(requiredKey);
 }
 
@@ -721,29 +716,6 @@ export function isMainModuleVisible(
   const items = SUBMENUS[module.module as Exclude<AppModule, "home">] ?? [];
 
   return items.some((item) => isSubmenuItemVisible(role, moduleKeys, item));
-}
-
-export function getMainModuleDestination(
-  role: string,
-  moduleKeys: string[],
-  module: MainModule,
-): string {
-  if (module.module === "home") return module.href;
-
-  const items = SUBMENUS[module.module];
-  if (module.module === "pos") {
-    const sale = items.find(
-      (item) => item.href === "/pos" || item.permissionKey === "/pos",
-    );
-    if (sale && isSubmenuItemVisible(role, moduleKeys, sale)) return "/pos2";
-  }
-
-  const firstVisible = items.find((item) =>
-    isSubmenuItemVisible(role, moduleKeys, item),
-  );
-  return firstVisible
-    ? getSubmenuItemDestination(role, moduleKeys, firstVisible)
-    : module.href;
 }
 
 /** Ruta segura de un tab padre: abre el primer hijo realmente autorizado. */

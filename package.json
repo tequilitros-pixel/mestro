@@ -2,18 +2,17 @@
   "name": "maestro",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.19.0",
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "prisma generate --schema=prisma/schema.prisma && node scripts/verify-prisma-client.cjs && next build --webpack",
+    "build": "prisma generate && next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --import tsx --test tests/*.test.ts tests/workforce/*.test.ts",
-    "test:workforce": "node --import tsx --test tests/workforce/*.test.ts tests/workforce*.test.ts",
+    "test": "node --import tsx --test tests/**/*.test.ts",
     "sync:liquor-recipes": "tsx scripts/sync-liquor-recipes.ts",
     "sync:liquor-steps": "tsx scripts/sync-liquor-steps.ts",
     "seed:pos-tequilitros": "tsx scripts/seed-pos-tequilitros.ts",
-    "cleanup:duplicate-tequilitros": "tsx scripts/cleanup-duplicate-tequilitros.ts",
-    "certify:pos2": "tsx scripts/certify-pos2-pilot.ts"
+    "cleanup:duplicate-tequilitros": "tsx scripts/cleanup-duplicate-tequilitros.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",

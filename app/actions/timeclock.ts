@@ -19,6 +19,8 @@ import {
 } from "@/lib/timeclockShared";
 import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/periodLock";
 
+const FORGOTTEN_SHIFT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
 export async function getMyOpenShift() {
   const user = await getCurrentUser();
   if (!user) return null;
@@ -49,7 +51,7 @@ export async function getMyBranches() {
     }),
     // DESCANSO (día libre) no tiene sucursal: no aplica para checar entrada.
     prisma.scheduledShift.findMany({
-      where: { userId: user.id, date: { gte: todayStart, lt: todayEnd }, type: "TURNO" },
+      where: { userId: user.id, date: { gte: todayStart, lt: todayEnd }, type: "TURNO", publicationStatus: "PUBLISHED" },
       include: { branch: { select: BRANCH_LOCATION_SELECT } },
     }),
   ]);
@@ -187,6 +189,52 @@ export async function clockOutAction(
   revalidatePath("/timeclock");
 
   return { success: true };
+}
+
+/**
+ * Cierra una sesión olvidada que lleva abierta al menos un día. No pide
+ * geolocalización porque ya no es una salida en sitio, y queda sin confirmar
+ * para que nómina la revise antes de pagarla.
+ */
+export async function closeForgottenShiftAction(
+  entryId: string,
+  clockInAdjusted: string,
+  clockOutAdjusted: string,
+) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "No autorizado" };
+
+  const entry = await prisma.timeClockEntry.findUnique({ where: { id: entryId } });
+  if (!entry || entry.userId !== user.id) return { error: "Turno no encontrado" };
+  if (entry.clockOut) return { error: "Este turno ya está cerrado" };
+  if (Date.now() - entry.clockIn.getTime() < FORGOTTEN_SHIFT_THRESHOLD_MS) {
+    return { error: "Esta opción solo aplica a sesiones abiertas desde hace más de 24 horas." };
+  }
+
+  const clockIn = new Date(clockInAdjusted);
+  const clockOut = new Date(clockOutAdjusted);
+  if (Number.isNaN(clockIn.getTime()) || Number.isNaN(clockOut.getTime())) {
+    return { error: "Las horas no son válidas" };
+  }
+  if (clockOut <= clockIn) {
+    return { error: "La hora de salida debe ser después de la entrada" };
+  }
+
+  const note = "Cierre excepcional de sesión olvidada; requiere revisión de nómina.";
+  await prisma.timeClockEntry.update({
+    where: { id: entryId },
+    data: {
+      clockIn,
+      clockOut,
+      confirmedByEmployee: false,
+      notes: entry.notes ? `${entry.notes}\n${note}` : note,
+    },
+  });
+
+  revalidatePath("/timeclock");
+  revalidatePath("/timeclock/payroll");
+  revalidatePath("/administration/personnel/timeclock");
+  return { success: true, warning: "La sesión se cerró y quedó marcada para revisión de nómina." };
 }
 
 /**
@@ -550,6 +598,78 @@ export async function createManualTimeClockEntryAction(input: {
   revalidatePath("/administration/personnel/timeclock");
   revalidatePath("/timeclock/payroll");
 
+  return { success: true };
+}
+
+export async function updateManualTimeClockEntryAction(input: {
+  entryId: string;
+  branchId: string;
+  clockIn: string;
+  clockOut: string;
+}) {
+  const admin = await getCurrentUser();
+  if (!admin || admin.role !== "ADMIN") {
+    return { error: "No tienes permiso" };
+  }
+
+  if (!input.entryId || !input.branchId || !input.clockIn || !input.clockOut) {
+    return { error: "Faltan datos de la corrección" };
+  }
+
+  const entry = await prisma.timeClockEntry.findUnique({
+    where: { id: input.entryId },
+    select: { id: true, clockIn: true },
+  });
+  if (!entry) return { error: "Turno no encontrado" };
+
+  const clockIn = new Date(input.clockIn);
+  const clockOut = new Date(input.clockOut);
+  if (Number.isNaN(clockIn.getTime()) || Number.isNaN(clockOut.getTime())) {
+    return { error: "Las horas no son válidas" };
+  }
+  if (clockOut <= clockIn) {
+    return { error: "La hora de salida debe ser después de la entrada" };
+  }
+  if (await isPayrollDateLocked(entry.clockIn) || await isPayrollDateLocked(clockIn)) {
+    return { error: PAYROLL_LOCKED_MESSAGE };
+  }
+
+  await prisma.timeClockEntry.update({
+    where: { id: entry.id },
+    data: {
+      branchId: input.branchId,
+      clockIn,
+      clockOut,
+      confirmedByEmployee: false,
+      source: "MANUAL",
+      closedManuallyById: admin.id,
+      scheduledShiftId: null,
+    },
+  });
+  revalidatePath("/administration/personnel/timeclock");
+  revalidatePath("/timeclock/payroll");
+  return { success: true };
+}
+
+export async function deleteManualTimeClockEntryAction(entryId: string) {
+  const admin = await getCurrentUser();
+  if (!admin || admin.role !== "ADMIN") {
+    return { error: "No tienes permiso" };
+  }
+
+  const entry = await prisma.timeClockEntry.findUnique({
+    where: { id: entryId },
+    select: { id: true, clockOut: true, clockIn: true },
+  });
+  if (!entry) return { error: "Turno no encontrado" };
+  if (!entry.clockOut) return { error: "No se puede borrar un turno abierto. Ciérralo primero." };
+  if (await isPayrollDateLocked(entry.clockIn)) {
+    return { error: PAYROLL_LOCKED_MESSAGE };
+  }
+
+  await prisma.timeClockEntry.delete({ where: { id: entry.id } });
+  revalidatePath("/administration/personnel/timeclock");
+  revalidatePath("/timeclock/payroll");
   return { success: true };
 }
 

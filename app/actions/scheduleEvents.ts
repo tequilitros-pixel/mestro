@@ -91,6 +91,7 @@ export async function createScheduleEventAction(input: EventInput) {
         endTime: input.endTime,
         position: input.position?.trim() || null,
         eventId: event.id,
+        publicationStatus: "DRAFT" as const,
       })),
     });
 
@@ -155,6 +156,7 @@ export async function updateScheduleEventAction(input: EventInput & { eventId: s
         startTime: input.startTime,
         endTime: input.endTime,
         position: input.position?.trim() || null,
+        publicationStatus: "DRAFT",
       },
     });
 
@@ -174,6 +176,7 @@ export async function updateScheduleEventAction(input: EventInput & { eventId: s
           endTime: input.endTime,
           position: input.position?.trim() || null,
           eventId: input.eventId,
+          publicationStatus: "DRAFT" as const,
         })),
       });
     }

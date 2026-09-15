@@ -49,6 +49,7 @@ export async function getPersonnelById(userId: string) {
 
 export async function getBranchesForAssignment() {
   return prisma.branch.findMany({
+    where: { active: true },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });

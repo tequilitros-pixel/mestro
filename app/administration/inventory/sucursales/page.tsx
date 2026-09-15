@@ -35,8 +35,13 @@ const quickActions = [
     permissionKey: "/administration/inventory/sucursales/traspasos",
   },
   {
-    label: "Nuevo conteo",
-    href: "/administration/inventory/branch-counts/new",
+    label: "Nuevo conteo semanal",
+    href: "/administration/inventory/branch-counts/new?type=WEEKLY",
+    permissionKey: "/administration/inventory/branch-counts",
+  },
+  {
+    label: "Nuevo conteo mensual",
+    href: "/administration/inventory/branch-counts/new?type=MONTHLY",
     permissionKey: "/administration/inventory/branch-counts",
   },
 ];
@@ -58,7 +63,7 @@ export default async function SucursalesInventoryPage() {
 
   const [products, recentEntries, entriesForTrend] = await Promise.all([
     prisma.inventoryProduct.findMany({
-      where: { isActive: true, trackStock: true },
+      where: { isActive: true, archivedAt: null, trackStock: true },
       select: { id: true, name: true, unit: true, minimumStock: true },
     }),
     prisma.inventoryEntry.findMany({

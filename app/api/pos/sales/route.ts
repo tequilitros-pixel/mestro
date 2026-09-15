@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
-import { PaymentMethod, PosBenefitReason, Prisma, type CatalogBaseUnit } from "@prisma/client";
+import { PaymentMethod, PosBenefitReason, Prisma } from "@prisma/client";
 import { getDiscountLimitsByRole, verifyManagerPin } from "@/lib/pos/discountLimits";
 import { getActiveDiscountRules } from "@/lib/pos/discountRules";
 import { setRlsContext, withRlsContext } from "@/lib/rls";
 import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
-import { formatBusinessDateOnly } from "@/lib/dateTime";
 import { hashPayload } from "@/lib/pos2/payloadHash";
 import { consumePosInventory } from "@/lib/pos/v1InventoryGuard";
+import {
+  consumePospressInventoryV2,
+  type PospressInventoryRequirement,
+} from "@/lib/pos/pospressInventory";
 import { DomainError } from "@/lib/domain/errors";
 import { appendAuditEvent } from "@/lib/pos2/audit";
 import { appendOutboxEvent } from "@/lib/pos2/outbox";
@@ -129,6 +133,7 @@ export async function POST(request: NextRequest) {
     authorization,
     clientOperationId,
     clientCreatedAt,
+    inventoryMode,
   }: {
     branchId?: string;
     items?: CartItemInput[];
@@ -140,6 +145,7 @@ export async function POST(request: NextRequest) {
     authorization?: { managerId?: string; pin?: string };
     clientOperationId?: string;
     clientCreatedAt?: string;
+    inventoryMode?: "legacy" | "v2";
   } = body;
 
   if (clientOperationId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientOperationId)) {
@@ -149,6 +155,7 @@ export async function POST(request: NextRequest) {
   const salePayloadHash = hashPayload({
     branchId, items, discountAmount: rawDiscountAmount, discountReason,
     discountReasonCode, employeeBuyerId, payments,
+    inventoryMode: inventoryMode ?? "legacy",
     authorization: authorization ? { managerId: authorization.managerId } : undefined,
     clientCreatedAt,
   });
@@ -505,7 +512,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const dayStart = businessDayStart(todayDateOnly());
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
 
   const todayCount = await withRlsContext(user, (tx) => tx.posSale.count({
     where: { branchId, createdAt: { gte: dayStart } },
@@ -513,7 +521,7 @@ export async function POST(request: NextRequest) {
 
   const code = clientOperationId
     ? `POS-${branch.code}-${clientOperationId.replace(/-/g, "").slice(0, 12).toUpperCase()}`
-    : `POS-${branch.code}-${formatBusinessDateOnly(dayStart).replace(/-/g, "")}-${String(todayCount + 1).padStart(3, "0")}`;
+    : `POS-${branch.code}-${dayStart.toISOString().slice(0, 10).replace(/-/g, "")}-${String(todayCount + 1).padStart(3, "0")}`;
   const saleCreatedAt = clientCreatedAt ? new Date(clientCreatedAt) : new Date();
   if (Number.isNaN(saleCreatedAt.getTime())) {
     return NextResponse.json({ error: "La fecha de la venta no es válida." }, { status: 400 });
@@ -568,17 +576,42 @@ export async function POST(request: NextRequest) {
       include: { items: true, payments: true, branch: true },
     });
 
-    const inventoryRequirements: Array<{ productId: string; quantity: number; unit?: CatalogBaseUnit }> = [];
+    const inventoryRequirements: Array<{ productId: string; quantity: number }> = [];
+    const pospressInventoryRequirements: PospressInventoryRequirement[] = [];
     for (const item of resolvedItems) {
       if (!item.variantId) continue;
       const variant = variantsById.get(item.variantId);
       if (!variant) continue;
 
       for (const ingredient of variant.ingredients) {
-        inventoryRequirements.push({ productId: ingredient.inventoryProductId, quantity: Number(ingredient.quantity) * item.quantity, unit: ingredient.unit ?? undefined });
+        const quantity = new Prisma.Decimal(ingredient.quantity).times(item.quantity);
+        inventoryRequirements.push({ productId: ingredient.inventoryProductId, quantity: quantity.toNumber() });
+        if (inventoryMode === "v2") {
+          if (!ingredient.unit || ingredient.unitStatus !== "RESOLVED") {
+            throw new DomainError("RECIPE_UNIT_UNRESOLVED", {
+              ingredientId: ingredient.id,
+              inventoryProductId: ingredient.inventoryProductId,
+            });
+          }
+          pospressInventoryRequirements.push({
+            inventoryProductId: ingredient.inventoryProductId,
+            quantity,
+            unit: ingredient.unit,
+          });
+        }
       }
     }
-    await consumePosInventory(tx, { branchId, saleCode: code, requirements: inventoryRequirements, actorId: user.id });
+    if (inventoryMode === "v2") {
+      await consumePospressInventoryV2(tx, {
+        branchId,
+        actorId: user.id,
+        saleId: createdSale.id,
+        operationId: clientOperationId ?? randomUUID(),
+        requirements: pospressInventoryRequirements,
+      });
+    } else {
+      await consumePosInventory(tx, { branchId, saleCode: code, requirements: inventoryRequirements });
+    }
 
     // Suma los pagos de esta venta al corte de caja abierto de la
     // sucursal — así "Ventas" en el corte queda alimentado por el

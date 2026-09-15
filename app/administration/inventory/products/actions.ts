@@ -1,10 +1,18 @@
 "use server";
 
-import { InventoryContentUnit, InventoryHandlingUnit, InventoryItemType } from "@prisma/client";
+import {
+  InventoryContentUnit,
+  InventoryCountFrequency,
+  InventoryHandlingUnit,
+  InventoryItemType,
+} from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { PRODUCT_CATEGORIES } from "./categories";
 import { requireAdminAction } from "@/lib/auth";
+import { appendAuditEvent } from "@/lib/pos2/audit";
+import { computeStockMatrix } from "../lib/stock";
+import { isInventoryCountFrequency } from "@/lib/inventory/countScope";
 
 export type CreateInventoryProductResult =
   | {
@@ -15,10 +23,19 @@ export type CreateInventoryProductResult =
   | {
       success: false;
       error: string;
-    };
+  };
+
+export type ArchiveInventoryProductResult =
+  | { success: true; message: string }
+  | { success: false; error: string; requiresConfirmation?: boolean };
 
 function readBoolean(formData: FormData, field: string) {
   return formData.get(field) === "on";
+}
+
+function readCountFrequency(formData: FormData): InventoryCountFrequency | null {
+  const value = formData.get("countFrequency")?.toString() ?? "UNCLASSIFIED";
+  return isInventoryCountFrequency(value) ? value : null;
 }
 
 function readOptionalNumber(value: FormDataEntryValue | null) {
@@ -34,7 +51,7 @@ function readOptionalNumber(value: FormDataEntryValue | null) {
 
   return number;
 }
-const handlingUnits: Record<string, InventoryHandlingUnit> = { Pieza: "PIEZA", Botella: "BOTELLA", Caja: "CAJA", Paquete: "PAQUETE", Garrafa: "GARRAFA", Kilogramo: "KILOGRAMO", Litro: "LITRO", Costal: "OTRA", Bolsa: "OTRA", Mililitro: "OTRA", Gramo: "OTRA", Metro: "OTRA" };
+const handlingUnits: Record<string, InventoryHandlingUnit> = { Pieza: "PIEZA", Botella: "BOTELLA", Caja: "CAJA", Paquete: "PAQUETE", Garrafa: "GARRAFA", Kilogramo: "KILOGRAMO", Bolsa: "BOLSA", Litro: "LITRO", Costal: "OTRA", Mililitro: "OTRA", Gramo: "OTRA", Metro: "OTRA" };
 function readPresentation(formData: FormData, unit: string) {
   const contentPerUnit = readOptionalNumber(formData.get("contentPerUnit")); const contentUnitValue = formData.get("contentUnit")?.toString() ?? "";
   if (contentPerUnit === null && !contentUnitValue) return { handlingUnit: handlingUnits[unit] ?? "OTRA", contentPerUnit: null, contentUnit: null, normalizedContentPerUnit: null };
@@ -55,6 +72,7 @@ export async function createInventoryProductAction(
     const category = formData.get("category")?.toString().trim() ?? "";
     const unit = formData.get("unit")?.toString().trim() ?? "";
     const itemTypeValue = formData.get("itemType")?.toString() ?? "";
+    const countFrequency = readCountFrequency(formData);
 
     const unitCost = readOptionalNumber(formData.get("unitCost"));
     const minimumStock =
@@ -86,6 +104,13 @@ export async function createInventoryProductAction(
       return {
         success: false,
         error: "Selecciona una unidad de medida.",
+      };
+    }
+
+    if (!countFrequency) {
+      return {
+        success: false,
+        error: "Selecciona un alcance de conteo válido.",
       };
     }
 
@@ -141,6 +166,7 @@ export async function createInventoryProductAction(
           unitCost,
           minimumStock,
           itemType: itemTypeValue as InventoryItemType,
+          countFrequency,
           trackStock: readBoolean(formData, "trackStock"),
           trackBatch: readBoolean(formData, "trackBatch"),
           trackExpiration: readBoolean(formData, "trackExpiration"),
@@ -175,6 +201,17 @@ export async function toggleProductActiveAction(
 ): Promise<{ success: true } | { success: false; error: string }> {
   try {
     await requireAdminAction();
+    const product = await prisma.inventoryProduct.findUnique({
+      where: { id: productId },
+      select: { archivedAt: true },
+    });
+    if (!product) return { success: false, error: "Producto no encontrado." };
+    if (product.archivedAt) {
+      return {
+        success: false,
+        error: "Restaura el producto antes de cambiar su estado activo.",
+      };
+    }
     await prisma.inventoryProduct.update({
       where: { id: productId },
       data: { isActive },
@@ -188,6 +225,124 @@ export async function toggleProductActiveAction(
   } catch (error) {
     console.error("Error toggling product:", error);
     return { success: false, error: "No fue posible actualizar el producto." };
+  }
+}
+
+async function productHasCurrentStock(productId: string) {
+  const [matrix, balances] = await Promise.all([
+    computeStockMatrix([productId]),
+    prisma.inventoryBalance.findMany({
+      where: { inventoryProductId: productId },
+      select: { quantity: true },
+    }),
+  ]);
+
+  return (
+    balances.some((balance) => Number(balance.quantity) !== 0) ||
+    [...matrix.stockByBranch.values()].some((products) =>
+      (products.get(productId) ?? 0) !== 0,
+    )
+  );
+}
+
+export async function archiveInventoryProductAction(
+  productId: string,
+  confirmWithStock = false,
+): Promise<ArchiveInventoryProductResult> {
+  try {
+    const actor = await requireAdminAction();
+    const product = await prisma.inventoryProduct.findUnique({
+      where: { id: productId },
+      select: { id: true, name: true, archivedAt: true },
+    });
+    if (!product) return { success: false, error: "Producto no encontrado." };
+    if (product.archivedAt) {
+      return { success: true, message: "El producto ya estaba archivado." };
+    }
+
+    const hasStock = await productHasCurrentStock(productId);
+    if (hasStock && !confirmWithStock) {
+      return {
+        success: false,
+        requiresConfirmation: true,
+        error:
+          "Este producto conserva existencia en al menos una ubicación. Archivar lo ocultará de la operación, pero no cambiará ni eliminará sus balances. Confirma para continuar.",
+      };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string; archivedAt: Date | null }>>`
+        SELECT "id", "archivedAt"
+        FROM "InventoryProduct"
+        WHERE "id" = ${productId}
+        FOR UPDATE
+      `;
+      if (!locked[0]) throw new Error("PRODUCT_NOT_FOUND");
+      if (locked[0].archivedAt) return;
+
+      const archivedAt = new Date();
+      await tx.inventoryProduct.update({
+        where: { id: productId },
+        data: { archivedAt },
+      });
+      await appendAuditEvent(tx, {
+        actorId: actor.id,
+        action: "INVENTORY_PRODUCT_ARCHIVED",
+        entityType: "InventoryProduct",
+        entityId: productId,
+        metadata: { productName: product.name, hadCurrentStock: hasStock, archivedAt: archivedAt.toISOString() },
+      });
+    });
+
+    revalidatePath("/administration");
+    revalidatePath("/administration/inventory");
+    revalidatePath("/administration/inventory/products");
+    revalidatePath("/administration/inventory/sucursales/stock");
+
+    return { success: true, message: "Producto archivado sin borrar su historial." };
+  } catch (error) {
+    console.error("Error archiving inventory product:", error);
+    return { success: false, error: "No fue posible archivar el producto." };
+  }
+}
+
+export async function restoreInventoryProductAction(
+  productId: string,
+): Promise<ArchiveInventoryProductResult> {
+  try {
+    const actor = await requireAdminAction();
+    await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string; archivedAt: Date | null }>>`
+        SELECT "id", "archivedAt"
+        FROM "InventoryProduct"
+        WHERE "id" = ${productId}
+        FOR UPDATE
+      `;
+      if (!locked[0]) throw new Error("PRODUCT_NOT_FOUND");
+      if (!locked[0].archivedAt) return;
+
+      await tx.inventoryProduct.update({
+        where: { id: productId },
+        data: { archivedAt: null },
+      });
+      await appendAuditEvent(tx, {
+        actorId: actor.id,
+        action: "INVENTORY_PRODUCT_RESTORED",
+        entityType: "InventoryProduct",
+        entityId: productId,
+        metadata: { restoredAt: new Date().toISOString() },
+      });
+    });
+
+    revalidatePath("/administration");
+    revalidatePath("/administration/inventory");
+    revalidatePath("/administration/inventory/products");
+    revalidatePath("/administration/inventory/sucursales/stock");
+
+    return { success: true, message: "Producto restaurado. Conserva su estado activo/inactivo." };
+  } catch (error) {
+    console.error("Error restoring inventory product:", error);
+    return { success: false, error: "No fue posible restaurar el producto." };
   }
 }
 export async function updateProductCategoryAction(
@@ -228,6 +383,7 @@ export async function updateInventoryProductAction(
     const category = formData.get("category")?.toString().trim() ?? "";
     const unit = formData.get("unit")?.toString().trim() ?? "";
     const itemTypeValue = formData.get("itemType")?.toString() ?? "";
+    const countFrequency = readCountFrequency(formData);
     const unitCost = readOptionalNumber(formData.get("unitCost"));
     const minimumStock = readOptionalNumber(formData.get("minimumStock")) ?? 0;
     const presentation = readPresentation(formData, unit);
@@ -242,6 +398,13 @@ export async function updateInventoryProductAction(
 
     if (!unit) {
       return { success: false, error: "Selecciona una unidad de medida." };
+    }
+
+    if (!countFrequency) {
+      return {
+        success: false,
+        error: "Selecciona un alcance de conteo válido.",
+      };
     }
 
     if (!Object.values(InventoryItemType).includes(itemTypeValue as InventoryItemType)) {
@@ -267,6 +430,7 @@ export async function updateInventoryProductAction(
         unitCost,
         minimumStock,
         itemType: itemTypeValue as InventoryItemType,
+        countFrequency,
         trackStock: readBoolean(formData, "trackStock"),
         trackBatch: readBoolean(formData, "trackBatch"),
         trackExpiration: readBoolean(formData, "trackExpiration"),
@@ -290,16 +454,19 @@ export async function deleteInventoryProductAction(
 ): Promise<{ success: true } | { success: false; error: string }> {
   try {
     await requireAdminAction();
-    const [packageUses, eventUses, kitUses, countUses, entryUses, posRecipeUses] = await Promise.all([
+    const [packageUses, eventUses, kitUses, countUses, entryUses, posRecipeUses, balanceUses, movementUses, declarationUses] = await Promise.all([
       prisma.eventPackageItem.count({ where: { productId } }),
       prisma.serviceEventItem.count({ where: { productId } }),
       prisma.equipmentKitItem.count({ where: { productId } }),
       prisma.inventoryCountItem.count({ where: { productId } }),
       prisma.inventoryEntry.count({ where: { productId } }),
       prisma.posVariantIngredient.count({ where: { inventoryProductId: productId } }),
+      prisma.inventoryBalance.count({ where: { inventoryProductId: productId } }),
+      prisma.inventoryMovement.count({ where: { inventoryProductId: productId } }),
+      prisma.inventoryCountDeclaration.count({ where: { inventoryProductId: productId } }),
     ]);
 
-    const totalUses = packageUses + eventUses + kitUses + countUses + entryUses + posRecipeUses;
+    const totalUses = packageUses + eventUses + kitUses + countUses + entryUses + posRecipeUses + balanceUses + movementUses + declarationUses;
 
     if (totalUses > 0) {
       return {
@@ -307,6 +474,14 @@ export async function deleteInventoryProductAction(
         error:
           "Este producto ya se usó en paquetes, eventos, kits, movimientos o recetas del POS. No se puede eliminar sin perder ese historial — mejor desactívalo.",
       };
+    }
+
+    const product = await prisma.inventoryProduct.findUnique({
+      where: { id: productId },
+      select: { archivedAt: true },
+    });
+    if (product?.archivedAt) {
+      return { success: false, error: "Un producto archivado no se elimina; restáuralo sólo si necesitas modificarlo." };
     }
 
     await prisma.inventoryProduct.delete({ where: { id: productId } });

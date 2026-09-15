@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/auth";
-import { headers } from "next/headers";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 
 export default async function WorkforceV1Layout({
@@ -11,14 +9,10 @@ export default async function WorkforceV1Layout({
   children: React.ReactNode;
 }) {
   if (!workforceV1Enabled()) notFound();
-  const pathname = (await headers()).get("x-pathname") ?? "";
-  const isSchedule = pathname.startsWith("/administration/workforce/schedule");
-  if (isSchedule)
-    await requireModuleAccess("/administration/schedule");
-  else await requireAdmin();
+  await requireAdmin();
   return (
-    <main className={isSchedule ? "w-full p-2 lg:p-3" : "mx-auto w-full max-w-7xl p-4 sm:p-6"}>
-      <header className={isSchedule ? "sr-only" : "mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"}>
+    <main className="mx-auto w-full max-w-7xl p-4 sm:p-6">
+      <header className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-primary">
             Workforce · Administración
@@ -43,12 +37,6 @@ export default async function WorkforceV1Layout({
             href="/administration/workforce/availability"
           >
             Disponibilidad
-          </Link>
-          <Link
-            className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/administration/workforce/schedule"
-          >
-            Horario
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"

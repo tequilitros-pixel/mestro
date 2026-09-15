@@ -1,6 +1,7 @@
 // Al actualizar la interfaz, la versión invalida los recursos estáticos de
 // versiones anteriores antes de volver a servirlos desde caché.
-const CACHE_NAME = "maestro-shell-v3";
+const IS_DEVELOPMENT_HOST = ["localhost", "127.0.0.1"].includes(self.location.hostname);
+const CACHE_NAME = IS_DEVELOPMENT_HOST ? "maestro-shell-dev-v8" : "maestro-shell-v8";
 const STATIC_ASSETS = [
   "/manifest.json",
   "/icon-192.png",
@@ -29,6 +30,8 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  if (IS_DEVELOPMENT_HOST) return;
+
   const request = event.request;
   if (request.method !== "GET") return;
 

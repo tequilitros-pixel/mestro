@@ -5,6 +5,8 @@ import {
   getScheduleGridForWeek,
   publishWeekAction,
   unpublishWeekAction,
+  publishScheduleScopeAction,
+  unpublishScheduleScopeAction,
   copyPreviousWeekAction,
 } from "@/app/actions/schedule";
 import {
@@ -46,6 +48,7 @@ type Shift = {
   endTime: string | null;
   position: string | null;
   notes: string | null;
+  publicationStatus: "DRAFT" | "PUBLISHED";
   user: { id: string; name: string };
   branch: BranchLite | null;
   event: { id: string; name: string; location: string | null } | null;
@@ -53,7 +56,9 @@ type Shift = {
 type GridData = {
   weekStart: string | Date;
   weekEnd: string | Date;
-  status: "DRAFT" | "PUBLISHED";
+  status: "DRAFT" | "PARTIAL" | "PUBLISHED";
+  publishedShiftCount: number;
+  totalShiftCount: number;
   weeklyHourThreshold: number;
   employees: Employee[];
   branches: BranchLite[];
@@ -120,6 +125,16 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
 }
 
+function rgbaFromHex(color: string, alpha: number) {
+  const hex = color.replace("#", "");
+  const normalized = hex.length === 3 ? hex.split("").map((part) => part + part).join("") : hex;
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return color;
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
 function formatWeekRange(weekStart: string) {
   const start = parseDateOnly(weekStart);
   const end = parseDateOnly(addDaysToDateOnly(weekStart, 6));
@@ -142,25 +157,39 @@ function getMostRecentMonday() {
 }
 
 function ShiftBlock({ shift, onClick }: { shift: Shift; onClick: () => void }) {
+  const isPublished = shift.publicationStatus === "PUBLISHED";
+  const statusLabel = isPublished ? "Publicado" : "Borrador";
+  const statusClass = isPublished
+    ? "border-tertiary-fixed-dim/80 bg-tertiary-fixed-dim/30"
+    : "border-outline-variant bg-surface-container-high";
+
   if (shift.type === "DESCANSO") {
     return (
       <button
         onClick={onClick}
-        className="group/shift w-full rounded-md border border-outline-variant bg-surface-container-high px-2 py-2 text-left transition hover:border-outline"
+        className={`group/shift w-full rounded-md border px-2 py-2 text-left transition hover:border-outline ${statusClass}`}
       >
-        <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Descanso</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Descanso</p>
+          <span className="rounded-full bg-background/55 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-on-surface-variant">
+            {statusLabel}
+          </span>
+        </div>
       </button>
     );
   }
 
   const color =
     shift.branch?.color || fallbackBranchColor(shift.event?.id ?? shift.branchId ?? shift.id);
+  const backgroundColor = rgbaFromHex(color, isPublished ? 0.32 : 0.1);
+  const borderColor = rgbaFromHex(color, isPublished ? 0.9 : 0.42);
+  const badgeColor = rgbaFromHex(color, isPublished ? 0.45 : 0.18);
 
   return (
     <button
       onClick={onClick}
-      className="group/shift relative w-full rounded-md border border-outline-variant bg-surface-container-high px-2.5 py-2 text-left transition hover:border-outline hover:bg-surface-container-highest"
-      style={{ borderLeftColor: color, borderLeftWidth: 3 }}
+      className="group/shift relative w-full rounded-md border px-2.5 py-2 text-left transition hover:brightness-105"
+      style={{ backgroundColor, borderColor, borderLeftColor: color, borderLeftWidth: 3 }}
     >
       <span className="absolute right-1.5 top-1 text-[10px] tracking-wider text-on-surface-variant opacity-0 transition group-hover/shift:opacity-100">
         •••
@@ -187,6 +216,12 @@ function ShiftBlock({ shift, onClick }: { shift: Shift; onClick: () => void }) {
       {shift.position && (
         <p className="mt-1 truncate text-[10px] leading-tight text-on-surface-variant">{shift.position}</p>
       )}
+      <span
+        className="mt-2 inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-on-surface"
+        style={{ backgroundColor: badgeColor }}
+      >
+        {statusLabel}
+      </span>
     </button>
   );
 }
@@ -493,6 +528,39 @@ export default function ScheduleGrid() {
     load();
   }
 
+  async function handleScopedPublish(publish: boolean) {
+    if (!data) return;
+    if (branchFilter !== "all" && employeeFilter !== "all") {
+      setError("Selecciona un empleado o una sucursal, no ambos.");
+      return;
+    }
+
+    setPublishing(true);
+    const result = publish
+      ? await publishScheduleScopeAction({
+          weekStart,
+          ...(employeeFilter !== "all" ? { userId: employeeFilter } : { branchId: branchFilter }),
+        })
+      : await unpublishScheduleScopeAction({
+          weekStart,
+          ...(employeeFilter !== "all" ? { userId: employeeFilter } : { branchId: branchFilter }),
+        });
+    setPublishing(false);
+
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+
+    const count = "count" in result ? result.count : 0;
+    showToast(
+      publish
+        ? `${count} turno${count === 1 ? "" : "s"} publicado${count === 1 ? "" : "s"}.`
+        : `${count} turno${count === 1 ? "" : "s"} regresado${count === 1 ? "" : "s"} a borrador.`,
+    );
+    load();
+  }
+
   const days = useMemo(() => {
     const list: Date[] = [];
     for (let i = 0; i < 7; i++) list.push(parseDateOnly(addDaysToDateOnly(weekStart, i)));
@@ -516,6 +584,13 @@ export default function ScheduleGrid() {
       return matchesEmployee && matchesBranch;
     });
   }, [branchFilter, data, employeeFilter]);
+
+  const selectedScope = employeeFilter !== "all" || branchFilter !== "all";
+  const selectedScopeFullyPublished = selectedScope && visibleShifts.length > 0 && visibleShifts.every((shift) => shift.publicationStatus === "PUBLISHED");
+  const selectedScopeHasPublished = selectedScope && visibleShifts.some((shift) => shift.publicationStatus === "PUBLISHED");
+  const selectedEmployeeName = data?.employees.find((employee) => employee.id === employeeFilter)?.name;
+  const selectedBranchName = data?.branches.find((branch) => branch.id === branchFilter)?.name;
+  const selectedScopeLabel = selectedEmployeeName ? selectedEmployeeName : selectedBranchName ? selectedBranchName : "selección";
 
   const shiftsByCell = useMemo(() => {
     const map = new Map<string, Shift[]>();
@@ -711,10 +786,12 @@ export default function ScheduleGrid() {
               className={`ml-auto w-fit rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
                 data.status === "PUBLISHED"
                   ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
-                  : "bg-secondary/15 text-secondary"
+                  : data.status === "PARTIAL"
+                    ? "bg-primary/15 text-primary"
+                    : "bg-secondary/15 text-secondary"
               }`}
             >
-              {data.status === "PUBLISHED" ? "Publicado" : "Borrador"}
+              {data.status === "PUBLISHED" ? "Publicado" : data.status === "PARTIAL" ? "Publicación parcial" : "Borrador"}
             </span>
 
             </>
@@ -751,21 +828,47 @@ export default function ScheduleGrid() {
               Nuevo evento
             </button>
 
-            <button
-              onClick={handlePublishToggle}
-              disabled={publishing}
-              className={`rounded-md px-3 py-1.5 text-xs font-bold transition disabled:opacity-60 ${
-                data.status === "PUBLISHED"
-                  ? "border border-outline-variant text-on-surface-variant hover:border-secondary/40 hover:text-secondary"
-                  : "bg-primary text-on-primary hover:opacity-90"
-              }`}
-            >
-              {publishing
-                ? "Guardando..."
-                : data.status === "PUBLISHED"
-                  ? "Despublicar"
-                  : "Publicar horario"}
-            </button>
+            {selectedScope ? (
+              <>
+                <span className="w-full text-[11px] text-on-surface-variant sm:w-auto">
+                  Publicación para: <strong className="text-on-surface">{selectedScopeLabel}</strong>
+                </span>
+                {!selectedScopeFullyPublished && (
+                  <button
+                    onClick={() => handleScopedPublish(true)}
+                    disabled={publishing || (branchFilter !== "all" && employeeFilter !== "all")}
+                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-on-primary transition hover:opacity-90 disabled:opacity-60"
+                  >
+                    {publishing ? "Guardando..." : `Publicar ${selectedScopeLabel}`}
+                  </button>
+                )}
+                {selectedScopeHasPublished && (
+                  <button
+                    onClick={() => handleScopedPublish(false)}
+                    disabled={publishing || (branchFilter !== "all" && employeeFilter !== "all")}
+                    className="rounded-md border border-outline-variant px-3 py-1.5 text-xs font-bold text-on-surface-variant transition hover:border-secondary/40 hover:text-secondary disabled:opacity-60"
+                  >
+                    {publishing ? "Guardando..." : `Despublicar ${selectedScopeLabel}`}
+                  </button>
+                )}
+              </>
+            ) : (
+              <button
+                onClick={handlePublishToggle}
+                disabled={publishing}
+                className={`rounded-md px-3 py-1.5 text-xs font-bold transition disabled:opacity-60 ${
+                  data.status === "PUBLISHED"
+                    ? "border border-outline-variant text-on-surface-variant hover:border-secondary/40 hover:text-secondary"
+                    : "bg-primary text-on-primary hover:opacity-90"
+                }`}
+              >
+                {publishing
+                  ? "Guardando..."
+                  : data.status === "PUBLISHED"
+                    ? "Despublicar todo"
+                    : "Publicar horario completo"}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -787,6 +890,17 @@ export default function ScheduleGrid() {
           <span className="ml-auto hidden sm:inline">Costo estimado: <strong className="font-semibold text-on-surface">{formatCurrency(summary.totalCost)}</strong></span>
         </div>
       )}
+
+      <div className="flex flex-wrap items-center gap-3 px-1 text-[11px] font-semibold text-on-surface-variant" aria-label="Estados de los turnos">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-tertiary-fixed-dim" />
+          Publicado: visible para el equipo
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full border border-outline-variant bg-surface-container-high" />
+          Borrador: todavía no visible
+        </span>
+      </div>
 
       {!loading && data && data.shifts.length === 0 && (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-outline-variant bg-surface-container p-8 text-center">

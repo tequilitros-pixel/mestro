@@ -352,6 +352,7 @@ export async function applyTemplateAction(input: {
         endTime: s.endTime,
         position: s.position,
         notes: s.notes,
+        publicationStatus: "DRAFT" as const,
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);

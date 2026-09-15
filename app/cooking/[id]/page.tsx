@@ -475,13 +475,13 @@ export default async function CookingDetailPage({
             title="Vapor"
             value={
               hasStartedVapor
-                ? "Iniciado"
-                : "Pendiente"
+                ? "Vapor en marcha"
+                : "Vapor por iniciar"
             }
             detail={
               hasStartedVapor
-                ? "Existe registro de inicio"
-                : "Aún no ha comenzado"
+                ? "Inicio registrado en MAESTRO"
+                : "Listo para registrar el arranque"
             }
           />
         </section>
@@ -543,8 +543,8 @@ export default async function CookingDetailPage({
               title="Vapor"
               value={
                 hasStartedVapor
-                  ? "INICIADO"
-                  : "PENDIENTE"
+                  ? "EN MARCHA"
+                  : "POR INICIAR"
               }
               warning={!hasStartedVapor}
             />

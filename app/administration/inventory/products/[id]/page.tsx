@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import EditProductForm from "./EditProductForm";
 import { getCurrentUser } from "@/lib/auth";
 import { formatCommercialPresentation, formatCommercialQuantity } from "@/lib/inventory/units";
+import { getInventoryProductState } from "@/lib/inventory/productState";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 export default async function EditProductPage({
   params,
@@ -40,6 +42,7 @@ export default async function EditProductPage({
             category: product.category,
             unit: product.unit,
             itemType: product.itemType,
+            countFrequency: product.countFrequency,
             unitCost: product.unitCost !== null ? Number(product.unitCost) : null,
             minimumStock: Number(product.minimumStock),
             trackStock: product.trackStock,
@@ -51,6 +54,7 @@ export default async function EditProductPage({
             contentUnit: product.contentUnit,
             handlingUnit: product.handlingUnit,
             normalizedContentPerUnit: product.normalizedContentPerUnit !== null ? Number(product.normalizedContentPerUnit) : null,
+            archivedAt: product.archivedAt?.toISOString() ?? null,
           }}
         /> : <section className="space-y-5 rounded-2xl border border-outline-variant bg-surface-container p-6">
           <div><h2 className="text-xl font-bold text-on-surface">Detalle de producto</h2><p className="mt-1 text-sm text-on-surface-variant">Código: {product.code}</p></div>
@@ -59,9 +63,11 @@ export default async function EditProductPage({
             <div><dt className="text-on-surface-variant">Categoría</dt><dd>{product.category}</dd></div>
             <div><dt className="text-on-surface-variant">Unidad comercial</dt><dd>{product.unit}</dd></div>
             <div><dt className="text-on-surface-variant">Tipo</dt><dd>{product.itemType}</dd></div>
+            <div><dt className="text-on-surface-variant">Alcance de conteo</dt><dd>{product.countFrequency === "WEEKLY" ? "Conteo semanal" : product.countFrequency === "MONTHLY_ONLY" ? "Sólo conteo mensual" : "Pendiente de clasificar"}</dd></div>
             <div className="sm:col-span-2"><dt className="text-on-surface-variant">Presentación</dt><dd>{formatCommercialPresentation({ productName: product.name, handlingUnit: product.handlingUnit, contentPerUnit: product.contentPerUnit, contentUnit: product.contentUnit }) ?? "Sin presentación comercial configurada"}</dd></div>
             <div className="sm:col-span-2"><dt className="text-on-surface-variant">Referencia de una unidad base</dt><dd>{formatCommercialQuantity(1, { productName: product.name, trackStock: product.trackStock, itemType: product.itemType, inventoryBaseUnit: product.inventoryBaseUnit, handlingUnit: product.handlingUnit, contentPerUnit: product.contentPerUnit, contentUnit: product.contentUnit, normalizedContentPerUnit: product.normalizedContentPerUnit })}</dd></div>
-            <div><dt className="text-on-surface-variant">Estado</dt><dd>{product.isActive ? "Activo" : "Inactivo"}</dd></div>
+            <div><dt className="text-on-surface-variant">Estado</dt><dd>{getInventoryProductState(product) === "ARCHIVED" ? "Archivado" : product.isActive ? "Activo" : "Inactivo"}</dd></div>
+            {product.archivedAt && <div><dt className="text-on-surface-variant">Archivado el</dt><dd>{formatBusinessDateTime(product.archivedAt)}</dd></div>}
           </dl>
         </section>}
       </div>

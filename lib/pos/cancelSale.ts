@@ -1,17 +1,17 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { randomUUID } from "node:crypto";
 import { setRlsContext } from "@/lib/rls";
 import { appendAuditEvent } from "@/lib/pos2/audit";
 import { appendOutboxEvent } from "@/lib/pos2/outbox";
 import { evaluateCapabilityShadow } from "@/lib/pos2/capabilities";
-import { applyInventoryBatchInTransaction } from "@/lib/pos2/inventory/applyMovements";
-import { groupInventoryDeltas } from "@/lib/pos2/inventory/domain";
+import { reversePospressInventoryV2 } from "@/lib/pos/pospressInventory";
 
 export async function cancelPosSaleAtomic(input: {
   saleId: string;
   user: { id: string; role: string };
   reason: string | null;
+  resolutionType?: "CANCELACION" | "REEMBOLSO";
   operationId?: string;
 }) {
   return prisma.$transaction(async (tx) => {
@@ -35,33 +35,39 @@ export async function cancelPosSaleAtomic(input: {
       return { kind: "closed_cut" as const };
     }
 
+    const resolutionType = input.resolutionType ?? "CANCELACION";
+    const storedReason = input.reason
+      ? `${resolutionType === "REEMBOLSO" ? "Reembolso" : "Cancelación"}: ${input.reason}`
+      : resolutionType === "REEMBOLSO" ? "Reembolso" : "Cancelación";
     const cancelled = await tx.posSale.update({
       where: { id: sale.id },
-      data: { status: "CANCELADA", cancelledAt: new Date(), cancelledById: input.user.id, cancelReason: input.reason },
+      data: { status: "CANCELADA", cancelledAt: new Date(), cancelledById: input.user.id, cancelReason: storedReason },
       include: { items: true, payments: true },
     });
 
-    const pos2Consumption = await tx.inventoryMovement.findMany({
-      where: { sourceType: "SALE", sourceId: sale.code, movementType: "SALE_CONSUMPTION" },
-      select: { id: true, inventoryProductId: true, quantityDelta: true, unit: true, sourceLineId: true },
-    });
-    if (pos2Consumption.length) {
-      const operationId = input.operationId ?? randomUUID();
-      await applyInventoryBatchInTransaction(tx, {
+    const pospressMovements = await tx.inventoryMovement.findMany({
+      where: {
         branchId: sale.branchId,
-        movements: groupInventoryDeltas(pos2Consumption.map((movement) => ({
-          inventoryProductId: movement.inventoryProductId,
-          quantityDelta: movement.quantityDelta.negated().toString(),
-          unit: movement.unit,
-          movementType: "SALE_REVERSAL" as const,
-          sourceType: "CANCELLATION" as const,
-          sourceId: sale.code,
-          sourceLineId: movement.sourceLineId ?? undefined,
-          reasonCode: "SALE_CANCELLED",
-          metadata: { originalMovementId: movement.id },
-        }))),
+        sourceType: "SALE",
+        sourceId: sale.id,
+        movementType: "SALE_CONSUMPTION",
+      },
+      select: {
+        id: true,
+        inventoryProductId: true,
+        quantityDelta: true,
+        unit: true,
+        sourceLineId: true,
+      },
+    });
+
+    if (pospressMovements.length) {
+      await reversePospressInventoryV2(tx, {
+        branchId: sale.branchId,
         actorId: input.user.id,
-        operationId,
+        operationId: input.operationId ?? randomUUID(),
+        cancellationId: sale.id,
+        movements: pospressMovements,
       });
     } else {
       const reversals = sale.items.flatMap((item) =>
@@ -90,7 +96,7 @@ export async function cancelPosSaleAtomic(input: {
     await appendAuditEvent(tx, {
       actorId: input.user.id, branchId: sale.branchId, action: "pos.sale.cancelled",
       entityType: "PosSale", entityId: sale.id, operationId: input.operationId,
-      metadata: { code: sale.code, cashCutOpen: sale.cashCut.status === "ABIERTO", reasonProvided: Boolean(input.reason) },
+      metadata: { code: sale.code, cashCutOpen: sale.cashCut.status === "ABIERTO", reasonProvided: Boolean(input.reason), resolutionType },
     });
     await evaluateCapabilityShadow(tx, {
       actor: { id: input.user.id, role: input.user.role as "ADMIN" | "GERENTE" | "ENCARGADO" | "OPERATOR" | "CONSULTA", branchIds: input.user.role === "ADMIN" ? null : [sale.branchId] },

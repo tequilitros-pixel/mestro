@@ -6,6 +6,9 @@ import { formatDateOnly } from "@/lib/dateOnly";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility";
 import { generateOperationId } from "@/lib/pos2/operationId";
+import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresentation";
+import { formatBusinessDateTime } from "@/lib/dateTime";
+import { inventoryCountTypeLabel } from "@/lib/inventory/countScope";
 
 export default async function CountDetailPage({
   params,
@@ -26,6 +29,7 @@ export default async function CountDetailPage({
     where: { id },
     include: {
       branch: true,
+      closedBy: { select: { name: true, username: true } },
       items: { include: { product: true }, orderBy: { product: { name: "asc" } } },
     },
   });
@@ -35,6 +39,9 @@ export default async function CountDetailPage({
   }
 
   const editable = count.status === "BORRADOR";
+  const pendingItems = editable
+    ? count.items.filter((item) => item.quantityCounted === null || item.countedAt === null)
+    : [];
   const totalCost = count.items.reduce(
     (sum, item) => sum + (item.costTotal !== null ? Number(item.costTotal) : 0),
     0,
@@ -45,7 +52,7 @@ export default async function CountDetailPage({
       <div className="mx-auto max-w-6xl space-y-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">{count.branch.name}</h1>
+            <h1 className="text-3xl font-bold">{inventoryCountTypeLabel(count.countType)} · {count.branch.name}</h1>
             <p className="mt-2 text-on-surface-variant">
               {formatDateOnly(count.countDate)}
             </p>
@@ -63,11 +70,39 @@ export default async function CountDetailPage({
         </div>
 
         {count.status === "CERRADO" && (
+          <p className="-mt-5 text-sm text-on-surface-variant">
+            Cerrado {count.closedAt ? formatBusinessDateTime(count.closedAt) : "sin fecha registrada"}
+            {count.closedBy ? ` · ${count.closedBy.name} (${count.closedBy.username})` : " · usuario no registrado"}
+            {` · ID ${count.id}`}
+          </p>
+        )}
+
+        {count.status === "CERRADO" && (
           <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
             <p className="text-xs text-on-surface-variant">Costo total consumido esta semana</p>
             <p className="mt-1 text-2xl font-bold text-tertiary-fixed-dim">
               ${totalCost.toFixed(2)}
             </p>
+          </div>
+        )}
+
+        {editable && pendingItems.length > 0 && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-2xl border border-secondary/40 bg-secondary/10 p-5 text-sm text-on-surface"
+          >
+            <p className="font-semibold text-secondary">
+              Faltan {pendingItems.length} productos por contar.
+            </p>
+            <p className="mt-1 text-on-surface-variant">
+              Captura una cantidad explícita, incluido 0, en cada renglón antes de cerrar.
+            </p>
+            <ul className="mt-3 grid gap-1 text-on-surface-variant sm:grid-cols-2">
+              {pendingItems.map((item) => (
+                <li key={item.id}>• {item.product.name}</li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -78,22 +113,10 @@ export default async function CountDetailPage({
               key={item.id}
               countId={count.id}
               editable={editable}
-              isAdmin={isAdmin}
-              item={{
-                id: item.id,
-                productName: item.product.name,
-                unit: item.product.unit,
-                previousQuantity: isAdmin ? Number(item.previousQuantity ?? 0) : null,
-                quantityCounted: Number(item.quantityCounted),
-                entriesQuantity: isAdmin && item.entriesQuantity !== null ? Number(item.entriesQuantity) : null,
-                quantityConsumed: isAdmin && item.quantityConsumed !== null ? Number(item.quantityConsumed) : null,
-                costTotal: isAdmin && item.costTotal !== null ? Number(item.costTotal) : null,
-                inventoryBaseUnit: item.product.inventoryBaseUnit,
-                handlingUnit: item.product.handlingUnit,
-                contentPerUnit: item.product.contentPerUnit !== null ? Number(item.product.contentPerUnit) : null,
-                contentUnit: item.product.contentUnit,
-                normalizedContentPerUnit: item.product.normalizedContentPerUnit !== null ? Number(item.product.normalizedContentPerUnit) : null,
-              }}
+              item={buildInventoryCountItemClientView(item, {
+                status: count.status,
+                canViewHistory: isAdmin,
+              })}
             />
           ))}
         </div>

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/icons";
 import {
   getPayrollWeekTable,
+  getPayrollWeekHistoryAction,
   getEmployeePayrollDetail,
   createPayrollAdjustmentAction,
   deletePayrollAdjustmentAction,
@@ -27,7 +28,13 @@ import {
   type PayrollWeekTable,
   type PayrollEmployeeDetail,
   type PayrollPeriodInfo,
+  type PayrollWeekHistoryItem,
 } from "@/app/actions/payroll";
+import {
+  createManualTimeClockEntryAction,
+  updateManualTimeClockEntryAction,
+  deleteManualTimeClockEntryAction,
+} from "@/app/actions/timeclock";
 import {
   addDaysToDateOnly,
   mondayOfWeek,
@@ -92,6 +99,12 @@ function formatPaymentDate(weekStart: string) {
   return new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(paymentDate);
 }
 
+function initialPayrollWeek() {
+  const today = todayDateOnly();
+  const currentMonday = mondayOfWeek(today);
+  return today === currentMonday ? addDaysToDateOnly(currentMonday, -7) : currentMonday;
+}
+
 function formatDayLabel(dateStr: string) {
   const fmt = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "UTC" });
   return fmt.format(parseDateOnly(dateStr));
@@ -117,10 +130,31 @@ function formatDateTime(iso: string) {
   }).format(new Date(iso));
 }
 
+function toDateTimeLocalInput(dateTime: string) {
+  const date = new Date(dateTime);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function buildDateTimeFromDay(date: string, hour: string) {
+  const [hh, mm] = hour.split(":");
+  const parsedDate = new Date(`${date}T${hh}:${mm}`);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate.toISOString();
+}
+
+type EditableEntryDraft = {
+  entryId: string;
+  date: string;
+  branchId: string;
+  clockIn: string;
+  clockOut: string;
+};
+
 export default function PayrollWeekView() {
   const { showToast } = useToast();
-  const [weekStart, setWeekStart] = useState(() => mondayOfWeek(todayDateOnly()));
+  const [weekStart, setWeekStart] = useState(() => initialPayrollWeek());
   const [table, setTable] = useState<PayrollWeekTable | null>(null);
+  const [history, setHistory] = useState<PayrollWeekHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -150,19 +184,29 @@ export default function PayrollWeekView() {
     };
   }, [weekStart, refreshKey]);
 
+  useEffect(() => {
+    getPayrollWeekHistoryAction().then((result) => {
+      if ("success" in result) setHistory(result.data);
+    });
+  }, [refreshKey]);
+
   async function handlePeriodAction(
     action: (weekStart: string) => Promise<{ error?: string; success?: boolean }>,
     successMessage: string,
   ) {
     setActionBusy(true);
-    const result = await action(weekStart);
-    setActionBusy(false);
-
-    if (result?.error) {
-      showToast(result.error, "error");
-    } else {
-      showToast(successMessage, "success");
-      setRefreshKey((k) => k + 1);
+    try {
+      const result = await action(weekStart);
+      if (result?.error) {
+        showToast(result.error, "error");
+      } else {
+        showToast(successMessage, "success");
+        setRefreshKey((k) => k + 1);
+      }
+    } catch (actionError) {
+      showToast(actionError instanceof Error ? actionError.message : "No se pudo completar la acción", "error");
+    } finally {
+      setActionBusy(false);
     }
   }
 
@@ -182,12 +226,17 @@ export default function PayrollWeekView() {
       return;
     }
     setActionBusy(true);
-    const result = await reopenPayrollPeriodAction(weekStart, reason.trim());
-    setActionBusy(false);
-    if (result?.error) showToast(result.error, "error");
-    else {
-      showToast("Semana reabierta", "success");
-      setRefreshKey((key) => key + 1);
+    try {
+      const result = await reopenPayrollPeriodAction(weekStart, reason.trim());
+      if (result?.error) showToast(result.error, "error");
+      else {
+        showToast("Semana reabierta", "success");
+        setRefreshKey((key) => key + 1);
+      }
+    } catch (actionError) {
+      showToast(actionError instanceof Error ? actionError.message : "No se pudo reabrir la semana", "error");
+    } finally {
+      setActionBusy(false);
     }
   }
 
@@ -199,11 +248,24 @@ export default function PayrollWeekView() {
       : table.employees;
   }, [search, table]);
 
+  const historyOptions = useMemo(() => {
+    const options = new Map<string, PayrollWeekHistoryItem>();
+    options.set(weekStart, {
+      weekStart,
+      paymentDate: addDaysToDateOnly(weekStart, 7),
+      status: table?.period.status ?? "BORRADOR",
+    });
+    for (const item of history) options.set(item.weekStart, item);
+    return Array.from(options.values()).sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+  }, [history, table, weekStart]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex items-center gap-2 rounded-2xl border border-outline-variant bg-surface-container p-1.5">
           <button
+            type="button"
+            title="Semana anterior"
             onClick={() => setWeekStart((w) => addDaysToDateOnly(w, -7))}
             className="rounded-xl p-2 text-on-surface-variant hover:bg-surface-container-high"
           >
@@ -213,6 +275,8 @@ export default function PayrollWeekView() {
             {formatWeekRange(weekStart)}
           </span>
           <button
+            type="button"
+            title="Semana siguiente"
             onClick={() => setWeekStart((w) => addDaysToDateOnly(w, 7))}
             className="rounded-xl p-2 text-on-surface-variant hover:bg-surface-container-high"
           >
@@ -220,11 +284,26 @@ export default function PayrollWeekView() {
           </button>
         </div>
         <button
-          onClick={() => setWeekStart(mondayOfWeek(todayDateOnly()))}
+          type="button"
+          onClick={() => setWeekStart(initialPayrollWeek())}
           className="rounded-xl border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high"
         >
           Semana actual
         </button>
+        <label className="flex min-w-56 flex-1 flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-outline sm:flex-none">
+          Lunes de pago
+          <select
+            value={weekStart}
+            onChange={(event) => setWeekStart(event.target.value)}
+            className="rounded-xl border border-outline-variant bg-surface px-3 py-2 text-xs font-semibold normal-case tracking-normal text-on-surface"
+          >
+            {historyOptions.map((item) => (
+              <option key={item.weekStart} value={item.weekStart}>
+                {formatDayLabel(item.paymentDate)} · {STATUS_LABELS[item.status]}
+              </option>
+            ))}
+          </select>
+        </label>
         {loading && <span className="text-xs text-on-surface-variant">Cargando...</span>}
       </div>
 
@@ -351,6 +430,14 @@ export default function PayrollWeekView() {
             </div>
           </section>
 
+          <Card className="border-primary/30 bg-primary/[0.04]">
+            <CardLabel>Total a pagar este lunes</CardLabel>
+            <p className="mt-1 text-3xl font-black tabular-nums text-on-surface">{money(table.totals.finalPay)}</p>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              Semana trabajada: {formatWeekRange(table.weekStart)} · pago: {formatPaymentDate(table.weekStart)}
+            </p>
+          </Card>
+
           <section className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest">
             <div className="flex flex-wrap items-end justify-between gap-3 border-b border-outline-variant bg-surface-container px-4 py-3">
               <div>
@@ -387,7 +474,10 @@ export default function PayrollWeekView() {
                     {visibleEmployees.map((employee) => (
                       <tr key={employee.id} className="group hover:bg-primary/[0.025]">
                         <td className="sticky left-0 z-10 border-b border-r border-outline-variant bg-surface-container-lowest px-4 py-2.5 group-hover:bg-surface-container font-semibold text-on-surface">
-                          <button onClick={() => setSelectedUserId(employee.id)} className="text-left hover:text-primary hover:underline">{employee.name}</button>
+                          <div className="flex flex-col items-start gap-1">
+                            <button type="button" onClick={() => setSelectedUserId(employee.id)} className="text-left hover:text-primary hover:underline">{employee.name}</button>
+                            <button type="button" onClick={() => setSelectedUserId(employee.id)} className="text-[10px] font-bold text-primary hover:underline">Editar horas y turnos</button>
+                          </div>
                           {employee.missingRate && (
                             <span className="ml-2 rounded-full bg-error/15 px-2 py-0.5 text-[9px] font-bold text-error">Sin tarifa</span>
                           )}
@@ -453,7 +543,14 @@ function EmployeeDetailModal({
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAdjustForm, setShowAdjustForm] = useState(false);
   const [justifyingDate, setJustifyingDate] = useState<string | null>(null);
+  const [draftEntryDate, setDraftEntryDate] = useState<string | null>(null);
+  const [editingEntry, setEditingEntry] = useState<EditableEntryDraft | null>(null);
+  const [entryBranchId, setEntryBranchId] = useState("");
+  const [entryClockIn, setEntryClockIn] = useState("");
+  const [entryClockOut, setEntryClockOut] = useState("");
+  const [savingEntry, setSavingEntry] = useState(false);
   const locked = detail ? detail.period.status !== "BORRADOR" : false;
+  const branchOptions = detail?.branches ?? [];
 
   useEffect(() => {
     let cancelled = false;
@@ -499,6 +596,115 @@ function EmployeeDetailModal({
       showToast("Justificación eliminada", "success");
       setRefreshKey((k) => k + 1);
     }
+  }
+
+  async function handleDeleteEntry(entryId: string) {
+    if (!confirm("¿Eliminar este turno?")) return;
+    const result = await deleteManualTimeClockEntryAction(entryId);
+    if (result?.error) {
+      showToast(result.error, "error");
+    } else {
+      showToast("Turno eliminado", "success");
+      setRefreshKey((k) => k + 1);
+      onDataChanged();
+      setEditingEntry(null);
+      setDraftEntryDate(null);
+    }
+  }
+
+  function openAddEntry(date: string) {
+    if (!detail) return;
+    const defaultBranch = branchOptions[0]?.id ?? "";
+    const start = buildDateTimeFromDay(date, "09:00") ?? new Date().toISOString();
+    const end = buildDateTimeFromDay(date, "18:00") ?? new Date().toISOString();
+    setDraftEntryDate(date);
+    setEntryBranchId(defaultBranch);
+    setEntryClockIn(toDateTimeLocalInput(start));
+    setEntryClockOut(toDateTimeLocalInput(end));
+    setEditingEntry({
+      entryId: "new",
+      date,
+      branchId: defaultBranch,
+      clockIn: toDateTimeLocalInput(start),
+      clockOut: toDateTimeLocalInput(end),
+    });
+    setJustifyingDate(null);
+  }
+
+  function startEditingEntry(entry: {
+    id: string;
+    branchId: string;
+    branchName: string;
+    clockIn: string;
+    clockOut: string | null;
+    source: "CHECADOR" | "MANUAL";
+  }) {
+    setDraftEntryDate(null);
+    setEditingEntry({
+      entryId: entry.id,
+      date: detail ? detail.weekStart : "",
+      branchId: entry.branchId,
+      clockIn: toDateTimeLocalInput(entry.clockIn),
+      clockOut: entry.clockOut ? toDateTimeLocalInput(entry.clockOut) : "",
+    });
+    setEntryBranchId(entry.branchId);
+    setEntryClockIn(toDateTimeLocalInput(entry.clockIn));
+    setEntryClockOut(entry.clockOut ? toDateTimeLocalInput(entry.clockOut) : "");
+  }
+
+  async function handleSaveEntry() {
+    if (locked || !detail) return;
+    if (!entryBranchId) {
+      showToast("Selecciona una sucursal", "error");
+      return;
+    }
+    const dateFromForm = new Date(entryClockIn);
+    const outDate = new Date(entryClockOut);
+    if (Number.isNaN(dateFromForm.getTime()) || Number.isNaN(outDate.getTime())) {
+      showToast("Formato de hora inválido", "error");
+      return;
+    }
+    if (outDate <= dateFromForm) {
+      showToast("La salida debe ser después de la entrada", "error");
+      return;
+    }
+
+    setSavingEntry(true);
+    try {
+      const result = editingEntry?.entryId === "new"
+        ? await createManualTimeClockEntryAction({
+            userId: detail.employee.id,
+            branchId: entryBranchId,
+            clockIn: new Date(entryClockIn).toISOString(),
+            clockOut: new Date(entryClockOut).toISOString(),
+          })
+        : await updateManualTimeClockEntryAction({
+            entryId: editingEntry?.entryId ?? "",
+            branchId: entryBranchId,
+            clockIn: new Date(entryClockIn).toISOString(),
+            clockOut: new Date(entryClockOut).toISOString(),
+          });
+
+      if (result?.error) {
+        showToast(result.error, "error");
+        return;
+      }
+
+      showToast(editingEntry?.entryId === "new" ? "Turno creado" : "Turno actualizado", "success");
+      setEditingEntry(null);
+      setDraftEntryDate(null);
+      setRefreshKey((k) => k + 1);
+      onDataChanged();
+    } catch (actionError) {
+      showToast(actionError instanceof Error ? actionError.message : "No se pudo guardar el turno", "error");
+    } finally {
+      setSavingEntry(false);
+    }
+  }
+
+  function cancelEntryEdit() {
+    setEditingEntry(null);
+    setDraftEntryDate(null);
   }
 
   return (
@@ -571,7 +777,7 @@ function EmployeeDetailModal({
                     </span>
                   </div>
 
-                  <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
+                  <div className="mt-2 space-y-3 text-xs">
                     <div>
                       <p className="font-semibold text-outline">Programado</p>
                       {day.scheduled ? (
@@ -583,21 +789,203 @@ function EmployeeDetailModal({
                         <p className="text-outline">Sin turno</p>
                       )}
                     </div>
-                    <div>
-                      <p className="font-semibold text-outline">Real (checador)</p>
-                      {day.actual ? (
-                        <p className="text-on-surface-variant">
-                          {day.actual.branchName} · {formatTime(day.actual.clockIn)}–
-                          {day.actual.clockOut ? formatTime(day.actual.clockOut) : "abierto"}
-                          {day.actual.source === "MANUAL" && (
-                            <span className="ml-1 text-[10px] text-secondary">(manual)</span>
-                          )}
-                        </p>
+                    <div className="rounded-lg bg-surface-container px-2 py-2">
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold text-outline">Horas y turnos registrados</p>
+                        {!locked && (
+                          <button
+                            type="button"
+                            onClick={() => openAddEntry(day.date)}
+                            className="rounded-lg border border-outline-variant px-2 py-0.5 text-[10px] font-bold text-on-surface-variant hover:bg-surface-container-high"
+                          >
+                            <PlusIcon className="inline h-3.5 w-3.5" /> Agregar
+                          </button>
+                        )}
+                      </div>
+                      {day.entries.length === 0 ? (
+                        <p className="mt-1.5 text-outline">Sin turnos</p>
                       ) : (
-                        <p className="text-outline">Sin checada</p>
+                        <div className="mt-1.5 space-y-1.5">
+                          {day.entries.map((entry) => (
+                            <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-surface-container-lowest px-2 py-1.5">
+                              <span className="text-on-surface">
+                                {entry.branchName} · {formatTime(entry.clockIn)}–
+                                {entry.clockOut ? formatTime(entry.clockOut) : "abierto"}
+                                <span className="ml-1 text-[10px] text-outline">
+                                  {entry.source === "MANUAL" ? "(manual)" : "(checador)"}
+                                </span>
+                              </span>
+                              {!locked && (
+                                <span className="flex gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      startEditingEntry({
+                                        id: entry.id,
+                                        branchId: entry.branchId,
+                                        branchName: entry.branchName,
+                                        clockIn: entry.clockIn,
+                                        clockOut: entry.clockOut,
+                                        source: entry.source,
+                                      })
+                                    }
+                                    title="Editar turno"
+                                    className="rounded-md border border-outline-variant px-2 py-1 text-[10px] font-bold hover:bg-surface-container-high"
+                                  >
+                                    Editar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteEntry(entry.id)}
+                                    aria-label="Eliminar turno"
+                                    title="Eliminar turno"
+                                    className="rounded-md p-1.5 text-outline hover:bg-error/10 hover:text-error"
+                                  >
+                                    <TrashIcon className="h-3.5 w-3.5" />
+                                  </button>
+                                  {!entry.clockOut && (
+                                    <span className="rounded-md bg-error/10 px-2 py-1 text-[10px] text-error">Abierto</span>
+                                  )}
+                                </span>
+                              )}
+                              {locked && (
+                                <span className="rounded-md bg-surface-container px-2 py-1 text-[10px] text-outline">
+                                  {entry.clockOut ? "Cerrado" : "Abierto"}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
+
+                  {editingEntry && editingEntry.entryId === "new" && draftEntryDate === day.date && (
+                    <div className="mt-2 rounded-lg border border-outline-variant bg-surface p-2.5">
+                      <p className="mb-2 text-xs font-bold text-on-surface">Agregar turno ({day.date})</p>
+                      <label className="mb-2 block">
+                        <span className="mb-1 block text-[11px] font-semibold text-outline">
+                          Sucursal
+                        </span>
+                        <select
+                          value={entryBranchId}
+                          onChange={(event) => setEntryBranchId(event.target.value)}
+                          className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                        >
+                          {branchOptions.length === 0 && (
+                            <option value="">Sin sucursales para este empleado</option>
+                          )}
+                          {branchOptions.map((branch) => (
+                            <option key={branch.id} value={branch.id}>
+                              {branch.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="mb-2 block">
+                        <span className="mb-1 block text-[11px] font-semibold text-outline">
+                          Entrada
+                        </span>
+                        <input
+                          type="datetime-local"
+                          value={entryClockIn}
+                          onChange={(event) => setEntryClockIn(event.target.value)}
+                          className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                        />
+                      </label>
+                      <label className="mb-2 block">
+                        <span className="mb-1 block text-[11px] font-semibold text-outline">
+                          Salida
+                        </span>
+                        <input
+                          type="datetime-local"
+                          value={entryClockOut}
+                          onChange={(event) => setEntryClockOut(event.target.value)}
+                          className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                        />
+                      </label>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={cancelEntryEdit}
+                          className="rounded-lg border border-outline-variant px-2.5 py-1 text-[11px] font-bold text-on-surface-variant hover:bg-surface-container-high"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveEntry}
+                          disabled={savingEntry}
+                          className="rounded-lg bg-primary px-2.5 py-1 text-[11px] font-bold text-on-primary disabled:opacity-50"
+                        >
+                          {savingEntry ? "Guardando..." : "Guardar turno"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {editingEntry &&
+                    editingEntry.entryId !== "new" &&
+                    editingEntry.entryId &&
+                    (() => {
+                      const entry = day.entries.find((item) => item.id === editingEntry.entryId);
+                      if (!entry) return null;
+                      return (
+                        <div className="mt-2 rounded-lg border border-outline-variant bg-surface p-2.5">
+                          <p className="mb-2 text-xs font-bold text-on-surface">Editar turno</p>
+                          <label className="mb-2 block">
+                            <span className="mb-1 block text-[11px] font-semibold text-outline">Sucursal</span>
+                            <select
+                              value={entryBranchId}
+                              onChange={(event) => setEntryBranchId(event.target.value)}
+                              className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                            >
+                              {branchOptions.map((branch) => (
+                                <option key={branch.id} value={branch.id}>
+                                  {branch.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="mb-2 block">
+                            <span className="mb-1 block text-[11px] font-semibold text-outline">Entrada</span>
+                            <input
+                              type="datetime-local"
+                              value={entryClockIn}
+                              onChange={(event) => setEntryClockIn(event.target.value)}
+                              className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                            />
+                          </label>
+                          <label className="mb-2 block">
+                            <span className="mb-1 block text-[11px] font-semibold text-outline">Salida</span>
+                            <input
+                              type="datetime-local"
+                              value={entryClockOut}
+                              onChange={(event) => setEntryClockOut(event.target.value)}
+                              className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                            />
+                          </label>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={cancelEntryEdit}
+                              className="rounded-lg border border-outline-variant px-2.5 py-1 text-[11px] font-bold text-on-surface-variant hover:bg-surface-container-high"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSaveEntry}
+                              disabled={savingEntry}
+                              className="rounded-lg bg-primary px-2.5 py-1 text-[11px] font-bold text-on-primary disabled:opacity-50"
+                            >
+                              {savingEntry ? "Guardando..." : "Actualizar"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  }
 
                   {day.incident && (
                     <div className="mt-2 space-y-1.5">

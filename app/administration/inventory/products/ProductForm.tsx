@@ -157,6 +157,25 @@ export default function ProductForm({ onSuccess }: { onSuccess?: () => void; }) 
 
         <label className="space-y-2">
           <span className="text-sm font-semibold text-on-surface-variant">
+            Alcance del conteo
+          </span>
+          <select
+            name="countFrequency"
+            required
+            defaultValue="UNCLASSIFIED"
+            className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+          >
+            <option value="UNCLASSIFIED">Pendiente de clasificar</option>
+            <option value="WEEKLY">Incluir en conteo semanal</option>
+            <option value="MONTHLY_ONLY">Sólo conteo mensual</option>
+          </select>
+          <span className="block text-xs text-on-surface-variant">
+            El conteo mensual incluye todos los productos activos con seguimiento de stock.
+          </span>
+        </label>
+
+        <label className="space-y-2">
+          <span className="text-sm font-semibold text-on-surface-variant">
             Costo unitario
           </span>
 

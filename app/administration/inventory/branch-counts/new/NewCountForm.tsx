@@ -6,8 +6,15 @@ import { createInventoryCountAction, type ActionResult } from "../actions";
 import { todayDateOnly } from "@/lib/dateOnly";
 
 type Branch = { id: string; name: string };
+type CountType = "WEEKLY" | "MONTHLY";
 
-export default function NewCountForm({ branches }: { branches: Branch[] }) {
+export default function NewCountForm({
+  branches,
+  defaultCountType,
+}: {
+  branches: Branch[];
+  defaultCountType: CountType;
+}) {
   const router = useRouter();
   const [result, setResult] = useState<ActionResult | null>(null);
   const [saving, setSaving] = useState(false);
@@ -38,6 +45,22 @@ export default function NewCountForm({ branches }: { branches: Branch[] }) {
           {result.error}
         </div>
       )}
+
+      <label className="space-y-2 block">
+        <span className="text-sm font-semibold text-on-surface-variant">Tipo de conteo</span>
+        <select
+          name="countType"
+          required
+          defaultValue={defaultCountType}
+          className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+        >
+          <option value="WEEKLY">Conteo semanal</option>
+          <option value="MONTHLY">Conteo mensual</option>
+        </select>
+        <span className="block text-xs text-on-surface-variant">
+          El semanal usa la clasificación administrable; el mensual incluye todo el inventario contable activo.
+        </span>
+      </label>
 
       <label className="space-y-2 block">
         <span className="text-sm font-semibold text-on-surface-variant">Sucursal</span>
