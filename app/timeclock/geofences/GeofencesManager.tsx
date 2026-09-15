@@ -5,6 +5,7 @@ import {
   updateBranchAddressAction,
   updateBranchColorAction,
   assignGeofenceToBranchAction,
+  setBranchArchivedAction,
   createGeofenceAction,
   deleteGeofenceAction,
 } from "@/app/actions/geofences";
@@ -58,6 +59,10 @@ export default function GeofencesManager({
 }) {
   const [branches, setBranches] = useState(initialBranches);
   const [geofences, setGeofences] = useState(initialGeofences);
+  const [showArchived, setShowArchived] = useState(false);
+
+  const activeBranches = branches.filter((branch) => branch.active);
+  const archivedBranches = branches.filter((branch) => !branch.active);
 
   function applyBranchPatch(branchId: string, patch: Partial<Branch>) {
     setBranches((prev) =>
@@ -71,13 +76,18 @@ export default function GeofencesManager({
         <div>
           <h2 className="text-lg font-bold text-on-surface">Sucursales</h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Edita la dirección de cada sucursal y asígnale una geozona para
-            restringir dónde pueden checar sus empleados.
+            Las sucursales activas aparecen en los selectores de horario,
+            asistencia, nómina y checador. Archiva las de prueba para
+            conservar sus históricos sin mostrarlas en la operación diaria.
           </p>
         </div>
 
         <div className="space-y-3">
-          {branches.map((branch) => (
+          {activeBranches.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-outline-variant p-6 text-center text-sm text-on-surface-variant">
+              No hay sucursales activas.
+            </p>
+          ) : activeBranches.map((branch) => (
             <BranchCard
               key={branch.id}
               branch={branch}
@@ -87,9 +97,43 @@ export default function GeofencesManager({
                 applyBranchPatch(branch.id, { geofenceId, geofence })
               }
               onColorSaved={(color) => applyBranchPatch(branch.id, { color })}
+              onStatusChanged={(active) => applyBranchPatch(branch.id, { active })}
             />
           ))}
         </div>
+
+        <section className="rounded-2xl border border-dashed border-outline-variant bg-surface-container/60 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-on-surface">Sucursales archivadas</h3>
+                <p className="mt-1 text-sm text-on-surface-variant">
+                  {archivedBranches.length === 0
+                    ? "Todavía no hay sucursales archivadas."
+                    : `${archivedBranches.length} sucursal${archivedBranches.length === 1 ? "" : "es"} fuera de la operación diaria. Sus históricos se conservan.`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowArchived((value) => !value)}
+                disabled={archivedBranches.length === 0}
+                className="rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface hover:border-primary hover:text-primary"
+              >
+                {showArchived ? "Ocultar archivadas" : "Ver archivadas"}
+              </button>
+            </div>
+
+            {showArchived && (
+              <div className="mt-4 space-y-3">
+                {archivedBranches.map((branch) => (
+                  <ArchivedBranchCard
+                    key={branch.id}
+                    branch={branch}
+                    onStatusChanged={(active) => applyBranchPatch(branch.id, { active })}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
       </section>
 
       <section className="space-y-4">
@@ -148,6 +192,7 @@ function BranchCard({
   onAddressSaved,
   onGeofenceAssigned,
   onColorSaved,
+  onStatusChanged,
 }: {
   branch: Branch;
   geofences: Geofence[];
@@ -157,12 +202,14 @@ function BranchCard({
     geofence: { id: string; name: string; radius: number } | null,
   ) => void;
   onColorSaved: (color: string | null) => void;
+  onStatusChanged: (active: boolean) => void;
 }) {
   const [editingAddress, setEditingAddress] = useState(false);
   const [address, setAddress] = useState(branch.address ?? "");
   const [savingAddress, setSavingAddress] = useState(false);
   const [savingAssignment, setSavingAssignment] = useState(false);
   const [savingColor, setSavingColor] = useState(false);
+  const [savingArchive, setSavingArchive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
 
@@ -219,6 +266,25 @@ function BranchCard({
     showToast(
       geofenceId === "" ? "Geozona quitada de la sucursal." : "Geozona asignada correctamente.",
     );
+  }
+
+  async function handleArchive() {
+    if (!window.confirm(`¿Archivar la sucursal "${branch.name}"? Se ocultará de los selectores operativos, pero conservará sus históricos.`)) {
+      return;
+    }
+
+    setSavingArchive(true);
+    setError(null);
+    const result = await setBranchArchivedAction(branch.id, true);
+    setSavingArchive(false);
+
+    if (!("success" in result)) {
+      setError(result.error);
+      return;
+    }
+
+    onStatusChanged(false);
+    showToast("Sucursal archivada. Sus históricos se conservaron.");
   }
 
   return (
@@ -329,10 +395,74 @@ function BranchCard({
                 </option>
               ))}
             </select>
+            <button
+              type="button"
+              onClick={handleArchive}
+              disabled={savingArchive}
+              className="mt-2 w-full rounded-xl border border-outline-variant px-3 py-2 text-xs font-semibold text-on-surface-variant hover:border-error/50 hover:text-error disabled:opacity-60"
+            >
+              {savingArchive ? "Archivando..." : "Archivar sucursal"}
+            </button>
           </label>
         </div>
       </div>
 
+      {error && <p className="mt-2 text-xs text-error">{error}</p>}
+    </Card>
+  );
+}
+
+function ArchivedBranchCard({
+  branch,
+  onStatusChanged,
+}: {
+  branch: Branch;
+  onStatusChanged: (active: boolean) => void;
+}) {
+  const [restoring, setRestoring] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
+
+  async function handleRestore() {
+    setRestoring(true);
+    setError(null);
+    const result = await setBranchArchivedAction(branch.id, false);
+    setRestoring(false);
+
+    if (!("success" in result)) {
+      setError(result.error);
+      return;
+    }
+
+    onStatusChanged(true);
+    showToast("Sucursal restaurada a la operación diaria.");
+  }
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span
+              className="h-3.5 w-3.5 shrink-0 rounded-full border border-outline-variant/50"
+              style={{ backgroundColor: branch.color ?? fallbackBranchColor(branch.id) }}
+            />
+            <p className="font-bold text-on-surface">{branch.name}</p>
+            <CardLabel>{branch.code}</CardLabel>
+          </div>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            {branch.address ?? "Sin dirección configurada"} · Archivada
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleRestore}
+          disabled={restoring}
+          className="rounded-xl border border-primary/40 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10 disabled:opacity-60"
+        >
+          {restoring ? "Restaurando..." : "Restaurar sucursal"}
+        </button>
+      </div>
       {error && <p className="mt-2 text-xs text-error">{error}</p>}
     </Card>
   );

@@ -3,8 +3,6 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarIcon, ClockIcon, PartyIcon, MapPinIcon } from "@/components/ui/icons";
-import { parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
-import { formatCivilDate } from "@/lib/dateTime";
 
 type ScheduleEventInfo = {
   id: string;
@@ -48,7 +46,9 @@ function dateKey(date: Date) {
 
 export default function CalendarView({ shifts, openShift }: CalendarViewProps) {
   const today = useMemo(() => {
-    return parseDateOnly(todayDateOnly());
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
   }, []);
 
   const todayKey = dateKey(today);
@@ -70,7 +70,7 @@ export default function CalendarView({ shifts, openShift }: CalendarViewProps) {
     const list: Date[] = [];
     for (let i = 0; i < 21; i += 1) {
       const d = new Date(today);
-      d.setUTCDate(d.getUTCDate() + i);
+      d.setDate(d.getDate() + i);
       list.push(d);
     }
     return list;
@@ -80,10 +80,10 @@ export default function CalendarView({ shifts, openShift }: CalendarViewProps) {
 
   const [selectedKey, setSelectedKey] = useState(firstDateWithShift);
 
-  const selectedDate = parseDateOnly(selectedKey);
+  const selectedDate = new Date(`${selectedKey}T00:00:00`);
   const selectedShifts = byDate.get(selectedKey) ?? [];
 
-  const monthLabel = `${MESES[selectedDate.getUTCMonth()]} ${selectedDate.getUTCFullYear()}`;
+  const monthLabel = `${MESES[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`;
 
   return (
     <main className="min-h-screen bg-background text-on-surface">
@@ -130,10 +130,10 @@ export default function CalendarView({ shifts, openShift }: CalendarViewProps) {
                 }`}
               >
                 <span className="font-mono text-[10px] font-bold tracking-wider">
-                  {DIAS[day.getUTCDay()]}
+                  {DIAS[day.getDay()]}
                 </span>
                 <span className="font-mono text-base font-bold">
-                  {day.getUTCDate()}
+                  {day.getDate()}
                 </span>
                 <span
                   className={`h-1 w-1 rounded-full ${
@@ -153,7 +153,11 @@ export default function CalendarView({ shifts, openShift }: CalendarViewProps) {
         <div>
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-bold text-on-surface-variant">
-              {formatCivilDate(selectedDate, { weekday: "long", day: "numeric", month: "long" })}
+              {selectedDate.toLocaleDateString("es-MX", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
             </p>
 
             {selectedKey === todayKey && (

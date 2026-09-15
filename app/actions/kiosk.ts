@@ -5,13 +5,18 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { addDaysToDateOnly, parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
-import { distanceMeters, hasGeofence } from "@/lib/geo";
 import {
   BRANCH_LOCATION_SELECT,
-  checkGeofence,
   matchTodaysScheduledShift,
   type Coords,
 } from "@/lib/timeclockShared";
+import {
+  evaluateGeofence,
+  geofenceDecision,
+  geofenceMessage,
+  requiresLocation,
+  type LocationInput,
+} from "@/lib/workforce/geofence";
 
 /**
  * ==========================================================
@@ -45,6 +50,26 @@ async function requireAdmin() {
   const user = await getCurrentUser();
   if (!user || user.role !== "ADMIN") return null;
   return user;
+}
+
+async function getLocationPolicy() {
+  return prisma.workforceSettings.upsert({ where: { id: "default" }, update: {}, create: {} });
+}
+
+async function canClockAtBranch(userId: string, branchId: string) {
+  const today = parseDateOnly(todayDateOnly());
+  const tomorrow = parseDateOnly(addDaysToDateOnly(todayDateOnly(), 1));
+  const [assignment, scheduled] = await Promise.all([
+    prisma.userBranch.findUnique({
+      where: { userId_branchId: { userId, branchId } },
+      select: { id: true },
+    }),
+    prisma.scheduledShift.findFirst({
+      where: { userId, branchId, type: "TURNO", date: { gte: today, lt: tomorrow } },
+      select: { id: true },
+    }),
+  ]);
+  return Boolean(assignment || scheduled);
 }
 
 /** Da de alta o cambia el PIN de un empleado. Solo admins. */
@@ -83,25 +108,31 @@ export async function clearEmployeePinAction(userId: string) {
  * dispositivo. El kiosco se ubica solo, igual que el checador
  * personal — no depende de qué empleado esté frente a la pantalla.
  */
-export async function getKioskBranches(coords: Coords) {
+export async function getKioskBranches(coords?: Coords) {
   const user = await requireAnyUser();
   if (!user) return [];
 
-  const branches = await prisma.branch.findMany({
-    where: { active: true, geofenceId: { not: null } },
-    select: BRANCH_LOCATION_SELECT,
-  });
+  const [branches, policy] = await Promise.all([
+    prisma.branch.findMany({ where: { active: true }, select: BRANCH_LOCATION_SELECT }),
+    getLocationPolicy(),
+  ]);
 
-  return branches.filter((branch) => {
-    if (!hasGeofence(branch)) return false;
-    const distance = distanceMeters(
-      branch.geofence.latitude,
-      branch.geofence.longitude,
-      coords.latitude,
-      coords.longitude,
-    );
-    return distance <= branch.geofence.radius;
-  });
+  return branches
+    .filter((branch) => {
+      if (!requiresLocation(branch, policy.requireGeolocationClockIn)) return true;
+      if (policy.outsideBehavior === "ALLOW_WITH_EXCEPTION") return true;
+      if (!coords) return false;
+      return evaluateGeofence(
+        branch,
+        { sample: coords },
+        policy.requireGeolocationClockIn,
+        policy.maximumAccuracyMeters,
+      ).result === "INSIDE";
+    })
+    .map((branch) => ({
+      ...branch,
+      locationRequired: requiresLocation(branch, policy.requireGeolocationClockIn),
+    }));
 }
 
 export type KioskEmployee = {
@@ -177,7 +208,7 @@ async function registerFailedPin(userId: string, attempts: number) {
  * Checa entrada en modo kiosco: en vez de `getCurrentUser()`, la
  * identidad la da el PIN de la persona seleccionada en la lista.
  */
-export async function kioskClockInAction(userId: string, pin: string, branchId: string, coords?: Coords) {
+export async function kioskClockInAction(userId: string, pin: string, branchId: string, location?: LocationInput) {
   const employee = await verifyPin(userId);
   if (!employee || !employee.active || !employee.pinHash) {
     return { error: "Empleado no válido" };
@@ -204,22 +235,41 @@ export async function kioskClockInAction(userId: string, pin: string, branchId: 
     return { error: `${employee.name} ya tiene un turno abierto.` };
   }
 
-  const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: BRANCH_LOCATION_SELECT });
-  if (!branch) return { error: "Sucursal no encontrada" };
+  const [branch, policy, authorized] = await Promise.all([
+    prisma.branch.findUnique({ where: { id: branchId }, select: BRANCH_LOCATION_SELECT }),
+    getLocationPolicy(),
+    canClockAtBranch(employee.id, branchId),
+  ]);
+  if (!branch || !branch.active) return { error: "Sucursal no encontrada" };
+  if (!authorized) return { error: "El empleado no está autorizado para checar en esta sucursal." };
 
-  const geofenceResult = checkGeofence(branch, coords);
-  if (geofenceResult && "error" in geofenceResult) {
-    return { error: geofenceResult.error };
+  const geofenceResult = evaluateGeofence(branch, location, policy.requireGeolocationClockIn, policy.maximumAccuracyMeters);
+  const decision = geofenceDecision(geofenceResult.result, policy.outsideBehavior);
+  if (!decision.allow) {
+    return { error: geofenceMessage(geofenceResult) ?? "No pudimos validar la ubicación.", geofenceResult: geofenceResult.result };
   }
 
   const scheduledShiftId = await matchTodaysScheduledShift(employee.id, branchId);
 
-  await prisma.timeClockEntry.create({
-    data: { userId: employee.id, branchId, clockIn: new Date(), scheduledShiftId },
+  await prisma.$transaction(async (tx) => {
+    const entry = await tx.timeClockEntry.create({
+      data: { userId: employee.id, branchId, clockIn: new Date(), scheduledShiftId },
+    });
+    await tx.clockGeolocationEvidence.create({
+      data: {
+        timeClockId: entry.id,
+        action: "CLOCK_IN",
+        result: geofenceResult.result,
+        distanceMeters: geofenceResult.distanceMeters,
+        accuracyMeters: geofenceResult.accuracyMeters,
+        checkedAt: geofenceResult.checkedAt,
+        reviewStatus: decision.needsReview && policy.requireOutsideReview ? "PENDING" : "NOT_REQUIRED",
+      },
+    });
   });
 
   revalidatePath("/timeclock");
-  return { success: true, employeeName: employee.name };
+  return { success: true, employeeName: employee.name, warning: decision.needsReview ? geofenceMessage(geofenceResult) : null };
 }
 
 /**
@@ -228,7 +278,7 @@ export async function kioskClockInAction(userId: string, pin: string, branchId: 
  * si hace falta corregir, el empleado puede pedirlo después con su
  * propia sesión, como ya funciona hoy.
  */
-export async function kioskClockOutAction(userId: string, pin: string, coords?: Coords) {
+export async function kioskClockOutAction(userId: string, pin: string, location?: LocationInput) {
   const employee = await verifyPin(userId);
   if (!employee || !employee.active || !employee.pinHash) {
     return { error: "Empleado no válido" };
@@ -254,16 +304,33 @@ export async function kioskClockOutAction(userId: string, pin: string, coords?: 
   });
   if (!entry) return { error: `${employee.name} no tiene un turno abierto.` };
 
-  const geofenceResult = checkGeofence(entry.branch, coords);
-  if (geofenceResult && "error" in geofenceResult) {
-    return { error: geofenceResult.error };
+  const policy = await getLocationPolicy();
+  const geofenceResult = evaluateGeofence(entry.branch, location, policy.requireGeolocationClockOut, policy.maximumAccuracyMeters);
+  const decision = geofenceDecision(geofenceResult.result, policy.outsideBehavior);
+  if (!decision.allow) {
+    return { error: geofenceMessage(geofenceResult) ?? "No pudimos validar la ubicación.", geofenceResult: geofenceResult.result };
   }
 
-  await prisma.timeClockEntry.update({
-    where: { id: entry.id },
-    data: { clockOut: new Date(), confirmedByEmployee: true },
+  await prisma.$transaction(async (tx) => {
+    await tx.timeClockEntry.update({
+      where: { id: entry.id },
+      data: { clockOut: new Date(), confirmedByEmployee: true },
+    });
+    await tx.clockGeolocationEvidence.upsert({
+      where: { timeClockId_action: { timeClockId: entry.id, action: "CLOCK_OUT" } },
+      update: {},
+      create: {
+        timeClockId: entry.id,
+        action: "CLOCK_OUT",
+        result: geofenceResult.result,
+        distanceMeters: geofenceResult.distanceMeters,
+        accuracyMeters: geofenceResult.accuracyMeters,
+        checkedAt: geofenceResult.checkedAt,
+        reviewStatus: decision.needsReview && policy.requireOutsideReview ? "PENDING" : "NOT_REQUIRED",
+      },
+    });
   });
 
   revalidatePath("/timeclock");
-  return { success: true, employeeName: employee.name };
+  return { success: true, employeeName: employee.name, warning: decision.needsReview ? geofenceMessage(geofenceResult) : null };
 }

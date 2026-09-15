@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getRecordingStatus } from "@/lib/brain/getRecordingStatus";
 import { computeStockMatrix } from "@/app/administration/inventory/lib/stock";
-import { addBusinessDays, businessDayStart, formatBusinessDateOnly } from "@/lib/dateTime";
 
 export type NotificationCheckResult = {
   title: string;
@@ -11,7 +10,7 @@ export type NotificationCheckResult = {
 
 export async function checkStockBajo(): Promise<NotificationCheckResult> {
   const products = await prisma.inventoryProduct.findMany({
-    where: { isActive: true, archivedAt: null, trackStock: true, minimumStock: { gt: 0 } },
+    where: { isActive: true, trackStock: true, minimumStock: { gt: 0 } },
     select: { id: true, name: true, minimumStock: true },
   });
 
@@ -48,9 +47,8 @@ export async function checkStockBajo(): Promise<NotificationCheckResult> {
 export async function checkLicorCaducidad(
   daysBeforeExpiration: number,
 ): Promise<NotificationCheckResult> {
-  const threshold = businessDayStart(
-    addBusinessDays(formatBusinessDateOnly(new Date()), daysBeforeExpiration),
-  );
+  const threshold = new Date();
+  threshold.setDate(threshold.getDate() + daysBeforeExpiration);
 
   const count = await prisma.liquorBottle.count({
     where: {

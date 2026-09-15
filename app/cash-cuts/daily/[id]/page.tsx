@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/icons";
  import { useEffect, useState, useCallback, startTransition } from "react";
 import { enqueueOperation } from "@/lib/offline/queue";
-import { formatBusinessDateTime } from "@/lib/dateTime";
 
 function localCutKey(id: string) { return `maestro:cash-cut:${id}`; }
 function saveLocalCut(cut: CashCut) { localStorage.setItem(localCutKey(cut.id), JSON.stringify(cut)); }
@@ -37,8 +36,6 @@ interface Outflow {
   id: string;
   concept: string;
   category: string;
-  categoryId?: string;
-  categoryRef?: { name: string } | null;
   amount: number;
   occurredAt?: string;
   notes?: string | null;
@@ -47,9 +44,6 @@ interface Outflow {
 interface Inflow {
   id: string;
   type: string;
-  categoryId?: string;
-  categoryNameSnapshot?: string | null;
-  categoryRef?: { name: string } | null;
   amount: number;
   occurredAt?: string;
   notes?: string | null;
@@ -149,6 +143,16 @@ const METODOS = [
   { key: "OTRO", label: "Otro" },
 ];
 
+const CATEGORIAS_SALIDA = [
+  "Insumos de barra",
+  "Hielo",
+  "Limpieza",
+  "Mantenimiento",
+  "Transporte",
+  "Cambio",
+  "Otro",
+];
+
 const TIPOS_EVIDENCIA = [
   { key: "DINERO_CONTADO", label: "Dinero contado" },
   { key: "SOBRE", label: "Sobre" },
@@ -177,7 +181,13 @@ const formatMoney = (value: number | null | undefined) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value ?? 0);
 
 const formatDateTime = (value: string | null | undefined) =>
-  value ? formatBusinessDateTime(value) : "Sin registrar";
+  value
+    ? new Intl.DateTimeFormat("es-MX", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "America/Mexico_City",
+      }).format(new Date(value))
+    : "Sin registrar";
 
 function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
   const posSales = cashCut.posSales ?? [];
@@ -643,31 +653,25 @@ function VentasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
 
 function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
   const [concept, setConcept] = useState("");
-  const [categories, setCategories] = useState<Array<{ id: string; name: string; requiresReason: boolean; requiresReceipt: boolean }>>([]);
-  const [categoryId, setCategoryId] = useState("");
+  const [category, setCategory] = useState(CATEGORIAS_SALIDA[0]);
   const [amount, setAmount] = useState("");
-  const [notes, setNotes] = useState("");
-  const [receiptPhotoUrl, setReceiptPhotoUrl] = useState("");
   const [saving, setSaving] = useState(false);
-  useEffect(() => { fetch("/api/financial-movement-categories?direction=EXPENSE&scope=CASH").then((r) => r.ok ? r.json() : []).then((rows: Array<{ id: string; name: string; requiresReason: boolean; requiresReceipt: boolean }>) => { setCategories(rows); setCategoryId(rows[0]?.id ?? ""); }).catch(() => setCategories([])); }, []);
-  const selected = categories.find((item) => item.id === categoryId);
 
   async function addSalida(e: React.FormEvent) {
     e.preventDefault();
-    if (!concept || !categoryId || !amount || (selected?.requiresReason && !notes.trim()) || (selected?.requiresReceipt && !receiptPhotoUrl.trim())) return;
+    if (!concept || !category || !amount) return;
     setSaving(true);
     if (!navigator.onLine) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      const category = categories.find((item) => item.id === categoryId);
-      await enqueueOperation({ id, kind: "cash-cut.outflow.create", createdAt, payload: { cashCutId, concept, categoryId, category: category?.name ?? "", amount: Number(amount), notes, receiptPhotoUrl } });
-      saveLocalCut({ ...cashCut, outflows: [...cashCut.outflows, { id, concept, category: category?.name ?? "", categoryId, amount: Number(amount) }] });
+      await enqueueOperation({ id, kind: "cash-cut.outflow.create", createdAt, payload: { cashCutId, concept, category, amount: Number(amount) } });
+      saveLocalCut({ ...cashCut, outflows: [...cashCut.outflows, { id, concept, category, amount: Number(amount) }] });
       setConcept(""); setAmount(""); setSaving(false); onSaved(); return;
     }
     await fetch(`/api/cash-cuts/${cashCutId}/salidas`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ concept, categoryId, category: categories.find((item) => item.id === categoryId)?.name, amount: Number(amount), notes, receiptPhotoUrl }),
+      body: JSON.stringify({ concept, category, amount: Number(amount) }),
     });
     setConcept("");
     setAmount("");
@@ -693,13 +697,13 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
           <Card>
             <CardLabel>Categoría</CardLabel>
             <select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             >
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
+              {CATEGORIAS_SALIDA.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
                 </option>
               ))}
             </select>
@@ -714,8 +718,6 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             />
           </Card>
-          {selected?.requiresReason && <Card><CardLabel>Motivo (obligatorio)</CardLabel><input value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface" required /></Card>}
-          {selected?.requiresReceipt && <Card><CardLabel>Comprobante (URL)</CardLabel><input value={receiptPhotoUrl} onChange={(e) => setReceiptPhotoUrl(e.target.value)} placeholder="URL del comprobante" className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface" required /></Card>}
           <Button type="submit" className="w-full" disabled={saving}>
             {saving ? "Guardando..." : "Agregar salida"}
           </Button>
@@ -728,7 +730,7 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
             <div className="flex justify-between">
               <div>
                 <p className="text-on-surface font-semibold">{o.concept}</p>
-              <p className="text-on-surface-variant text-xs">{o.categoryRef?.name ?? o.category}</p>
+                <p className="text-on-surface-variant text-xs">{o.category}</p>
               </div>
               <p className="text-on-surface font-bold">${o.amount.toFixed(2)}</p>
             </div>
@@ -745,31 +747,33 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
 }
 
 function EntradasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
-  const [categories, setCategories] = useState<Array<{ id: string; name: string; requiresReason: boolean; requiresReceipt: boolean }>>([]);
-  const [categoryId, setCategoryId] = useState("");
+  const [type, setType] = useState("CAMBIO_RECIBIDO");
   const [amount, setAmount] = useState("");
-  const [notes, setNotes] = useState("");
-  const [receiptPhotoUrl, setReceiptPhotoUrl] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { fetch("/api/financial-movement-categories?direction=INCOME&scope=CASH").then((r) => r.ok ? r.json() : []).then((rows: Array<{ id: string; name: string; requiresReason: boolean; requiresReceipt: boolean }>) => { setCategories(rows); setCategoryId(rows[0]?.id ?? ""); }).catch(() => setCategories([])); }, []);
-  const selected = categories.find((item) => item.id === categoryId);
+  const TIPOS = [
+    { key: "CAMBIO_RECIBIDO", label: "Cambio recibido" },
+    { key: "REEMBOLSO", label: "Reembolso" },
+    { key: "AJUSTE", label: "Ajuste" },
+    { key: "PRESTAMO", label: "Préstamo" },
+    { key: "OTRO", label: "Otro" },
+  ];
 
   async function addEntrada(e: React.FormEvent) {
     e.preventDefault();
-    if (!amount || !categoryId || (selected?.requiresReason && !notes.trim()) || (selected?.requiresReceipt && !receiptPhotoUrl.trim())) return;
+    if (!amount) return;
     setSaving(true);
     if (!navigator.onLine) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      await enqueueOperation({ id, kind: "cash-cut.inflow.create", createdAt, payload: { cashCutId, type: "OTRO", categoryId, amount: Number(amount), notes, receiptPhotoUrl } });
-      saveLocalCut({ ...cashCut, inflows: [...cashCut.inflows, { id, type: "OTRO", categoryId, categoryNameSnapshot: categories.find((item) => item.id === categoryId)?.name, amount: Number(amount) }] });
+      await enqueueOperation({ id, kind: "cash-cut.inflow.create", createdAt, payload: { cashCutId, type, amount: Number(amount) } });
+      saveLocalCut({ ...cashCut, inflows: [...cashCut.inflows, { id, type, amount: Number(amount) }] });
       setAmount(""); setSaving(false); onSaved(); return;
     }
     await fetch(`/api/cash-cuts/${cashCutId}/entradas`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "OTRO", categoryId, amount: Number(amount), notes, receiptPhotoUrl }),
+      body: JSON.stringify({ type, amount: Number(amount) }),
     });
     setAmount("");
     setSaving(false);
@@ -783,21 +787,19 @@ function EntradasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
       {!disabled && (
         <form onSubmit={addEntrada} className="space-y-3">
           <Card>
-            <CardLabel>Categoría</CardLabel>
+            <CardLabel>Tipo</CardLabel>
             <select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              value={type}
+              onChange={(e) => setType(e.target.value)}
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             >
-              {categories.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
+              {TIPOS.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.label}
                 </option>
               ))}
             </select>
           </Card>
-          {selected?.requiresReason && <Card><CardLabel>Motivo (obligatorio)</CardLabel><input value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface" required /></Card>}
-          {selected?.requiresReceipt && <Card><CardLabel>Comprobante (URL)</CardLabel><input value={receiptPhotoUrl} onChange={(e) => setReceiptPhotoUrl(e.target.value)} placeholder="URL del comprobante" className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface" required /></Card>}
           <Card>
             <CardLabel>Monto</CardLabel>
             <input
@@ -818,7 +820,7 @@ function EntradasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
         {cashCut.inflows.map((i) => (
           <Card key={i.id}>
             <div className="flex justify-between">
-              <p className="text-on-surface font-semibold">{i.categoryRef?.name ?? i.categoryNameSnapshot ?? i.type}</p>
+              <p className="text-on-surface font-semibold">{i.type}</p>
               <p className="text-on-surface font-bold">${i.amount.toFixed(2)}</p>
             </div>
           </Card>

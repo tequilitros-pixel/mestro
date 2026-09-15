@@ -10,13 +10,11 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/ui/CompactUI";
-import { formatBusinessTime } from "@/lib/dateTime";
-import { formatDateOnly } from "@/lib/dateOnly";
 
 /*
- * Tablero de historial para ADMIN, GERENTE y CONSULTA.
- * El Server Component solo monta este componente para roles con
- * historial; un ENCARGADO nunca recibe este arbol ni sus datos.
+ * Tablero de cortes para ADMIN, GERENTE y CONSULTA.
+ * El alcance de sucursal y semana ya viene fijado por el servidor;
+ * este componente solo filtra y ordena lo que recibió.
  *
  * La busqueda, el orden y la paginacion son sobre la lista que ya
  * llego acotada por el servidor. Los indicadores se derivan de esa
@@ -48,9 +46,9 @@ const money = (n: number | null | undefined) =>
     : "—";
 
 const hora = (v: string | null) =>
-  v ? formatBusinessTime(v) : "—";
+  v ? new Date(v).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) : "—";
 
-const fecha = (v: string) => formatDateOnly(new Date(v));
+const fecha = (v: string) => new Date(v).toLocaleDateString("es-MX", { timeZone: "UTC" });
 
 /** El esquema solo tiene ABIERTO/CERRADO/AUDITADO; el resto se deriva. */
 function etiquetaEstado(c: Corte): { texto: string; tono: "neutral" | "success" | "warning" | "danger" } {
@@ -71,14 +69,13 @@ function colorDiferencia(d: number | null) {
 export default function TableroCortes({
   branches,
   canCreate,
+  currentWeek,
 }: {
   branches: Branch[];
   canCreate: boolean;
+  currentWeek: { startDate: string; endDate: string };
 }) {
-  const [branchId, setBranchId] = useState("");
   const [status, setStatus] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [cortes, setCortes] = useState<Corte[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -88,10 +85,7 @@ export default function TableroCortes({
 
   useEffect(() => {
     const params = new URLSearchParams();
-    if (branchId) params.set("branchId", branchId);
     if (status) params.set("status", status);
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
 
     const controller = new AbortController();
     setCargando(true);
@@ -115,9 +109,9 @@ export default function TableroCortes({
       });
 
     return () => controller.abort();
-  }, [branchId, status, from, to]);
+  }, [status]);
 
-  useEffect(() => setPagina(1), [branchId, status, from, to, busqueda, orden]);
+  useEffect(() => setPagina(1), [status, busqueda, orden]);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -161,14 +155,11 @@ export default function TableroCortes({
   const visibles = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
   const limpiar = () => {
-    setBranchId("");
     setStatus("");
-    setFrom("");
-    setTo("");
     setBusqueda("");
   };
 
-  const hayFiltros = Boolean(branchId || status || from || to || busqueda);
+  const hayFiltros = Boolean(status || busqueda);
 
   const ordenarPor = (campo: Orden["campo"]) =>
     setOrden((o) => (o.campo === campo ? { campo, asc: !o.asc } : { campo, asc: false }));
@@ -194,7 +185,7 @@ export default function TableroCortes({
     <main className="page-frame max-w-7xl space-y-4">
       <PageHeader
         title="Cortes de caja"
-        description="Historial y control de los cortes de tus sucursales."
+        description={`Sucursal de trabajo: ${branches[0]?.name ?? "sin definir"} · Semana actual: ${currentWeek.startDate} al ${currentWeek.endDate}.`}
         actions={
           canCreate ? (
             <Link
@@ -230,25 +221,6 @@ export default function TableroCortes({
           />
         </div>
 
-        {branches.length > 1 && (
-          <div>
-            <label htmlFor="suc" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
-              Sucursal
-            </label>
-            <select
-              id="suc"
-              value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
-              className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
-            >
-              <option value="">Todas</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
         <div>
           <label htmlFor="est" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
             Estado
@@ -266,22 +238,6 @@ export default function TableroCortes({
           </select>
         </div>
 
-        <div>
-          <label htmlFor="d1" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
-            Desde
-          </label>
-          <input id="d1" type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-            className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary" />
-        </div>
-
-        <div>
-          <label htmlFor="d2" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
-            Hasta
-          </label>
-          <input id="d2" type="date" value={to} onChange={(e) => setTo(e.target.value)}
-            className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary" />
-        </div>
-
         {hayFiltros && (
           <div className="flex items-end sm:col-span-2 lg:col-span-6">
             <button type="button" onClick={limpiar}
@@ -297,7 +253,9 @@ export default function TableroCortes({
 
       {!cargando && !error && filtrados.length === 0 && (
         <EmptyState>
-          {hayFiltros
+          {!branches.length
+            ? "No hay una sucursal de trabajo definida. Inicia un corte o pide que te asignen una única sucursal."
+            : hayFiltros
             ? "No hay cortes que coincidan con esos filtros."
             : "Todavía no hay cortes registrados."}
         </EmptyState>

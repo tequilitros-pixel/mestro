@@ -10,7 +10,6 @@ import {
 } from "@/app/actions/scheduleEvents";
 import { useToast } from "@/components/ui/Toast";
 import { TrashIcon, PartyIcon, CoinsIcon } from "@/components/ui/icons";
-import { formatDateOnly } from "@/lib/dateOnly";
 
 type Employee = { id: string; name: string };
 type BranchLite = { id: string; name: string; color: string | null };
@@ -100,7 +99,7 @@ export default function EventModal({
       const ev = result.event;
       setName(ev.name);
       setDescription(ev.description ?? "");
-      setDate(formatDateOnly(new Date(ev.date)));
+      setDate(new Date(ev.date).toISOString().slice(0, 10));
       setStartTime(ev.startTime);
       setEndTime(ev.endTime);
       setLocation(ev.location ?? "");

@@ -1,4 +1,4 @@
-export type OfflineOperationStatus = "pending" | "syncing" | "failed";
+export type OfflineOperationStatus = "pending" | "syncing" | "failed" | "cancelled";
 
 export type CookingEventPayload = {
   cookingId: string;
@@ -17,17 +17,6 @@ export type OfflineOperation = {
   id: string;
   kind:
     | "cooking.event.create"
-    | "boiler.session.start"
-    | "boiler.session.stop"
-    | "boiler.gas.reading.create"
-    | "boiler.pressure.reading.create"
-    | "boiler.event.create"
-    | "boiler.maintenance.create"
-    | "boiler.incident.create"
-    | "steam.interval.start"
-    | "steam.pressure.create"
-    | "steam.interval.stop"
-    | "sweet-honey.recovery.create"
     | "milling.discharge.create"
     | "fermentation.reading.create"
     | "distillation.event.create"

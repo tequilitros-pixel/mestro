@@ -70,8 +70,8 @@ export function buildCookingMessages({
 
   const messages = [
     hasStartedVapor
-      ? "El inicio de vapor quedó registrado correctamente."
-      : "El vapor aún no ha sido iniciado. El proceso permanece pendiente de calentamiento.",
+      ? "El vapor está en marcha; el inicio quedó registrado en MAESTRO."
+      : "El vapor está por iniciar y el horno permanece en preparación.",
   ];
 
   if (!lastTemperature) {

@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 import { assertWorkforceAdministrator } from "@/lib/workforce/employment/rules";
 import { addBranchAssignment, changeEmploymentStatus, changeHomeBranch, changePayRate, createEmployee } from "@/lib/workforce/employment/service";
-import { parseDateOnly } from "@/lib/dateOnly";
+import { applyScheduleTemplate } from "@/lib/workforce/scheduling/service";
 
 async function authorize() {
   if (!workforceV1Enabled()) throw new Error("Workforce V1 no está habilitado.");
@@ -18,7 +18,7 @@ async function authorize() {
 
 function dateValue(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "");
-  const date = value ? parseDateOnly(value) : null;
+  const date = value ? new Date(`${value}T00:00:00.000Z`) : null;
   if (!date || Number.isNaN(date.getTime())) throw new Error(`Fecha inválida: ${key}`);
   return date;
 }
@@ -46,7 +46,7 @@ export async function createWorkforceEmployeeAction(formData: FormData) {
 }
 
 export async function changeWorkforceHomeAction(formData: FormData) {
-  await authorize();
+  const user = await authorize();
   const employeeId = String(formData.get("employeeId"));
   const branchId = String(formData.get("branchId"));
   const employmentId = String(formData.get("employmentId"));
@@ -56,7 +56,15 @@ export async function changeWorkforceHomeAction(formData: FormData) {
   try {
     await changeHomeBranch({ employmentId, branchId, effectiveFrom });
     assignmentSaved = true;
-
+    const branch = await import("@/lib/prisma").then(({ prisma }) => prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { templateApplyMode: true, defaultScheduleTemplateId: true },
+    }));
+    if (branch?.templateApplyMode === "AUTO_CREATE_DRAFT" && branch.defaultScheduleTemplateId) {
+      const monday = new Date(effectiveFrom);
+      monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+      await applyScheduleTemplate({ id: user.id, role: user.role, accessibleBranchIds: await getAccessibleBranchIds() }, { templateId: branch.defaultScheduleTemplateId, employmentIds: [employmentId], weekStart: monday });
+    }
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Error desconocido.";
     error = assignmentSaved
@@ -65,7 +73,7 @@ export async function changeWorkforceHomeAction(formData: FormData) {
   }
   if (error) redirect(`/administration/workforce/employees/${employeeId}?error=${encodeURIComponent(error)}${assignmentSaved ? `&assignedBranch=${encodeURIComponent(branchId)}` : ""}`);
   revalidatePath(`/administration/workforce/employees/${employeeId}`);
-  redirect(`/administration/workforce/employees/${employeeId}?assignedBranch=${encodeURIComponent(branchId)}&assignedFrom=${effectiveFrom.toISOString().slice(0, 10)}`);
+  redirect(`/administration/workforce/employees/${employeeId}?assignedBranch=${encodeURIComponent(branchId)}`);
 }
 
 export async function addWorkforceAllowedBranchAction(formData: FormData) {
@@ -76,15 +84,8 @@ export async function addWorkforceAllowedBranchAction(formData: FormData) {
 
 export async function changeWorkforcePayRateAction(formData: FormData) {
   await authorize();
-  const employeeId = String(formData.get("employeeId"));
-  let error: string | null = null;
-  try {
-    await changePayRate({ employmentId: String(formData.get("employmentId")), rateType: String(formData.get("rateType")) as "HOURLY" | "DAILY" | "WEEKLY" | "SALARY", amount: Number(formData.get("amount")), currency: String(formData.get("currency")).toUpperCase(), effectiveFrom: dateValue(formData, "effectiveFrom") });
-  } catch (cause) {
-    error = cause instanceof Error ? cause.message : "No fue posible cambiar la tarifa.";
-  }
-  if (error) redirect(`/administration/workforce/employees/${encodeURIComponent(employeeId)}?error=${encodeURIComponent(error)}`);
-  revalidatePath(`/administration/workforce/employees/${employeeId}`);
+  await changePayRate({ employmentId: String(formData.get("employmentId")), rateType: String(formData.get("rateType")) as "HOURLY" | "DAILY" | "WEEKLY" | "SALARY", amount: Number(formData.get("amount")), currency: String(formData.get("currency")).toUpperCase(), effectiveFrom: dateValue(formData, "effectiveFrom") });
+  revalidatePath(`/administration/workforce/employees/${String(formData.get("employeeId"))}`);
 }
 
 export async function changeWorkforceEmploymentStatusAction(formData: FormData) {

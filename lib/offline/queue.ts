@@ -64,3 +64,27 @@ export async function removeOperation(id: string) {
   await transactStore("readwrite", (store) => store.delete(id));
   window.dispatchEvent(new Event("maestro:queue-changed"));
 }
+
+/** Cancela una venta que aún no llegó al servidor. Conservamos el registro
+ * local para que el operador pueda explicar qué pasó y no se reintente por
+ * accidente al recuperar la conexión. */
+export async function cancelQueuedOperation(id: string, reason?: string) {
+  const operations = await listOperations();
+  const operation = operations.find((item) => item.id === id);
+  if (!operation) return false;
+  if (operation.kind !== "pos.sale.create" || operation.status === "syncing") return false;
+  await updateOperation({
+    ...operation,
+    status: "cancelled",
+    lastError: reason?.trim() || "Cancelada en el dispositivo antes de sincronizar.",
+  });
+  return true;
+}
+
+export async function retryQueuedOperation(id: string) {
+  const operations = await listOperations();
+  const operation = operations.find((item) => item.id === id);
+  if (!operation || operation.status === "syncing" || operation.status === "cancelled") return false;
+  await updateOperation({ ...operation, status: "pending", lastError: undefined });
+  return true;
+}

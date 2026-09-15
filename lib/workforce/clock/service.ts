@@ -1,4 +1,3 @@
-import { workforceGeolocationEnabled } from "@/lib/workforce/geolocation-release";
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -328,8 +327,8 @@ export async function getClockDashboard(actor: ClockActor, context: ClockService
     state,
     lastEvent: stream.at(-1) ?? null,
     locationPolicy: {
-      requireGeolocationClockIn: workforceGeolocationEnabled && locationPolicy.requireGeolocationClockIn,
-      requireGeolocationClockOut: workforceGeolocationEnabled && locationPolicy.requireGeolocationClockOut,
+      requireGeolocationClockIn: locationPolicy.requireGeolocationClockIn,
+      requireGeolocationClockOut: locationPolicy.requireGeolocationClockOut,
     },
   };
 }
@@ -403,9 +402,9 @@ export async function recordClockEvent(
       include: { geofence: true },
     });
     const requiresGeolocation = input.type === "CLOCK_IN"
-      ? workforceGeolocationEnabled && policy.requireGeolocationClockIn
+      ? policy.requireGeolocationClockIn
       : input.type === "CLOCK_OUT"
-        ? workforceGeolocationEnabled && policy.requireGeolocationClockOut
+        ? policy.requireGeolocationClockOut
         : false;
     const geolocation = evaluateGeofence(
       branch,

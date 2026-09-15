@@ -2,7 +2,8 @@ import "server-only";
 
 import type { Prisma, UserRole } from "@prisma/client";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
-import { addDaysToDateOnly, businessDayStart, mondayOfWeek, todayDateOnly } from "@/lib/dateOnly";
+import { prisma } from "@/lib/prisma";
+import { getCurrentCashCutWeek } from "@/lib/cash-cuts/readScope";
 
 /*
  * ============================================================
@@ -40,7 +41,57 @@ export type CashCutScope = {
   canSeeHistory: boolean;
   /** Puede crear, capturar y cerrar. */
   canManage: boolean;
+  /** Sucursal en la que trabaja: corte propio reciente o único acceso. */
+  workingBranchId: string | null;
 };
+
+async function resolveWorkingBranchId(
+  userId: string,
+  branchIds: string[] | null,
+): Promise<string | null> {
+  const branchWhere: Prisma.BranchWhereInput = {
+    active: true,
+    ...(branchIds === null ? {} : { id: { in: branchIds } }),
+  };
+
+  const openCut = await prisma.cashCut.findFirst({
+    where: {
+      responsibleId: userId,
+      status: "ABIERTO",
+      branch: { is: branchWhere },
+    },
+    orderBy: { openedAt: "desc" },
+    select: { branchId: true },
+  });
+
+  if (openCut) return openCut.branchId;
+
+  const week = getCurrentCashCutWeek();
+  const latestCutThisWeek = await prisma.cashCut.findFirst({
+    where: {
+      responsibleId: userId,
+      date: { gte: week.from, lte: week.to },
+      branch: { is: branchWhere },
+    },
+    orderBy: [{ date: "desc" }, { openedAt: "desc" }],
+    select: { branchId: true },
+  });
+
+  if (latestCutThisWeek) return latestCutThisWeek.branchId;
+
+  // Sin corte abierto no inventamos una sucursal para un usuario con
+  // acceso múltiple. El único fallback seguro es tener exactamente una.
+  const candidates = await prisma.branch.findMany({
+    where: {
+      active: true,
+      ...(branchIds === null ? {} : { id: { in: branchIds } }),
+    },
+    select: { id: true },
+    take: 2,
+  });
+
+  return candidates.length === 1 ? candidates[0].id : null;
+}
 
 /**
  * Resuelve el alcance SIEMPRE desde la sesion autenticada.
@@ -52,11 +103,14 @@ export async function getCashCutScope(): Promise<CashCutScope | null> {
   if (!user) return null;
   if (!ROLES_CON_ACCESO.includes(user.role)) return null;
 
+  const branchIds = await getAccessibleBranchIds();
+
   return {
     user: { id: user.id, name: user.name, role: user.role },
-    branchIds: await getAccessibleBranchIds(),
+    branchIds,
     canSeeHistory: ROLES_CON_HISTORIAL.includes(user.role),
     canManage: ROLES_QUE_OPERAN.includes(user.role),
+    workingBranchId: await resolveWorkingBranchId(user.id, branchIds),
   };
 }
 
@@ -78,14 +132,6 @@ export function cashCutScopeWhere(scope: CashCutScope): Prisma.CashCutWhereInput
     where.status = "ABIERTO";
   }
 
-  if (scope.user.role === "GERENTE") {
-    const weekStart = mondayOfWeek(todayDateOnly());
-    where.date = {
-      gte: businessDayStart(weekStart),
-      lt: businessDayStart(addDaysToDateOnly(weekStart, 7)),
-    };
-  }
-
   return where;
 }
 
@@ -105,6 +151,33 @@ export function withCashCutScope(
   return extra ? { AND: [base, extra] } : base;
 }
 
+/**
+ * Alcance de lectura: además del alcance por rol, solo la sucursal de
+ * trabajo y la semana calendario actual. Un usuario sin contexto de
+ * sucursal recibe una consulta vacía, nunca todas sus sucursales.
+ */
+export function cashCutReadScopeWhere(scope: CashCutScope): Prisma.CashCutWhereInput {
+  const week = getCurrentCashCutWeek();
+
+  return {
+    AND: [
+      cashCutScopeWhere(scope),
+      scope.workingBranchId
+        ? { branchId: scope.workingBranchId }
+        : { branchId: { in: [] } },
+      { date: { gte: week.from, lte: week.to } },
+    ],
+  };
+}
+
+export function withCashCutReadScope(
+  scope: CashCutScope,
+  extra?: Prisma.CashCutWhereInput,
+): Prisma.CashCutWhereInput {
+  const base = cashCutReadScopeWhere(scope);
+  return extra ? { AND: [base, extra] } : base;
+}
+
 /** ¿Puede escribir en este corte? Solo roles operativos y solo si esta ABIERTO. */
 export function canWriteCashCut(
   scope: CashCutScope,
@@ -114,15 +187,4 @@ export function canWriteCashCut(
   if (cut.status !== "ABIERTO") return false;
   if (!scope.canSeeHistory && cut.responsibleId !== scope.user.id) return false;
   return true;
-}
-
-export function currentBusinessWeekRange() {
-  const start = mondayOfWeek(todayDateOnly());
-  return { from: businessDayStart(start), toExclusive: businessDayStart(addDaysToDateOnly(start, 7)) };
-}
-
-export function isCurrentManagerBusinessWeek(role: UserRole, value: Date) {
-  if (role !== "GERENTE") return true;
-  const range = currentBusinessWeekRange();
-  return value >= range.from && value < range.toExclusive;
 }

@@ -14,6 +14,8 @@ import { distanceMeters, hasGeofence } from "@/lib/geo";
 export const BRANCH_LOCATION_SELECT = {
   id: true,
   name: true,
+  active: true,
+  geofenceEnabled: true,
   geofence: {
     select: { latitude: true, longitude: true, radius: true },
   },
@@ -29,11 +31,12 @@ export type Coords = { latitude: number; longitude: number };
  */
 export function checkGeofence(
   branch: {
+    geofenceEnabled?: boolean;
     geofence: { latitude: number; longitude: number; radius: number } | null;
   },
   coords: Coords | null | undefined
 ): { error: string } | { distance: number } | null {
-  if (!hasGeofence(branch)) return null;
+  if (!branch.geofence || branch.geofenceEnabled === false) return null;
 
   if (!coords) {
     return {
@@ -81,6 +84,7 @@ export async function matchTodaysScheduledShift(
       userId,
       branchId,
       type: "TURNO",
+      publicationStatus: "PUBLISHED",
       date: { gte: todayStart, lt: todayEnd },
     },
     select: { id: true, startTime: true },

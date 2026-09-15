@@ -35,7 +35,7 @@ export default function MainNavigation({ role, moduleKeys }: { role: string; mod
   function destinationFor(module: (typeof MAIN_MODULES)[number]) {
     if (module.module === "home") return module.href;
     const firstVisible = SUBMENUS[module.module].find((item) =>
-      isSubmenuItemVisible(role, moduleKeys, item),
+      !item.legacyAlias && isSubmenuItemVisible(role, moduleKeys, item),
     );
     return firstVisible
       ? getSubmenuItemDestination(role, moduleKeys, firstVisible)

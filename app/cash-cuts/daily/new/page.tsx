@@ -8,7 +8,6 @@ import DenominationWizard from "@/components/cash-cuts/DenominationWizard";
 import type { CashDenominationCount } from "@/lib/cash-cuts/denominations";
 import { enqueueOperation } from "@/lib/offline/queue";
 import { todayDateOnly } from "@/lib/dateOnly";
-import { formatBusinessDate } from "@/lib/dateTime";
 
 interface Branch {
   id: string;
@@ -28,7 +27,10 @@ interface EligibleEvent {
 }
 
 const formatEventDate = (iso: string) =>
-  formatBusinessDate(iso, { day: "numeric", month: "short" });
+  new Date(iso).toLocaleDateString("es-MX", {
+    day: "numeric",
+    month: "short",
+  });
 
 export default function NuevoCortePage() {
   const router = useRouter();
@@ -103,7 +105,7 @@ export default function NuevoCortePage() {
         envelopeNumber: null, nextFund: null, event: null,
       }));
       localStorage.setItem(`maestro:open-cash-cut:${branchId}`, id);
-      router.push(`/cash-cuts/daily/${id}`);
+      router.push(`/pospress?branchId=${encodeURIComponent(branchId)}`);
       return;
     }
     try {
@@ -117,7 +119,7 @@ export default function NuevoCortePage() {
         setError(cashCut.error ?? "No se pudo abrir el corte");
         return;
       }
-      router.push(`/cash-cuts/daily/${cashCut.id}`);
+      router.push(`/pospress?branchId=${encodeURIComponent(branchId)}`);
     } catch {
       setError("No se pudo abrir el corte. Revisa tu conexión e inténtalo de nuevo.");
     } finally {

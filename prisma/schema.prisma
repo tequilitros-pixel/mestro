@@ -26,16 +26,6 @@ model User {
   updatedAt                 DateTime                   @updatedAt
   lastLogin                 DateTime?
   cookingsFinished          Cooking[]                  @relation("CookingFinishedBy")
-  boilerSessionsStarted     BoilerSession[]            @relation("BoilerSessionStartedBy")
-  boilerSessionsEnded       BoilerSession[]            @relation("BoilerSessionEndedBy")
-  boilerEvents              BoilerEvent[]
-  boilerProcessLinksCreated BoilerProcessLink[]        @relation("BoilerProcessLinkCreatedBy")
-  steamIntervalsCreated     SteamInjectionInterval[]   @relation("SteamIntervalCreatedBy")
-  pressureReadings          PressureReading[]
-  gasReadings               GasReading[]
-  boilerMaintenances        BoilerMaintenance[]
-  boilerIncidents           BoilerIncident[]
-  sweetHoneyRecoveries      SweetHoneyRecovery[]
   distillationsFinished     Distillation[]             @relation("DistillationFinishedBy")
   fermentationsFinished     Fermentation[]             @relation("FermentationFinishedBy")
   liquorBatchesCreated      LiquorBatch[]              @relation("LiquorBatchCreatedBy")
@@ -55,8 +45,6 @@ model User {
   cashCutsCreated           CashCut[]                  @relation("CashCutCreatedBy")
   cashCutsUpdated           CashCut[]                  @relation("CashCutUpdatedBy")
   cashOutflowsAuthorized    CashOutflow[]              @relation("CashOutflowAuthorizedBy")
-  financialCategoriesCreated FinancialMovementCategory[] @relation("FinancialCategoryCreatedBy")
-  financialCategoriesUpdated FinancialMovementCategory[] @relation("FinancialCategoryUpdatedBy")
   cashCutAuditEntries       CashCutAuditEntry[]        @relation("CashCutAuditBy")
   cashSafeMovementsBy       CashSafeMovement[]         @relation("CashSafeMovementBy")
   cashSafeEnvelopesCreated  CashSafeEnvelope[]         @relation("CashSafeEnvelopeCreatedBy")
@@ -69,11 +57,11 @@ model User {
   timeClockEditReviews      TimeClockEditRequest[]     @relation("TimeClockEditReviewedBy")
   scheduledShifts           ScheduledShift[]           @relation("ScheduledShifts")
   scheduleWeeksPublished    ScheduleWeek[]             @relation("ScheduleWeekPublishedBy")
+  inventoryCountsClosed     InventoryCount[]            @relation("InventoryCountClosedBy")
   geofenceAlerts            GeofenceAlert[]
   legacyWorkforceSettingsUpdated WorkforceSettings[] @relation("WorkforceSettingsUpdatedBy")
   salaryRates               SalaryRate[]               @relation("SalaryRateOwner")
   salaryRatesCreated        SalaryRate[]               @relation("SalaryRateCreatedBy")
-  cashTransfersCreated      CashTransfer[]             @relation("CashTransferCreatedBy")
 
   millingsFinished   Milling[]           @relation("MillingFinishedBy")
   millingDischarges  MillingDischarge[]
@@ -151,8 +139,6 @@ model User {
   workforcePayrollAdjustmentsCreated    WorkforcePayrollAdjustment[]     @relation("WorkforcePayrollAdjustmentCreatedBy")
   workforcePayrollAdjustmentsApproved   WorkforcePayrollAdjustment[]     @relation("WorkforcePayrollAdjustmentApprovedBy")
 
-  inventoryCountsClosed InventoryCount[] @relation("InventoryCountClosedBy")
-
   registersCreated             Register[]               @relation("RegisterCreatedBy")
   terminalsCreated             Terminal[]               @relation("TerminalCreatedBy")
   terminalEnrollmentsCreated   TerminalEnrollment[]     @relation("TerminalEnrollmentCreatedBy")
@@ -211,10 +197,6 @@ model Equipment {
   distillations     Distillation[]
   millings          Milling[]
   millingDischarges MillingDischarge[]
-  boilerSessions     BoilerSession[]
-  boilerMaintenances BoilerMaintenance[]
-  boilerIncidents    BoilerIncident[]
-  sweetHoneyTanks    SweetHoneyRecovery[]
 }
 
 model Lot {
@@ -239,8 +221,6 @@ model Lot {
   millings            Milling[]
   liquorBatches       LiquorBatch[]
   rawMaterialEntries  RawMaterialMovement[]
-  boilerProcessLinks   BoilerProcessLink[]
-  sweetHoneyRecoveries SweetHoneyRecovery[]
 }
 
 model Cooking {
@@ -264,8 +244,6 @@ model Cooking {
   finishedBy            User?          @relation("CookingFinishedBy", fields: [finishedById], references: [id])
   lot                   Lot            @relation(fields: [lotId], references: [id])
   events                CookingEvent[]
-  steamIntervals        SteamInjectionInterval[]
-  sweetHoneyRecoveries  SweetHoneyRecovery[]
 
   @@index([lotId])
   @@index([equipmentId])
@@ -288,206 +266,6 @@ model CookingEvent {
   cooking           Cooking          @relation(fields: [cookingId], references: [id])
 
   @@index([cookingId])
-}
-
-model BoilerSession {
-  id              String       @id @default(cuid())
-  operationId     String       @unique
-  equipmentId     String
-  startedAt       DateTime
-  endedAt         DateTime?
-  startedById     String
-  endedById       String?
-  stopOperationId String?      @unique
-  closeReason     String?
-  source          BoilerSource @default(MANUAL)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-
-  equipment        Equipment                @relation(fields: [equipmentId], references: [id])
-  startedBy        User                     @relation("BoilerSessionStartedBy", fields: [startedById], references: [id])
-  endedBy          User?                    @relation("BoilerSessionEndedBy", fields: [endedById], references: [id])
-  events           BoilerEvent[]
-  processLinks     BoilerProcessLink[]
-  steamIntervals   SteamInjectionInterval[]
-  pressureReadings PressureReading[]
-  gasReadings      GasReading[]
-  incidents        BoilerIncident[]
-
-  @@index([equipmentId, startedAt])
-  @@index([endedAt])
-}
-
-model BoilerEvent {
-  id          String          @id @default(cuid())
-  operationId String          @unique
-  sessionId   String?
-  type        BoilerEventType
-  occurredAt  DateTime
-  createdAt   DateTime        @default(now())
-  actorId     String?
-  source      BoilerSource    @default(MANUAL)
-  notes       String?
-  metadata    Json?
-
-  session BoilerSession? @relation(fields: [sessionId], references: [id])
-  actor   User?          @relation(fields: [actorId], references: [id])
-
-  @@index([sessionId, occurredAt])
-  @@index([type, occurredAt])
-  @@index([actorId, createdAt])
-}
-
-model BoilerProcessLink {
-  id              String            @id @default(cuid())
-  boilerSessionId String
-  lotId           String
-  stage           LotStage
-  processType     BoilerProcessType
-  processId       String?
-  startedAt       DateTime
-  endedAt         DateTime?
-  createdById     String?
-  source          BoilerSource      @default(MANUAL)
-  createdAt       DateTime          @default(now())
-
-  boilerSession BoilerSession @relation(fields: [boilerSessionId], references: [id], onDelete: Cascade)
-  lot           Lot           @relation(fields: [lotId], references: [id])
-  createdBy     User?         @relation("BoilerProcessLinkCreatedBy", fields: [createdById], references: [id])
-
-  @@index([boilerSessionId, startedAt])
-  @@index([lotId, stage, startedAt])
-  @@index([processType, processId])
-}
-
-model SteamInjectionInterval {
-  id               String              @id @default(cuid())
-  startOperationId String              @unique
-  stopOperationId  String?             @unique
-  cookingId        String
-  boilerSessionId  String
-  state            SteamInjectionState
-  startedAt        DateTime
-  endedAt          DateTime?
-  createdById      String
-  source           BoilerSource        @default(MANUAL)
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-
-  cooking          Cooking           @relation(fields: [cookingId], references: [id], onDelete: Cascade)
-  boilerSession    BoilerSession     @relation(fields: [boilerSessionId], references: [id])
-  createdBy        User              @relation("SteamIntervalCreatedBy", fields: [createdById], references: [id])
-  pressureReadings PressureReading[]
-
-  @@index([cookingId, startedAt])
-  @@index([boilerSessionId, startedAt])
-  @@index([state, endedAt])
-}
-
-model PressureReading {
-  id              String       @id @default(cuid())
-  operationId     String       @unique
-  steamIntervalId String?
-  boilerSessionId String
-  originalValue   Decimal      @db.Decimal(12, 4)
-  originalUnit    PressureUnit
-  canonicalPsi    Decimal      @db.Decimal(12, 4)
-  occurredAt      DateTime
-  createdAt       DateTime     @default(now())
-  actorId         String?
-  source          BoilerSource @default(MANUAL)
-  notes           String?
-
-  steamInterval SteamInjectionInterval? @relation(fields: [steamIntervalId], references: [id], onDelete: Cascade)
-  boilerSession BoilerSession           @relation(fields: [boilerSessionId], references: [id])
-  actor         User?                   @relation(fields: [actorId], references: [id])
-
-  @@index([steamIntervalId, occurredAt])
-  @@index([boilerSessionId, occurredAt])
-  @@index([actorId, createdAt])
-}
-
-model GasReading {
-  id              String         @id @default(cuid())
-  operationId     String         @unique
-  boilerSessionId String
-  levelPercent    Decimal        @db.Decimal(6, 3)
-  levelLiters     Decimal        @db.Decimal(12, 3)
-  type            GasReadingType
-  occurredAt      DateTime
-  createdAt       DateTime       @default(now())
-  actorId         String?
-  source          BoilerSource   @default(MANUAL)
-  notes           String?
-
-  boilerSession BoilerSession @relation(fields: [boilerSessionId], references: [id], onDelete: Cascade)
-  actor         User?         @relation(fields: [actorId], references: [id])
-
-  @@index([boilerSessionId, occurredAt])
-  @@index([type, occurredAt])
-  @@index([actorId, createdAt])
-}
-
-model BoilerMaintenance {
-  id          String       @id @default(cuid())
-  operationId String       @unique
-  equipmentId String
-  occurredAt  DateTime
-  createdAt   DateTime     @default(now())
-  actorId     String
-  source      BoilerSource @default(MANUAL)
-  notes       String
-
-  equipment Equipment @relation(fields: [equipmentId], references: [id])
-  actor     User      @relation(fields: [actorId], references: [id])
-
-  @@index([equipmentId, occurredAt])
-  @@index([actorId, createdAt])
-}
-
-model BoilerIncident {
-  id          String       @id @default(cuid())
-  operationId String       @unique
-  equipmentId String
-  sessionId   String?
-  occurredAt  DateTime
-  createdAt   DateTime     @default(now())
-  actorId     String
-  source      BoilerSource @default(MANUAL)
-  notes       String
-
-  equipment Equipment      @relation(fields: [equipmentId], references: [id])
-  session   BoilerSession? @relation(fields: [sessionId], references: [id])
-  actor     User           @relation(fields: [actorId], references: [id])
-
-  @@index([equipmentId, occurredAt])
-  @@index([sessionId, occurredAt])
-  @@index([actorId, createdAt])
-}
-
-model SweetHoneyRecovery {
-  id                String       @id @default(cuid())
-  operationId       String       @unique
-  lotId             String
-  sourceCookingId   String
-  destinationTankId String?
-  liters            Decimal      @db.Decimal(12, 3)
-  brix              Decimal?     @db.Decimal(8, 3)
-  recoveredAt       DateTime
-  createdAt         DateTime     @default(now())
-  createdById       String
-  source            BoilerSource @default(MANUAL)
-  notes             String?
-
-  lot             Lot        @relation(fields: [lotId], references: [id])
-  sourceCooking   Cooking    @relation(fields: [sourceCookingId], references: [id])
-  destinationTank Equipment? @relation(fields: [destinationTankId], references: [id])
-  createdBy       User       @relation(fields: [createdById], references: [id])
-
-  @@index([lotId, recoveredAt])
-  @@index([sourceCookingId, recoveredAt])
-  @@index([destinationTankId])
-  @@index([createdById, createdAt])
 }
 
 model Milling {
@@ -1284,7 +1062,6 @@ model Branch {
   workforceSessions             WorkSession[]
   workforceAttendanceExceptions AttendanceException[]
   workforceGeolocationEvidence  ClockGeolocationEvidence[]
-  cashTransfers                 CashTransfer[]
 
   eventAddedSource  EventAddedProduct[] @relation("EventAddedSourceBranch")
   eventAddedReturns EventAddedProduct[] @relation("EventAddedReturnBranch")
@@ -1527,9 +1304,6 @@ model CashOutflow {
 
   concept         String
   category        String
-  categoryId      String?
-  categoryRef     FinancialMovementCategory? @relation("CashOutflowCategory", fields: [categoryId], references: [id], onDelete: Restrict)
-  categoryNameSnapshot String?
   amount          Float
   authorizedById  String?
   authorizedBy    User?   @relation("CashOutflowAuthorizedBy", fields: [authorizedById], references: [id])
@@ -1551,12 +1325,8 @@ model CashInflow {
   cashCut   CashCut @relation(fields: [cashCutId], references: [id], onDelete: Cascade)
 
   type   CashInflowType
-  categoryId      String?
-  categoryRef     FinancialMovementCategory? @relation("CashInflowCategory", fields: [categoryId], references: [id], onDelete: Restrict)
-  categoryNameSnapshot String?
   amount Float
   notes  String?
-  receiptPhotoUrl String?
 
   occurredAt DateTime @default(now())
   createdAt  DateTime @default(now())
@@ -1671,52 +1441,6 @@ enum CookingEventType {
   SUSPENDER_VAPOR
   FIN_COCCION
   OBSERVACION
-}
-
-enum BoilerSource {
-  MANUAL
-  SENSOR
-  PLC
-  IMPORT
-  API
-}
-
-enum SteamInjectionState {
-  SIN_INYECCION
-  INYECTANDO
-}
-
-enum PressureUnit {
-  PSI
-  KG_CM2
-}
-
-enum GasReadingType {
-  INITIAL
-  FINAL
-  REFILL
-  CHECK
-}
-
-enum BoilerEventType {
-  ENCENDIDO
-  APAGADO
-  CIERRE_FORZADO
-  MANTENIMIENTO
-  INCIDENTE
-  RECARGA_GAS
-  VAPOR_INICIADO
-  VAPOR_DETENIDO
-  CAMBIO_PRESION
-  LECTURA_GAS
-  OBSERVACION
-}
-
-enum BoilerProcessType {
-  COCIMIENTO
-  MOLIENDA
-  FERMENTACION
-  DESTILACION
 }
 
 enum MillingStatus {
@@ -1994,10 +1718,6 @@ model CashSafeEnvelopeMovement {
   /// (no se fuerza aqui a nivel de schema porque INGRESO/RECEPCION
   /// pueden no necesitarlo).
   notes String?
-  categoryId String?
-  categoryRef FinancialMovementCategory? @relation("EnvelopeMovementCategory", fields: [categoryId], references: [id], onDelete: Restrict)
-  categoryNameSnapshot String?
-  receiptPhotoUrl String?
 
   /// Referencia al corte de origen cuando aplica (tipicamente en
   /// el movimiento INGRESO).
@@ -2035,10 +1755,6 @@ model InventoryProduct {
 
   itemType InventoryItemType
 
-  /// Alcance explícito del conteo. UNCLASSIFIED queda fuera del semanal
-  /// hasta que un administrador lo revise.
-  countFrequency InventoryCountFrequency @default(UNCLASSIFIED)
-
   trackStock      Boolean              @default(true)
   trackBatch      Boolean              @default(false)
   trackExpiration Boolean              @default(false)
@@ -2046,10 +1762,11 @@ model InventoryProduct {
   mustReturn      Boolean              @default(false)
   countItems      InventoryCountItem[]
   entries         InventoryEntry[]
+  /// Alcance explícito del conteo: semanal, mensual o pendiente de clasificación.
+  countFrequency InventoryCountFrequency @default(UNCLASSIFIED)
 
   isActive Boolean @default(true)
-  /// Estado archivado separado de activo/inactivo. Archivar nunca elimina
-  /// referencias, movimientos, conteos ni balances históricos.
+  /// Archivar conserva todo el historial y evita que el producto aparezca en nuevas capturas.
   archivedAt DateTime?
 
   createdAt DateTime @default(now())
@@ -2147,10 +1864,10 @@ model InventoryCountDeclaration {
   id String @id @default(cuid())
   branchId String
   branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  countId String?
-  count InventoryCount? @relation(fields: [countId], references: [id], onDelete: SetNull)
   inventoryProductId String
   inventoryProduct InventoryProduct @relation(fields: [inventoryProductId], references: [id], onDelete: Restrict)
+  countId String?
+  count InventoryCount? @relation(fields: [countId], references: [id], onDelete: SetNull)
   expectedQuantity Decimal @db.Decimal(18, 6)
   declaredQuantity Decimal @db.Decimal(18, 6)
   unit CatalogBaseUnit
@@ -2180,11 +1897,11 @@ enum InventoryHandlingUnit {
   BOTELLA
   GARRAFA
   CAJA
-  BOLSA
   PAQUETE
   PIEZA
   KILOGRAMO
   LITRO
+  BOLSA
   OTRA
 }
 
@@ -2444,14 +2161,14 @@ model InventoryCount {
   status    InventoryCountStatus @default(BORRADOR)
   countType InventoryCountType @default(WEEKLY)
   notes     String?
-  closedAt   DateTime?
+  closedAt  DateTime?
   closedById String?
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
 
-  branch   Branch               @relation(fields: [branchId], references: [id])
-  closedBy User?                @relation("InventoryCountClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
-  items        InventoryCountItem[]
+  branch Branch               @relation(fields: [branchId], references: [id])
+  closedBy User?              @relation("InventoryCountClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  items  InventoryCountItem[]
   declarations InventoryCountDeclaration[]
 
   @@index([branchId])
@@ -2469,7 +2186,7 @@ model InventoryCountItem {
   id               String   @id @default(cuid())
   countId          String
   productId        String
-  /// Null means the item is still pending capture. Explicit zero is stored as 0.
+  /// Null means pending capture; explicit zero remains a valid count.
   quantityCounted  Decimal? @db.Decimal(12, 3)
   countedAt        DateTime?
   previousQuantity Decimal? @db.Decimal(12, 3)
@@ -2601,6 +2318,9 @@ model ScheduledShift {
   position String?
 
   notes String?
+
+  /// El admin puede editar sin que el turno vuelva a aparecer hasta publicarlo.
+  publicationStatus ScheduledShiftPublicationStatus @default(PUBLISHED)
 
   /// Si este turno es la asignación de un empleado a un evento puntual
   /// (boda, XV años, feria, etc.), apunta al ScheduleEvent que trae el
@@ -2747,6 +2467,11 @@ model ScheduleWeek {
 }
 
 enum ScheduleWeekStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ScheduledShiftPublicationStatus {
   DRAFT
   PUBLISHED
 }
@@ -5441,31 +5166,6 @@ enum CashMovementDirection {
   OUT
 }
 
-enum CashTransferEndpointType {
-  CASH_SESSION
-  ENVELOPE
-}
-
-model CashTransfer {
-  id              String                   @id @default(cuid())
-  operationId     String                   @unique @db.Uuid
-  branchId        String
-  branch          Branch                   @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  sourceType      CashTransferEndpointType
-  sourceId        String
-  destinationType CashTransferEndpointType
-  destinationId   String
-  amount          Decimal                  @db.Decimal(18, 2)
-  reason          String
-  actorId         String
-  actor           User                     @relation("CashTransferCreatedBy", fields: [actorId], references: [id], onDelete: Restrict)
-  createdAt       DateTime                 @default(now())
-
-  @@index([branchId, createdAt])
-  @@index([sourceType, sourceId])
-  @@index([destinationType, destinationId])
-}
-
 model CashMovement {
   id            String                @id @default(cuid())
   cashSessionId String
@@ -5483,53 +5183,10 @@ model CashMovement {
   actor         User                  @relation("CashMovementActor", fields: [actorId], references: [id], onDelete: Restrict)
   operationId   String?               @unique @db.Uuid
   metadata      Json?
-  categoryId    String?
-  categoryRef  FinancialMovementCategory? @relation("CashMovementCategory", fields: [categoryId], references: [id], onDelete: Restrict)
-  categoryNameSnapshot String?
   createdAt     DateTime              @default(now())
 
   @@index([cashSessionId, createdAt])
   @@index([branchId, createdAt])
   @@index([operationId])
   @@index([sourceType, sourceId])
-}
-
-enum FinancialMovementDirection {
-  INCOME
-  EXPENSE
-}
-
-enum FinancialMovementScope {
-  CASH
-  ENVELOPE
-  BOTH
-}
-
-/// Global, administrable taxonomy for manual cash/envelope movements.
-/// Historical movement rows keep their categoryId and name snapshot; rows
-/// created before this catalog remains compatible with nullable references.
-model FinancialMovementCategory {
-  id              String                    @id @default(cuid())
-  name            String
-  code            String                    @unique
-  direction       FinancialMovementDirection
-  scope           FinancialMovementScope
-  group           String?
-  requiresReason  Boolean                   @default(false)
-  requiresReceipt Boolean                   @default(false)
-  isActive        Boolean                   @default(true)
-  sortOrder       Int                       @default(0)
-  createdAt       DateTime                  @default(now())
-  updatedAt       DateTime                  @updatedAt
-  createdById     String?
-  createdBy       User?                     @relation("FinancialCategoryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  updatedById     String?
-  updatedBy       User?                     @relation("FinancialCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
-  cashOutflows    CashOutflow[]             @relation("CashOutflowCategory")
-  cashInflows     CashInflow[]              @relation("CashInflowCategory")
-  cashMovements   CashMovement[]            @relation("CashMovementCategory")
-  envelopeMovements CashSafeEnvelopeMovement[] @relation("EnvelopeMovementCategory")
-
-  @@index([direction, scope, isActive, sortOrder])
-  @@index([isActive, name])
 }

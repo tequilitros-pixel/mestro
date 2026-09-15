@@ -3,12 +3,6 @@
 import { useEffect, useState, startTransition } from "react";
 import Link from "next/link";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
-import { formatDateOnly } from "@/lib/dateOnly";
-
-interface Branch {
-  id: string;
-  name: string;
-}
 
 interface CashCut {
   id: string;
@@ -28,17 +22,9 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export default function CashCutsHistoryPage() {
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [branchId, setBranchId] = useState("");
   const [status, setStatus] = useState("");
   const [cashCuts, setCashCuts] = useState<CashCut[]>([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/branches")
-      .then((res) => res.json())
-      .then(setBranches);
-  }, []);
 
   useEffect(() => {
     startTransition(() => {
@@ -46,7 +32,6 @@ export default function CashCutsHistoryPage() {
     });
 
     const params = new URLSearchParams();
-    if (branchId) params.set("branchId", branchId);
     if (status) params.set("status", status);
 
     fetch(`/api/cash-cuts?${params.toString()}`)
@@ -55,26 +40,13 @@ export default function CashCutsHistoryPage() {
         setCashCuts(data);
         setLoading(false);
       });
-  }, [branchId, status]);
+  }, [status]);
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-bold text-on-surface">Historial de cortes</h1>
 
       <div className="flex gap-3">
-        <select
-          value={branchId}
-          onChange={(e) => setBranchId(e.target.value)}
-          className="flex-1 rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
-        >
-          <option value="">Todas las sucursales</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
@@ -102,7 +74,7 @@ export default function CashCutsHistoryPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardLabel>
-                    {cc.branch.name} · {formatDateOnly(new Date(cc.date))}
+                    {cc.branch.name} · {new Date(cc.date).toLocaleDateString("es-MX")}
                   </CardLabel>
                   <CardValue>{cc.code}</CardValue>
                   <p className="text-on-surface-variant text-xs mt-1">

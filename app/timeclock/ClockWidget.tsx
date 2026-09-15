@@ -7,12 +7,12 @@ import {
   getNearbyBranches,
   clockInAction,
   clockOutAction,
+  closeForgottenShiftAction,
   reportGeofenceAlert,
 } from "@/app/actions/timeclock";
 import { ClockIcon, LoginIcon, LogoutIcon } from "@/components/ui/icons";
 import { distanceMeters, hasGeofence, type BranchLocation } from "@/lib/geo";
 import { enqueueOperation } from "@/lib/offline/queue";
-import { formatBusinessTime, formatBusinessDateTimeLocal, parseBusinessDateTimeLocal } from "@/lib/dateTime";
 
 type Branch = BranchLocation & { id: string; name: string };
 type OpenShift = {
@@ -21,6 +21,7 @@ type OpenShift = {
   branch: Branch;
 };
 type OutOfRange = { distance: number; radius: number } | null;
+const FORGOTTEN_SHIFT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 function formatElapsed(milliseconds: number) {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -31,7 +32,15 @@ function formatElapsed(milliseconds: number) {
 }
 
 function toDatetimeLocal(date: Date) {
-  return formatBusinessDateTimeLocal(date);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+    )}:${pad(date.getMinutes())}`;
+}
+
+function asLocationInput(coords: { latitude: number; longitude: number } | undefined) {
+  if (!coords) return undefined;
+  return { sample: { latitude: coords.latitude, longitude: coords.longitude, checkedAt: new Date().toISOString() } };
 }
 
 function getCurrentPosition(): Promise<GeolocationPosition> {
@@ -273,7 +282,7 @@ export default function ClockWidget() {
       setSaving(false);
       return;
     }
-    const result = await clockInAction(selectedBranch, coords);
+      const result = await clockInAction(selectedBranch, asLocationInput(coords));
     setSaving(false);
 
     if (result.error) {
@@ -296,6 +305,49 @@ export default function ClockWidget() {
 
     setError(null);
 
+    const adjustedClockIn = new Date(clockInValue);
+    const adjustedClockOut = new Date(clockOutValue);
+
+    if (Number.isNaN(adjustedClockIn.getTime()) || Number.isNaN(adjustedClockOut.getTime())) {
+      setError("Las horas no son válidas.");
+      return;
+    }
+
+    const forgottenSession = Date.now() - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS;
+    if (forgottenSession) {
+      if (!navigator.onLine) {
+        await enqueueOperation({
+          id: crypto.randomUUID(),
+          kind: "timeclock.clock-out",
+          createdAt: new Date().toISOString(),
+          payload: {
+            entryId: openShift.id,
+            clockIn: adjustedClockIn.toISOString(),
+            clockOut: adjustedClockOut.toISOString(),
+            forgottenSession: true,
+          },
+        });
+        setOpenShift(null);
+        localStorage.removeItem("maestro:timeclock-open-shift");
+        setConfirming(false);
+        return;
+      }
+      setSaving(true);
+      const result = await closeForgottenShiftAction(
+        openShift.id,
+        adjustedClockIn.toISOString(),
+        adjustedClockOut.toISOString(),
+      );
+      setSaving(false);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setConfirming(false);
+      await load();
+      return;
+    }
+
     let coords: { latitude: number; longitude: number } | undefined;
 
     if (hasGeofence(openShift.branch)) {
@@ -315,17 +367,6 @@ export default function ClockWidget() {
     }
 
     setSaving(true);
-    let adjustedClockIn: Date;
-    let adjustedClockOut: Date;
-    try {
-      adjustedClockIn = parseBusinessDateTimeLocal(clockInValue);
-      adjustedClockOut = parseBusinessDateTimeLocal(clockOutValue);
-    } catch {
-      setSaving(false);
-      setError("Las horas no son válidas.");
-      return;
-    }
-
     if (!navigator.onLine) {
       const clockOut = adjustedClockOut;
       await enqueueOperation({ id: crypto.randomUUID(), kind: "timeclock.clock-out", createdAt: new Date().toISOString(), payload: { entryId: openShift.id, clockOut: clockOut.toISOString(), coords } });
@@ -335,14 +376,14 @@ export default function ClockWidget() {
       setSaving(false);
       return;
     }
-    // datetime-local no incluye zona horaria. Se interpreta explícitamente en
-    // la zona oficial de negocio antes de enviar un instante ISO inequívoco.
-    const result = await clockOutAction(
-      openShift.id,
-      adjustedClockIn.toISOString(),
-      adjustedClockOut.toISOString(),
-      coords,
-    );
+    // datetime-local no incluye zona horaria. Convertir en el navegador conserva
+    // la hora local del empleado y envía a Vercel un instante ISO inequívoco.
+      const result = await clockOutAction(
+        openShift.id,
+        adjustedClockIn.toISOString(),
+        adjustedClockOut.toISOString(),
+        asLocationInput(coords),
+      );
     setSaving(false);
 
     if (result.error) {
@@ -445,7 +486,10 @@ export default function ClockWidget() {
           </p>
           <p className="text-2xl font-bold text-on-surface">
             Desde las{" "}
-            {formatBusinessTime(openShift.clockIn)}
+            {new Date(openShift.clockIn).toLocaleTimeString("es-MX", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </p>
 
           <div className="rounded-2xl bg-background/55 px-4 py-5">
@@ -463,7 +507,9 @@ export default function ClockWidget() {
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-error py-4 text-lg font-bold text-on-surface transition duration-150 ease-out hover:opacity-90 hover:scale-[1.04] active:scale-[0.97]"
           >
             <LogoutIcon className="h-5 w-5" />
-            Checar salida
+                {Date.now() - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS
+                  ? "Cerrar sesión olvidada"
+                  : "Checar salida"}
           </button>
         </div>
       ) : (
@@ -472,6 +518,14 @@ export default function ClockWidget() {
           <p className="text-sm text-on-surface-variant">
             Revisa que las horas sean correctas antes de confirmar.
           </p>
+
+          {openShift && Date.now() - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS && (
+            <div className="rounded-xl border border-secondary/40 bg-secondary/10 p-3 text-left text-sm text-secondary">
+              Esta sesión lleva más de 24 horas abierta. Se cerrará como sesión olvidada,
+              sin pedir GPS, y quedará marcada para revisión de nómina. Ajusta la hora real
+              de salida para no registrar por error todas las horas transcurridas.
+            </div>
+          )}
 
           <label className="block space-y-2">
             <span className="text-sm font-semibold text-on-surface-variant">Entrada</span>

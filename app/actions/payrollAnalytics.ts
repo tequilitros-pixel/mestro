@@ -3,7 +3,6 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { parseDateOnly, addDaysToDateOnly, formatDateOnly } from "@/lib/dateOnly";
-import { formatCivilDate } from "@/lib/dateTime";
 import { withRlsContext } from "@/lib/rls";
 
 /**
@@ -493,7 +492,10 @@ export async function getPayrollAnalytics(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, value]) => ({
       date,
-      label: formatCivilDate(`${date}T00:00:00.000Z`, { day: "2-digit", month: "short" }),
+      label: new Date(`${date}T12:00:00`).toLocaleDateString("es-MX", {
+        day: "2-digit",
+        month: "short",
+      }),
       cost: Math.round(value.cost),
       hours: Math.round(value.hours * 10) / 10,
       sales: Math.round(value.sales),

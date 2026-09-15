@@ -64,7 +64,23 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       void syncNow();
       void (async () => {
         try {
-          if ("serviceWorker" in navigator) await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+          if (!("serviceWorker" in navigator)) return;
+
+          if (process.env.NODE_ENV !== "production") {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+            if ("caches" in window) {
+              const cacheKeys = await caches.keys();
+              await Promise.all(
+                cacheKeys
+                  .filter((key) => key.startsWith("maestro-shell-"))
+                  .map((key) => caches.delete(key)),
+              );
+            }
+            return;
+          }
+
+          await navigator.serviceWorker.register("/sw.js", { scope: "/" });
         } catch (error) {
           console.error("No fue posible registrar el modo offline", error);
         }

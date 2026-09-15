@@ -106,5 +106,5 @@ export function getDistillationStatus(events: DistillationEvent[]) {
   if (events.some((e) => e.type === "CORTE_CABEZAS")) return "Sacando destrozado";
   if (events.some((e) => e.type === "INICIO_CALENTAMIENTO")) return "Calentando";
 
-  return "Sin iniciar";
+  return "Listo para iniciar";
 }

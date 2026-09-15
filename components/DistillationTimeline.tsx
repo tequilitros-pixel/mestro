@@ -11,7 +11,6 @@ import {
   type IconProps,
 } from "@/components/ui/icons";
 import { ComponentType } from "react";
-import { formatBusinessDateTime } from "@/lib/dateTime";
 
 const EVENT_META: Record<
   string,
@@ -70,7 +69,7 @@ export default function DistillationTimeline({
                     </h3>
 
                     <p className="text-sm text-on-surface-variant">
-                      {formatBusinessDateTime(event.createdAt)}
+                      {event.createdAt.toLocaleString()}
                     </p>
                   </div>
 

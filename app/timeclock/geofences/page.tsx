@@ -28,10 +28,10 @@ export default async function GeofencesPage() {
           <p className="font-mono text-xs uppercase tracking-[0.35em] text-on-surface-variant">
             Horario
           </p>
-          <h1 className="mt-1 text-4xl font-bold">Geozona</h1>
+          <h1 className="mt-1 text-4xl font-bold">Geozonas y sucursales</h1>
           <p className="mt-2 text-sm text-on-surface-variant">
-            Direcciones de sucursales y geozonas del checador: crea o elimina
-            geozonas y asígnalas al área de trabajo correspondiente.
+            Administra direcciones y geozonas del checador. Las sucursales de
+            prueba pueden archivarse sin borrar sus históricos.
           </p>
         </div>
 

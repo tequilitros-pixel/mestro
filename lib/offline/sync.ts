@@ -23,6 +23,7 @@ async function runSync() {
 
   for (const operation of operations) {
     if (!navigator.onLine) break;
+    if (operation.status === "cancelled") continue;
     // No adelantar ventas a una apertura/cierre de caja que quedó pendiente.
     if (blocked && operation.kind.startsWith("cash-cut.")) break;
     // Las ventas son independientes; conserva el orden de los demás eventos.

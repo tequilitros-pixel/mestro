@@ -98,6 +98,12 @@ function netAdjustmentAmount(rows: { type: string; amount: number }[]) {
 
 export type PayrollPeriodStatusValue = "BORRADOR" | "REVISION" | "APROBADA" | "PAGADA";
 
+export type PayrollWeekHistoryItem = {
+  weekStart: string;
+  paymentDate: string;
+  status: PayrollPeriodStatusValue;
+};
+
 export type PayrollPeriodInfo = {
   status: PayrollPeriodStatusValue;
   submittedByName: string | null;
@@ -140,10 +146,40 @@ export type PayrollWeekTable = {
   period: PayrollPeriodInfo;
 };
 
+export async function getPayrollWeekHistoryAction(): Promise<
+  { error: string } | { success: true; data: PayrollWeekHistoryItem[] }
+> {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "No tienes permiso" };
+
+  const periods = await prisma.payrollPeriod.findMany({
+    orderBy: { weekStart: "desc" },
+    take: 104,
+    select: { weekStart: true, status: true },
+  });
+
+  return {
+    success: true,
+    data: periods.map((period) => ({
+      weekStart: formatDateOnly(period.weekStart),
+      paymentDate: addDaysToDateOnly(formatDateOnly(period.weekStart), 7),
+      status: period.status,
+    })),
+  };
+}
+
 export type PayrollDayDetail = {
   date: string;
   scheduled: { branchName: string; startTime: string; endTime: string } | null;
   actual: { branchName: string; clockIn: string; clockOut: string | null; source: "CHECADOR" | "MANUAL" } | null;
+  entries: {
+    id: string;
+    branchId: string;
+    branchName: string;
+    clockIn: string;
+    clockOut: string | null;
+    source: "CHECADOR" | "MANUAL";
+  }[];
   hoursWorked: number;
   incident: "SIN_SALIDA" | "SIN_TURNO" | "TURNO_NO_TRABAJADO" | "LLEGADA_TARDE" | "SALIDA_ANTICIPADA" | null;
   justified: boolean;
@@ -165,6 +201,7 @@ export type PayrollEmployeeDetail = {
   employee: { id: string; name: string; hourlyRate: number | null };
   weekStart: string;
   weekEnd: string;
+  branches: { id: string; name: string }[];
   days: PayrollDayDetail[];
   regularHours: number;
   overtimeHours: number;
@@ -346,7 +383,7 @@ async function computeLiveEmployeeDetail(
   const end = parseDateOnly(addDaysToDateOnly(mondayStr, 7));
   const rateReferenceDate = new Date(end.getTime() - 1);
 
-  const [employee, entries, shifts, overtimeRecords, salaryRates, settings, adjustments] = await Promise.all([
+    const [employee, entries, shifts, overtimeRecords, salaryRates, settings, userBranches, adjustments] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, name: true, hourlyRate: true },
@@ -370,6 +407,11 @@ async function computeLiveEmployeeDetail(
       orderBy: { effectiveFrom: "desc" },
     }),
     getPayrollSettings(),
+    prisma.userBranch.findMany({
+      where: { userId },
+      include: { branch: { select: { id: true, name: true } } },
+      orderBy: { branch: { name: "asc" } },
+    }),
     prisma.payrollAdjustment.findMany({
       where: { userId, weekStart: start },
       include: { createdBy: { select: { name: true } } },
@@ -406,6 +448,14 @@ async function computeLiveEmployeeDetail(
 
     const firstEntry = dayEntries[0] ?? null;
     const lastClosedEntry = closedEntries[closedEntries.length - 1] ?? null;
+    const dayShiftEntries = dayEntries.map((entry) => ({
+      id: entry.id,
+      branchId: entry.branchId,
+      branchName: entry.branch.name,
+      clockIn: entry.clockIn.toISOString(),
+      clockOut: entry.clockOut ? entry.clockOut.toISOString() : null,
+      source: entry.source,
+    }));
     const hasOpenEntry = dayEntries.some((e) => !e.clockOut);
 
     let incident: PayrollDayDetail["incident"] = null;
@@ -444,6 +494,7 @@ async function computeLiveEmployeeDetail(
             source: firstEntry.source,
           }
         : null,
+      entries: dayShiftEntries,
       hoursWorked,
       incident,
       justified: false,
@@ -485,11 +536,14 @@ async function computeLiveEmployeeDetail(
 
   const justifications = await loadJustificationsMap(userId, mondayStr);
 
-  return {
-    employee: { id: employee.id, name: employee.name, hourlyRate },
-    weekStart: mondayStr,
-    weekEnd: addDaysToDateOnly(mondayStr, 6),
-    days: applyJustifications(days, justifications),
+    return {
+      employee: { id: employee.id, name: employee.name, hourlyRate },
+      branches: userBranches
+        .filter((item) => item.branch)
+        .map((item) => ({ id: item.branchId, name: item.branch.name })),
+      weekStart: mondayStr,
+      weekEnd: addDaysToDateOnly(mondayStr, 6),
+      days: applyJustifications(days, justifications),
     regularHours,
     overtimeHours,
     totalHours,
@@ -683,6 +737,7 @@ export async function getEmployeePayrollDetail(
         date,
         scheduled: null,
         actual: null,
+        entries: [],
         hoursWorked: 0,
         incident: null,
         justified: false,
@@ -694,6 +749,7 @@ export async function getEmployeePayrollDetail(
         success: true,
         data: {
           employee: { id: employee.id, name: employee.name, hourlyRate: null },
+          branches: [],
           weekStart: mondayStr,
           weekEnd,
           days: applyJustifications(emptyDays, justifications),
@@ -711,6 +767,11 @@ export async function getEmployeePayrollDetail(
       };
     }
 
+    const lockedDays = applyJustifications(
+      entry.daysSnapshot as PayrollDayDetail[],
+      justifications,
+    ).map((day) => ({ ...day, entries: day.entries ?? [] }));
+
     return {
       success: true,
       data: {
@@ -719,9 +780,10 @@ export async function getEmployeePayrollDetail(
           name: employee.name,
           hourlyRate: entry.hourlyRate !== null ? Number(entry.hourlyRate) : null,
         },
+        branches: [],
         weekStart: mondayStr,
         weekEnd,
-        days: applyJustifications(entry.daysSnapshot as PayrollDayDetail[], justifications),
+        days: lockedDays,
         regularHours: Number(entry.regularHours),
         overtimeHours: Number(entry.overtimeHours),
         totalHours: Number(entry.totalHours),
@@ -739,7 +801,10 @@ export async function getEmployeePayrollDetail(
   const live = await computeLiveEmployeeDetail(userId, mondayStr);
   if ("error" in live) return live;
 
-  return { success: true, data: { ...live, period: periodInfoFrom(period) } };
+  return {
+    success: true,
+    data: { ...live, period: periodInfoFrom(period) },
+  };
 }
 
 /**

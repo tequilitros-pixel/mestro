@@ -6,7 +6,6 @@ import { getActiveProcesses } from "@/lib/brain/data/getActiveProcesses";
 import { getRecordingStatus } from "@/lib/brain/getRecordingStatus";
 import { prisma } from "@/lib/prisma";
 import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
-import { addBusinessDays, businessDayStart } from "@/lib/dateTime";
 import {
   type IconProps,
   FactoryIcon,
@@ -39,6 +38,14 @@ export default async function HomePage() {
   if (!user) {
     redirect("/login");
   }
+
+  const scheduleCardHref =
+    user.role === "ADMIN" ? "/administration/schedule" : "/timeclock/calendar";
+  const scheduleCardTitle = user.role === "ADMIN" ? "Horario" : "Mi horario";
+  const scheduleCardDescription =
+    user.role === "ADMIN"
+      ? "Edita, revisa y publica los turnos por empleado o sucursal."
+      : "Consulta tu horario publicado y tus turnos de trabajo.";
 
   const [
     { cookings, millings, fermentations, distillations },
@@ -207,9 +214,9 @@ export default async function HomePage() {
           <ModuleCard
             icon={ClockIcon}
             eyebrow="Personal, horarios y nómina"
-            title="Workforce"
-            description="Consulta tu horario, disponibilidad, checador, horas y nómina operativa."
-            href="/workforce"
+            title={scheduleCardTitle}
+            description={scheduleCardDescription}
+            href={scheduleCardHref}
             status="Disponible"
           />
 
@@ -250,7 +257,8 @@ export default async function HomePage() {
 
 async function getExpiringBottles() {
   const now = new Date();
-  const in7Days = businessDayStart(addBusinessDays(now, 7));
+  const in7Days = new Date(now);
+  in7Days.setDate(in7Days.getDate() + 7);
 
   return prisma.liquorBottle.findMany({
     where: {
