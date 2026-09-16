@@ -21,14 +21,14 @@ export default function ScheduleTabs() {
   const [tab, setTab] = useState<Tab>("horario");
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 border-b border-outline-variant pb-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2 border-b border-outline-variant pb-2.5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">
             Administración
           </p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-on-surface">
-            Programar horarios
+            Horarios
           </h1>
         </div>
 

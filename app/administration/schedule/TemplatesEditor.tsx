@@ -260,9 +260,9 @@ export default function TemplatesEditor() {
                 return (
                   <div
                     key={dayOfWeek}
-                    className="flex flex-wrap items-center justify-between gap-3 p-4"
+                    className="flex flex-wrap items-center justify-between gap-2.5 p-3"
                   >
-                    <div className="flex w-32 shrink-0 items-center gap-2.5">
+                    <div className="flex min-w-0 w-32 shrink-0 items-center gap-2.5">
                       <span
                         className={`h-2 w-2 shrink-0 rounded-full ${
                           existing ? "bg-tertiary-fixed-dim" : "bg-outline"
@@ -276,14 +276,14 @@ export default function TemplatesEditor() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                       <input
                         type="time"
                         value={draft.start}
                         onChange={(e) =>
                           setDraft(dayOfWeek, "start", e.target.value)
                         }
-                        className="rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+                        className="h-9 w-[108px] max-w-full rounded-lg border border-outline-variant bg-background px-2.5 py-2 text-xs font-medium text-on-surface outline-none transition focus:border-primary"
                       />
 
                       <span className="text-on-surface-variant">–</span>
@@ -294,13 +294,13 @@ export default function TemplatesEditor() {
                         onChange={(e) =>
                           setDraft(dayOfWeek, "end", e.target.value)
                         }
-                        className="rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+                        className="h-9 w-[108px] max-w-full rounded-lg border border-outline-variant bg-background px-2.5 py-2 text-xs font-medium text-on-surface outline-none transition focus:border-primary"
                       />
 
                       <button
                         onClick={() => handleSave(dayOfWeek)}
                         disabled={isSaving}
-                        className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90 disabled:opacity-60"
+                        className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-on-primary transition hover:opacity-90 disabled:opacity-60"
                       >
                         {isSaving ? "Guardando..." : "Guardar"}
                       </button>
@@ -309,7 +309,7 @@ export default function TemplatesEditor() {
                         <button
                           onClick={() => handleClear(dayOfWeek)}
                           disabled={isSaving}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-4 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-error hover:text-error disabled:opacity-60"
+                          className="inline-flex items-center gap-1 rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-error hover:text-error disabled:opacity-60"
                         >
                           <TrashIcon className="h-3.5 w-3.5" />
                           {isSaving ? "Eliminando..." : "Eliminar"}

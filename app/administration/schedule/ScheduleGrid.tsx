@@ -159,69 +159,71 @@ function getMostRecentMonday() {
 function ShiftBlock({ shift, onClick }: { shift: Shift; onClick: () => void }) {
   const isPublished = shift.publicationStatus === "PUBLISHED";
   const statusLabel = isPublished ? "Publicado" : "Borrador";
-  const statusClass = isPublished
-    ? "border-tertiary-fixed-dim/80 bg-tertiary-fixed-dim/30"
-    : "border-outline-variant bg-surface-container-high";
+  const statusDotClass = isPublished ? "bg-tertiary-fixed-dim" : "bg-secondary";
 
   if (shift.type === "DESCANSO") {
     return (
       <button
         onClick={onClick}
-        className={`group/shift w-full rounded-md border px-2 py-2 text-left transition hover:border-outline ${statusClass}`}
+        className="group/shift flex min-h-[34px] w-full items-center justify-between gap-2 rounded-lg border border-outline-variant bg-surface-container-high/70 px-2 py-1.5 text-left transition hover:border-outline"
       >
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Descanso</p>
-          <span className="rounded-full bg-background/55 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-on-surface-variant">
-            {statusLabel}
-          </span>
-        </div>
+        <p className="text-[10px] font-semibold text-on-surface-variant">Descanso</p>
+        <span className={`h-2 w-2 shrink-0 rounded-full ${statusDotClass}`} title={statusLabel} aria-label={statusLabel} />
       </button>
     );
   }
 
   const color =
     shift.branch?.color || fallbackBranchColor(shift.event?.id ?? shift.branchId ?? shift.id);
-  const backgroundColor = rgbaFromHex(color, isPublished ? 0.32 : 0.1);
-  const borderColor = rgbaFromHex(color, isPublished ? 0.9 : 0.42);
-  const badgeColor = rgbaFromHex(color, isPublished ? 0.45 : 0.18);
+  const backgroundColor = rgbaFromHex(color, isPublished ? 0.38 : 0.08);
+  const borderColor = rgbaFromHex(color, isPublished ? 0.9 : 0.36);
+  const secondaryInfo = [shift.position, shift.event?.location].filter(Boolean).join(" · ");
 
   return (
     <button
       onClick={onClick}
-      className="group/shift relative w-full rounded-md border px-2.5 py-2 text-left transition hover:brightness-105"
-      style={{ backgroundColor, borderColor, borderLeftColor: color, borderLeftWidth: 3 }}
+      className="group/shift relative w-full rounded-lg border px-2 py-1.5 text-left transition hover:brightness-105"
+      style={{
+        backgroundColor,
+        borderColor,
+        borderLeftColor: color,
+        borderLeftWidth: 3,
+        boxShadow: isPublished ? `inset 0 0 0 1px ${rgbaFromHex(color, 0.2)}` : undefined,
+      }}
+      data-publication-status={shift.publicationStatus}
     >
       <span className="absolute right-1.5 top-1 text-[10px] tracking-wider text-on-surface-variant opacity-0 transition group-hover/shift:opacity-100">
         •••
       </span>
-      <p className="truncate pr-5 text-[11px] font-bold leading-tight text-on-surface">
+      <p className="truncate pr-4 text-[10px] font-bold leading-tight text-on-surface">
         {shift.event?.name ?? shift.branch?.name ?? "Sin sucursal"}
       </p>
-      <p className="mt-1 whitespace-nowrap font-mono text-[11px] font-semibold leading-tight text-on-surface">
+      <p className="mt-0.5 whitespace-nowrap font-mono text-[10px] font-semibold leading-tight text-on-surface">
         {shift.startTime ? formatTime12(shift.startTime) : "—"}
         {" – "}
         {shift.endTime ? formatTime12(shift.endTime) : "—"}
       </p>
-      {shift.startTime && shift.endTime && (
-        <p className="mt-1 text-[10px] font-medium text-on-surface-variant">
-          {formatHours(shiftHours(shift.startTime, shift.endTime))}
+      <div className="mt-0.5 flex items-center justify-between gap-1">
+        <span className="text-[9px] font-medium text-on-surface-variant">
+          {shift.startTime && shift.endTime ? formatHours(shiftHours(shift.startTime, shift.endTime)) : "—"}
+        </span>
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${
+            isPublished ? "bg-tertiary-fixed-dim/20 text-tertiary-fixed-dim" : "bg-secondary/15 text-secondary"
+          }`}
+          title={statusLabel}
+          aria-label={statusLabel}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass}`} />
+          {statusLabel}
+        </span>
+      </div>
+      {secondaryInfo && (
+        <p className="mt-0.5 truncate text-[9px] leading-tight text-on-surface-variant">
+          {shift.event?.location && <MapPinIcon className="mr-0.5 inline h-2.5 w-2.5" />}
+          {secondaryInfo}
         </p>
       )}
-      {shift.event?.location && (
-        <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-on-surface-variant">
-          <MapPinIcon className="h-2.5 w-2.5 shrink-0" />
-          {shift.event.location}
-        </p>
-      )}
-      {shift.position && (
-        <p className="mt-1 truncate text-[10px] leading-tight text-on-surface-variant">{shift.position}</p>
-      )}
-      <span
-        className="mt-2 inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-on-surface"
-        style={{ backgroundColor: badgeColor }}
-      >
-        {statusLabel}
-      </span>
     </button>
   );
 }
@@ -320,8 +322,8 @@ function MobileDayView({
   const dateStr = formatDateOnly(selectedDay);
 
   return (
-    <div className="space-y-3">
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+    <div className="space-y-2.5">
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
         {days.map((day, i) => {
           const dStr = formatDateOnly(day);
           const isSelected = i === dayIndex;
@@ -332,7 +334,7 @@ function MobileDayView({
             <button
               key={i}
               onClick={() => onSelectDay(i)}
-              className={`relative flex shrink-0 flex-col items-center gap-1 rounded-xl px-3.5 py-3 transition ${
+              className={`relative flex shrink-0 flex-col items-center gap-0.5 rounded-lg px-3 py-2 transition ${
                 isSelected
                   ? "bg-primary text-on-primary"
                   : isToday
@@ -340,8 +342,8 @@ function MobileDayView({
                     : "border border-outline-variant bg-surface-container text-on-surface-variant"
               }`}
             >
-              <span className="font-mono text-[10px] font-bold tracking-wider">{DAY_LABELS[i]}</span>
-              <span className="font-mono text-base font-bold">{day.getUTCDate()}</span>
+              <span className="font-mono text-[9px] font-bold tracking-wider">{DAY_LABELS[i]}</span>
+              <span className="font-mono text-sm font-bold">{day.getUTCDate()}</span>
               {dayHasAlert && (
                 <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-error" />
               )}
@@ -367,50 +369,50 @@ function MobileDayView({
           return (
             <div
               key={employee.id}
-              className={`rounded-2xl border bg-surface-container p-4 ${
+              className={`rounded-xl border bg-surface-container p-3 ${
                 hasAlert ? "border-error/40 bg-error/5" : "border-outline-variant"
               }`}
             >
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-black text-primary ring-1 ring-primary/30">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-black text-primary ring-1 ring-primary/30">
                   {getInitials(employee.name)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-on-surface">{employee.name}</p>
+                  <p className="truncate text-[13px] font-semibold text-on-surface">{employee.name}</p>
                   <p
-                    className={`flex items-center gap-1 text-xs ${
+                    className={`flex items-center gap-1 text-[11px] ${
                       overtimeEmployeeIds.has(employee.id) ? "font-semibold text-secondary" : "text-on-surface-variant"
                     }`}
                   >
                     {overtimeEmployeeIds.has(employee.id) && <AlertIcon className="h-3 w-3" />}
-                    {formatHours(totals.hours)} esta semana
+                    {totals.turnos} turno{totals.turnos === 1 ? "" : "s"} · {formatHours(totals.hours)}
                   </p>
                 </div>
               </div>
 
               {hasAlert && (
-                <p className="mt-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-error">
+                <p className="mt-1.5 flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-error">
                   <AlertIcon className="h-3 w-3" />
                   Traslape ese día
                 </p>
               )}
               {showAvailability && employeeAvailability && (
-                <p className={`mt-2 text-xs font-semibold ${employeeAvailability.type === "UNAVAILABLE" ? "text-error" : employeeAvailability.type === "AVAILABLE_PARTIAL" ? "text-secondary" : "text-on-surface-variant"}`}>
+                <p className={`mt-1.5 text-[11px] font-semibold ${employeeAvailability.type === "UNAVAILABLE" ? "text-error" : employeeAvailability.type === "AVAILABLE_PARTIAL" ? "text-secondary" : "text-on-surface-variant"}`}>
                   {employeeAvailability.type === "AVAILABLE_ALL_DAY" ? "● Disponible" : employeeAvailability.type === "UNAVAILABLE" ? "● No disponible" : employeeAvailability.type === "PREFER_OFF" ? "○ Prefiere descanso" : `● Disponible ${employeeAvailability.startTime}–${employeeAvailability.endTime}`}
                 </p>
               )}
 
-              <div className="mt-3 space-y-1.5">
+              <div className="mt-2.5 space-y-1">
                 {cellShifts.map((s) => (
                   <ShiftBlock key={s.id} shift={s} onClick={() => onShiftClick(s)} />
                 ))}
 
                 <button
                   onClick={() => onAddClick(employee.id, dateStr)}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-outline-variant py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-primary"
+                  className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-outline-variant/70 py-1.5 text-[10px] font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-primary"
                 >
-                  <PlusIcon className="h-3.5 w-3.5" />
-                  {cellShifts.length === 0 ? "Agregar turno" : "Agregar otro"}
+                  <PlusIcon className="h-3 w-3" />
+                  {cellShifts.length === 0 ? "Turno" : "+ Otro"}
                 </button>
               </div>
             </div>
@@ -474,7 +476,7 @@ export default function ScheduleGrid() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
+    void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekStart]);
 
@@ -502,7 +504,7 @@ export default function ScheduleGrid() {
     }
 
     showToast("Semana anterior copiada correctamente.");
-    load();
+    await load();
   }
 
   async function handlePublishToggle() {
@@ -525,7 +527,7 @@ export default function ScheduleGrid() {
         ? "Horario regresado a borrador."
         : "Horario publicado. El equipo ya puede verlo.",
     );
-    load();
+    await load();
   }
 
   async function handleScopedPublish(publish: boolean) {
@@ -558,7 +560,17 @@ export default function ScheduleGrid() {
         ? `${count} turno${count === 1 ? "" : "s"} publicado${count === 1 ? "" : "s"}.`
         : `${count} turno${count === 1 ? "" : "s"} regresado${count === 1 ? "" : "s"} a borrador.`,
     );
-    load();
+    await load();
+  }
+
+  function handleNewShift() {
+    if (!data) return;
+    const employee = visibleEmployees[0] ?? data.employees[0];
+    if (!employee) {
+      setError("No hay personal activo para programar.");
+      return;
+    }
+    setModal({ mode: "create", userId: employee.id, date: todayStr });
   }
 
   const days = useMemo(() => {
@@ -722,24 +734,24 @@ export default function ScheduleGrid() {
   }, [alerts]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-lg border border-outline-variant bg-surface-container p-3">
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2.5 rounded-lg border border-outline-variant bg-surface-container p-2.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
             onClick={() => setWeekStart((prev) => addDaysToDateOnly(prev, -7))}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-outline-variant text-on-surface-variant transition hover:border-outline hover:text-on-surface"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-outline-variant text-on-surface-variant transition hover:border-outline hover:text-on-surface"
             aria-label="Semana anterior"
           >
             <ChevronLeftIcon className="h-4 w-4" />
           </button>
 
-          <div className="min-w-[190px] px-1 text-center">
-            <p className="text-sm font-semibold text-on-surface">{formatWeekRange(weekStart)}</p>
+          <div className="min-w-[156px] px-1 text-center">
+            <p className="text-[13px] font-semibold text-on-surface">{formatWeekRange(weekStart)}</p>
           </div>
 
           <button
             onClick={() => setWeekStart((prev) => addDaysToDateOnly(prev, 7))}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-outline-variant text-on-surface-variant transition hover:border-outline hover:text-on-surface"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-outline-variant text-on-surface-variant transition hover:border-outline hover:text-on-surface"
             aria-label="Semana siguiente"
           >
             <ChevronRightIcon className="h-4 w-4" />
@@ -748,7 +760,7 @@ export default function ScheduleGrid() {
           <button
             onClick={() => setWeekStart(getMostRecentMonday())}
             disabled={weekStart === getMostRecentMonday()}
-            className="rounded-md border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-40"
+            className="rounded-md border border-outline-variant px-2.5 py-1 text-[11px] font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-40"
           >
             Hoy
           </button>
@@ -761,7 +773,7 @@ export default function ScheduleGrid() {
               id="branch-filter"
               value={branchFilter}
               onChange={(event) => setBranchFilter(event.target.value)}
-              className="h-8 min-w-[180px] rounded-md border border-outline-variant bg-background px-2.5 text-xs font-semibold text-on-surface outline-none"
+              className="h-7 min-w-[132px] rounded-md border border-outline-variant bg-background px-2 text-[11px] font-semibold text-on-surface outline-none"
             >
               <option value="all">Todas las sucursales</option>
               {data.branches.map((branch) => (
@@ -774,7 +786,7 @@ export default function ScheduleGrid() {
               id="employee-filter"
               value={employeeFilter}
               onChange={(event) => setEmployeeFilter(event.target.value)}
-              className="h-8 min-w-[170px] rounded-md border border-outline-variant bg-background px-2.5 text-xs font-semibold text-on-surface outline-none"
+              className="h-7 min-w-[140px] rounded-md border border-outline-variant bg-background px-2 text-[11px] font-semibold text-on-surface outline-none"
             >
               <option value="all">Todos los empleados</option>
               {data.employees.map((employee) => (
@@ -783,7 +795,7 @@ export default function ScheduleGrid() {
             </select>
 
             <span
-              className={`ml-auto w-fit rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+              className={`ml-auto w-fit rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
                 data.status === "PUBLISHED"
                   ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
                   : data.status === "PARTIAL"
@@ -799,34 +811,48 @@ export default function ScheduleGrid() {
         </div>
 
         {data && (
-          <div className="flex flex-wrap items-center gap-2 border-t border-outline-variant pt-3">
-            <label className="mr-auto flex items-center gap-2 text-xs font-medium text-on-surface-variant"><input type="checkbox" checked={showAvailability} onChange={(e) => setShowAvailability(e.target.checked)} /> Disponibilidad</label>
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-outline-variant pt-2.5">
+            <label className="mr-auto flex items-center gap-1.5 text-[11px] font-medium text-on-surface-variant"><input type="checkbox" checked={showAvailability} onChange={(e) => setShowAvailability(e.target.checked)} /> Disponibilidad</label>
 
             <button
-              onClick={handleCopyPrevious}
-              disabled={copying}
-              className="inline-flex items-center gap-1.5 rounded-md border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-60"
+              onClick={handleNewShift}
+              disabled={data.employees.length === 0}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-[11px] font-bold text-on-primary transition hover:opacity-90 disabled:opacity-50"
             >
-              <ClipboardIcon className="h-4 w-4" />
-              {copying ? "Copiando..." : "Copiar semana anterior"}
+              <PlusIcon className="h-3.5 w-3.5" />
+              Nuevo turno
             </button>
 
-            <button
-              onClick={() => setShowSaveTemplate(true)}
-              disabled={data.shifts.length === 0}
-              className="inline-flex items-center gap-1.5 rounded-md border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-40"
-            >
-              <BookIcon className="h-4 w-4" />
-              Guardar como plantilla
-            </button>
-
-            <button
-              onClick={() => setEventModal({ mode: "create", date: todayStr })}
-              className="inline-flex items-center gap-1.5 rounded-md border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface"
-            >
-              <PartyIcon className="h-4 w-4" />
-              Nuevo evento
-            </button>
+            <details className="relative order-last">
+              <summary className="cursor-pointer list-none rounded-md border border-outline-variant px-2.5 py-1 text-[11px] font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface">
+                ••• Más acciones
+              </summary>
+              <div className="absolute right-0 top-full z-40 mt-1 flex min-w-[205px] flex-col gap-1 rounded-xl border border-outline-variant bg-surface-container p-1.5 shadow-xl">
+                <button
+                  onClick={handleCopyPrevious}
+                  disabled={copying}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-left text-[11px] font-semibold text-on-surface-variant transition hover:bg-surface-container-high hover:text-on-surface disabled:opacity-60"
+                >
+                  <ClipboardIcon className="h-3.5 w-3.5" />
+                  {copying ? "Copiando..." : "Copiar semana anterior"}
+                </button>
+                <button
+                  onClick={() => setShowSaveTemplate(true)}
+                  disabled={data.shifts.length === 0}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-left text-[11px] font-semibold text-on-surface-variant transition hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40"
+                >
+                  <BookIcon className="h-3.5 w-3.5" />
+                  Guardar como plantilla
+                </button>
+                <button
+                  onClick={() => setEventModal({ mode: "create", date: todayStr })}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-left text-[11px] font-semibold text-on-surface-variant transition hover:bg-surface-container-high hover:text-on-surface"
+                >
+                  <PartyIcon className="h-3.5 w-3.5" />
+                  Nuevo evento
+                </button>
+              </div>
+            </details>
 
             {selectedScope ? (
               <>
@@ -837,7 +863,7 @@ export default function ScheduleGrid() {
                   <button
                     onClick={() => handleScopedPublish(true)}
                     disabled={publishing || (branchFilter !== "all" && employeeFilter !== "all")}
-                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-on-primary transition hover:opacity-90 disabled:opacity-60"
+                    className="rounded-md bg-primary px-2.5 py-1 text-[11px] font-bold text-on-primary transition hover:opacity-90 disabled:opacity-60"
                   >
                     {publishing ? "Guardando..." : `Publicar ${selectedScopeLabel}`}
                   </button>
@@ -846,7 +872,7 @@ export default function ScheduleGrid() {
                   <button
                     onClick={() => handleScopedPublish(false)}
                     disabled={publishing || (branchFilter !== "all" && employeeFilter !== "all")}
-                    className="rounded-md border border-outline-variant px-3 py-1.5 text-xs font-bold text-on-surface-variant transition hover:border-secondary/40 hover:text-secondary disabled:opacity-60"
+                    className="rounded-md border border-outline-variant px-2.5 py-1 text-[11px] font-bold text-on-surface-variant transition hover:border-secondary/40 hover:text-secondary disabled:opacity-60"
                   >
                     {publishing ? "Guardando..." : `Despublicar ${selectedScopeLabel}`}
                   </button>
@@ -856,7 +882,7 @@ export default function ScheduleGrid() {
               <button
                 onClick={handlePublishToggle}
                 disabled={publishing}
-                className={`rounded-md px-3 py-1.5 text-xs font-bold transition disabled:opacity-60 ${
+                className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition disabled:opacity-60 ${
                   data.status === "PUBLISHED"
                     ? "border border-outline-variant text-on-surface-variant hover:border-secondary/40 hover:text-secondary"
                     : "bg-primary text-on-primary hover:opacity-90"
@@ -882,7 +908,7 @@ export default function ScheduleGrid() {
       {alerts.length > 0 && <AlertsPanel alerts={alerts} />}
 
       {summary && (
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-outline-variant px-1 py-2 text-xs text-on-surface-variant">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-y border-outline-variant px-1 py-1.5 text-[11px] text-on-surface-variant">
           <span><strong className="font-semibold text-on-surface">{visibleEmployees.length}</strong> empleados</span>
           <span><strong className="font-semibold text-on-surface">{formatHours(summary.totalHours)}</strong> programadas</span>
           <span><strong className="font-semibold text-on-surface">{summary.totalShifts}</strong> turnos</span>
@@ -894,11 +920,11 @@ export default function ScheduleGrid() {
       <div className="flex flex-wrap items-center gap-3 px-1 text-[11px] font-semibold text-on-surface-variant" aria-label="Estados de los turnos">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-tertiary-fixed-dim" />
-          Publicado: visible para el equipo
+          <span title="Visible para el equipo">Publicado</span>
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full border border-outline-variant bg-surface-container-high" />
-          Borrador: todavía no visible
+          <span title="Todavía no visible para el equipo">Borrador</span>
         </span>
       </div>
 
@@ -953,38 +979,39 @@ export default function ScheduleGrid() {
 
           <div className="hidden max-h-[calc(100vh-220px)] overflow-auto rounded-lg border border-outline-variant bg-surface-container md:block">
             <div
-              className="grid min-w-[1260px]"
-              style={{ gridTemplateColumns: "220px repeat(7, minmax(135px, 1fr)) 90px" }}
+              className="grid min-w-0"
+              style={{ gridTemplateColumns: "minmax(145px, 1.35fr) repeat(7, minmax(0, 1fr)) minmax(58px, 0.55fr)" }}
             >
-              <div className="sticky left-0 top-0 z-30 border-b border-r border-outline-variant bg-surface-container-high px-3 py-2.5">
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
+              <div className="sticky left-0 top-0 z-30 border-b border-r border-outline-variant bg-surface-container-high px-2 py-1.5">
+                <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant">
                   Empleado
                 </p>
               </div>
 
               {days.map((day, i) => {
                 const isToday = formatDateOnly(day) === todayStr;
+                const isWeekend = i > 4;
                 return (
                   <div
                     key={i}
-                    className={`sticky top-0 z-20 border-b border-r border-outline-variant px-3 py-2 text-center ${
-                      isToday ? "bg-primary/[0.06]" : "bg-surface-container-high"
+                    className={`sticky top-0 z-20 border-b border-r border-outline-variant px-1.5 py-1.5 text-center ${
+                      isToday ? "bg-primary/[0.08]" : isWeekend ? "bg-surface-container" : "bg-surface-container-high"
                     }`}
                   >
                     <p
-                      className={`text-[10px] font-black uppercase tracking-widest ${
+                      className={`text-[9px] font-black uppercase tracking-widest ${
                         isToday ? "text-primary" : "text-on-surface-variant"
                       }`}
                     >
                       {DAY_LABELS[i]}
                     </p>
-                    <p className="text-sm font-bold text-on-surface">{day.getUTCDate()}</p>
+                    <p className="text-[13px] font-bold text-on-surface">{day.getUTCDate()}</p>
                   </div>
                 );
               })}
 
-              <div className="sticky right-0 top-0 z-30 border-b border-l border-outline-variant bg-surface-container-high px-3 py-2.5 text-center">
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Total</p>
+              <div className="sticky right-0 top-0 z-30 border-b border-l border-outline-variant bg-surface-container-high px-1.5 py-1.5 text-center">
+                <p className="text-[9px] font-black uppercase tracking-widest text-on-surface-variant">Total</p>
               </div>
 
               {visibleEmployees.length === 0 && (
@@ -998,23 +1025,23 @@ export default function ScheduleGrid() {
 
                 return (
                   <Fragment key={employee.id}>
-                    <div className="sticky left-0 z-10 flex min-h-[74px] items-center gap-2.5 border-b border-r border-outline-variant bg-surface-container px-3 py-2">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary ring-1 ring-primary/20">
+                    <div className="sticky left-0 z-10 flex min-h-[66px] items-center gap-2 border-b border-r border-outline-variant bg-surface-container px-2 py-1.5">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary ring-1 ring-primary/20">
                         {getInitials(employee.name)}
                       </span>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-on-surface">
+                        <p className="truncate text-[11px] font-semibold text-on-surface">
                           {employee.name}
                         </p>
                         <p
-                          className={`mt-0.5 flex items-center gap-1 text-[10px] ${
+                            className={`mt-0.5 flex items-center gap-1 text-[9px] ${
                             overtimeEmployeeIds.has(employee.id)
                               ? "font-semibold text-secondary"
                               : "text-on-surface-variant"
                           }`}
                         >
                           {overtimeEmployeeIds.has(employee.id) && <AlertIcon className="h-3 w-3" />}
-                          {totals.turnos} turno{totals.turnos === 1 ? "" : "s"}
+                            {totals.turnos} turno{totals.turnos === 1 ? "" : "s"} · {formatHours(totals.hours)}
                         </p>
                       </div>
                     </div>
@@ -1029,19 +1056,21 @@ export default function ScheduleGrid() {
                       return (
                         <div
                           key={i}
-                          className={`group min-h-[74px] space-y-1.5 border-b border-r px-1.5 py-1.5 ${
-                            hasAlert
-                              ? "border-outline-variant bg-error/[0.06] ring-1 ring-inset ring-error/40"
+                        className={`group min-h-[66px] space-y-1 border-b border-r px-1 py-1 ${
+                          hasAlert
+                            ? "border-outline-variant bg-error/[0.06] ring-1 ring-inset ring-error/40"
+                            : i > 4
+                              ? "border-outline-variant bg-surface-container/[0.35]"
                               : "border-outline-variant"
                           }`}
                         >
                           {showAvailability && availability && (
-                            <p className={`text-[10px] font-bold ${availability.type === "UNAVAILABLE" ? "text-error" : availability.type === "AVAILABLE_PARTIAL" ? "text-secondary" : "text-on-surface-variant"}`}>
+                            <p className={`text-[9px] font-bold ${availability.type === "UNAVAILABLE" ? "text-error" : availability.type === "AVAILABLE_PARTIAL" ? "text-secondary" : "text-on-surface-variant"}`}>
                               {availability.type === "AVAILABLE_ALL_DAY" ? "● Disponible" : availability.type === "UNAVAILABLE" ? "● No disponible" : availability.type === "PREFER_OFF" ? "○ Prefiere descanso" : `● ${availability.startTime}–${availability.endTime}`}
                             </p>
                           )}
                           {hasAlert && (
-                            <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-error">
+                            <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-error">
                               <AlertIcon className="h-3 w-3" />
                               Traslape
                             </p>
@@ -1056,18 +1085,19 @@ export default function ScheduleGrid() {
 
                           <button
                             onClick={() => setModal({ mode: "create", userId: employee.id, date: dateStr })}
-                            className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-outline-variant/60 py-1.5 text-[10px] font-medium text-on-surface-variant opacity-40 transition hover:border-primary/40 hover:text-primary group-hover:opacity-100 focus:opacity-100"
+                            className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-outline-variant/60 py-1 text-[9px] font-medium text-on-surface-variant opacity-35 transition hover:border-primary/40 hover:text-primary group-hover:opacity-100 focus:opacity-100"
                             aria-label="Agregar turno"
                           >
                             <PlusIcon className="h-3.5 w-3.5" />
-                            <span>{cellShifts.length === 0 ? "Agregar turno" : "Agregar otro"}</span>
+                            <span>{cellShifts.length === 0 ? "Turno" : "Otro"}</span>
                           </button>
                         </div>
                       );
                     })}
 
-                    <div className={`sticky right-0 z-10 flex min-h-[74px] items-center justify-center border-b border-l border-outline-variant bg-surface-container px-2 text-sm font-bold ${overtimeEmployeeIds.has(employee.id) ? "text-secondary" : "text-on-surface"}`}>
-                      {formatHours(totals.hours)}
+                    <div className={`sticky right-0 z-10 flex min-h-[66px] flex-col items-center justify-center border-b border-l border-outline-variant bg-surface-container px-1 text-on-surface ${overtimeEmployeeIds.has(employee.id) ? "text-secondary" : ""}`}>
+                      <span className="text-[11px] font-bold">{formatHours(totals.hours)}</span>
+                      <span className="text-[9px] text-on-surface-variant">{totals.turnos} turnos</span>
                     </div>
                   </Fragment>
                 );

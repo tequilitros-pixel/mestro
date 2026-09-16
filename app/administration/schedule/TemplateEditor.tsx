@@ -239,7 +239,7 @@ export default function TemplateEditor({
         {DAY_LABELS.map((label, dayIndex) => (
           <div
             key={dayIndex}
-            className="space-y-2 rounded-2xl border border-outline-variant bg-surface-container p-4"
+            className="min-w-0 space-y-2 rounded-2xl border border-outline-variant bg-surface-container p-3"
           >
             <div className="flex items-center justify-between">
               <p className="text-sm font-bold text-on-surface">{label}</p>
@@ -275,18 +275,18 @@ export default function TemplateEditor({
                 <button
                   key={s.id}
                   onClick={() => setModal({ mode: "edit", shift: s })}
-                  className="w-full rounded-lg px-2.5 py-2 text-left transition hover:brightness-110"
+                  className="min-w-0 w-full overflow-hidden rounded-lg px-2 py-1.5 text-left transition hover:brightness-110"
                   style={{ backgroundColor: color, border: "1px solid rgba(255,255,255,0.25)" }}
                 >
-                  <p className="text-xs font-black leading-tight text-white">
+                  <p className="truncate text-[10px] font-black leading-tight tracking-tight text-white">
                     {s.startTime ? formatTime12(s.startTime) : "—"}
                     {" – "}
                     {s.endTime ? formatTime12(s.endTime) : "—"}
                   </p>
-                  <p className="truncate text-[11px] font-semibold leading-tight text-white/90">
+                  <p className="truncate text-[10px] font-semibold leading-tight text-white/90">
                     {s.user?.name ?? "Sin asignar"}
                   </p>
-                  <p className="truncate text-[10px] leading-tight text-white/75">
+                  <p className="truncate text-[9px] leading-tight text-white/75">
                     {s.branch?.name ?? "Sin sucursal"}
                   </p>
                 </button>
