@@ -416,7 +416,7 @@ export default function PayrollWeekView() {
           <section className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container" aria-label="Resumen semanal">
             <div className="grid grid-cols-2 divide-x divide-y divide-outline-variant sm:grid-cols-5 sm:divide-y-0">
               {[
-                ["Empleados", String(table.totals.employeesWorked)],
+                ["Usuarios activos", String(table.totals.activeEmployees)],
                 ["Horas totales", hours(table.totals.totalHours)],
                 ["Horas extra", hours(table.totals.overtimeHours)],
                 ["Total nómina", money(table.totals.finalPay)],
@@ -442,7 +442,7 @@ export default function PayrollWeekView() {
             <div className="flex flex-wrap items-end justify-between gap-3 border-b border-outline-variant bg-surface-container px-4 py-3">
               <div>
                 <h2 className="font-bold text-on-surface">Planilla semanal</h2>
-                <p className="text-xs text-on-surface-variant">Horas reales del checador · lunes a domingo</p>
+                <p className="text-xs text-on-surface-variant">Todos los usuarios activos · horas reales por día · lunes a domingo</p>
               </div>
               <label className="relative block w-full sm:w-64">
                 <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
@@ -834,15 +834,17 @@ function EmployeeDetailModal({
                                   >
                                     Editar
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteEntry(entry.id)}
-                                    aria-label="Eliminar turno"
-                                    title="Eliminar turno"
-                                    className="rounded-md p-1.5 text-outline hover:bg-error/10 hover:text-error"
-                                  >
-                                    <TrashIcon className="h-3.5 w-3.5" />
-                                  </button>
+                                  {entry.source === "MANUAL" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteEntry(entry.id)}
+                                      aria-label="Quitar turno manual"
+                                      title="Quitar turno manual"
+                                      className="rounded-md p-1.5 text-outline hover:bg-error/10 hover:text-error"
+                                    >
+                                      <TrashIcon className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
                                   {!entry.clockOut && (
                                     <span className="rounded-md bg-error/10 px-2 py-1 text-[10px] text-error">Abierto</span>
                                   )}

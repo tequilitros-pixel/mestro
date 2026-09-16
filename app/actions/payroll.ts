@@ -135,6 +135,7 @@ export type PayrollWeekTable = {
   weekEnd: string;
   employees: PayrollWeekEmployee[];
   totals: {
+    activeEmployees: number;
     regularHours: number;
     overtimeHours: number;
     totalHours: number;
@@ -307,12 +308,10 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
     const totalHours = hoursByDay.reduce((sum, h) => sum + h, 0);
     const employeeAdjustments = adjustmentsByUser.get(employee.id) ?? [];
 
-    // Se muestra si trabajó horas esta semana O si tiene un ajuste
-    // manual (bono/deducción) aunque no haya checado — por ejemplo un
-    // bono de fin de año o una deducción de un préstamo.
-    if (totalHours <= 0 && employeeAdjustments.length === 0) continue;
-
-    employeesWorked += 1;
+    // La plantilla siempre muestra a todas las personas activas, aunque
+    // todavía no tengan horas. `employeesWorked` conserva el indicador
+    // operativo de quienes sí registraron trabajo o ajustes.
+    if (totalHours > 0 || employeeAdjustments.length > 0) employeesWorked += 1;
 
     const overtimeHours =
       overtimeByUser.get(employee.id) ?? Math.max(0, totalHours - settings.weeklyHourThreshold);
@@ -358,6 +357,7 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
   return {
     employees: employeeRows,
     totals: {
+      activeEmployees: employees.length,
       regularHours: totalRegular,
       overtimeHours: totalOvertime,
       totalHours: totalRegular + totalOvertime,
@@ -652,12 +652,35 @@ export async function getPayrollWeekTable(
   const period = await loadPeriodWithEntries(mondayStr);
 
   if (period && period.status !== "BORRADOR") {
-    const employees: PayrollWeekEmployee[] = period.entries
-      .map((entry) => {
+    const activeUsers = await prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    const entriesByUserId = new Map(period.entries.map((entry) => [entry.userId, entry]));
+    const employees: PayrollWeekEmployee[] = activeUsers
+      .map((user) => {
+        const entry = entriesByUserId.get(user.id);
+        if (!entry) {
+          return {
+            id: user.id,
+            name: user.name,
+            hourlyRate: null,
+            missingRate: false,
+            hoursByDay: new Array(7).fill(0),
+            daysWorked: 0,
+            regularHours: 0,
+            overtimeHours: 0,
+            totalHours: 0,
+            estimatedPay: 0,
+            adjustmentsTotal: 0,
+            finalPay: 0,
+          };
+        }
         const hoursByDay = entry.hoursByDay as number[];
         return {
-          id: entry.userId,
-          name: entry.user.name,
+          id: user.id,
+          name: user.name,
           hourlyRate: entry.hourlyRate !== null ? Number(entry.hourlyRate) : null,
           missingRate: entry.hourlyRate === null,
           hoursByDay,
@@ -670,7 +693,7 @@ export async function getPayrollWeekTable(
           finalPay: Number(entry.totalPay),
         };
       })
-      .sort((a, b) => b.totalHours - a.totalHours);
+      .sort((a, b) => b.totalHours - a.totalHours || a.name.localeCompare(b.name, "es-MX"));
 
     const totals = employees.reduce(
       (acc, e) => {
@@ -681,7 +704,7 @@ export async function getPayrollWeekTable(
         acc.finalPay += e.finalPay;
         return acc;
       },
-      { regularHours: 0, overtimeHours: 0, totalHours: 0, employeesWorked: employees.length, estimatedPay: 0, adjustmentsTotal: 0, finalPay: 0 },
+      { activeEmployees: activeUsers.length, regularHours: 0, overtimeHours: 0, totalHours: 0, employeesWorked: period.entries.length, estimatedPay: 0, adjustmentsTotal: 0, finalPay: 0 },
     );
     totals.totalHours = totals.regularHours + totals.overtimeHours;
 

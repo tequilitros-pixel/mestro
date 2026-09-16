@@ -659,10 +659,15 @@ export async function deleteManualTimeClockEntryAction(entryId: string) {
 
   const entry = await prisma.timeClockEntry.findUnique({
     where: { id: entryId },
-    select: { id: true, clockOut: true, clockIn: true },
+    select: { id: true, clockOut: true, clockIn: true, source: true },
   });
   if (!entry) return { error: "Turno no encontrado" };
   if (!entry.clockOut) return { error: "No se puede borrar un turno abierto. Ciérralo primero." };
+  // Las checadas originales son evidencia de asistencia y no deben
+  // desaparecer de la bitácora. Los turnos manuales sí pueden quitarse.
+  if (entry.source !== "MANUAL") {
+    return { error: "No se puede borrar una checada original. Edita el turno para corregir sus horas." };
+  }
   if (await isPayrollDateLocked(entry.clockIn)) {
     return { error: PAYROLL_LOCKED_MESSAGE };
   }
