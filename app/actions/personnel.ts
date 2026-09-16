@@ -7,8 +7,9 @@ import { getCurrentUser } from "@/lib/auth";
 import type { UserRole } from "@prisma/client";
 import { normalizeMexicanPhone } from "@/lib/phone";
 
-export async function getPersonnel() {
+export async function getPersonnel(includeArchived = false) {
   return prisma.user.findMany({
+    where: includeArchived ? undefined : { active: true },
     select: {
       id: true,
       name: true,
