@@ -30,6 +30,7 @@ import {
   formatBusinessDateOnly,
 } from "@/lib/dateOnly";
 import { formatBusinessDate, formatBusinessTime } from "@/lib/dateTime";
+import { aggregateProductSales } from "@/lib/pos/salesAnalytics";
 
 type SaleItem = { id: string; name: string; quantity: number; lineTotal: number };
 type SalePayment = { method: string; amount: number };
@@ -59,6 +60,8 @@ type AnalyticsSale = {
     name: string;
     quantity: number;
     lineTotal: number;
+    isCustom: boolean;
+    productId: string | null;
     productName: string | null;
     categoryName: string | null;
   }>;
@@ -308,20 +311,17 @@ export default function SalesDashboardClient({
   }, [analytics]);
 
   const productRanking = useMemo(() => {
-    const totals = new Map<string, { total: number; units: number }>();
-    for (const sale of scopedAnalytics) {
-      for (const item of sale.items) {
-        const name = item.productName ?? item.name;
-        const current = totals.get(name) ?? { total: 0, units: 0 };
-        current.total += item.lineTotal;
-        current.units += item.quantity;
-        totals.set(name, current);
-      }
-    }
-    return Array.from(totals.entries())
-      .map(([name, v]) => ({ name, ...v }))
-      .sort((a, b) => b.total - a.total);
+    return aggregateProductSales(scopedAnalytics);
   }, [scopedAnalytics]);
+
+  const productTotals = useMemo(
+    () => ({
+      units: productRanking.reduce((sum, product) => sum + product.units, 0),
+      products: productRanking.length,
+      total: productRanking.reduce((sum, product) => sum + product.total, 0),
+    }),
+    [productRanking],
+  );
 
   const categoryRanking = useMemo(() => {
     const totals = new Map<string, { total: number; units: number }>();
@@ -523,8 +523,10 @@ export default function SalesDashboardClient({
                         <RankingBarChart
                           data={productRanking.slice(0, 5).map((p) => ({
                             name: p.name,
-                            value: Math.round(p.total),
+                            value: p.units,
                           }))}
+                          valueLabel="Unidades"
+                          valueFormat="units"
                         />
                       </Card>
 
@@ -622,15 +624,39 @@ export default function SalesDashboardClient({
 
                 {emptyPeriod ? (
                   emptyPeriodCard
+                ) : productRanking.length === 0 ? (
+                  <Card className="text-center">
+                    <p className="text-sm text-on-surface-variant">
+                      No hay productos de catálogo vendidos en este periodo. Los cobros
+                      personalizados no se cuentan como productos.
+                    </p>
+                  </Card>
                 ) : (
                   <>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <Card className="p-4">
+                        <CardLabel>Unidades vendidas</CardLabel>
+                        <CardValue>{productTotals.units}</CardValue>
+                      </Card>
+                      <Card className="p-4">
+                        <CardLabel>Productos diferentes</CardLabel>
+                        <CardValue>{productTotals.products}</CardValue>
+                      </Card>
+                      <Card className="p-4">
+                        <CardLabel>Importe de productos</CardLabel>
+                        <CardValue>{formatCurrency(productTotals.total)}</CardValue>
+                      </Card>
+                    </div>
+
                     <Card>
-                      <CardLabel>Top 10 productos por venta</CardLabel>
+                      <CardLabel>Top 10 productos por unidades</CardLabel>
                       <RankingBarChart
                         data={productRanking.slice(0, 10).map((p) => ({
                           name: p.name,
-                          value: Math.round(p.total),
+                          value: p.units,
                         }))}
+                        valueLabel="Unidades"
+                        valueFormat="units"
                       />
                     </Card>
 
@@ -639,7 +665,7 @@ export default function SalesDashboardClient({
                       <div className="mt-2 divide-y divide-outline-variant">
                         {productRanking.map((product) => (
                           <div
-                            key={product.name}
+                            key={product.key}
                             className="flex items-center justify-between gap-4 py-3"
                           >
                             <div className="min-w-0">

@@ -38,6 +38,11 @@ const currency = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
+const integer = new Intl.NumberFormat("es-MX");
+
+const units = (value: number) =>
+  `${integer.format(value)} ${value === 1 ? "unidad" : "unidades"}`;
+
 /** Ventas diarias por sucursal: una línea por sucursal. */
 export function DailyBranchChart({
   data,
@@ -83,10 +88,14 @@ export function DailyBranchChart({
 export function RankingBarChart({
   data,
   valueLabel = "Ventas",
+  valueFormat = "currency",
 }: {
   data: Array<{ name: string; value: number }>;
   valueLabel?: string;
+  valueFormat?: "currency" | "units";
 }) {
+  const formatValue = valueFormat === "units" ? units : currency;
+
   return (
     <div style={{ height: Math.max(200, data.length * 42) }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -104,7 +113,12 @@ export function RankingBarChart({
             type="number"
             stroke="var(--color-outline)"
             fontSize={12}
-            tickFormatter={(v) => currency(Number(v))}
+            allowDecimals={valueFormat !== "units"}
+            tickFormatter={(v) =>
+              valueFormat === "units"
+                ? integer.format(Number(v))
+                : currency(Number(v))
+            }
           />
           <YAxis
             type="category"
@@ -115,7 +129,7 @@ export function RankingBarChart({
           />
           <Tooltip
             contentStyle={tooltipStyle}
-            formatter={(value) => [currency(Number(value)), valueLabel]}
+            formatter={(value) => [formatValue(Number(value)), valueLabel]}
           />
           <Bar dataKey="value" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
         </BarChart>

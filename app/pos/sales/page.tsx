@@ -62,10 +62,12 @@ export default async function PosSalesPage() {
             name: true,
             quantity: true,
             lineTotal: true,
+            isCustom: true,
             variant: {
               select: {
                 product: {
                   select: {
+                    id: true,
                     name: true,
                     category: { select: { name: true } },
                   },
@@ -92,6 +94,8 @@ export default async function PosSalesPage() {
           name: i.name,
           quantity: i.quantity,
           lineTotal: i.lineTotal,
+          isCustom: i.isCustom,
+          productId: i.variant?.product.id ?? null,
           productName: i.variant?.product.name ?? null,
           categoryName: i.variant?.product.category.name ?? null,
         })),
