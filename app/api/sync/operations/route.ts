@@ -48,7 +48,7 @@ export async function POST(request: Request) {
         await startBoilerSession({ operationId: operation.id, equipmentId: requiredString(payload.equipmentId, "Falta la Caldera"), actorId: user.id, occurredAt: optionalDate(payload.occurredAt) ?? createdAt, source: enumValue(payload.source, BoilerSource, "Fuente inválida"), initialGasPercent: optionalNumber(payload.initialGasPercent), notes: optionalString(payload.notes) });
         break;
       case "boiler.session.stop":
-        await stopBoilerSession({ operationId: operation.id, sessionId: requiredString(payload.sessionId, "Falta la sesión"), actorId: user.id, occurredAt: optionalDate(payload.occurredAt) ?? createdAt, source: enumValue(payload.source, BoilerSource, "Fuente inválida"), closeReason: optionalString(payload.closeReason) });
+        await stopBoilerSession({ operationId: operation.id, sessionId: requiredString(payload.sessionId, "Falta la sesión"), actorId: user.id, finalGasPercent: requiredNumber(payload.finalGasPercent, "Falta el porcentaje final de gas"), occurredAt: optionalDate(payload.occurredAt) ?? createdAt, source: enumValue(payload.source, BoilerSource, "Fuente inválida"), closeReason: optionalString(payload.closeReason) });
         break;
       case "boiler.gas.reading.create":
         await createGasReading({ operationId: operation.id, sessionId: requiredString(payload.sessionId, "Falta la sesión"), actorId: user.id, percent: requiredNumber(payload.percent, "Porcentaje de gas inválido"), type: enumValue(payload.type, GasReadingType, "Tipo de gas inválido"), occurredAt: optionalDate(payload.occurredAt) ?? createdAt, source: enumValue(payload.source, BoilerSource, "Fuente inválida"), notes: optionalString(payload.notes) });

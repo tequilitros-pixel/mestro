@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { LotStage } from "@prisma/client";
 import { advanceLotStage } from "@/lib/lotStage";
 import { findAvailableEquipment, reserveEquipment } from "@/lib/equipmentAvailability";
+import { requireModuleActionAccess } from "@/lib/auth";
 
 export default async function NewMillingPage() {
   const lots = await prisma.lot.findMany({
@@ -31,25 +32,33 @@ export default async function NewMillingPage() {
   async function createMilling(formData: FormData) {
     "use server";
 
+    const user = await requireModuleActionAccess("/milling");
+
     const lotId = formData.get("lotId") as string;
     const equipmentId = formData.get("equipmentId") as string;
     const cookedKg = Number(formData.get("cookedKg"));
 
-    const reserved = await reserveEquipment(prisma, equipmentId, cookedKg);
-
-    if (!reserved) {
-      redirect("/milling/new?error=equipo-ocupado");
-    }
-
-    const milling = await prisma.milling.create({
-      data: {
-        lotId,
-        equipmentId,
-        cookedKg,
-      },
+    const milling = await prisma.$transaction(async (tx) => {
+      const duplicate = await tx.milling.findFirst({
+        where: { lotId, status: { not: "TERMINADA" } },
+        select: { id: true },
+      });
+      if (duplicate) return duplicate;
+      const reserved = await reserveEquipment(tx, equipmentId, cookedKg);
+      if (!reserved) return null;
+      const created = await tx.milling.create({ data: { lotId, equipmentId, cookedKg } });
+      await tx.millingWorkSession.create({
+        data: {
+          millingId: created.id,
+          startedById: user.id,
+          startOperationId: crypto.randomUUID(),
+        },
+      });
+      await advanceLotStage(tx, lotId, LotStage.MOLIENDA);
+      return created;
     });
 
-    await advanceLotStage(prisma, lotId, LotStage.MOLIENDA);
+    if (!milling) redirect("/milling/new?error=equipo-ocupado");
 
     redirect(`/milling/${milling.id}?created=1`);
   }

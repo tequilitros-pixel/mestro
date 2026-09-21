@@ -1,9 +1,9 @@
 "use server";
 
-import { BoilerEventType, BoilerSource, GasReadingType, PressureUnit } from "@prisma/client";
+import { BoilerEventType, BoilerProcessType, BoilerSource, GasReadingType, PressureUnit } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireModuleActionAccess } from "@/lib/auth";
-import { createBoilerEvent, createBoilerIncident, createBoilerMaintenance, createGasReading, createPressureReading, startBoilerSession, stopBoilerSession } from "@/lib/boiler/service";
+import { createBoilerEvent, createBoilerIncident, createBoilerMaintenance, createGasReading, createPressureReading, startBoilerProcessUsage, startBoilerSession, stopBoilerProcessUsage, stopBoilerSession } from "@/lib/boiler/service";
 
 const text = (form: FormData, key: string) => { const value = form.get(key); return typeof value === "string" && value.trim() ? value.trim() : null; };
 const required = (form: FormData, key: string) => text(form, key) ?? (() => { throw new Error(`Falta ${key}`); })();
@@ -21,7 +21,34 @@ export async function startBoilerSessionAction(form: FormData) {
 export async function stopBoilerSessionAction(form: FormData) {
   const user = await requireModuleActionAccess("/boiler");
   const sessionId = required(form, "sessionId");
-  await stopBoilerSession({ operationId: crypto.randomUUID(), sessionId, actorId: user.id, occurredAt: text(form, "occurredAt") ?? undefined, source: source(form), closeReason: text(form, "closeReason") });
+  await stopBoilerSession({ operationId: crypto.randomUUID(), sessionId, actorId: user.id, finalGasPercent: number(form, "finalGasPercent"), occurredAt: text(form, "occurredAt") ?? undefined, source: source(form), closeReason: text(form, "closeReason") });
+  revalidate();
+}
+
+const processPermission: Record<BoilerProcessType, string> = {
+  COCIMIENTO: "/cooking",
+  MOLIENDA: "/milling",
+  FERMENTACION: "/fermentation",
+  DESTILACION: "/distillation",
+};
+
+export async function startBoilerProcessUsageAction(form: FormData) {
+  const processType = required(form, "processType") as BoilerProcessType;
+  const user = await requireModuleActionAccess(processPermission[processType] ?? "/boiler");
+  await startBoilerProcessUsage({
+    processType,
+    processId: required(form, "processId"),
+    boilerSessionId: text(form, "boilerSessionId") ?? undefined,
+    actorId: user.id,
+  });
+  revalidatePath(`/${processPermission[processType]?.slice(1)}/${required(form, "processId")}`);
+  revalidate();
+}
+
+export async function stopBoilerProcessUsageAction(form: FormData) {
+  const processType = required(form, "processType") as BoilerProcessType;
+  const user = await requireModuleActionAccess(processPermission[processType] ?? "/boiler");
+  await stopBoilerProcessUsage({ processType, processId: required(form, "processId"), actorId: user.id });
   revalidate();
 }
 

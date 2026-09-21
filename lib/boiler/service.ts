@@ -1,5 +1,5 @@
 import "server-only";
-import { Prisma, BoilerEventType, BoilerSource, EquipmentType, GasReadingType, LotStage, PressureUnit, SteamInjectionState, CookingStatus } from "@prisma/client";
+import { Prisma, BoilerEventType, BoilerProcessType, BoilerSource, EquipmentType, GasReadingType, LotStage, PressureUnit, SteamInjectionState, CookingStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { gasPercentToLiters, pressureToPsi } from "./units";
 
@@ -37,7 +37,7 @@ export async function startBoilerSession(input: { operationId: string; equipment
   });
 }
 
-export async function stopBoilerSession(input: { operationId: string; sessionId: string; actorId: string; occurredAt?: Date | string; source?: BoilerSource; closeReason?: string | null }) {
+export async function stopBoilerSession(input: { operationId: string; sessionId: string; actorId: string; finalGasPercent: Prisma.Decimal.Value; occurredAt?: Date | string; source?: BoilerSource; closeReason?: string | null }) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.boilerSession.findUnique({ where: { stopOperationId: input.operationId } });
     if (existing) return existing;
@@ -46,6 +46,9 @@ export async function stopBoilerSession(input: { operationId: string; sessionId:
     if (session.endedAt) invalid("La sesión de Caldera ya está cerrada", "SESSION_CLOSED");
     const endedAt = date(input.occurredAt ?? new Date());
     if (endedAt < session.startedAt) invalid("El cierre no puede ser anterior al encendido");
+    const finalPercent = nonNegative(decimal(input.finalGasPercent, "Porcentaje final de gas"), "Porcentaje final de gas");
+    if (finalPercent.gt(100)) invalid("El porcentaje de gas debe estar entre 0 y 100");
+    await tx.gasReading.create({ data: { operationId: `${input.operationId}:gas`, boilerSessionId: session.id, levelPercent: finalPercent, levelLiters: gasPercentToLiters(finalPercent), type: GasReadingType.FINAL, occurredAt: endedAt, actorId: input.actorId, source: input.source ?? BoilerSource.MANUAL } });
     const updated = await tx.boilerSession.update({ where: { id: session.id }, data: { endedAt, endedById: input.actorId, stopOperationId: input.operationId, closeReason: input.closeReason ?? null } });
     await tx.boilerEvent.create({ data: { operationId: `${input.operationId}:apagado`, sessionId: session.id, type: input.closeReason ? BoilerEventType.CIERRE_FORZADO : BoilerEventType.APAGADO, occurredAt: endedAt, actorId: input.actorId, source: input.source ?? BoilerSource.MANUAL, notes: input.closeReason ?? null } });
     await tx.steamInjectionInterval.updateMany({ where: { boilerSessionId: session.id, endedAt: null }, data: { endedAt } });
@@ -97,6 +100,48 @@ async function openBoiler(tx: Tx, sessionId?: string) {
   return session;
 }
 
+const processStage: Record<BoilerProcessType, LotStage> = {
+  COCIMIENTO: LotStage.COCCION,
+  MOLIENDA: LotStage.MOLIENDA,
+  FERMENTACION: LotStage.FERMENTACION,
+  DESTILACION: LotStage.DESTILACION,
+};
+
+async function resolveProcess(tx: Tx, processType: BoilerProcessType, processId: string) {
+  if (processType === BoilerProcessType.COCIMIENTO) return tx.cooking.findUnique({ where: { id: processId }, select: { id: true, lotId: true } });
+  if (processType === BoilerProcessType.MOLIENDA) return tx.milling.findUnique({ where: { id: processId }, select: { id: true, lotId: true } });
+  if (processType === BoilerProcessType.FERMENTACION) return tx.fermentation.findUnique({ where: { id: processId }, select: { id: true, lotId: true } });
+  return tx.distillation.findUnique({ where: { id: processId }, select: { id: true, lotId: true } });
+}
+
+export async function startBoilerProcessUsage(input: { processType: BoilerProcessType; processId: string; boilerSessionId?: string; actorId: string; occurredAt?: Date | string; source?: BoilerSource }) {
+  return prisma.$transaction(async (tx) => {
+    const process = await resolveProcess(tx, input.processType, input.processId);
+    if (!process) throw new BoilerDomainError("Proceso no encontrado", "PROCESS_NOT_FOUND");
+    const session = await openBoiler(tx, input.boilerSessionId);
+    const existing = await tx.boilerProcessLink.findFirst({ where: { processType: input.processType, processId: input.processId, endedAt: null } });
+    if (existing) return existing;
+    return tx.boilerProcessLink.create({ data: {
+      boilerSessionId: session.id,
+      lotId: process.lotId,
+      stage: processStage[input.processType],
+      processType: input.processType,
+      processId: input.processId,
+      startedAt: date(input.occurredAt ?? new Date()),
+      createdById: input.actorId,
+      source: input.source ?? BoilerSource.MANUAL,
+    } });
+  });
+}
+
+export async function stopBoilerProcessUsage(input: { processType: BoilerProcessType; processId: string; actorId: string; occurredAt?: Date | string }) {
+  return prisma.$transaction(async (tx) => {
+    const link = await tx.boilerProcessLink.findFirst({ where: { processType: input.processType, processId: input.processId, endedAt: null } });
+    if (!link) throw new BoilerDomainError("No hay uso activo de Caldera para este proceso", "PROCESS_USAGE_NOT_ACTIVE");
+    return tx.boilerProcessLink.update({ where: { id: link.id }, data: { endedAt: date(input.occurredAt ?? new Date()) } });
+  });
+}
+
 export async function startSteamInterval(input: { operationId: string; cookingId: string; boilerSessionId?: string; actorId: string; pressureValue: Prisma.Decimal.Value; pressureUnit: PressureUnit; occurredAt?: Date | string; source?: BoilerSource; notes?: string | null }) {
   return prisma.$transaction(async (tx) => {
     const previous = await tx.steamInjectionInterval.findUnique({ where: { startOperationId: input.operationId } });
@@ -140,6 +185,7 @@ export async function stopSteamInterval(input: { operationId: string; cookingId:
     const endedAt = date(input.occurredAt ?? new Date());
     const closed = await tx.steamInjectionInterval.update({ where: { id: active.id }, data: { endedAt, stopOperationId: input.operationId } });
     await tx.steamInjectionInterval.create({ data: { startOperationId: `${input.operationId}:sin-inyeccion`, cookingId: cooking.id, boilerSessionId: active.boilerSessionId, state: SteamInjectionState.SIN_INYECCION, startedAt: endedAt, createdById: input.actorId, source: input.source ?? BoilerSource.MANUAL } });
+    await tx.boilerProcessLink.updateMany({ where: { processType: BoilerProcessType.COCIMIENTO, processId: cooking.id, endedAt: null }, data: { endedAt } });
     await tx.boilerEvent.create({ data: { operationId: `${input.operationId}:event`, sessionId: active.boilerSessionId, type: BoilerEventType.VAPOR_DETENIDO, occurredAt: endedAt, actorId: input.actorId, source: input.source ?? BoilerSource.MANUAL, notes: input.notes ?? null } });
     return closed;
   });

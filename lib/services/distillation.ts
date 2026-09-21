@@ -23,7 +23,9 @@ export function getCurrentTemperature(events: DistillationEvent[]) {
 
 export function getTotalLiters(events: DistillationEvent[]) {
   return events.reduce((sum, event) => {
-    return sum + (event.liters ?? 0);
+    // FIN_DESTILACION stores the official total, not an additional
+    // collection. Counting it again duplicated the production result.
+    return event.type === "FIN_DESTILACION" ? sum : sum + (event.liters ?? 0);
   }, 0);
 }
 
@@ -34,7 +36,7 @@ export function getHeartLiters(events: DistillationEvent[]) {
   for (const event of events) {
     if (event.type === "INICIO_CORAZON") counting = true;
 
-    if (counting) {
+    if (counting && event.type !== "FIN_DESTILACION") {
       total += event.liters ?? 0;
     }
 
@@ -63,7 +65,7 @@ export function getTailLiters(events: DistillationEvent[]) {
   for (const event of events) {
     if (event.type === "INICIO_COLAS") counting = true;
 
-    if (counting) {
+    if (counting && event.type !== "FIN_DESTILACION") {
       total += event.liters ?? 0;
     }
   }

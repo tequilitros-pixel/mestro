@@ -37,6 +37,7 @@ model User {
   boilerIncidents           BoilerIncident[]
   sweetHoneyRecoveries      SweetHoneyRecovery[]
   distillationsFinished     Distillation[]             @relation("DistillationFinishedBy")
+  distillationsCancelled    Distillation[]             @relation("DistillationCancelledBy")
   fermentationsFinished     Fermentation[]             @relation("FermentationFinishedBy")
   liquorBatchesCreated      LiquorBatch[]              @relation("LiquorBatchCreatedBy")
   liquorBatchesFinished     LiquorBatch[]              @relation("LiquorBatchFinishedBy")
@@ -76,6 +77,8 @@ model User {
   cashTransfersCreated      CashTransfer[]             @relation("CashTransferCreatedBy")
 
   millingsFinished   Milling[]           @relation("MillingFinishedBy")
+  millingSessionsStarted MillingWorkSession[] @relation("MillingSessionStartedBy")
+  millingSessionsEnded   MillingWorkSession[] @relation("MillingSessionEndedBy")
   millingDischarges  MillingDischarge[]
   pushSubscriptions  PushSubscription[]
   passwordResetCodes PasswordResetCode[]
@@ -209,6 +212,7 @@ model Equipment {
   updatedAt         DateTime           @updatedAt
   cookings          Cooking[]
   distillations     Distillation[]
+  fermentations     Fermentation[]
   millings          Milling[]
   millingDischarges MillingDischarge[]
   boilerSessions     BoilerSession[]
@@ -526,10 +530,33 @@ model Milling {
   lot                 Lot                @relation(fields: [lotId], references: [id])
   discharges          MillingDischarge[]
   events              MillingEvent[]
+  workSessions        MillingWorkSession[]
 
   @@index([lotId])
   @@index([equipmentId])
   @@index([finishedById])
+}
+
+model MillingWorkSession {
+  id               String   @id @default(cuid())
+  millingId        String
+  startedAt        DateTime @default(now())
+  endedAt          DateTime?
+  startedById      String
+  endedById        String?
+  startOperationId String   @unique
+  endOperationId   String?  @unique
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  milling   Milling @relation(fields: [millingId], references: [id], onDelete: Cascade)
+  startedBy User    @relation("MillingSessionStartedBy", fields: [startedById], references: [id])
+  endedBy   User?   @relation("MillingSessionEndedBy", fields: [endedById], references: [id])
+
+  @@index([millingId, startedAt])
+  @@index([startedById])
+  @@index([endedById])
 }
 
 model MillingEvent {
@@ -554,6 +581,7 @@ model MillingEvent {
 model Fermentation {
   id                 String                @id @default(cuid())
   lotId              String
+  tankId             String?
   tank               String
   mustLiters         Float
   initialBrix        Float
@@ -574,9 +602,12 @@ model Fermentation {
   finishedById       String?
   finishedBy         User?                 @relation("FermentationFinishedBy", fields: [finishedById], references: [id])
   lot                Lot                   @relation(fields: [lotId], references: [id])
+  tankEquipment      Equipment?            @relation(fields: [tankId], references: [id])
   readings           FermentationReading[]
+  distillations      Distillation[]         @relation("FermentationDistillations")
 
   @@index([lotId])
+  @@index([tankId])
   @@index([finishedById])
 }
 
@@ -605,6 +636,7 @@ model Distillation {
   equipmentId      String
   type             DistillationType
   loadedLiters     Float
+  fillPercent      Float?
   initialAlcohol   Float?
   headsLiters      Float?
   heartLiters      Float?
@@ -622,14 +654,26 @@ model Distillation {
   finalNotes       String?
   finalTailsLiters Float?
   finishedById     String?
+  sourceFermentationId String?
+  sourceDistillationId String?
+  cancelledAt      DateTime?
+  cancelledById    String?
+  cancellationReason String?
   equipment        Equipment           @relation(fields: [equipmentId], references: [id])
   finishedBy       User?               @relation("DistillationFinishedBy", fields: [finishedById], references: [id])
+  cancelledBy      User?               @relation("DistillationCancelledBy", fields: [cancelledById], references: [id])
   lot              Lot                 @relation(fields: [lotId], references: [id])
+  sourceFermentation Fermentation?      @relation("FermentationDistillations", fields: [sourceFermentationId], references: [id])
+  sourceDistillation Distillation?      @relation("DistillationLineage", fields: [sourceDistillationId], references: [id])
+  derivedDistillations Distillation[]   @relation("DistillationLineage")
   events           DistillationEvent[]
 
   @@index([lotId])
   @@index([equipmentId])
   @@index([finishedById])
+  @@index([cancelledById])
+  @@index([sourceFermentationId])
+  @@index([sourceDistillationId])
 }
 
 model DistillationEvent {
@@ -1746,6 +1790,7 @@ enum FermentationStatus {
 enum DistillationStatus {
   ACTIVA
   TERMINADA
+  CANCELADA
 }
 
 enum DistillationType {

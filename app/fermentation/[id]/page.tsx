@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 import FermentationCharts from "@/components/FermentationCharts";
 import FinishFermentationModal from "@/components/FinishFermentationModal";
 import { FermentationStatus, LotStage } from "@prisma/client";
@@ -25,6 +25,8 @@ import {
   TARGET_BRIX,
   evaluateFermentation,
 } from "@/lib/fermentation/fermentationMetrics";
+import ProcessSwitcher from "@/components/production/ProcessSwitcher";
+import ProcessBoilerUsage from "@/components/boiler/ProcessBoilerUsage";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -48,10 +50,17 @@ export default async function FermentationDetailPage({ params }: Props) {
 
   if (!fermentation) notFound();
 
+  const siblingFermentations = await prisma.fermentation.findMany({
+    where: { lotId: fermentation.lotId },
+    orderBy: [{ tank: "asc" }, { startedAt: "asc" }],
+    select: { id: true, tank: true, status: true, mustLiters: true },
+  });
+
   const fermentationLotId = fermentation.lotId;
 
   async function addReading(formData: FormData) {
     "use server";
+    await requireModuleActionAccess("/fermentation");
 
     const currentFermentation = await prisma.fermentation.findUnique({
       where: { id },
@@ -133,11 +142,7 @@ export default async function FermentationDetailPage({ params }: Props) {
   async function finishFermentation(formData: FormData) {
     "use server";
 
-    const user = await getCurrentUser();
-
-    if (!user) {
-      redirect("/login");
-    }
+    const user = await requireModuleActionAccess("/fermentation");
 
     const finalBrix = parseRequiredNumber(
       formData.get("finalBrix")
@@ -220,6 +225,11 @@ export default async function FermentationDetailPage({ params }: Props) {
     if (result.count === 0) {
       redirect(`/fermentation/${id}`);
     }
+
+    await prisma.boilerProcessLink.updateMany({
+      where: { processType: "FERMENTACION", processId: id, endedAt: null },
+      data: { endedAt: finishedAt },
+    });
 
     await advanceLotStage(
       prisma,
@@ -569,6 +579,7 @@ export default async function FermentationDetailPage({ params }: Props) {
 
   const registrarTabContent = (
     <>
+      {!isFinished && <ProcessBoilerUsage processType="FERMENTACION" processId={id} />}
       {!isFinished && (
         <section className="rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
           <div className="mb-6">
@@ -949,6 +960,17 @@ export default async function FermentationDetailPage({ params }: Props) {
         </header>
 
         <div className="mt-8">
+          <ProcessSwitcher
+            title="Tinas de este lote"
+            basePath="/fermentation"
+            currentId={id}
+            items={siblingFermentations.map((item) => ({
+              id: item.id,
+              label: item.tank,
+              detail: `${formatNumber(item.mustLiters, 0)} L`,
+              status: item.status === FermentationStatus.TERMINADA ? "Terminada" : "Activa",
+            }))}
+          />
           <PageTabs tabs={tabs} />
         </div>
       </div>

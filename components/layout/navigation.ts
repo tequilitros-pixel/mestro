@@ -182,6 +182,13 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       operatorAllowed: true,
     },
     {
+      href: "/boiler",
+      label: "Caldera",
+      icon: FlameIcon,
+      iconVariant: "orange",
+      operatorAllowed: true,
+    },
+    {
       href: "/milling",
       label: "Molienda",
       icon: GearIcon,
@@ -730,4 +737,16 @@ export function getSubmenuItemDestination(
     item.children.find((child) => isSubmenuItemVisible(role, moduleKeys, child))
       ?.href ?? item.href
   );
+}
+
+/** Abre el primer destino visible del módulo sin conceder rutas hermanas. */
+export function getMainModuleDestination(
+  role: string,
+  moduleKeys: string[],
+  module: MainModule,
+): string {
+  if (module.module === "home" || role === "ADMIN") return module.href;
+  const items = SUBMENUS[module.module as Exclude<AppModule, "home">] ?? [];
+  const visible = items.find((item) => isSubmenuItemVisible(role, moduleKeys, item));
+  return visible ? getSubmenuItemDestination(role, moduleKeys, visible) : module.href;
 }

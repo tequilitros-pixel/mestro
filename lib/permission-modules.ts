@@ -21,6 +21,7 @@ export const ALWAYS_AVAILABLE_PATHS = [
 /** Acceso histórico para operadores que aún no tienen permisos configurados. */
 export const LEGACY_OPERATOR_PERMISSION_KEYS = [
   "/cooking",
+  "/boiler",
   "/milling",
   "/fermentation",
   "/distillation",
@@ -71,6 +72,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "/plant", label: "Planta" },
       { key: "/lots", label: "Lotes" },
       { key: "/cooking", label: "Cocción" },
+      { key: "/boiler", label: "Caldera" },
       { key: "/milling", label: "Molienda" },
       { key: "/fermentation", label: "Fermentación" },
       { key: "/distillation", label: "Destilación" },
