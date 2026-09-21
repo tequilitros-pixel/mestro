@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, CashSafeEnvelope, CashSafeEnvelopeStatus } from "@prisma/client";
+import { buildAutomaticEnvelopeReceipt } from "@/lib/cash-cuts/envelopeReceipt";
 
 /*
  * ============================================================
@@ -125,7 +126,9 @@ export async function generateEnvelopeCode(
 }
 
 /**
- * Crea (o recupera, si ya existe) el sobre de un corte cerrado.
+ * Crea (o recupera, si ya existe) el sobre de un corte cerrado y lo recibe
+ * automaticamente en caja fuerte. El monto ya fue contado y asignado al
+ * sobre durante el cierre, por lo que no necesita una segunda aprobacion.
  * Idempotente: si el cierre se reintenta (doble clic, retry de
  * red), NUNCA produce un segundo sobre para el mismo cashCutId.
  *
@@ -175,6 +178,12 @@ export async function createEnvelopeForCashCut(
    * ya ve el sobre del otro corte y genera el siguiente numero.
    */
   const code = await generateEnvelopeCode(tx, params.branchCode, params.cutDate);
+  const receipt = buildAutomaticEnvelopeReceipt({
+    amount: params.amount,
+    userId: params.userId,
+    cashCutId: params.cashCutId,
+  });
+
   return tx.cashSafeEnvelope.create({
     data: {
       code,
@@ -183,18 +192,21 @@ export async function createEnvelopeForCashCut(
       cutDate: params.cutDate,
       originalAmount: params.amount,
       currentBalance: params.amount,
-      status: "PENDIENTE",
+      ...receipt.envelope,
       createdById: params.userId,
       movements: {
-        create: {
-          type: "INGRESO",
-          amount: params.amount,
-          previousBalance: 0,
-          newBalance: params.amount,
-          cashCutId: params.cashCutId,
-          userId: params.userId,
-          notes: "Generado al cerrar el corte",
-        },
+        create: [
+          {
+            type: "INGRESO",
+            amount: params.amount,
+            previousBalance: 0,
+            newBalance: params.amount,
+            cashCutId: params.cashCutId,
+            userId: params.userId,
+            notes: "Generado al cerrar el corte",
+          },
+          receipt.movement,
+        ],
       },
     },
   });
