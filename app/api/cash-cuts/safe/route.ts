@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
 
   const branches = await prisma.branch.findMany({
     where: {
+      active: true,
       ...(requestedBranchId ? { id: requestedBranchId } : {}),
       ...(allowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
     },
