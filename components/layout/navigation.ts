@@ -74,6 +74,8 @@ export type SubMenuItem = {
   operatorAllowed?: boolean;
   /** Permiso que controla este enlace cuando su ruta comparte acceso con otra sección. */
   permissionKey?: string;
+  /** Cualquiera de estos permisos permite mostrar el enlace. */
+  permissionKeys?: string[];
   /**
    * Agrupa visualmente los tabs de un submenú bajo un encabezado
    * corto (ej. "Inventario de eventos"). Los items sin `group`
@@ -137,7 +139,7 @@ export const MAIN_MODULES: MainModule[] = [
   },
   {
     href: "/pospress",
-    label: "Punto de Venta",
+    label: "Ventas",
     shortLabel: "Ventas",
     icon: CashRegisterIcon,
     iconVariant: "cyan",
@@ -343,22 +345,22 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
   pos: [
     {
       href: "/pospress",
-      label: "POSpress",
+      label: "Punto de Venta",
       icon: CashRegisterIcon,
       iconVariant: "cyan",
       permissionKey: "/pos",
     },
     {
-      href: "/pospress/transactions",
-      label: "Transacciones",
-      icon: ReceiptIcon,
-      iconVariant: "green",
-      permissionKey: "/pos/sales",
-    },
-    {
       href: "/pos/sales",
       label: "Ventas resumen",
       icon: ChartLineIcon,
+      iconVariant: "green",
+      permissionKeys: ["/pos", "/pos/sales"],
+    },
+    {
+      href: "/pospress/transactions",
+      label: "Transacciones",
+      icon: ReceiptIcon,
       iconVariant: "green",
       permissionKey: "/pos/sales",
     },
@@ -647,13 +649,15 @@ export function isSubmenuItemVisible(
   if (role === "GERENTE" && isInventoryManagerReadPath(item.href)) return true;
 
   const permissionHref = item.permissionKey ?? item.href;
-  const requiredKey = item.permissionKey
-    ? item.permissionKey
-    : (getModuleKeyForPath(permissionHref) ?? permissionHref);
+  const requiredKeys = item.permissionKeys ?? [
+    item.permissionKey
+      ? item.permissionKey
+      : (getModuleKeyForPath(permissionHref) ?? permissionHref),
+  ];
 
   // Se compara el permiso resuelto de forma exacta para que cada módulo
   // herede únicamente el permiso que le corresponde.
-  return moduleKeys.includes(requiredKey);
+  return requiredKeys.some((requiredKey) => moduleKeys.includes(requiredKey));
 }
 
 export function isMainModuleVisible(

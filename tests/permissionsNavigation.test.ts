@@ -30,20 +30,21 @@ const allLeaves = Object.values(SUBMENUS).flatMap(leaves);
 
 test("Punto de Venta separa vender, transacciones y ventas resumen", () => {
   const main = MAIN_MODULES.find((module) => module.module === "pos");
-  const sale = SUBMENUS.pos.find((item) => item.label === "POSpress");
+  const sale = SUBMENUS.pos.find((item) => item.label === "Punto de Venta");
   const transactions = SUBMENUS.pos.find((item) => item.label === "Transacciones");
   const summary = SUBMENUS.pos.find((item) => item.label === "Ventas resumen");
 
   assert.equal(main?.href, "/pospress");
+  assert.equal(main?.label, "Ventas");
   assert.equal(sale?.permissionKey, "/pos");
   assert.equal(transactions?.permissionKey, "/pos/sales");
   assert.equal(summary?.href, "/pos/sales");
-  assert.equal(summary?.permissionKey, "/pos/sales");
+  assert.deepEqual(summary?.permissionKeys, ["/pos", "/pos/sales"]);
   assert.equal(getSubmenuItemDestination("GERENTE", ["/pos"], sale!), "/pospress");
   assert.equal(getMainModuleDestination("GERENTE", ["/pos"], main!), "/pospress");
   assert.equal(
     getMainModuleDestination("GERENTE", ["/pos/sales"], main!),
-    "/pospress/transactions",
+    "/pos/sales",
   );
   assert.equal(getCurrentModule("/pos2"), "pos");
   assert.equal(getCurrentModule("/pos/sales"), "pos");
@@ -87,24 +88,26 @@ test("cada pestaña delegable está representada en el catálogo de permisos", (
       isAdminOnlyPath(item.href)
     ) continue;
 
-    const requiredKey = item.permissionKey ?? getModuleKeyForPath(item.href);
-    assert.ok(requiredKey, `La pestaña ${item.href} no tiene protección asignada`);
-    assert.ok(
-      configurableKeys.includes(requiredKey),
-      `La pestaña ${item.href} usa un permiso que no aparece en configuración: ${requiredKey}`,
-    );
+    const requiredKeys = item.permissionKeys ?? [item.permissionKey ?? getModuleKeyForPath(item.href)];
+    assert.ok(requiredKeys.every(Boolean), `La pestaña ${item.href} no tiene protección asignada`);
+    for (const requiredKey of requiredKeys) {
+      assert.ok(
+        configurableKeys.includes(requiredKey!),
+        `La pestaña ${item.href} usa un permiso que no aparece en configuración: ${requiredKey}`,
+      );
+    }
   }
 });
 
-test("Vender no concede Transacciones ni Ventas resumen", () => {
+test("Vender concede Punto de Venta y Ventas resumen, pero no Transacciones", () => {
   const items = SUBMENUS.pos;
   const visible = (label: string) =>
     isSubmenuItemVisible("GERENTE", ["/pos"], items.find((item) => item.label === label)!);
 
-  assert.equal(visible("POSpress"), true);
+  assert.equal(visible("Punto de Venta"), true);
   assert.equal(visible("Mesas"), true);
   assert.equal(visible("Transacciones"), false);
-  assert.equal(visible("Ventas resumen"), false);
+  assert.equal(visible("Ventas resumen"), true);
   assert.equal(
     isSubmenuItemVisible(
       "GERENTE",

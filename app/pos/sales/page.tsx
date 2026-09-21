@@ -1,11 +1,13 @@
-import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { getAccessibleBranchIds, getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import SalesDashboardClient from "@/components/pos/SalesDashboardClient";
 import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
 import { withRlsContext } from "@/lib/rls";
 
 export default async function PosSalesPage() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/pos", "/pos/sales"]);
+  if (!user) redirect("/profile");
   const allowedBranchIds = await getAccessibleBranchIds();
 
   const branches = await prisma.branch.findMany({
@@ -22,8 +24,6 @@ export default async function PosSalesPage() {
   const startOfTomorrow = businessDayStart(addDaysToDateOnly(today, 1));
 
   const branchFilter = allowedBranchIds ? { in: allowedBranchIds } : undefined;
-
-  if (!user) return null;
 
   const [sales, analyticsSales] = await withRlsContext(user, (tx) => Promise.all([
     tx.posSale.findMany({

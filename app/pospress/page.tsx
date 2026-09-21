@@ -48,7 +48,7 @@ export default async function PosPressPage({
 
   return (
     <PosSellClient
-      title="POSpress"
+      title="Punto de Venta"
       inventoryMode="v2"
       initialBranchId={selectedBranchId}
       branchOptions={branches.map((branch) => ({
