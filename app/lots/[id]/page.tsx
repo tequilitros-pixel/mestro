@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import LotMenu from "@/components/LotMenu";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { requireModuleActionAccess } from "@/lib/auth";
 import { getLotEngine } from "@/lib/services/lotEngine";
+import { getLotFinalization } from "@/lib/lots/finalization";
+import { finishProductionLot } from "@/lib/lots/finishProductionLot";
 import {
   PrinterIcon,
   BrainIcon,
@@ -29,10 +32,10 @@ export default async function LotDetailPage({ params }: Props) {
   const lot = await prisma.lot.findUnique({
     where: { id },
     include: {
-      cookings: { include: { events: true } },
-      millings: { include: { events: true } },
-      fermentations: { include: { readings: true } },
-      distillations: { include: { events: true } },
+      cookings: { orderBy: { startedAt: "asc" }, include: { events: true } },
+      millings: { orderBy: { startedAt: "asc" }, include: { events: true } },
+      fermentations: { orderBy: { startedAt: "asc" }, include: { readings: true } },
+      distillations: { orderBy: { startedAt: "asc" }, include: { events: true } },
       expenses: true,
     },
   });
@@ -50,6 +53,21 @@ export default async function LotDetailPage({ params }: Props) {
   // "Finalizar lote", no la suma de lecturas intermedias de litros.
   const totalLiters = lot.totalLitersObtained ?? 0;
   const isFinished = lot.totalLitersObtained !== null;
+  const finalization = getLotFinalization({
+    stage: lot.stage,
+    finishedAt: lot.finishedAt,
+    totalLitersObtained: lot.totalLitersObtained,
+    runs: lot.distillations,
+  });
+
+  async function finishLotAction(_formData: FormData) {
+    "use server";
+    void _formData;
+
+    const user = await requireModuleActionAccess("/lots");
+    await finishProductionLot({ lotId: id, actorId: user.id });
+    redirect(`/lots/${id}?finished=1`);
+  }
 
   const costPerLiter = totalLiters > 0 ? totalCost / totalLiters : 0;
 
@@ -136,6 +154,31 @@ export default async function LotDetailPage({ params }: Props) {
               }))}
             />
           </div>
+        )}
+
+        {finalization.ready && (
+          <section
+            id="finalizar-lote"
+            className="mt-8 rounded-2xl border border-secondary/30 bg-surface-container p-6 sm:p-8"
+          >
+            <p className="font-mono text-sm uppercase tracking-[0.35em] text-secondary">
+              Último paso
+            </p>
+            <h2 className="mt-3 text-3xl font-bold text-primary">
+              Finalizar lote {lot.code}
+            </h2>
+            <p className="mt-2 max-w-2xl text-on-surface-variant">
+              Se guardarán automáticamente {finalization.totalLiters.toLocaleString("es-MX")} L de las rectificaciones terminadas, la fecha de cierre y el QR de trazabilidad.
+            </p>
+            <form action={finishLotAction} className="mt-6">
+              <button
+                type="submit"
+                className="rounded-xl bg-primary px-6 py-3 font-bold text-on-primary transition hover:opacity-90 active:scale-[0.98]"
+              >
+                Finalizar lote
+              </button>
+            </form>
+          </section>
         )}
 
         <section className="mt-8 rounded-xl bg-surface-container p-8">

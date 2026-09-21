@@ -20,11 +20,8 @@ import {
   DistillationStatus,
   EquipmentStatus,
   LotStage,
-  RawMaterialMovementType,
 } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
-import { randomUUID } from "crypto";
-import { applyRawMaterialMovement } from "@/lib/liquors/rawMaterialMovements";
 import {
   getCurrentAlcohol,
   getCurrentTemperature,
@@ -43,6 +40,7 @@ import { formatBusinessDateTime } from "@/lib/dateTime";
 import ProcessSwitcher from "@/components/production/ProcessSwitcher";
 import { cancelDistillationRun, reconcileLotDistillationStage } from "@/lib/distillation/operations";
 import ProcessBoilerUsage from "@/components/boiler/ProcessBoilerUsage";
+import { finishProductionLot } from "@/lib/lots/finishProductionLot";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -87,7 +85,6 @@ export default async function DistillationDetailPage({
 
   const distillationEquipmentId = distillation.equipmentId;
   const distillationLotId = distillation.lotId;
-  const distillationLotCode = distillation.lot.code;
   const distillationType = distillation.type;
   const sourceName = distillation.sourceFermentation?.tank ?? distillation.sourceDistillation?.sourceFermentation?.tank ?? "Fuente histórica";
   const sourceVolume = distillation.sourceFermentation?.mustLiters
@@ -482,75 +479,7 @@ export default async function DistillationDetailPage({
     void _formData;
 
     const user = await requireModuleActionAccess("/distillation");
-
-    const lot = await prisma.lot.findUnique({
-      where: { id: distillationLotId },
-      select: {
-        stage: true,
-        totalLitersObtained: true,
-        qrToken: true,
-      },
-    });
-
-    if (
-      !lot ||
-      lot.stage !== LotStage.TERMINADO ||
-      lot.totalLitersObtained !== null
-    ) {
-      redirect(`/distillation/${id}`);
-    }
-
-    await prisma.$transaction(async (tx) => {
-      const runs = await tx.distillation.findMany({
-        where: {
-          lotId: distillationLotId,
-          type: "RECTIFICACION",
-          status: DistillationStatus.TERMINADA,
-        },
-        select: { finalLiters: true },
-      });
-      const activeRuns = await tx.distillation.count({
-        where: { lotId: distillationLotId, status: DistillationStatus.ACTIVA },
-      });
-      const totalLiters = runs.reduce((sum, run) => sum + (run.finalLiters ?? 0), 0);
-      if (activeRuns > 0 || runs.length === 0 || totalLiters <= 0) {
-        throw new Error("LOT_DISTILLATION_INCOMPLETE");
-      }
-      await tx.lot.update({
-        where: { id: distillationLotId },
-        data: {
-          finishedAt: new Date(),
-          totalLitersObtained: totalLiters,
-          qrToken: lot.qrToken ?? randomUUID(),
-        },
-      });
-
-      /*
-       * El destilado terminado entra al almacén de materia prima, al
-       * material marcado como receptor de lotes (típicamente "Tequila
-       * blanco a granel"). Queda registrado de qué lote vino, así que
-       * el stock es a granel pero con historial rastreable.
-       *
-       * Si nadie ha marcado un material receptor, el lote se cierra
-       * igual: no se bloquea la producción por una configuración
-       * pendiente, pero tampoco se inventa el destino.
-       */
-      const target = await tx.rawMaterial.findFirst({
-        where: { receivesLotOutput: true, active: true },
-        select: { id: true },
-      });
-
-      if (target) {
-        await applyRawMaterialMovement(tx, {
-          rawMaterialId: target.id,
-          type: RawMaterialMovementType.PRODUCCION,
-          amount: totalLiters,
-          lotId: distillationLotId,
-          createdById: user.id,
-          notes: `Destilado obtenido del lote ${distillationLotCode}.`,
-        });
-      }
-    });
+    await finishProductionLot({ lotId: distillationLotId, actorId: user.id });
 
     redirect(`/distillation/${id}?lotFinished=1`);
   }
