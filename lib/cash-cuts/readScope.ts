@@ -35,3 +35,17 @@ export function getCashCutVisibilityWhere(today = todayDateOnly()) {
     ],
   };
 }
+
+/**
+ * ADMIN usa `branchIds === null` para representar acceso global. En ese caso
+ * no se agrega filtro de sucursal; los demas roles conservan exclusivamente
+ * su sucursal de trabajo resuelta en el servidor.
+ */
+export function getCashCutBranchWhere(
+  branchIds: string[] | null,
+  workingBranchId: string | null,
+) {
+  if (branchIds === null) return {};
+  if (workingBranchId) return { branchId: workingBranchId };
+  return { branchId: { in: [] as string[] } };
+}

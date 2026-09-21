@@ -74,12 +74,15 @@ export default async function CashCutsPage() {
   }
 
   /* ---------- Gerente / Administrador / Consulta ---------- */
-  const branches = scope.workingBranchId
-    ? await prisma.branch.findMany({
-        where: { id: scope.workingBranchId, active: true },
-        select: { id: true, name: true },
-      })
-    : [];
+  const branches =
+    scope.branchIds === null
+      ? [{ id: "__all__", name: "Todas las sucursales" }]
+      : scope.workingBranchId
+        ? await prisma.branch.findMany({
+            where: { id: scope.workingBranchId, active: true },
+            select: { id: true, name: true },
+          })
+        : [];
 
   const week = getCurrentCashCutWeek();
 

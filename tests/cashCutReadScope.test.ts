@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getCashCutBranchWhere,
   getCashCutVisibilityWhere,
   getCurrentCashCutWeek,
 } from "../lib/cash-cuts/readScope";
@@ -36,5 +37,21 @@ test("un corte abierto anterior sigue visible junto con la semana actual", () =>
         },
       },
     ],
+  });
+});
+
+test("ADMIN consulta todas las sucursales de la semana", () => {
+  assert.deepEqual(getCashCutBranchWhere(null, "barra"), {});
+});
+
+test("un usuario acotado conserva solo su sucursal de trabajo", () => {
+  assert.deepEqual(getCashCutBranchWhere(["barra", "centro"], "barra"), {
+    branchId: "barra",
+  });
+});
+
+test("un usuario acotado sin sucursal de trabajo no obtiene datos", () => {
+  assert.deepEqual(getCashCutBranchWhere(["barra", "centro"], null), {
+    branchId: { in: [] },
   });
 });
