@@ -76,7 +76,11 @@ export default async function CashCutsPage() {
   /* ---------- Gerente / Administrador / Consulta ---------- */
   const branches =
     scope.branchIds === null
-      ? [{ id: "__all__", name: "Todas las sucursales" }]
+      ? await prisma.branch.findMany({
+          where: { active: true },
+          select: { id: true, name: true },
+          orderBy: { name: "asc" },
+        })
       : scope.workingBranchId
         ? await prisma.branch.findMany({
             where: { id: scope.workingBranchId, active: true },
@@ -90,6 +94,7 @@ export default async function CashCutsPage() {
     <TableroCortes
       branches={branches}
       canCreate={scope.canManage}
+      canUseHistoricalFilters={scope.user.role === "ADMIN" && scope.branchIds === null}
       currentWeek={{ startDate: week.startDate, endDate: week.endDate }}
     />
   );

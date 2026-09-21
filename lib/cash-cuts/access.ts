@@ -156,13 +156,17 @@ export function withCashCutScope(
 }
 
 /**
- * Alcance de lectura: ADMIN ve todas las sucursales durante la semana actual;
- * los demas roles conservan solo su sucursal de trabajo. Los cortes abiertos
- * permanecen visibles aunque sean anteriores para que nunca bloqueen una
- * apertura sin ofrecer una ruta de cierre. Un usuario acotado sin contexto de
- * sucursal recibe una consulta vacía, nunca todas sus sucursales.
+ * Alcance de lectura: ADMIN puede abrir el historial de cualquier fecha y
+ * sucursal; la ruta de listado aplica después el periodo y la sucursal
+ * solicitados. Los demás roles conservan solo su sucursal de trabajo y la
+ * semana actual. Un corte abierto anterior sigue visible para no bloquear una
+ * nueva apertura sin ofrecer una ruta de cierre.
  */
 export function cashCutReadScopeWhere(scope: CashCutScope): Prisma.CashCutWhereInput {
+  if (scope.user.role === "ADMIN" && scope.branchIds === null) {
+    return cashCutScopeWhere(scope);
+  }
+
   return {
     AND: [
       cashCutScopeWhere(scope),

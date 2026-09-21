@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { PlusIcon } from "@/components/ui/icons";
 import {
@@ -13,8 +13,9 @@ import {
 
 /*
  * Tablero de cortes para ADMIN, GERENTE y CONSULTA.
- * El alcance de sucursal y semana ya viene fijado por el servidor;
- * este componente solo filtra y ordena lo que recibió.
+ * El servidor valida el alcance del rol y, para ADMIN, aplica el periodo y la
+ * sucursal elegidos. El navegador nunca decide qué sucursales están
+ * autorizadas.
  *
  * La busqueda, el orden y la paginacion son sobre la lista que ya
  * llego acotada por el servidor. Los indicadores se derivan de esa
@@ -37,6 +38,38 @@ type Corte = {
 };
 
 type Orden = { campo: "date" | "code" | "branch" | "totalSales" | "difference"; asc: boolean };
+type Periodo = "current-week" | "last-week" | "current-month" | "current-year" | "custom";
+
+function Th({
+  campo,
+  children,
+  className = "",
+  orden,
+  onSort,
+}: {
+  campo?: Orden["campo"];
+  children: ReactNode;
+  className?: string;
+  orden: Orden;
+  onSort: (campo: Orden["campo"]) => void;
+}) {
+  return (
+    <th className={`sticky top-0 z-10 bg-surface-container-high px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant ${className}`}>
+      {campo ? (
+        <button
+          type="button"
+          onClick={() => onSort(campo)}
+          className="inline-flex items-center gap-1 hover:text-on-surface"
+        >
+          {children}
+          {orden.campo === campo && <span aria-hidden="true">{orden.asc ? "↑" : "↓"}</span>}
+        </button>
+      ) : (
+        children
+      )}
+    </th>
+  );
+}
 
 const POR_PAGINA = 25;
 
@@ -69,27 +102,47 @@ function colorDiferencia(d: number | null) {
 export default function TableroCortes({
   branches,
   canCreate,
+  canUseHistoricalFilters,
   currentWeek,
 }: {
   branches: Branch[];
   canCreate: boolean;
+  canUseHistoricalFilters: boolean;
   currentWeek: { startDate: string; endDate: string };
 }) {
   const [status, setStatus] = useState("");
   const [busqueda, setBusqueda] = useState("");
+  const [periodo, setPeriodo] = useState<Periodo>("current-week");
+  const [branchId, setBranchId] = useState("");
+  const [desde, setDesde] = useState(currentWeek.startDate);
+  const [hasta, setHasta] = useState(currentWeek.endDate);
   const [cortes, setCortes] = useState<Corte[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [orden, setOrden] = useState<Orden>({ campo: "date", asc: false });
   const [pagina, setPagina] = useState(1);
+  const errorRango =
+    periodo === "custom" && (!desde || !hasta || desde > hasta)
+      ? desde > hasta
+        ? "La fecha inicial no puede ser posterior a la final."
+        : "Selecciona ambas fechas."
+      : null;
 
   useEffect(() => {
+    if (errorRango) return;
+
     const params = new URLSearchParams();
     if (status) params.set("status", status);
+    if (canUseHistoricalFilters) {
+      params.set("period", periodo);
+      if (branchId) params.set("branchId", branchId);
+      if (periodo === "custom") {
+        params.set("from", desde);
+        params.set("to", hasta);
+      }
+    }
 
     const controller = new AbortController();
-    setCargando(true);
-    setError(null);
 
     fetch(`/api/cash-cuts?${params.toString()}`, { signal: controller.signal })
       .then(async (res) => {
@@ -109,9 +162,7 @@ export default function TableroCortes({
       });
 
     return () => controller.abort();
-  }, [status]);
-
-  useEffect(() => setPagina(1), [status, busqueda, orden]);
+  }, [branchId, canUseHistoricalFilters, desde, errorRango, hasta, periodo, status]);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -141,51 +192,70 @@ export default function TableroCortes({
   }, [cortes, busqueda, orden]);
 
   const indicadores = useMemo(() => {
-    const abiertos = cortes.filter((c) => c.status === "ABIERTO").length;
-    const cerrados = cortes.filter((c) => c.status !== "ABIERTO").length;
-    const venta = cortes.reduce((s, c) => s + (c.totalSales ?? 0), 0);
-    const conDiferencia = cortes.filter(
+    const abiertos = filtrados.filter((c) => c.status === "ABIERTO").length;
+    const cerrados = filtrados.filter((c) => c.status !== "ABIERTO").length;
+    const venta = filtrados.reduce((s, c) => s + (c.totalSales ?? 0), 0);
+    const conDiferencia = filtrados.filter(
       (c) => c.status !== "ABIERTO" && c.difference !== null && c.difference !== 0,
     );
     const porRevisar = conDiferencia.filter((c) => c.status !== "AUDITADO").length;
     return { abiertos, cerrados, venta, diferencias: conDiferencia.length, porRevisar };
-  }, [cortes]);
+  }, [filtrados]);
 
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA));
   const visibles = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
-  const limpiar = () => {
-    setStatus("");
-    setBusqueda("");
+  const iniciarRecarga = () => {
+    setCargando(true);
+    setError(null);
+    setPagina(1);
   };
 
-  const hayFiltros = Boolean(status || busqueda);
+  const limpiar = () => {
+    if (status || branchId || periodo !== "current-week") {
+      iniciarRecarga();
+    } else {
+      setPagina(1);
+    }
+    setStatus("");
+    setBusqueda("");
+    setPeriodo("current-week");
+    setBranchId("");
+    setDesde(currentWeek.startDate);
+    setHasta(currentWeek.endDate);
+  };
 
-  const ordenarPor = (campo: Orden["campo"]) =>
-    setOrden((o) => (o.campo === campo ? { campo, asc: !o.asc } : { campo, asc: false }));
-
-  const Th = ({ campo, children, className = "" }: { campo?: Orden["campo"]; children: React.ReactNode; className?: string }) => (
-    <th className={`sticky top-0 z-10 bg-surface-container-high px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant ${className}`}>
-      {campo ? (
-        <button
-          type="button"
-          onClick={() => ordenarPor(campo)}
-          className="inline-flex items-center gap-1 hover:text-on-surface"
-        >
-          {children}
-          {orden.campo === campo && <span aria-hidden="true">{orden.asc ? "↑" : "↓"}</span>}
-        </button>
-      ) : (
-        children
-      )}
-    </th>
+  const hayFiltros = Boolean(
+    status || busqueda || branchId || periodo !== "current-week",
   );
+
+  const nombreSucursal = branchId
+    ? branches.find((branch) => branch.id === branchId)?.name ?? "Sucursal seleccionada"
+    : canUseHistoricalFilters
+      ? "Todas las sucursales"
+      : branches[0]?.name ?? "sin definir";
+
+  const nombrePeriodo: Record<Periodo, string> = {
+    "current-week": `Esta semana (${currentWeek.startDate} al ${currentWeek.endDate})`,
+    "last-week": "Semana pasada",
+    "current-month": "Este mes",
+    "current-year": "Todo el año",
+    custom: `${desde} al ${hasta}`,
+  };
+
+  const ordenarPor = (campo: Orden["campo"]) => {
+    setPagina(1);
+    setOrden((o) => (o.campo === campo ? { campo, asc: !o.asc } : { campo, asc: false }));
+  };
+
+  const errorVisible = errorRango ?? error;
+  const cargandoVisible = cargando && !errorRango;
 
   return (
     <main className="page-frame max-w-7xl space-y-4">
       <PageHeader
         title="Cortes de caja"
-        description={`Sucursal de trabajo: ${branches[0]?.name ?? "sin definir"} · Semana actual: ${currentWeek.startDate} al ${currentWeek.endDate}.`}
+        description={`${nombreSucursal} · ${nombrePeriodo[periodo]}. Los cortes abiertos pendientes siempre se muestran.`}
         actions={
           canCreate ? (
             <Link
@@ -210,16 +280,64 @@ export default function TableroCortes({
       <FilterBar className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <div className="lg:col-span-2">
           <label htmlFor="q" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
-            Buscar
+            Corte o responsable
           </label>
           <input
             id="q"
             value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Código o responsable"
+            onChange={(e) => {
+              setBusqueda(e.target.value);
+              setPagina(1);
+            }}
+            placeholder="Ej. CC-TLALTENANGO o nombre"
             className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
           />
         </div>
+
+        {canUseHistoricalFilters && (
+          <>
+            <div>
+              <label htmlFor="periodo" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
+                Periodo
+              </label>
+              <select
+                id="periodo"
+                value={periodo}
+                onChange={(e) => {
+                  iniciarRecarga();
+                  setPeriodo(e.target.value as Periodo);
+                }}
+                className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
+              >
+                <option value="current-week">Esta semana</option>
+                <option value="last-week">Semana pasada</option>
+                <option value="current-month">Este mes</option>
+                <option value="current-year">Todo el año</option>
+                <option value="custom">Fechas personalizadas</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="sucursal" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
+                Sucursal
+              </label>
+              <select
+                id="sucursal"
+                value={branchId}
+                onChange={(e) => {
+                  iniciarRecarga();
+                  setBranchId(e.target.value);
+                }}
+                className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
+              >
+                <option value="">Todas las sucursales</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
 
         <div>
           <label htmlFor="est" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
@@ -228,7 +346,10 @@ export default function TableroCortes({
           <select
             id="est"
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) => {
+              iniciarRecarga();
+              setStatus(e.target.value);
+            }}
             className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
           >
             <option value="">Todos</option>
@@ -237,6 +358,43 @@ export default function TableroCortes({
             <option value="AUDITADO">Auditado</option>
           </select>
         </div>
+
+        {canUseHistoricalFilters && periodo === "custom" && (
+          <>
+            <div>
+              <label htmlFor="desde" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
+                Desde
+              </label>
+              <input
+                id="desde"
+                type="date"
+                value={desde}
+                max={hasta}
+                onChange={(e) => {
+                  iniciarRecarga();
+                  setDesde(e.target.value);
+                }}
+                className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
+              />
+            </div>
+            <div>
+              <label htmlFor="hasta" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
+                Hasta
+              </label>
+              <input
+                id="hasta"
+                type="date"
+                value={hasta}
+                min={desde}
+                onChange={(e) => {
+                  iniciarRecarga();
+                  setHasta(e.target.value);
+                }}
+                className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
+              />
+            </div>
+          </>
+        )}
 
         {hayFiltros && (
           <div className="flex items-end sm:col-span-2 lg:col-span-6">
@@ -248,10 +406,10 @@ export default function TableroCortes({
         )}
       </FilterBar>
 
-      {cargando && <p className="text-sm text-on-surface-variant">Cargando…</p>}
-      {error && <p className="text-sm text-error">{error}</p>}
+      {cargandoVisible && <p className="text-sm text-on-surface-variant">Cargando…</p>}
+      {errorVisible && <p className="text-sm text-error">{errorVisible}</p>}
 
-      {!cargando && !error && filtrados.length === 0 && (
+      {!cargandoVisible && !errorVisible && filtrados.length === 0 && (
         <EmptyState>
           {!branches.length
             ? "No hay una sucursal de trabajo definida. Inicia un corte o pide que te asignen una única sucursal."
@@ -261,23 +419,23 @@ export default function TableroCortes({
         </EmptyState>
       )}
 
-      {!cargando && filtrados.length > 0 && (
+      {!cargandoVisible && !errorVisible && filtrados.length > 0 && (
         <>
           {/* Escritorio */}
           <div className="hidden overflow-x-auto rounded-xl border border-outline-variant md:block">
             <table className="w-full border-collapse text-[13px]">
               <thead>
                 <tr>
-                  <Th campo="date">Fecha</Th>
-                  <Th campo="code">Código</Th>
-                  <Th campo="branch">Sucursal</Th>
-                  <Th>Responsable</Th>
-                  <Th>Apertura</Th>
-                  <Th>Cierre</Th>
-                  <Th campo="totalSales" className="text-right">Venta</Th>
-                  <Th campo="difference" className="text-right">Diferencia</Th>
-                  <Th>Estado</Th>
-                  <Th>Acción</Th>
+                  <Th campo="date" orden={orden} onSort={ordenarPor}>Fecha</Th>
+                  <Th campo="code" orden={orden} onSort={ordenarPor}>Código</Th>
+                  <Th campo="branch" orden={orden} onSort={ordenarPor}>Sucursal</Th>
+                  <Th orden={orden} onSort={ordenarPor}>Responsable</Th>
+                  <Th orden={orden} onSort={ordenarPor}>Apertura</Th>
+                  <Th orden={orden} onSort={ordenarPor}>Cierre</Th>
+                  <Th campo="totalSales" orden={orden} onSort={ordenarPor} className="text-right">Venta</Th>
+                  <Th campo="difference" orden={orden} onSort={ordenarPor} className="text-right">Diferencia</Th>
+                  <Th orden={orden} onSort={ordenarPor}>Estado</Th>
+                  <Th orden={orden} onSort={ordenarPor}>Acción</Th>
                 </tr>
               </thead>
               <tbody>

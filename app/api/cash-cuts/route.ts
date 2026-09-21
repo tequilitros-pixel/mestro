@@ -1,14 +1,34 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
-import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { getCashCutScope, withCashCutReadScope, withCashCutScope } from "@/lib/cash-cuts/access";
 import { isBranchAllowed } from "@/lib/branches/access";
 import { denominationTotal, validDenominationRows } from "@/lib/cash-cuts/denominations";
 import { parseDateOnly } from "@/lib/dateOnly";
+import {
+  CASH_CUT_PERIODS,
+  type CashCutPeriod,
+  getCashCutPeriodRange,
+  getCashCutRangeVisibilityWhere,
+} from "@/lib/cash-cuts/readScope";
 
 const ROLES_QUE_PUEDEN_ABRIR_CORTE = ["ADMIN", "GERENTE", "ENCARGADO"];
 const CASH_CUT_STATUSES = ["ABIERTO", "CERRADO", "AUDITADO"] as const;
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidDateOnly(value: string | null): value is string {
+  if (!value || !DATE_ONLY_PATTERN.test(value)) return false;
+  const parsed = parseDateOnly(value);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+class OpenCashCutAlreadyExistsError extends Error {
+  constructor(
+    public readonly cashCut: { id: string; code: string },
+  ) {
+    super("Esta sucursal ya tiene un corte abierto.");
+  }
+}
 
 export async function GET(request: Request) {
   const scope = await getCashCutScope();
@@ -20,40 +40,78 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const requestedBranchId = searchParams.get("branchId") ?? undefined;
   const status = searchParams.get("status") ?? undefined;
+  const period = searchParams.get("period") ?? "current-week";
+  const query = searchParams.get("q")?.trim().slice(0, 100) ?? "";
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+  const isGlobalAdmin = scope.user.role === "ADMIN" && scope.branchIds === null;
 
   if (status && !CASH_CUT_STATUSES.includes(status as (typeof CASH_CUT_STATUSES)[number])) {
     return NextResponse.json({ error: "Estado inválido." }, { status: 400 });
   }
-  if ((from && !DATE_ONLY_PATTERN.test(from)) || (to && !DATE_ONLY_PATTERN.test(to))) {
-    return NextResponse.json({ error: "Fecha inválida." }, { status: 400 });
+  if (!CASH_CUT_PERIODS.includes(period as CashCutPeriod)) {
+    return NextResponse.json({ error: "Periodo inválido." }, { status: 400 });
+  }
+  if (!isGlobalAdmin && (period !== "current-week" || from || to)) {
+    return NextResponse.json(
+      { error: "Solo el administrador puede consultar periodos históricos." },
+      { status: 403 },
+    );
+  }
+  if (period === "custom" && (!isValidDateOnly(from) || !isValidDateOnly(to))) {
+    return NextResponse.json({ error: "Selecciona una fecha inicial y final válidas." }, { status: 400 });
+  }
+  if (period !== "custom" && (from || to)) {
+    return NextResponse.json({ error: "Las fechas solo aplican al periodo personalizado." }, { status: 400 });
+  }
+  if (from && to && from > to) {
+    return NextResponse.json({ error: "La fecha inicial no puede ser posterior a la final." }, { status: 400 });
   }
 
-  if (requestedBranchId && !isBranchAllowed(scope.branchIds, requestedBranchId)) {
-    return NextResponse.json({ error: "No tienes acceso a esa sucursal." }, { status: 403 });
+  if (requestedBranchId && !isGlobalAdmin && requestedBranchId !== scope.workingBranchId) {
+    return NextResponse.json({ error: "Solo puedes consultar la sucursal de trabajo actual." }, { status: 403 });
   }
+  if (requestedBranchId && isGlobalAdmin) {
+    const branchExists = await prisma.branch.findFirst({
+      where: { id: requestedBranchId, active: true },
+      select: { id: true },
+    });
+    if (!branchExists) {
+      return NextResponse.json({ error: "Sucursal inválida." }, { status: 400 });
+    }
+  }
+
+  const range = getCashCutPeriodRange(period as CashCutPeriod, {
+    from: from ?? undefined,
+    to: to ?? undefined,
+  });
 
   /*
-   * withCashCutScope combina con AND, no fusionando objetos. Por eso un
-   * ENCARGADO que pida ?status=CERRADO recibe lista vacia en vez de
-   * historial: su alcance ya fija status ABIERTO y responsibleId propio,
-   * y el filtro del querystring no puede sobreescribirlo.
+   * withCashCutReadScope combina con AND y conserva el alcance del rol.
+   * Para ADMIN la ruta agrega el periodo y la sucursal solicitados; para
+   * los demás roles el propio alcance sigue fijando sucursal y semana.
    */
   const cashCuts = await prisma.cashCut.findMany({
-    where: withCashCutScope(scope, {
-      branchId: requestedBranchId,
-      status: status as (typeof CASH_CUT_STATUSES)[number] | undefined,
-      date: {
-        gte: from ? parseDateOnly(from) : undefined,
-        lte: to ? parseDateOnly(to) : undefined,
-      },
+    where: withCashCutReadScope(scope, {
+      AND: [
+        requestedBranchId ? { branchId: requestedBranchId } : {},
+        getCashCutRangeVisibilityWhere(range),
+        status ? { status: status as (typeof CASH_CUT_STATUSES)[number] } : {},
+        query
+          ? {
+              OR: [
+                { code: { contains: query, mode: "insensitive" } },
+                { responsible: { is: { name: { contains: query, mode: "insensitive" } } } },
+              ],
+            }
+          : {},
+      ],
     }),
     include: {
       branch: true,
       responsible: { select: { id: true, name: true } },
     },
-    orderBy: { date: "desc" },
+    orderBy: [{ date: "desc" }, { openedAt: "desc" }],
   });
 
   return NextResponse.json(cashCuts);
@@ -165,8 +223,24 @@ export async function POST(request: Request) {
   const openedAt = clientCreatedAt ? new Date(clientCreatedAt) : new Date();
   if (Number.isNaN(openedAt.getTime())) return NextResponse.json({ error: "Fecha de apertura inválida" }, { status: 400 });
 
-  const cashCut = await prisma.$transaction(async (tx) => {
-    const created = await tx.cashCut.create({
+  let cashCut;
+  try {
+    cashCut = await prisma.$transaction(async (tx) => {
+      // Serializa aperturas por sucursal. El historial contiene cortes
+      // abiertos antiguos, pero desde este punto no permitimos que una
+      // segunda apertura vuelva ambiguo a qué caja deben ir las ventas.
+      const lockKey = `cash-cut-open:${branchId}`;
+      await tx.$queryRaw<Array<{ lock: string }>>`
+        SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS "lock"
+      `;
+      const existingOpen = await tx.cashCut.findFirst({
+        where: { branchId, status: "ABIERTO" },
+        orderBy: { openedAt: "desc" },
+        select: { id: true, code: true },
+      });
+      if (existingOpen) throw new OpenCashCutAlreadyExistsError(existingOpen);
+
+      const created = await tx.cashCut.create({
       data: {
         ...(clientOperationId ? { id: clientOperationId } : {}),
         code,
@@ -217,8 +291,20 @@ export async function POST(request: Request) {
       });
     }
 
-    return created;
-  });
+      return created;
+    });
+  } catch (error) {
+    if (error instanceof OpenCashCutAlreadyExistsError) {
+      return NextResponse.json(
+        {
+          error: `Esta sucursal ya tiene un corte abierto (${error.cashCut.code}). Continúa ese corte antes de abrir otro.`,
+          cashCut: error.cashCut,
+        },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
 
   return NextResponse.json(cashCut, { status: 201 });
 }
