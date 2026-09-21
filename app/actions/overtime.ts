@@ -6,6 +6,8 @@ import { getCurrentUser } from "@/lib/auth";
 import {
   parseDateOnly,
   addDaysToDateOnly,
+  businessDayStart,
+  formatBusinessDateOnly,
   formatDateOnly,
   mondayOfWeek,
 } from "@/lib/dateOnly";
@@ -280,10 +282,12 @@ export async function syncOvertimeForRange(
 
   const start = parseDateOnly(firstMonday);
   const end = parseDateOnly(addDaysToDateOnly(lastMonday, 7));
+  const clockStart = businessDayStart(firstMonday);
+  const clockEnd = businessDayStart(addDaysToDateOnly(lastMonday, 7));
 
   const entries = await prisma.timeClockEntry.findMany({
     where: {
-      clockIn: { gte: start, lt: end },
+      clockIn: { gte: clockStart, lt: clockEnd },
       clockOut: { not: null },
     },
     select: {
@@ -312,7 +316,7 @@ export async function syncOvertimeForRange(
       (entry.clockOut.getTime() - entry.clockIn.getTime()) / (1000 * 60 * 60);
     if (!(hours > 0)) continue;
 
-    const weekStart = mondayOfWeek(formatDateOnly(entry.clockIn));
+    const weekStart = mondayOfWeek(formatBusinessDateOnly(entry.clockIn));
     const key = `${entry.userId}-${entry.branchId}-${weekStart}`;
 
     const current =

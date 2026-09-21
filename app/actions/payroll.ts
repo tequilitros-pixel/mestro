@@ -11,6 +11,10 @@ import {
   mondayOfWeek,
   parseDateOnly,
 } from "@/lib/dateOnly";
+import {
+  payrollBusinessDate,
+  payrollWeekInstantRange,
+} from "@/lib/payroll/legacyRules";
 
 /**
  * ==========================================================
@@ -113,6 +117,16 @@ export type PayrollPeriodInfo = {
   paidByName: string | null;
   paidAt: string | null;
   rejectedNotes: string | null;
+  approvedEntries: number;
+  totalEntries: number;
+};
+
+export type PayrollEmployeeApprovalStatus = "BORRADOR" | "REVISION" | "APROBADA" | "PAGADA";
+
+export type PayrollEmployeeApproval = {
+  status: PayrollEmployeeApprovalStatus;
+  approvedByName: string | null;
+  approvedAt: string | null;
 };
 
 export type PayrollWeekEmployee = {
@@ -128,6 +142,7 @@ export type PayrollWeekEmployee = {
   estimatedPay: number;
   adjustmentsTotal: number;
   finalPay: number;
+  approval: PayrollEmployeeApproval;
 };
 
 export type PayrollWeekTable = {
@@ -214,6 +229,7 @@ export type PayrollEmployeeDetail = {
   adjustmentsTotal: number;
   finalPay: number;
   period: PayrollPeriodInfo;
+  approval: PayrollEmployeeApproval;
 };
 
 /**
@@ -225,15 +241,15 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
   totals: PayrollWeekTable["totals"];
 }> {
   const dayKeys = weekDayKeys(mondayStr);
-  const start = parseDateOnly(mondayStr);
-  const end = parseDateOnly(addDaysToDateOnly(mondayStr, 7));
+  const weekStartDate = parseDateOnly(mondayStr);
+  const { start: clockStart, end: clockEnd } = payrollWeekInstantRange(mondayStr);
   // Un instante dentro de la semana (el domingo) para resolver qué
   // tarifa estaba vigente — ver nota en resolveHourlyRate.
-  const rateReferenceDate = new Date(end.getTime() - 1);
+  const rateReferenceDate = new Date(clockEnd.getTime() - 1);
 
   const [entries, employees, overtimeRecords, salaryRates, settings, adjustments] = await Promise.all([
     prisma.timeClockEntry.findMany({
-      where: { clockIn: { gte: start, lt: end }, clockOut: { not: null } },
+      where: { clockIn: { gte: clockStart, lt: clockEnd }, clockOut: { not: null } },
       select: { userId: true, clockIn: true, clockOut: true },
     }),
     prisma.user.findMany({
@@ -242,7 +258,7 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
       orderBy: { name: "asc" },
     }),
     prisma.overtimeRecord.findMany({
-      where: { weekStart: start },
+      where: { weekStart: weekStartDate },
       select: { userId: true, overtimeHours: true, amount: true, status: true },
     }),
     prisma.salaryRate.findMany({
@@ -252,7 +268,7 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
     }),
     getPayrollSettings(),
     prisma.payrollAdjustment.findMany({
-      where: { weekStart: start },
+      where: { weekStart: weekStartDate },
       select: { userId: true, type: true, amount: true },
     }),
   ]);
@@ -277,7 +293,7 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
     const hours = hoursBetween(entry.clockIn, entry.clockOut);
     if (!(hours > 0)) continue;
 
-    const dayKey = formatDateOnly(entry.clockIn);
+    const dayKey = payrollBusinessDate(entry.clockIn);
     const dayIndex = dayKeys.indexOf(dayKey);
     if (dayIndex === -1) continue;
 
@@ -344,6 +360,7 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
       estimatedPay,
       adjustmentsTotal,
       finalPay,
+      approval: { status: "BORRADOR", approvedByName: null, approvedAt: null },
     });
 
     totalRegular += regularHours;
@@ -379,9 +396,10 @@ async function computeLiveEmployeeDetail(
   mondayStr: string,
 ): Promise<{ error: string } | Omit<PayrollEmployeeDetail, "period">> {
   const dayKeys = weekDayKeys(mondayStr);
-  const start = parseDateOnly(mondayStr);
-  const end = parseDateOnly(addDaysToDateOnly(mondayStr, 7));
-  const rateReferenceDate = new Date(end.getTime() - 1);
+  const weekStartDate = parseDateOnly(mondayStr);
+  const weekEndDate = parseDateOnly(addDaysToDateOnly(mondayStr, 7));
+  const { start: clockStart, end: clockEnd } = payrollWeekInstantRange(mondayStr);
+  const rateReferenceDate = new Date(clockEnd.getTime() - 1);
 
   const [employee, entries, shifts, overtimeRecords, salaryRates, settings, userBranches, adjustments] = await Promise.all([
     prisma.user.findUnique({
@@ -389,16 +407,16 @@ async function computeLiveEmployeeDetail(
       select: { id: true, name: true, hourlyRate: true },
     }),
     prisma.timeClockEntry.findMany({
-      where: { userId, clockIn: { gte: start, lt: end } },
+      where: { userId, clockIn: { gte: clockStart, lt: clockEnd } },
       include: { branch: { select: { name: true } } },
       orderBy: { clockIn: "asc" },
     }),
     prisma.scheduledShift.findMany({
-      where: { userId, type: "TURNO", date: { gte: start, lt: end } },
+      where: { userId, type: "TURNO", date: { gte: weekStartDate, lt: weekEndDate } },
       include: { branch: { select: { name: true } } },
     }),
     prisma.overtimeRecord.findMany({
-      where: { userId, weekStart: start },
+      where: { userId, weekStart: weekStartDate },
       select: { overtimeHours: true },
     }),
     prisma.salaryRate.findMany({
@@ -413,7 +431,7 @@ async function computeLiveEmployeeDetail(
       orderBy: { branch: { name: "asc" } },
     }),
     prisma.payrollAdjustment.findMany({
-      where: { userId, weekStart: start },
+      where: { userId, weekStart: weekStartDate },
       include: { createdBy: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
     }),
@@ -425,7 +443,7 @@ async function computeLiveEmployeeDetail(
 
   const entriesByDay = new Map<string, typeof entries>();
   for (const entry of entries) {
-    const key = formatDateOnly(entry.clockIn);
+    const key = payrollBusinessDate(entry.clockIn);
     const list = entriesByDay.get(key) ?? [];
     list.push(entry);
     entriesByDay.set(key, list);
@@ -553,6 +571,7 @@ async function computeLiveEmployeeDetail(
     adjustments: adjustmentRows,
     adjustmentsTotal,
     finalPay: totalPay + adjustmentsTotal,
+    approval: { status: "BORRADOR", approvedByName: null, approvedAt: null },
   };
 }
 
@@ -602,7 +621,12 @@ async function loadPeriodWithEntries(mondayStr: string) {
       submittedBy: { select: { name: true } },
       approvedBy: { select: { name: true } },
       paidBy: { select: { name: true } },
-      entries: { include: { user: { select: { id: true, name: true } } } },
+      entries: {
+        include: {
+          user: { select: { id: true, name: true } },
+          approvedBy: { select: { name: true } },
+        },
+      },
     },
   });
 }
@@ -620,6 +644,8 @@ function periodInfoFrom(
       paidByName: null,
       paidAt: null,
       rejectedNotes: null,
+      approvedEntries: 0,
+      totalEntries: 0,
     };
   }
 
@@ -632,6 +658,8 @@ function periodInfoFrom(
     paidByName: period.paidBy?.name ?? null,
     paidAt: period.paidAt?.toISOString() ?? null,
     rejectedNotes: period.rejectedNotes,
+    approvedEntries: period.entries.filter((entry) => entry.status !== "REVISION").length,
+    totalEntries: period.entries.length,
   };
 }
 
@@ -675,6 +703,7 @@ export async function getPayrollWeekTable(
             estimatedPay: 0,
             adjustmentsTotal: 0,
             finalPay: 0,
+            approval: { status: period.status, approvedByName: null, approvedAt: null },
           };
         }
         const hoursByDay = entry.hoursByDay as number[];
@@ -691,6 +720,11 @@ export async function getPayrollWeekTable(
           estimatedPay: Number(entry.basePay) + Number(entry.overtimePay),
           adjustmentsTotal: Number(entry.adjustmentsTotal),
           finalPay: Number(entry.totalPay),
+          approval: {
+            status: entry.status,
+            approvedByName: entry.approvedBy?.name ?? null,
+            approvedAt: entry.approvedAt?.toISOString() ?? null,
+          },
         };
       })
       .sort((a, b) => b.totalHours - a.totalHours || a.name.localeCompare(b.name, "es-MX"));
@@ -786,6 +820,7 @@ export async function getEmployeePayrollDetail(
           adjustmentsTotal: 0,
           finalPay: 0,
           period: periodInfo,
+          approval: { status: period.status, approvedByName: null, approvedAt: null },
         },
       };
     }
@@ -817,6 +852,11 @@ export async function getEmployeePayrollDetail(
         adjustmentsTotal: Number(entry.adjustmentsTotal),
         finalPay: Number(entry.totalPay),
         period: periodInfo,
+        approval: {
+          status: entry.status,
+          approvedByName: entry.approvedBy?.name ?? null,
+          approvedAt: entry.approvedAt?.toISOString() ?? null,
+        },
       },
     };
   }
@@ -977,24 +1017,63 @@ export async function submitPayrollPeriodAction(weekStart: string) {
   return { success: true };
 }
 
-/** REVISION -> APROBADA. Solo admins. */
-export async function approvePayrollPeriodAction(weekStart: string) {
+/**
+ * Conserva bloqueada la aprobación semanal masiva. Los clientes viejos que
+ * todavía intenten llamarla no pueden saltarse la revisión por empleado.
+ */
+export async function approvePayrollPeriodAction() {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "No tienes permiso" };
+
+  return { error: "La aprobación ahora es individual. Abre cada empleado para aprobarlo." };
+}
+
+/** Aprueba únicamente el snapshot de un empleado dentro de la semana. */
+export async function approvePayrollEntryAction(weekStart: string, userId: string) {
   const admin = await requireAdmin();
   if (!admin) return { error: "No tienes permiso" };
 
   const mondayStr = mondayOfWeek(weekStart);
-  const period = await prisma.payrollPeriod.findUnique({ where: { weekStart: parseDateOnly(mondayStr) } });
-  if (!period || period.status !== "REVISION") {
-    return { error: "Esta semana no está en revisión" };
-  }
+  const result = await prisma.$transaction(async (tx) => {
+    const periods = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT "id", "status"::text AS "status"
+      FROM "PayrollPeriod"
+      WHERE "weekStart" = ${parseDateOnly(mondayStr)}
+      FOR UPDATE
+    `;
+    const period = periods[0];
+    if (!period || period.status !== "REVISION") {
+      return { error: "Esta semana no está en revisión" };
+    }
 
-  await prisma.payrollPeriod.update({
-    where: { id: period.id },
-    data: { status: "APROBADA", approvedById: admin.id, approvedAt: new Date() },
+    const entry = await tx.payrollEntry.findUnique({
+      where: { periodId_userId: { periodId: period.id, userId } },
+      select: { id: true, status: true },
+    });
+    if (!entry) return { error: "Este empleado no forma parte de la nómina enviada" };
+    if (entry.status !== "REVISION") return { success: true, completed: false };
+
+    const approvedAt = new Date();
+    await tx.payrollEntry.update({
+      where: { id: entry.id },
+      data: { status: "APROBADA", approvedById: admin.id, approvedAt },
+    });
+
+    const pending = await tx.payrollEntry.count({
+      where: { periodId: period.id, status: "REVISION" },
+    });
+    if (pending === 0) {
+      await tx.payrollPeriod.update({
+        where: { id: period.id },
+        data: { status: "APROBADA", approvedById: admin.id, approvedAt },
+      });
+    }
+
+    return { success: true, completed: pending === 0 };
   });
 
   revalidatePath("/timeclock/payroll");
-  return { success: true };
+  return result;
 }
 
 /** APROBADA -> PAGADA. Solo admins. Cierra la semana por completo. */
@@ -1008,10 +1087,16 @@ export async function markPayrollPeriodPaidAction(weekStart: string) {
     return { error: "Esta semana no está aprobada" };
   }
 
-  await prisma.payrollPeriod.update({
-    where: { id: period.id },
-    data: { status: "PAGADA", paidById: admin.id, paidAt: new Date() },
-  });
+  await prisma.$transaction([
+    prisma.payrollEntry.updateMany({
+      where: { periodId: period.id, status: "APROBADA" },
+      data: { status: "PAGADA" },
+    }),
+    prisma.payrollPeriod.update({
+      where: { id: period.id },
+      data: { status: "PAGADA", paidById: admin.id, paidAt: new Date() },
+    }),
+  ]);
 
   revalidatePath("/timeclock/payroll");
   return { success: true };

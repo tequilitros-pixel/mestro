@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
   addDaysToDateOnly,
+  businessDayStart,
   mondayOfWeek,
   parseDateOnly,
   todayDateOnly,
@@ -689,8 +690,8 @@ export async function getWeeklyPayrollReport(weekStart: string, branchId?: strin
     return { error: "Solo un administrador puede ver la nómina" };
   }
 
-  const start = parseDateOnly(weekStart);
-  const end = parseDateOnly(addDaysToDateOnly(weekStart, 7));
+  const start = businessDayStart(weekStart);
+  const end = businessDayStart(addDaysToDateOnly(weekStart, 7));
 
 
   const entries = await prisma.timeClockEntry.findMany({

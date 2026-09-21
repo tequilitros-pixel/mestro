@@ -20,7 +20,7 @@ import {
   createPayrollAdjustmentAction,
   deletePayrollAdjustmentAction,
   submitPayrollPeriodAction,
-  approvePayrollPeriodAction,
+  approvePayrollEntryAction,
   markPayrollPeriodPaidAction,
   reopenPayrollPeriodAction,
   justifyIncidentAction,
@@ -210,15 +210,6 @@ export default function PayrollWeekView() {
     }
   }
 
-  async function approveWeek() {
-    if (!table) return;
-    const accepted = confirm(
-      `Estás a punto de aprobar la nómina del ${formatWeekRange(table.weekStart)}.\n\nUna vez aprobada, los registros de esta semana quedarán bloqueados.`,
-    );
-    if (!accepted) return;
-    await handlePeriodAction(approvePayrollPeriodAction, "Nómina semanal aprobada");
-  }
-
   async function reopenWeek() {
     const reason = prompt("Motivo obligatorio para reabrir este periodo:");
     if (!reason?.trim()) {
@@ -326,7 +317,7 @@ export default function PayrollWeekView() {
                 {table.period.status === "BORRADOR" &&
                   "Se calcula en vivo con el checador. Envíala a revisión para congelar los números."}
                 {table.period.status === "REVISION" &&
-                  `Enviada por ${table.period.submittedByName ?? "—"} · ${
+                  `${table.period.approvedEntries} de ${table.period.totalEntries} empleados aprobados · Enviada por ${table.period.submittedByName ?? "—"} · ${
                     table.period.submittedAt ? formatDateTime(table.period.submittedAt) : ""
                   }`}
                 {table.period.status === "APROBADA" &&
@@ -356,16 +347,6 @@ export default function PayrollWeekView() {
 
               {table.period.status === "REVISION" && (
                 <>
-                  <button
-                    disabled={actionBusy}
-                    onClick={() =>
-                      approveWeek()
-                    }
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:opacity-50"
-                  >
-                    <CheckIcon className="h-3.5 w-3.5" />
-                    Aprobar
-                  </button>
                   <button
                     disabled={actionBusy}
                     onClick={() =>
@@ -476,7 +457,9 @@ export default function PayrollWeekView() {
                         <td className="sticky left-0 z-10 border-b border-r border-outline-variant bg-surface-container-lowest px-4 py-2.5 group-hover:bg-surface-container font-semibold text-on-surface">
                           <div className="flex flex-col items-start gap-1">
                             <button type="button" onClick={() => setSelectedUserId(employee.id)} className="text-left hover:text-primary hover:underline">{employee.name}</button>
-                            <button type="button" onClick={() => setSelectedUserId(employee.id)} className="text-[10px] font-bold text-primary hover:underline">Editar horas y turnos</button>
+                            <button type="button" onClick={() => setSelectedUserId(employee.id)} className="text-[10px] font-bold text-primary hover:underline">
+                              {table.period.status === "BORRADOR" ? "Editar horas y turnos" : "Revisar detalle"}
+                            </button>
                           </div>
                           {employee.missingRate && (
                             <span className="ml-2 rounded-full bg-error/15 px-2 py-0.5 text-[9px] font-bold text-error">Sin tarifa</span>
@@ -498,8 +481,12 @@ export default function PayrollWeekView() {
                             : money(employee.finalPay)}
                         </td>
                         <td className="border-b border-outline-variant px-3 py-2.5 text-center">
-                          <button onClick={() => setSelectedUserId(employee.id)} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${table.period.status === "APROBADA" || table.period.status === "PAGADA" ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim" : "bg-secondary/15 text-secondary"}`}>
-                            {table.period.status === "APROBADA" || table.period.status === "PAGADA" ? "Aprobado" : "Pendiente"}
+                          <button onClick={() => setSelectedUserId(employee.id)} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${employee.approval.status === "APROBADA" || employee.approval.status === "PAGADA" ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim" : "bg-secondary/15 text-secondary"}`}>
+                            {employee.approval.status === "PAGADA"
+                              ? "Pagado"
+                              : employee.approval.status === "APROBADA"
+                                ? "Aprobado"
+                                : "Pendiente"}
                           </button>
                         </td>
                       </tr>
@@ -549,6 +536,7 @@ function EmployeeDetailModal({
   const [entryClockIn, setEntryClockIn] = useState("");
   const [entryClockOut, setEntryClockOut] = useState("");
   const [savingEntry, setSavingEntry] = useState(false);
+  const [approving, setApproving] = useState(false);
   const locked = detail ? detail.period.status !== "BORRADOR" : false;
   const branchOptions = detail?.branches ?? [];
 
@@ -707,6 +695,32 @@ function EmployeeDetailModal({
     setDraftEntryDate(null);
   }
 
+  async function approveEmployee() {
+    if (!detail || detail.period.status !== "REVISION" || detail.approval.status !== "REVISION") return;
+    if (!confirm(`¿Aprobar únicamente la nómina de ${detail.employee.name}?`)) return;
+
+    setApproving(true);
+    try {
+      const result = await approvePayrollEntryAction(detail.weekStart, detail.employee.id);
+      if ("error" in result) {
+        showToast(result.error ?? "No se pudo aprobar al empleado", "error");
+        return;
+      }
+      showToast(
+        result.completed
+          ? `${detail.employee.name} aprobado. La semana quedó completamente aprobada.`
+          : `${detail.employee.name} aprobado`,
+        "success",
+      );
+      setRefreshKey((key) => key + 1);
+      onDataChanged();
+    } catch (actionError) {
+      showToast(actionError instanceof Error ? actionError.message : "No se pudo aprobar al empleado", "error");
+    } finally {
+      setApproving(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -761,6 +775,32 @@ function EmployeeDetailModal({
                 )}
               </Card>
             </div>
+
+            {detail.period.status === "REVISION" && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant bg-surface-container p-3">
+                <div>
+                  <p className="text-sm font-bold text-on-surface">
+                    {detail.approval.status === "APROBADA" ? "Nómina individual aprobada" : "Aprobación individual pendiente"}
+                  </p>
+                  <p className="text-xs text-on-surface-variant">
+                    {detail.approval.status === "APROBADA"
+                      ? `Aprobada por ${detail.approval.approvedByName ?? "—"}${detail.approval.approvedAt ? ` · ${formatDateTime(detail.approval.approvedAt)}` : ""}`
+                      : "Revisa las horas y el pago de este empleado antes de aprobarlo."}
+                  </p>
+                </div>
+                {detail.approval.status === "REVISION" && (
+                  <button
+                    type="button"
+                    onClick={approveEmployee}
+                    disabled={approving}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:opacity-50"
+                  >
+                    <CheckIcon className="h-3.5 w-3.5" />
+                    {approving ? "Aprobando..." : `Aprobar solo a ${detail.employee.name}`}
+                  </button>
+                )}
+              </div>
+            )}
 
             <div className="mt-4 space-y-2">
               {detail.days.map((day) => (

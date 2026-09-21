@@ -2,7 +2,13 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { parseDateOnly, addDaysToDateOnly, formatDateOnly } from "@/lib/dateOnly";
+import {
+  parseDateOnly,
+  addDaysToDateOnly,
+  businessDayStart,
+  formatBusinessDateOnly,
+  formatDateOnly,
+} from "@/lib/dateOnly";
 import { formatCivilDate } from "@/lib/dateTime";
 import { withRlsContext } from "@/lib/rls";
 
@@ -180,6 +186,8 @@ export async function getPayrollAnalytics(
 
   const start = parseDateOnly(from);
   const end = parseDateOnly(addDaysToDateOnly(to, 1));
+  const instantStart = businessDayStart(from);
+  const instantEnd = businessDayStart(addDaysToDateOnly(to, 1));
 
   if (!(start < end)) {
     return { error: "El rango de fechas no es válido." };
@@ -190,7 +198,7 @@ export async function getPayrollAnalytics(
   const [entries, openEntries, scheduled, sales, branchList, overtime] = await Promise.all([
     prisma.timeClockEntry.findMany({
       where: {
-        clockIn: { gte: start, lt: end },
+        clockIn: { gte: instantStart, lt: instantEnd },
         clockOut: { not: null },
       },
       select: {
@@ -204,7 +212,7 @@ export async function getPayrollAnalytics(
     }),
 
     prisma.timeClockEntry.count({
-      where: { clockIn: { gte: start, lt: end }, clockOut: null },
+      where: { clockIn: { gte: instantStart, lt: instantEnd }, clockOut: null },
     }),
 
     // DESCANSO (día libre) no tiene sucursal ni horas: no cuenta como
@@ -223,7 +231,7 @@ export async function getPayrollAnalytics(
 
     withRlsContext(currentUser, (tx) => tx.posSale.findMany({
       where: {
-        createdAt: { gte: start, lt: end },
+        createdAt: { gte: instantStart, lt: instantEnd },
         status: "COMPLETADA",
       },
       select: { total: true, createdAt: true, branchId: true },
@@ -300,7 +308,7 @@ export async function getPayrollAnalytics(
   }
 
   function dayOf(date: Date) {
-    const key = formatDateOnly(date);
+    const key = formatBusinessDateOnly(date);
     const existing = dailyAcc.get(key);
     if (existing) return existing;
 
@@ -371,7 +379,7 @@ export async function getPayrollAnalytics(
    */
   const workedKeys = new Set(
     entries.map(
-      (e) => `${e.userId}-${e.branchId}-${formatDateOnly(e.clockIn)}`,
+      (e) => `${e.userId}-${e.branchId}-${formatBusinessDateOnly(e.clockIn)}`,
     ),
   );
 

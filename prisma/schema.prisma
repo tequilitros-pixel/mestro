@@ -109,6 +109,7 @@ model User {
   payrollPeriodsApproved  PayrollPeriod[] @relation("PayrollPeriodApprovedBy")
   payrollPeriodsPaid      PayrollPeriod[] @relation("PayrollPeriodPaidBy")
   payrollEntries          PayrollEntry[]  @relation("PayrollEntryOwner")
+  payrollEntriesApproved  PayrollEntry[]  @relation("PayrollEntryApprovedBy")
 
   payrollIncidentJustifications   PayrollIncidentJustification[] @relation("PayrollIncidentJustificationOwner")
   payrollIncidentJustificationsBy PayrollIncidentJustification[] @relation("PayrollIncidentJustificationBy")
@@ -3135,6 +3136,12 @@ enum PayrollPeriodStatus {
   PAGADA
 }
 
+enum PayrollEntryStatus {
+  REVISION
+  APROBADA
+  PAGADA
+}
+
 /// Snapshot congelado del pago de un empleado dentro de un periodo ya
 /// enviado a revisión. `hoursByDay` y `daysSnapshot` guardan la misma
 /// forma que devuelven en vivo `getPayrollWeekTable` /
@@ -3144,6 +3151,10 @@ model PayrollEntry {
   id       String @id @default(cuid())
   periodId String
   userId   String
+
+  status       PayrollEntryStatus @default(REVISION)
+  approvedById String?
+  approvedAt   DateTime?
 
   hourlyRate       Decimal? @db.Decimal(10, 2)
   regularHours     Decimal  @db.Decimal(10, 2)
@@ -3160,11 +3171,13 @@ model PayrollEntry {
 
   createdAt DateTime @default(now())
 
-  period PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  user   User          @relation("PayrollEntryOwner", fields: [userId], references: [id])
+  period     PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  user       User          @relation("PayrollEntryOwner", fields: [userId], references: [id])
+  approvedBy User?         @relation("PayrollEntryApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@unique([periodId, userId])
   @@index([userId])
+  @@index([periodId, status])
 }
 
 /// Justificación de una incidencia del expediente (llegada tarde,
