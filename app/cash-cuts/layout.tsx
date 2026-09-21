@@ -38,7 +38,12 @@ export default async function ModuleLayout({
     await requireModuleAccess(moduleKey);
   }
 
-  const scope = await getCashCutScope();
+  // La ruta ya validó su permiso exacto arriba. Reutilizamos esa misma llave
+  // para no exigir además el permiso padre `/cash-cuts` a quien solo opera
+  // `/cash-cuts/daily`.
+  const scope = await getCashCutScope(
+    moduleKey ? [moduleKey] : ["/cash-cuts"],
+  );
 
   // Rol sin acceso al modulo (OPERATOR de planta).
   if (!scope) notFound();

@@ -85,10 +85,18 @@ export function cashCutScopeWhere(scope: CashCutScope): Prisma.CashCutWhereInput
 
   if (scope.user.role === "GERENTE") {
     const weekStart = mondayOfWeek(todayDateOnly());
-    where.date = {
+    const currentWeek = {
       gte: businessDayStart(weekStart),
       lt: businessDayStart(addDaysToDateOnly(weekStart, 7)),
     };
+
+    // El historial del gerente sigue limitado a la semana actual. La única
+    // excepción es su propio corte todavía abierto: debe poder terminarlo
+    // aunque el turno haya cruzado del domingo al lunes.
+    where.OR = [
+      { date: currentWeek },
+      { status: "ABIERTO", responsibleId: scope.user.id },
+    ];
   }
 
   return where;
