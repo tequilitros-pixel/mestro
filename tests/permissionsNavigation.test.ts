@@ -16,6 +16,7 @@ import {
   isSubmenuItemVisible,
   type SubMenuItem,
 } from "../components/layout/navigation";
+import nextConfig from "../next.config";
 
 const configurableKeys = PERMISSION_GROUPS.flatMap((group) =>
   group.modules.map((module) => module.key),
@@ -27,14 +28,17 @@ function leaves(items: SubMenuItem[]): SubMenuItem[] {
 
 const allLeaves = Object.values(SUBMENUS).flatMap(leaves);
 
-test("Punto de Venta separa vender y transacciones dentro de POSpress", () => {
+test("Punto de Venta separa vender, transacciones y ventas resumen", () => {
   const main = MAIN_MODULES.find((module) => module.module === "pos");
   const sale = SUBMENUS.pos.find((item) => item.label === "POSpress");
   const transactions = SUBMENUS.pos.find((item) => item.label === "Transacciones");
+  const summary = SUBMENUS.pos.find((item) => item.label === "Ventas resumen");
 
   assert.equal(main?.href, "/pospress");
   assert.equal(sale?.permissionKey, "/pos");
   assert.equal(transactions?.permissionKey, "/pos/sales");
+  assert.equal(summary?.href, "/pos/sales");
+  assert.equal(summary?.permissionKey, "/pos/sales");
   assert.equal(getSubmenuItemDestination("GERENTE", ["/pos"], sale!), "/pospress");
   assert.equal(getMainModuleDestination("GERENTE", ["/pos"], main!), "/pospress");
   assert.equal(
@@ -42,7 +46,26 @@ test("Punto de Venta separa vender y transacciones dentro de POSpress", () => {
     "/pospress/transactions",
   );
   assert.equal(getCurrentModule("/pos2"), "pos");
+  assert.equal(getCurrentModule("/pos/sales"), "pos");
   assert.equal(getCurrentModule("/pospress/transactions"), "pos");
+});
+
+test("la ruta de ventas resumen no es interceptada por la entrada de POSpress", async () => {
+  assert.equal(typeof nextConfig.redirects, "function");
+  const redirects = await nextConfig.redirects!();
+
+  assert.ok(
+    redirects.some(
+      (redirect) =>
+        redirect.source === "/pos" && redirect.destination === "/pospress",
+    ),
+    "/pos debe seguir abriendo POSpress",
+  );
+  assert.equal(
+    redirects.some((redirect) => redirect.source === "/pos/:path*"),
+    false,
+    "las pantallas reales bajo /pos deben permanecer accesibles",
+  );
 });
 
 test("cada permiso configurable tiene una pestaña y se resuelve exactamente", () => {
@@ -73,7 +96,7 @@ test("cada pestaña delegable está representada en el catálogo de permisos", (
   }
 });
 
-test("Vender no concede la pestaña de Transacciones", () => {
+test("Vender no concede Transacciones ni Ventas resumen", () => {
   const items = SUBMENUS.pos;
   const visible = (label: string) =>
     isSubmenuItemVisible("GERENTE", ["/pos"], items.find((item) => item.label === label)!);
@@ -81,6 +104,15 @@ test("Vender no concede la pestaña de Transacciones", () => {
   assert.equal(visible("POSpress"), true);
   assert.equal(visible("Mesas"), true);
   assert.equal(visible("Transacciones"), false);
+  assert.equal(visible("Ventas resumen"), false);
+  assert.equal(
+    isSubmenuItemVisible(
+      "GERENTE",
+      ["/pos/sales"],
+      items.find((item) => item.label === "Ventas resumen")!,
+    ),
+    true,
+  );
 });
 
 test("un permiso terciario abre directamente el hijo autorizado", () => {

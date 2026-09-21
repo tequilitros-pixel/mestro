@@ -356,6 +356,13 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       permissionKey: "/pos/sales",
     },
     {
+      href: "/pos/sales",
+      label: "Ventas resumen",
+      icon: ChartLineIcon,
+      iconVariant: "green",
+      permissionKey: "/pos/sales",
+    },
+    {
       href: "/pospress/tables",
       label: "Mesas",
       icon: StoreIcon,

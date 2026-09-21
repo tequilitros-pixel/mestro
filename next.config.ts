@@ -12,11 +12,6 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
-        source: "/pos/:path*",
-        destination: "/pospress",
-        permanent: true,
-      },
-      {
         source: "/pos2/:path*",
         destination: "/pospress",
         permanent: true,

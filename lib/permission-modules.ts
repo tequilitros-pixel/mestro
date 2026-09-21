@@ -112,7 +112,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     group: "Punto de Venta",
     modules: [
       { key: "/pos", label: "Vender" },
-      { key: "/pos/sales", label: "Transacciones" },
+      { key: "/pos/sales", label: "Transacciones y ventas resumen" },
     ],
   },
   {
