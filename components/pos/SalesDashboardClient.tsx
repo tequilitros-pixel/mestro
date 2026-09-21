@@ -12,6 +12,8 @@ import {
   GridIcon,
   WalletIcon,
   SearchIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "@/components/ui/icons";
 import PageTabs from "@/components/ui/PageTabs";
 import { DateRangeCalendar } from "@/components/ui/DateRangeCalendar";
@@ -23,14 +25,15 @@ import {
 } from "./SalesCharts";
 import {
   todayDateOnly,
-  mondayOfWeek,
-  addDaysToDateOnly,
-  firstDayOfMonth,
-  lastSalesDayOfMonth,
   formatBusinessDateOnly,
 } from "@/lib/dateOnly";
 import { formatBusinessDate, formatBusinessTime } from "@/lib/dateTime";
 import { aggregateProductSales } from "@/lib/pos/salesAnalytics";
+import {
+  salesPeriodDateRange,
+  shiftSalesPeriodRange,
+  type SalesPeriod,
+} from "@/lib/pos/salesPeriod";
 
 type SaleItem = { id: string; name: string; quantity: number; lineTotal: number };
 type SalePayment = { method: string; amount: number };
@@ -69,27 +72,12 @@ type AnalyticsSale = {
 
 type BranchOption = { id: string; name: string };
 
-type Period = "day" | "week" | "month" | "custom";
-
-const PERIOD_LABELS: Record<Period, string> = {
+const PERIOD_LABELS: Record<SalesPeriod, string> = {
   day: "Día",
   week: "Semana",
   month: "Mes",
   custom: "Calendario",
 };
-
-/** Rango de fechas (calendario, sin hora) del periodo elegido. */
-function periodDateRange(period: Period): { from: string; to: string } {
-  const today = todayDateOnly();
-  if (period === "week") {
-    const monday = mondayOfWeek(today);
-    return { from: monday, to: addDaysToDateOnly(monday, 6) };
-  }
-  if (period === "month") {
-    return { from: firstDayOfMonth(today), to: lastSalesDayOfMonth(today) };
-  }
-  return { from: today, to: today };
-}
 
 const PAYMENT_LABELS: Record<string, string> = {
   EFECTIVO: "Efectivo",
@@ -147,7 +135,7 @@ export default function SalesDashboardClient({
   const [loading, setLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [analyticsBranchId, setAnalyticsBranchId] = useState("");
-  const [period, setPeriod] = useState<Period>("day");
+  const [period, setPeriod] = useState<SalesPeriod>("day");
   const [analyticsFrom, setAnalyticsFrom] = useState(todayDateOnly());
   const [analyticsTo, setAnalyticsTo] = useState(todayDateOnly());
   const [analytics, setAnalytics] = useState<AnalyticsSale[]>(initialAnalytics);
@@ -191,9 +179,20 @@ export default function SalesDashboardClient({
     }
   }
 
-  function handlePeriodChange(nextPeriod: Exclude<Period, "custom">) {
-    const range = periodDateRange(nextPeriod);
+  function handlePeriodChange(nextPeriod: Exclude<SalesPeriod, "custom">) {
+    const range = salesPeriodDateRange(nextPeriod);
     setPeriod(nextPeriod);
+    setAnalyticsFrom(range.from);
+    setAnalyticsTo(range.to);
+    void loadAnalytics(range.from, range.to);
+  }
+
+  function handlePeriodStep(direction: -1 | 1) {
+    const range = shiftSalesPeriodRange(
+      period,
+      { from: analyticsFrom, to: analyticsTo },
+      direction,
+    );
     setAnalyticsFrom(range.from);
     setAnalyticsTo(range.to);
     void loadAnalytics(range.from, range.to);
@@ -391,7 +390,9 @@ export default function SalesDashboardClient({
 
   const periodRangeLabel =
     period === "day"
-      ? "Hoy"
+      ? periodFrom === todayDateOnly()
+        ? "Hoy"
+        : formatDayLabel(periodFrom)
       : period === "week"
         ? `Del ${formatDayLabel(periodFrom)} al ${formatDayLabel(periodTo)} (lun-dom)`
         : period === "month"
@@ -401,7 +402,7 @@ export default function SalesDashboardClient({
   const analyticsScopeSelector = (
     <div className="flex flex-wrap items-center gap-3">
       <div className="inline-flex rounded-xl border border-outline-variant bg-surface-container p-1">
-        {(["day", "week", "month"] as Array<Exclude<Period, "custom">>).map((p) => (
+        {(["day", "week", "month"] as Array<Exclude<SalesPeriod, "custom">>).map((p) => (
           <button
             key={p}
             type="button"
@@ -416,6 +417,29 @@ export default function SalesDashboardClient({
             {PERIOD_LABELS[p]}
           </button>
         ))}
+      </div>
+
+      <div className="inline-flex rounded-xl border border-outline-variant bg-surface-container p-1">
+        <button
+          type="button"
+          onClick={() => handlePeriodStep(-1)}
+          disabled={analyticsLoading}
+          aria-label={`${PERIOD_LABELS[period]} anterior`}
+          className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-60"
+        >
+          <ChevronLeftIcon className="h-4 w-4" />
+          Anterior
+        </button>
+        <button
+          type="button"
+          onClick={() => handlePeriodStep(1)}
+          disabled={analyticsLoading}
+          aria-label={`${PERIOD_LABELS[period]} siguiente`}
+          className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-60"
+        >
+          Siguiente
+          <ChevronRightIcon className="h-4 w-4" />
+        </button>
       </div>
 
       <DateRangeCalendar
