@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
 
 /**
  * Catálogo completo para la pantalla de cobro: categorías activas
@@ -9,7 +9,7 @@ import { getCurrentUser } from "@/lib/auth";
  * no para pintar la cuadrícula de venta).
  */
 export async function GET() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/pos"]);
 
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });

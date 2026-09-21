@@ -44,7 +44,7 @@ export async function POST(
 
   const { id: cashCutId } = await params;
 
-  const scope = await getCashCutScope();
+  const scope = await getCashCutScope(["/cash-cuts/daily"]);
   if (!scope) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 import {
   CookingEventType,
   CookingStatus,
@@ -142,6 +142,8 @@ export default async function CookingDetailPage({
   ) {
     "use server";
 
+    await requireModuleActionAccess("/cooking");
+
     const currentCooking =
       await prisma.cooking.findUnique({
         where: { id },
@@ -243,6 +245,8 @@ export default async function CookingDetailPage({
   ) {
     "use server";
 
+    await requireModuleActionAccess("/cooking");
+
     const currentCooking =
       await prisma.cooking.findUnique({
         where: { id },
@@ -318,11 +322,7 @@ export default async function CookingDetailPage({
   ) {
     "use server";
 
-    const user = await getCurrentUser();
-
-    if (!user) {
-      redirect("/login");
-    }
+    const user = await requireModuleActionAccess("/cooking");
 
     const finalAgaveKg = parseRequiredNumber(
       formData.get("finalAgaveKg")

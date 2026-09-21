@@ -6,7 +6,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string; evidenceId: string }> },
 ) {
-  const scope = await getCashCutScope();
+  const scope = await getCashCutScope(["/cash-cuts/daily"]);
   if (!scope) return Response.json({ error: "No autorizado" }, { status: 401 });
 
   const { id, evidenceId } = await params;

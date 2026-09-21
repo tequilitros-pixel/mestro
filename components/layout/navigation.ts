@@ -2,6 +2,8 @@ import type { ComponentType } from "react";
 import type { AppIconVariant } from "@/components/ui/AppIcon";
 import {
   getModuleKeyForPath,
+  isConfigurablePermissionKey,
+  isInventoryManagerReadPath,
   isAdminOnlyPath,
   isAlwaysAvailablePath,
 } from "@/lib/permission-modules";
@@ -43,7 +45,6 @@ import {
   ListChecksIcon,
   ArrowsRangeIcon,
   CashRegisterIcon,
-  GridIcon,
 } from "@/components/ui/icons";
 
 export type AppModule =
@@ -345,85 +346,21 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "POSpress",
       icon: CashRegisterIcon,
       iconVariant: "cyan",
+      permissionKey: "/pos",
     },
     {
       href: "/pospress/transactions",
       label: "Transacciones",
       icon: ReceiptIcon,
       iconVariant: "green",
+      permissionKey: "/pos/sales",
     },
     {
       href: "/pospress/tables",
       label: "Mesas",
       icon: StoreIcon,
       iconVariant: "purple",
-    },
-    // Keep the old permission keys represented for existing grants. These
-    // aliases are never rendered; next.config.ts sends them to POSpress.
-    {
-      href: "/pos",
-      label: "Vender",
-      icon: CashRegisterIcon,
-      iconVariant: "cyan",
-      legacyAlias: true,
-    },
-    {
-      href: "/pos/sales",
-      label: "Ventas",
-      icon: ChartLineIcon,
-      iconVariant: "green",
-      legacyAlias: true,
-    },
-    {
-      href: "/pos/discounts/courtesies",
-      label: "Descuentos",
-      icon: TagIcon,
-      iconVariant: "blue",
-      legacyAlias: true,
-      children: [
-        {
-          href: "/pos/discounts/rules",
-          label: "Administrar",
-          icon: GearIcon,
-          iconVariant: "blue",
-          legacyAlias: true,
-        },
-        {
-          href: "/pos/discounts/courtesies",
-          label: "Cortesías",
-          icon: PartyIcon,
-          iconVariant: "purple",
-          legacyAlias: true,
-        },
-        {
-          href: "/pos/discounts/employees",
-          label: "Trabajadores",
-          icon: UsersIcon,
-          iconVariant: "blue",
-          legacyAlias: true,
-        },
-        {
-          href: "/pos/discounts/products",
-          label: "Productos",
-          icon: PackageIcon,
-          iconVariant: "orange",
-          legacyAlias: true,
-        },
-      ],
-    },
-    {
-      href: "/pos/categories",
-      label: "Categorías",
-      icon: GridIcon,
-      iconVariant: "purple",
-      legacyAlias: true,
-    },
-    {
-      href: "/pos/products",
-      label: "Productos",
-      icon: PackageIcon,
-      iconVariant: "orange",
-      legacyAlias: true,
+      permissionKey: "/pos",
     },
   ],
 
@@ -597,7 +534,11 @@ export function getCurrentModule(pathname: string): AppModule {
     return "cash-cuts";
   }
 
-  if (matchesRoute(pathname, "/pospress")) {
+  if (
+    matchesRoute(pathname, "/pospress") ||
+    matchesRoute(pathname, "/pos2") ||
+    matchesRoute(pathname, "/pos")
+  ) {
     return "pos";
   }
 
@@ -628,6 +569,7 @@ export function getCurrentModule(pathname: string): AppModule {
     "/plant",
     "/lots",
     "/cooking",
+    "/boiler",
     "/milling",
     "/fermentation",
     "/distillation",
@@ -677,7 +619,8 @@ export function isSubmenuItemVisible(
   // Compatibilidad con operadores antiguos: si todavía no tienen permisos
   // configurados conservan su acceso fijo de producción. En cuanto el admin
   // les asigna permisos, se respeta exactamente esa configuración.
-  if (role === "OPERATOR" && moduleKeys.length === 0) {
+  const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);
+  if (role === "OPERATOR" && !hasConfiguredPermissions) {
     return item.href === "/" || item.operatorAllowed === true;
   }
 
@@ -694,6 +637,7 @@ export function isSubmenuItemVisible(
 
   if (isAlwaysAvailablePath(item.href)) return true;
   if (isAdminOnlyPath(item.href)) return false;
+  if (role === "GERENTE" && isInventoryManagerReadPath(item.href)) return true;
 
   const permissionHref = item.permissionKey ?? item.href;
   const requiredKey = item.permissionKey
@@ -712,7 +656,8 @@ export function isMainModuleVisible(
 ): boolean {
   if (role === "ADMIN") return true;
 
-  if (role === "OPERATOR" && moduleKeys.length === 0) {
+  const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);
+  if (role === "OPERATOR" && !hasConfiguredPermissions) {
     // El operador conserva su acceso fijo de siempre: solo Producción.
     return module.module === "production";
   }

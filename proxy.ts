@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isPublicPath } from "@/lib/publicPaths";
 
 /*
  * El proxy NO debe consultar Prisma/Postgres. Aunque Next 16 documenta
@@ -12,19 +13,13 @@ import type { NextRequest } from "next/server";
  * Server Component normal y puede usar Prisma sin problema.
  */
 
-const PUBLIC_PATHS = ["/login", "/q", "/forgot-password", "/reset-password"];
-
-function matchesPath(pathname: string, path: string) {
-  return pathname === path || pathname.startsWith(`${path}/`);
-}
-
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname);
 
-  const isPublicPage = PUBLIC_PATHS.some((path) => matchesPath(pathname, path));
+  const isPublicPage = isPublicPath(pathname);
 
   if (isPublicPage) {
     return NextResponse.next({ request: { headers: requestHeaders } });

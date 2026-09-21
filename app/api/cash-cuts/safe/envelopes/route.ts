@@ -2,7 +2,7 @@
 // Destino: app/api/cash-cuts/safe/envelopes/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { getBranchSafeSummary, listEnvelopesForBranch } from "@/lib/cash-cuts/safeEnvelopes";
 import { currentBusinessWeekRange } from "@/lib/cash-cuts/access";
 
@@ -13,7 +13,7 @@ import { currentBusinessWeekRange } from "@/lib/cash-cuts/access";
  * detalle al seleccionar una tarjeta).
  */
 export async function GET(req: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/cash-cuts/safe"]);
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

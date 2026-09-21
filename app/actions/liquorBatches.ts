@@ -3,18 +3,19 @@
 import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAnyModuleActionAccess } from "@/lib/auth";
 import { scaleRecipe } from "@/lib/liquors/RecipeEngine";
 
 const MAX_RETRIES = 3;
 const TIME_ZONE = "America/Mexico_City";
 
 export async function createLiquorBatchAction(formData: FormData) {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const user = await requireAnyModuleActionAccess([
+    "/liquors",
+    "/liquors/batches",
+    "/liquors/production",
+    "/lots",
+  ]);
 
   const productId = String(formData.get("productId") ?? "").trim();
   const recipeId = String(formData.get("recipeId") ?? "").trim();

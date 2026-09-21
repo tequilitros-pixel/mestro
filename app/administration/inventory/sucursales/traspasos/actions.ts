@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { getAccessibleBranchIds, requireModuleActionAccess } from "@/lib/auth";
 import { isBranchAllowed } from "@/lib/branches/access";
 
 export type ActionResult =
@@ -11,14 +11,10 @@ export type ActionResult =
 
 export async function createTransferAction(formData: FormData): Promise<ActionResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user) return { success: false, error: "Tu sesión terminó. Vuelve a iniciar sesión." };
-    if (user.role !== "ADMIN") {
-      const permission = await prisma.modulePermission.findUnique({
-        where: { userId_moduleKey: { userId: user.id, moduleKey: "/administration/inventory/sucursales/traspasos" } },
-        select: { id: true },
-      });
-      if (!permission) return { success: false, error: "No tienes permiso para realizar traspasos." };
+    try {
+      await requireModuleActionAccess("/administration/inventory/sucursales/traspasos");
+    } catch {
+      return { success: false, error: "No tienes permiso para realizar traspasos." };
     }
 
     const fromBranchId = formData.get("fromBranchId")?.toString() ?? "";

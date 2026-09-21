@@ -2,14 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 
 export async function pauseLiquorBatchAction(formData: FormData) {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const user = await requireModuleActionAccess("/liquors/batches");
 
   const batchId = String(formData.get("batchId") ?? "").trim();
   const reason = String(formData.get("reason") ?? "").trim();
@@ -79,11 +75,7 @@ export async function pauseLiquorBatchAction(formData: FormData) {
 }
 
 export async function resumeLiquorBatchAction(formData: FormData) {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const user = await requireModuleActionAccess("/liquors/batches");
 
   const batchId = String(formData.get("batchId") ?? "").trim();
 

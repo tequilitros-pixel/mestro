@@ -3,12 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { ServiceEventStatus } from "@prisma/client";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 import { parseBusinessDateTimeLocal } from "@/lib/dateTime";
 
 export type ActionResult =
   | { success: true; message: string; id?: string }
   | { success: false; error: string };
+
+async function getEventActor() {
+  try {
+    return await requireModuleActionAccess("/administration/inventory/events");
+  } catch {
+    return null;
+  }
+}
 
 function readOptionalNumber(value: FormDataEntryValue | null) {
   if (value === null || value.toString().trim() === "") return null;
@@ -41,6 +49,7 @@ export async function createServiceEventAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     const clientName = formData.get("clientName")?.toString().trim() ?? "";
     const clientPhone = formData.get("clientPhone")?.toString().trim() || null;
     const location = formData.get("location")?.toString().trim() ?? "";
@@ -169,6 +178,7 @@ export async function updateSentQuantityAction(
   sentQuantity: number,
 ): Promise<ActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     if (!Number.isFinite(sentQuantity) || sentQuantity < 0) {
       return { success: false, error: "La cantidad no puede ser negativa." };
     }
@@ -197,6 +207,7 @@ export async function updateReturnedQuantityAction(
   returnedOpenQuantity = 0,
 ): Promise<ActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     if (!Number.isFinite(returnedQuantity) || !Number.isFinite(damagedQuantity) || !Number.isFinite(returnedOpenQuantity) || returnedQuantity < 0 || damagedQuantity < 0 || returnedOpenQuantity < 0) {
       return { success: false, error: "Las cantidades no pueden ser negativas." };
     }
@@ -257,12 +268,12 @@ export async function updateReturnedQuantityAction(
 }
 
 export async function confirmEventCheckoutAction(eventId: string): Promise<ActionResult> {
-  const user = await getCurrentUser(); if (!user) return { success: false, error: "Tu sesión terminó." };
+  const user = await getEventActor(); if (!user) return { success: false, error: "No tienes permiso para administrar eventos." };
   try { await prisma.$transaction(async (tx) => { const event = await tx.serviceEvent.findUnique({ where: { id: eventId }, include: { items: true } }); if (!event) throw new Error("Evento no encontrado."); if (event.checkoutConfirmedAt) return; if (event.items.some((item) => !item.checkedOut)) throw new Error("Revisa todos los productos antes de confirmar."); await tx.serviceEvent.update({ where: { id: eventId }, data: { checkoutConfirmedAt: new Date(), checkoutConfirmedById: user.id, status: "READY" } }); }); revalidatePath(`/administration/inventory/events/${eventId}`); return { success: true, message: "Salida confirmada." }; } catch (error) { return { success: false, error: error instanceof Error ? error.message : "No fue posible confirmar la salida." }; }
 }
 
 export async function confirmEventReturnAction(eventId: string): Promise<ActionResult> {
-  const user = await getCurrentUser(); if (!user) return { success: false, error: "Tu sesión terminó." };
+  const user = await getEventActor(); if (!user) return { success: false, error: "No tienes permiso para administrar eventos." };
   try { await prisma.$transaction(async (tx) => { const event = await tx.serviceEvent.findUnique({ where: { id: eventId }, include: { items: true } }); if (!event) throw new Error("Evento no encontrado."); if (event.returnConfirmedAt) return; if (!event.checkoutConfirmedAt || event.items.some((item) => !item.checkedIn)) throw new Error("Registra y revisa todos los productos antes de confirmar."); await tx.serviceEvent.update({ where: { id: eventId }, data: { returnConfirmedAt: new Date(), returnConfirmedById: user.id, status: "COMPLETED" } }); }); revalidatePath(`/administration/inventory/events/${eventId}`); return { success: true, message: "Regreso confirmado." }; } catch (error) { return { success: false, error: error instanceof Error ? error.message : "No fue posible confirmar el regreso." }; }
 }
 
@@ -270,6 +281,7 @@ export async function addCustomEventItemAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     const eventId = formData.get("eventId")?.toString() ?? "";
     const productId = formData.get("productId")?.toString() ?? "";
     const plannedQuantity = readOptionalNumber(formData.get("plannedQuantity"));
@@ -335,6 +347,7 @@ export async function removeEventItemAction(
   eventId: string,
 ): Promise<ActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     await prisma.serviceEventItem.delete({ where: { id: itemId } });
 
     revalidatePath(`/administration/inventory/events/${eventId}`);
@@ -351,6 +364,7 @@ export async function updateEventStatusAction(
   status: ServiceEventStatus,
 ): Promise<ActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     await prisma.serviceEvent.update({
       where: { id: eventId },
       data: { status },
@@ -380,6 +394,7 @@ export async function createRecountAction(
   formData: FormData,
 ): Promise<RecountActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     const eventId = formData.get("eventId")?.toString() ?? "";
 
     if (!eventId) {
@@ -464,6 +479,7 @@ export async function markRecountFulfilledAction(
   eventId: string,
 ): Promise<ActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     await prisma.eventRecount.update({
       where: { id: recountId },
       data: { status: "SURTIDO", fulfilledAt: new Date() },

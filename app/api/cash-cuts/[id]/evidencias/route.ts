@@ -22,7 +22,7 @@ async function checkAccessToCut(userId: string, role: string, cashCutId: string)
    * Los argumentos solo se usan para comprobar que coinciden con la
    * sesion real; si no, se rechaza.
    */
-  const scope = await getCashCutScope();
+  const scope = await getCashCutScope(["/cash-cuts/daily"]);
   if (!scope || scope.user.id !== userId || scope.user.role !== role) {
     return { ok: false, status: 401 as const, error: "No autorizado", cashCut: null };
   }

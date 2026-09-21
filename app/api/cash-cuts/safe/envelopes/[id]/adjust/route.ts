@@ -1,7 +1,7 @@
 // PENDIENTE DE SCHEMA -- ver lib/cash-cuts/safeEnvelopes.ts
 // Destino: app/api/cash-cuts/safe/envelopes/[id]/adjust/route.ts
 import { NextResponse } from "next/server";
-import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAdjust, adjustEnvelope } from "@/lib/cash-cuts/safeEnvelopes";
 import { isCurrentManagerBusinessWeek } from "@/lib/cash-cuts/access";
@@ -11,7 +11,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/cash-cuts/safe"]);
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

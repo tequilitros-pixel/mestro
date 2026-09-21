@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { getAccessibleBranchIds } from "@/lib/auth";
 import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
 import { isBranchAllowed } from "@/lib/branches/access";
 import { denominationTotal, validDenominationRows } from "@/lib/cash-cuts/denominations";
@@ -11,7 +11,7 @@ const CASH_CUT_STATUSES = ["ABIERTO", "CERRADO", "AUDITADO"] as const;
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET(request: Request) {
-  const scope = await getCashCutScope();
+  const scope = await getCashCutScope(["/cash-cuts", "/cash-cuts/daily"]);
 
   if (!scope) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -60,7 +60,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
+  const scope = await getCashCutScope(["/cash-cuts", "/cash-cuts/daily"]);
+  const user = scope?.user;
 
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -107,7 +108,7 @@ export async function POST(request: Request) {
      * a un ENCARGADO confirmar la existencia de un corte cerrado o ajeno
      * de su misma sucursal, y recibir sus datos.
      */
-    const scopeForReuse = await getCashCutScope();
+    const scopeForReuse = await getCashCutScope(["/cash-cuts", "/cash-cuts/daily"]);
     const existing = scopeForReuse
       ? await prisma.cashCut.findFirst({
           where: withCashCutScope(scopeForReuse, { id: clientOperationId }),

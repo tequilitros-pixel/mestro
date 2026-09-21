@@ -27,17 +27,22 @@ function leaves(items: SubMenuItem[]): SubMenuItem[] {
 
 const allLeaves = Object.values(SUBMENUS).flatMap(leaves);
 
-test("Punto de Venta principal abre POS2 y conserva el POS legacy como fallback", () => {
+test("Punto de Venta separa vender y transacciones dentro de POSpress", () => {
   const main = MAIN_MODULES.find((module) => module.module === "pos");
-  const legacySale = SUBMENUS.pos.find((item) => item.label === "Vender");
+  const sale = SUBMENUS.pos.find((item) => item.label === "POSpress");
+  const transactions = SUBMENUS.pos.find((item) => item.label === "Transacciones");
 
-  assert.equal(main?.href, "/pos2");
-  assert.equal(legacySale?.href, "/pos2");
-  assert.equal(legacySale?.permissionKey, "/pos");
-  assert.equal(getSubmenuItemDestination("GERENTE", ["/pos"], legacySale!), "/pos2");
-  assert.equal(getMainModuleDestination("GERENTE", ["/pos"], main!), "/pos2");
-  assert.equal(getMainModuleDestination("GERENTE", ["/pos/sales"], main!), "/pos/sales");
+  assert.equal(main?.href, "/pospress");
+  assert.equal(sale?.permissionKey, "/pos");
+  assert.equal(transactions?.permissionKey, "/pos/sales");
+  assert.equal(getSubmenuItemDestination("GERENTE", ["/pos"], sale!), "/pospress");
+  assert.equal(getMainModuleDestination("GERENTE", ["/pos"], main!), "/pospress");
+  assert.equal(
+    getMainModuleDestination("GERENTE", ["/pos/sales"], main!),
+    "/pospress/transactions",
+  );
   assert.equal(getCurrentModule("/pos2"), "pos");
+  assert.equal(getCurrentModule("/pospress/transactions"), "pos");
 });
 
 test("cada permiso configurable tiene una pestaña y se resuelve exactamente", () => {
@@ -68,40 +73,26 @@ test("cada pestaña delegable está representada en el catálogo de permisos", (
   }
 });
 
-test("Vender no concede Ventas ni los reportes de Descuentos", () => {
+test("Vender no concede la pestaña de Transacciones", () => {
   const items = SUBMENUS.pos;
   const visible = (label: string) =>
     isSubmenuItemVisible("GERENTE", ["/pos"], items.find((item) => item.label === label)!);
 
-  assert.equal(visible("Vender"), true);
-  assert.equal(visible("Ventas"), false);
-  assert.equal(visible("Descuentos"), false);
-});
-
-test("cada reporte terciario de Descuentos requiere su propio permiso", () => {
-  const parent = SUBMENUS.pos.find((item) => item.label === "Descuentos")!;
-  const keys = ["/pos/discounts/employees"];
-
-  assert.equal(isSubmenuItemVisible("GERENTE", keys, parent), true);
-  assert.equal(getSubmenuItemDestination("GERENTE", keys, parent), keys[0]);
-  assert.deepEqual(
-    parent.children!
-      .filter((item) => isSubmenuItemVisible("GERENTE", keys, item))
-      .map((item) => item.href),
-    keys,
-  );
+  assert.equal(visible("POSpress"), true);
+  assert.equal(visible("Mesas"), true);
+  assert.equal(visible("Transacciones"), false);
 });
 
 test("un permiso terciario abre directamente el hijo autorizado", () => {
   const parent = SUBMENUS.administration.find(
-    (item) => item.label === "Inventario de sucursales",
+    (item) => item.label === "Sucursales",
   )!;
   const keys = ["/administration/inventory/sucursales/stock"];
 
-  assert.equal(isSubmenuItemVisible("GERENTE", keys, parent), true);
-  assert.equal(getSubmenuItemDestination("GERENTE", keys, parent), keys[0]);
+  assert.equal(isSubmenuItemVisible("ENCARGADO", keys, parent), true);
+  assert.equal(getSubmenuItemDestination("ENCARGADO", keys, parent), keys[0]);
   assert.equal(
-    isSubmenuItemVisible("GERENTE", keys, parent.children![0]),
+    isSubmenuItemVisible("ENCARGADO", keys, parent.children![0]),
     false,
     "Stock no debe conceder también el Resumen",
   );
@@ -118,13 +109,30 @@ test("Cortes activa su módulo principal sin conceder las demás pantallas", () 
   assert.deepEqual(visible, ["Cortes"]);
 });
 
-test("Control de Cortes abre su dashboard y no mezcla pestañas de Descuentos", () => {
+test("Control de Cortes abre su dashboard", () => {
   const control = SUBMENUS["cash-cuts"].find((item) => item.label === "Control")!;
-  const discounts = SUBMENUS.pos.find((item) => item.label === "Descuentos")!;
 
   assert.equal(getSubmenuItemDestination("ADMIN", [], control), "/cash-cuts/dashboard");
   assert.equal(control.children!.some((item) => item.href.startsWith("/pos/")), false);
-  assert.equal(discounts.children!.some((item) => item.href === "/pos/discounts/rules"), true);
+});
+
+test("Caldera pertenece al módulo de Producción", () => {
+  assert.equal(getCurrentModule("/boiler"), "production");
+  assert.equal(getModuleKeyForPath("/boiler/sessions/active"), "/boiler");
+});
+
+test("permisos obsoletos no desactivan la compatibilidad del operador", () => {
+  const boiler = SUBMENUS.production.find((item) => item.href === "/boiler")!;
+  assert.equal(isSubmenuItemVisible("OPERATOR", ["/permiso-antiguo"], boiler), true);
+});
+
+test("Gerente ve las superficies de inventario de solo lectura", () => {
+  const products = SUBMENUS.administration.find(
+    (item) => item.href === "/administration/inventory/products",
+  )!;
+  const events = SUBMENUS.administration.find((item) => item.label === "Eventos")!;
+  assert.equal(isSubmenuItemVisible("GERENTE", [], products), true);
+  assert.equal(isSubmenuItemVisible("GERENTE", [], events), false);
 });
 
 test("Materia prima cuenta con permiso independiente", () => {

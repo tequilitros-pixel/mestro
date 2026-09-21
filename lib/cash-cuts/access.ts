@@ -1,7 +1,10 @@
 import "server-only";
 
 import type { Prisma, UserRole } from "@prisma/client";
-import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import {
+  getAccessibleBranchIds,
+  getCurrentUserWithAnyModuleAccess,
+} from "@/lib/auth";
 import { addDaysToDateOnly, businessDayStart, mondayOfWeek, todayDateOnly } from "@/lib/dateOnly";
 
 /*
@@ -47,8 +50,10 @@ export type CashCutScope = {
  * Nunca desde parametros del navegador (userId, branchId, role).
  * Devuelve null si no hay sesion o si el rol no toca este modulo.
  */
-export async function getCashCutScope(): Promise<CashCutScope | null> {
-  const user = await getCurrentUser();
+export async function getCashCutScope(
+  moduleKeys: readonly string[] = ["/cash-cuts"],
+): Promise<CashCutScope | null> {
+  const user = await getCurrentUserWithAnyModuleAccess(moduleKeys);
   if (!user) return null;
   if (!ROLES_CON_ACCESO.includes(user.role)) return null;
 

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getCurrentCommandActor } from "@/lib/pos2/currentActor";
+import { getCurrentCommandActorFor } from "@/lib/pos2/currentActor";
 import { pos2ErrorResponse } from "@/lib/pos2/http";
 import { transferCash } from "@/lib/cash-cuts/safeEnvelopes";
 
 export async function POST(request: Request) {
   try {
-    const actor = await getCurrentCommandActor();
+    const actor = await getCurrentCommandActorFor(["/cash-cuts/safe"]);
     const body = await request.json() as Record<string, unknown>;
     const endpoint = (value: unknown) => {
       const item = value as Record<string, unknown>;

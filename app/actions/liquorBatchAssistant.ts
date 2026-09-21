@@ -1,20 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { RawMaterialMovementType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
-import { applyMovement } from "./rawMaterials";
+import { requireModuleActionAccess } from "@/lib/auth";
+import { applyRawMaterialMovement } from "@/lib/liquors/rawMaterialMovements";
 
 export async function completeLiquorBatchStepAction(
   formData: FormData
 ) {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const user = await requireModuleActionAccess("/liquors/batches");
 
   const batchId = String(formData.get("batchId") ?? "").trim();
   const stepId = String(formData.get("stepId") ?? "").trim();
@@ -188,7 +183,7 @@ export async function completeLiquorBatchStepAction(
     const consumed = actualQuantity ?? step.batchIngredient?.scaledQuantity ?? 0;
 
     if (rawMaterialId && consumed > 0) {
-      await applyMovement(tx, {
+      await applyRawMaterialMovement(tx, {
         rawMaterialId,
         type: RawMaterialMovementType.CONSUMO_RECETA,
         amount: consumed,

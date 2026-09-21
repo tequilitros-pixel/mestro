@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import { EquipmentStatus } from "@prisma/client";
+import { requireModuleActionAccess } from "@/lib/auth";
 
 type Props = {
   params: Promise<{
@@ -21,6 +22,8 @@ export default async function EquipmentPage({ params }: Props) {
 
   async function updateEquipment(formData: FormData) {
     "use server";
+
+    await requireModuleActionAccess("/plant");
 
     const status = formData.get("status") as EquipmentStatus;
     const currentLoad = Number(formData.get("currentLoad"));

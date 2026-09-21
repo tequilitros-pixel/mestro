@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { PaymentMethod, PosBenefitReason, Prisma } from "@prisma/client";
 import { getDiscountLimitsByRole, verifyManagerPin } from "@/lib/pos/discountLimits";
 import { getActiveDiscountRules } from "@/lib/pos/discountRules";
@@ -58,7 +58,7 @@ function validateReason(
 }
 
 export async function GET(request: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/pos", "/pos/sales"]);
 
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/pos"]);
 
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });

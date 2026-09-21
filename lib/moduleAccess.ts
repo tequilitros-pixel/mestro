@@ -27,6 +27,6 @@ export async function canUserAccessModule(
 export async function requireUserModuleAccess(moduleKey: string) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!(await canUserAccessModule(user, moduleKey))) redirect("/cooking");
+  if (!(await canUserAccessModule(user, moduleKey))) redirect("/profile");
   return user;
 }

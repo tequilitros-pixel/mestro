@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { ComponentType } from "react";
 import { prisma } from "@/lib/prisma";
+import { requireModuleActionAccess } from "@/lib/auth";
 import {
   type IconProps,
   PackageIcon,
@@ -32,6 +33,8 @@ export default async function EditLiquorProductPage({ params }: Props) {
 
   async function updateProduct(formData: FormData) {
     "use server";
+
+    await requireModuleActionAccess("/liquors");
 
     const productId = String(formData.get("productId") ?? "");
     const originalSlug = String(formData.get("originalSlug") ?? "");

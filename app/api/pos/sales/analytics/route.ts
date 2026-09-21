@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { addDaysToDateOnly, businessDayStart } from "@/lib/dateOnly";
 import { withRlsContext } from "@/lib/rls";
 
@@ -13,7 +13,7 @@ const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
  * acceso.
  */
 export async function GET(request: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/pos", "/pos/sales"]);
 
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });

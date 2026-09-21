@@ -2,7 +2,7 @@
 
 import { LiquorStepType, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export type LiquorRecipeStepState = {
@@ -23,12 +23,12 @@ export async function saveLiquorRecipeStepAction(
   _previousState: LiquorRecipeStepState,
   formData: FormData
 ): Promise<LiquorRecipeStepState> {
-  const user = await getCurrentUser();
-
-  if (!user) {
+  try {
+    await requireModuleActionAccess("/liquors/recipes");
+  } catch {
     return {
       success: false,
-      error: "Tu sesión terminó. Vuelve a iniciar sesión.",
+      error: "No tienes permiso para editar recetas.",
     };
   }
 
@@ -286,11 +286,7 @@ export async function saveLiquorRecipeStepAction(
 export async function deleteLiquorRecipeStepAction(
   formData: FormData
 ): Promise<void> {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    throw new Error("No autorizado.");
-  }
+  await requireModuleActionAccess("/liquors/recipes");
 
   const recipeId = getRequiredText(formData.get("recipeId"));
   const stepId = getRequiredText(formData.get("stepId"));
@@ -341,11 +337,7 @@ export async function moveLiquorRecipeStepDownAction(
 export async function toggleLiquorRecipeStepAction(
   formData: FormData
 ): Promise<void> {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    throw new Error("No autorizado.");
-  }
+  await requireModuleActionAccess("/liquors/recipes");
 
   const recipeId = getRequiredText(formData.get("recipeId"));
   const stepId = getRequiredText(formData.get("stepId"));
@@ -385,11 +377,7 @@ async function moveLiquorRecipeStep(
   formData: FormData,
   direction: "up" | "down"
 ): Promise<void> {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    throw new Error("No autorizado.");
-  }
+  await requireModuleActionAccess("/liquors/recipes");
 
   const recipeId = getRequiredText(formData.get("recipeId"));
   const stepId = getRequiredText(formData.get("stepId"));

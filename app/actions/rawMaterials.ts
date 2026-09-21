@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, RawMaterialMovementType } from "@prisma/client";
+import { RawMaterialMovementType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
+import { applyRawMaterialMovement } from "@/lib/liquors/rawMaterialMovements";
 
 /**
  * ==========================================================
@@ -12,7 +13,7 @@ import { getCurrentUser } from "@/lib/auth";
  * Almacén de materia prima para elaboración de licores.
  *
  * Regla central: `RawMaterial.currentStock` NUNCA se edita a mano.
- * Todo cambio pasa por `applyMovement`, que registra el movimiento
+ * Todo cambio pasa por `applyRawMaterialMovement`, que registra el movimiento
  * y ajusta el stock en la misma transacción. Así siempre existe el
  * rastro de por qué cambió una existencia.
  *
@@ -28,17 +29,13 @@ export type ActionResult =
 
 const ROLES_QUE_PUEDEN_MOVER = ["ADMIN", "GERENTE"];
 
-/** Movimientos que siempre restan, sin importar el signo capturado. */
-const OUTGOING: RawMaterialMovementType[] = [
-  RawMaterialMovementType.CONSUMO_RECETA,
-  RawMaterialMovementType.MERMA,
-  RawMaterialMovementType.TRASPASO_SUCURSAL,
-];
-
 async function requireStockRole() {
-  const user = await getCurrentUser();
-
-  if (!user) return { error: "No autorizado" as const, user: null };
+  let user;
+  try {
+    user = await requireModuleActionAccess("/liquors/raw-materials");
+  } catch {
+    return { error: "No autorizado" as const, user: null };
+  }
 
   if (!ROLES_QUE_PUEDEN_MOVER.includes(user.role)) {
     return {
@@ -57,80 +54,6 @@ async function requireStockRole() {
  * tanto desde acciones sueltas como desde procesos más grandes, como
  * el descuento automático al completar un ingrediente.
  */
-export async function applyMovement(
-  client: Prisma.TransactionClient | typeof prisma,
-  input: {
-    rawMaterialId: string;
-    type: RawMaterialMovementType;
-    /** Siempre en positivo: el signo lo decide el tipo. */
-    amount: number;
-    unitCost?: number | null;
-    lotId?: string | null;
-    liquorBatchId?: string | null;
-    branchId?: string | null;
-    notes?: string | null;
-    createdById?: string | null;
-    /** Para AJUSTE: indica si suma o resta. */
-    negative?: boolean;
-  },
-) {
-  const magnitude = Math.abs(input.amount);
-
-  const isOutgoing =
-    OUTGOING.includes(input.type) ||
-    (input.type === RawMaterialMovementType.AJUSTE && input.negative === true);
-
-  const signed = isOutgoing ? -magnitude : magnitude;
-
-  const material = await client.rawMaterial.findUnique({
-    where: { id: input.rawMaterialId },
-    select: { currentStock: true, averageCost: true },
-  });
-
-  if (!material) {
-    throw new Error("La materia prima ya no existe.");
-  }
-
-  /*
-   * Costo promedio ponderado: solo lo recalculan las entradas que
-   * traen costo. Las salidas consumen al promedio vigente, así que
-   * no lo modifican.
-   */
-  let averageCost = material.averageCost;
-
-  if (!isOutgoing && input.unitCost != null && input.unitCost >= 0) {
-    const previousStock = Math.max(material.currentStock, 0);
-    const previousValue = previousStock * (material.averageCost ?? input.unitCost);
-    const incomingValue = magnitude * input.unitCost;
-    const totalStock = previousStock + magnitude;
-
-    averageCost =
-      totalStock > 0 ? (previousValue + incomingValue) / totalStock : input.unitCost;
-  }
-
-  await client.rawMaterialMovement.create({
-    data: {
-      rawMaterialId: input.rawMaterialId,
-      type: input.type,
-      quantity: signed,
-      unitCost: input.unitCost ?? null,
-      lotId: input.lotId ?? null,
-      liquorBatchId: input.liquorBatchId ?? null,
-      branchId: input.branchId ?? null,
-      notes: input.notes ?? null,
-      createdById: input.createdById ?? null,
-    },
-  });
-
-  await client.rawMaterial.update({
-    where: { id: input.rawMaterialId },
-    data: {
-      currentStock: { increment: signed },
-      ...(averageCost !== material.averageCost ? { averageCost } : {}),
-    },
-  });
-}
-
 function readNumber(formData: FormData, field: string) {
   const raw = formData.get(field);
   if (raw === null || String(raw).trim() === "") return null;
@@ -330,7 +253,7 @@ export async function registerMovementAction(
 
   try {
     await prisma.$transaction(async (tx) => {
-      await applyMovement(tx, {
+      await applyRawMaterialMovement(tx, {
         rawMaterialId,
         type: typeValue as RawMaterialMovementType,
         amount,
@@ -405,7 +328,7 @@ export async function transferToBranchAction(
     }
 
     await prisma.$transaction(async (tx) => {
-      await applyMovement(tx, {
+      await applyRawMaterialMovement(tx, {
         rawMaterialId,
         type: RawMaterialMovementType.TRASPASO_SUCURSAL,
         amount,

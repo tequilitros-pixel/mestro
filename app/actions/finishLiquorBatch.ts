@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { LiquorBatchStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 
 type FinishLiquorBatchInput = {
   batchId: string;
@@ -155,12 +155,7 @@ export async function finishLiquorBatchWithRemainderAction(
 }
 
 async function getAuthenticatedUserId() {
-  const user = await getCurrentUser();
-  if (!user) {
-    throw new Error(
-      "Tu sesión no está disponible. Inicia sesión nuevamente."
-    );
-  }
+  const user = await requireModuleActionAccess("/liquors/bottling");
   return user.id;
 }
 

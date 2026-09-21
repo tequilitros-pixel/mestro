@@ -3,6 +3,7 @@ import { CookingEventType, CookingStatus, LotStage } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
 import { findAvailableEquipment, reserveEquipment } from "@/lib/equipmentAvailability";
+import { requireModuleActionAccess } from "@/lib/auth";
 
 export default async function NewCookingPage() {
   /*
@@ -19,6 +20,8 @@ export default async function NewCookingPage() {
 
   async function createCooking(formData: FormData) {
     "use server";
+
+    await requireModuleActionAccess("/cooking");
 
     const lotId = formData.get("lotId") as string;
     const equipmentId = formData.get("equipmentId") as string;

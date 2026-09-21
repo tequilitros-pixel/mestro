@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { hashSessionToken } from "@/lib/session";
 import {
   LEGACY_OPERATOR_PERMISSION_KEYS,
+  canAccessModule,
   isConfigurablePermissionKey,
   isAdminOnlyPath,
 } from "@/lib/permission-modules";
@@ -47,15 +48,35 @@ export async function requireAdminAction() {
 }
 
 export async function requireModuleActionAccess(moduleKey: string) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess([moduleKey]);
   if (!user) throw new Error("PERMISSION_DENIED");
+  return user;
+}
+
+export async function getCurrentUserWithAnyModuleAccess(
+  moduleKeys: readonly string[],
+) {
+  const user = await getCurrentUser();
+  if (!user) return null;
   if (user.role === "ADMIN") return user;
 
-  const permission = await prisma.modulePermission.findUnique({
-    where: { userId_moduleKey: { userId: user.id, moduleKey } },
-    select: { id: true },
+  const permissions = await prisma.modulePermission.findMany({
+    where: { userId: user.id },
+    select: { moduleKey: true },
   });
-  if (!permission) throw new Error("PERMISSION_DENIED");
+  const storedKeys = permissions.map((permission) => permission.moduleKey);
+  const allowed = moduleKeys.some(
+    (moduleKey) =>
+      !isAdminOnlyPath(moduleKey) &&
+      canAccessModule(user.role, storedKeys, moduleKey),
+  );
+
+  return allowed ? user : null;
+}
+
+export async function requireAnyModuleActionAccess(moduleKeys: readonly string[]) {
+  const user = await getCurrentUserWithAnyModuleAccess(moduleKeys);
+  if (!user) throw new Error("PERMISSION_DENIED");
   return user;
 }
 export async function requireModuleAccess(moduleKey: string) {

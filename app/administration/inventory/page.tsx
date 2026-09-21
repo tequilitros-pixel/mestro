@@ -19,6 +19,14 @@ import {
 } from "./InventoryCharts";
 import { formatBusinessDateTime } from "@/lib/dateTime";
 import { getAccessibleBranchIds } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { getUserModuleKeys } from "@/app/actions/permissions";
+import {
+  canAccessModule,
+  getModuleKeyForPath,
+  isInventoryManagerReadPath,
+} from "@/lib/permission-modules";
+import { redirect } from "next/navigation";
 
 const sections = [
   {
@@ -59,13 +67,26 @@ const formatDate = (iso: string | null) =>
     : "Nunca";
 
 export default async function InventoryPage() {
-  const analytics = await getInventoryAnalytics(30, await getAccessibleBranchIds());
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const [analytics, moduleKeys] = await Promise.all([
+    getInventoryAnalytics(30, await getAccessibleBranchIds()),
+    user.role === "ADMIN" ? Promise.resolve([]) : getUserModuleKeys(user.id),
+  ]);
   const { totals, topProducts, categories, branches, movementTypes, daily, lowStock, stale } =
     analytics;
 
+  const visibleSections = sections.filter((section) => {
+    if (user.role === "ADMIN") return true;
+    if (user.role === "GERENTE" && isInventoryManagerReadPath(section.href)) return true;
+    const moduleKey = getModuleKeyForPath(section.href);
+    return moduleKey ? canAccessModule(user.role, moduleKeys, moduleKey) : false;
+  });
+
   const shortcuts = (
     <section className="grid gap-5 md:grid-cols-3">
-      {sections.map((section) => (
+      {visibleSections.map((section) => (
         <Link
           key={section.href}
           href={section.href}

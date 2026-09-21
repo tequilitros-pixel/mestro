@@ -112,11 +112,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     group: "Punto de Venta",
     modules: [
       { key: "/pos", label: "Vender" },
-      { key: "/pos/sales", label: "Ventas" },
-      { key: "/pos/discounts/rules", label: "Descuentos · Administrar" },
-      { key: "/pos/discounts/courtesies", label: "Descuentos · Cortesías" },
-      { key: "/pos/discounts/employees", label: "Descuentos · Trabajadores" },
-      { key: "/pos/discounts/products", label: "Descuentos · Productos" },
+      { key: "/pos/sales", label: "Transacciones" },
     ],
   },
   {
@@ -191,8 +187,32 @@ export function canAccessModule(
 }
 
 export function getModuleKeyForPath(pathname: string): string | null {
-  // POSpress is the new POS1-based workspace. It intentionally shares
-  // the existing POS permission while its workflow is being introduced.
+  // Resource-oriented URLs still belong to their operational workflow.
+  if (/^\/liquors\/products\/[^/]+\/new\/?$/.test(pathname)) {
+    return "/liquors/production";
+  }
+  if (
+    /^\/liquors\/batches\/[^/]+\/(bottling|labels)(\/|$)/.test(pathname) ||
+    pathname.startsWith("/liquors/print/bottling/")
+  ) {
+    return "/liquors/bottling";
+  }
+  if (/^\/liquors\/bottles\/[^/]+\/(label|qr)(\/|$)/.test(pathname)) {
+    return "/liquors/qr";
+  }
+  if (/^\/liquors\/bottles\/[^/]+\/?$/.test(pathname)) {
+    return "/liquors/inventory";
+  }
+
+  if (
+    pathname === "/pospress/transactions" ||
+    pathname.startsWith("/pospress/transactions/")
+  ) {
+    return "/pos/sales";
+  }
+
+  // POSpress remains the canonical sales workspace while the stored keys
+  // keep backward compatibility with existing grants.
   if (pathname === "/pospress" || pathname.startsWith("/pospress/")) {
     return "/pos";
   }
@@ -231,5 +251,7 @@ export function getDefaultPathForModuleKeys(moduleKeys: string[]): string {
 
   // /pos remains the stored permission key for existing users, while
   // POSpress is the only canonical UI entry point.
-  return defaultKey === "/pos" ? "/pospress" : (defaultKey ?? "/profile");
+  if (defaultKey === "/pos") return "/pospress";
+  if (defaultKey === "/pos/sales") return "/pospress/transactions";
+  return defaultKey ?? "/profile";
 }

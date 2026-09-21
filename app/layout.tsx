@@ -11,6 +11,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 
 const OPERATOR_ALLOWED_PATHS = [
   "/cooking",
+  "/boiler",
   "/milling",
   "/fermentation",
   "/distillation",
@@ -80,12 +81,9 @@ export default async function RootLayout({
     }
   }
 
-  /*
-   * Los permisos por módulo (tabla ModulePermission) solo aplican
-   * a roles que no sean ADMIN (acceso total) ni OPERATOR (acceso
-   * fijo a producción). Para el resto, la navegación debe reflejar
-   * exactamente lo que tienen otorgado.
-   */
+  /* ADMIN conserva acceso total. Un OPERATOR sin permisos configurados
+   * mantiene la compatibilidad histórica; cuando recibe cualquier permiso
+   * configurable, la navegación y el servidor respetan esa matriz exacta. */
   return (
     <html
       lang="es"

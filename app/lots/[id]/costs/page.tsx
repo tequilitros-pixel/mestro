@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import LotMenu from "@/components/LotMenu";
+import { requireModuleActionAccess } from "@/lib/auth";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -34,6 +35,8 @@ export default async function LotCostsPage({ params }: Props) {
 
   async function addExpense(formData: FormData) {
     "use server";
+
+    await requireModuleActionAccess("/lots");
 
     const category = formData.get("category") as string;
     const concept = formData.get("concept") as string;

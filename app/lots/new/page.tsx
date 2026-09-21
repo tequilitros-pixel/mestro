@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 
@@ -13,11 +13,7 @@ export default async function NewLotPage() {
   async function createLot(formData: FormData) {
     "use server";
 
-    const user = await getCurrentUser();
-
-    if (!user) {
-      redirect("/login");
-    }
+    const user = await requireModuleActionAccess("/lots");
 
     const agaveKg = parseRequiredNumber(
       formData.get("agaveKg")

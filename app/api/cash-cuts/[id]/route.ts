@@ -9,7 +9,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const scope = await getCashCutScope();
+  const scope = await getCashCutScope(["/cash-cuts/daily"]);
   if (!scope) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -110,7 +110,7 @@ export async function PATCH(
 
   const { id } = await params;
 
-  const scope = await getCashCutScope();
+  const scope = await getCashCutScope(["/cash-cuts/daily"]);
   if (!scope) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

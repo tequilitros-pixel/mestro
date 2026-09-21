@@ -24,7 +24,7 @@ import {
 } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { randomUUID } from "crypto";
-import { applyMovement } from "@/app/actions/rawMaterials";
+import { applyRawMaterialMovement } from "@/lib/liquors/rawMaterialMovements";
 import {
   getCurrentAlcohol,
   getCurrentTemperature,
@@ -541,7 +541,7 @@ export default async function DistillationDetailPage({
       });
 
       if (target) {
-        await applyMovement(tx, {
+        await applyRawMaterialMovement(tx, {
           rawMaterialId: target.id,
           type: RawMaterialMovementType.PRODUCCION,
           amount: totalLiters,
