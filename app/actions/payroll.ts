@@ -3,8 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { getPayrollSettings } from "@/app/actions/overtime";
-import { splitTiers, computeAmount } from "@/lib/overtimeCalc";
 import {
   addDaysToDateOnly,
   formatDateOnly,
@@ -12,6 +10,7 @@ import {
   parseDateOnly,
 } from "@/lib/dateOnly";
 import {
+  computeHourlyPay,
   payrollBusinessDate,
   payrollWeekInstantRange,
 } from "@/lib/payroll/legacyRules";
@@ -234,7 +233,7 @@ export type PayrollEmployeeDetail = {
 
 /**
  * Calcula EN VIVO (sin snapshot) las filas de la tabla semanal a
- * partir del checador, tarifas, tiempo extra y ajustes manuales.
+ * partir del checador, tarifas y ajustes manuales.
  */
 async function computeLiveWeekEmployees(mondayStr: string): Promise<{
   employees: PayrollWeekEmployee[];
@@ -247,7 +246,7 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
   // tarifa estaba vigente — ver nota en resolveHourlyRate.
   const rateReferenceDate = new Date(clockEnd.getTime() - 1);
 
-  const [entries, employees, overtimeRecords, salaryRates, settings, adjustments] = await Promise.all([
+  const [entries, employees, salaryRates, adjustments] = await Promise.all([
     prisma.timeClockEntry.findMany({
       where: { clockIn: { gte: clockStart, lt: clockEnd }, clockOut: { not: null } },
       select: { userId: true, clockIn: true, clockOut: true },
@@ -257,16 +256,11 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
       select: { id: true, name: true, hourlyRate: true },
       orderBy: { name: "asc" },
     }),
-    prisma.overtimeRecord.findMany({
-      where: { weekStart: weekStartDate },
-      select: { userId: true, overtimeHours: true, amount: true, status: true },
-    }),
     prisma.salaryRate.findMany({
       where: { scheme: "HORA" },
       select: { userId: true, amount: true, effectiveFrom: true, effectiveTo: true },
       orderBy: { effectiveFrom: "desc" },
     }),
-    getPayrollSettings(),
     prisma.payrollAdjustment.findMany({
       where: { weekStart: weekStartDate },
       select: { userId: true, type: true, amount: true },
@@ -302,16 +296,6 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
     hoursByUserDay.set(entry.userId, arr);
   }
 
-  // Horas extra ya detectadas (o aprobadas) para la semana, sumadas
-  // por si la persona trabajó en más de una sucursal. Si todavía no
-  // hay registro (nadie ha corrido la detección en Tiempo Extra para
-  // esta semana), se estima abajo en vivo.
-  const overtimeByUser = new Map<string, number>();
-  for (const record of overtimeRecords) {
-    const current = overtimeByUser.get(record.userId) ?? 0;
-    overtimeByUser.set(record.userId, current + Number(record.overtimeHours));
-  }
-
   const employeeRows: PayrollWeekEmployee[] = [];
   let totalRegular = 0;
   let totalOvertime = 0;
@@ -329,9 +313,8 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
     // operativo de quienes sí registraron trabajo o ajustes.
     if (totalHours > 0 || employeeAdjustments.length > 0) employeesWorked += 1;
 
-    const overtimeHours =
-      overtimeByUser.get(employee.id) ?? Math.max(0, totalHours - settings.weeklyHourThreshold);
-    const regularHours = Math.max(0, totalHours - overtimeHours);
+    const regularHours = totalHours;
+    const overtimeHours = 0;
 
     const hourlyRate = resolveHourlyRate(
       ratesByUser.get(employee.id) ?? [],
@@ -340,10 +323,8 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
     );
     const missingRate = hourlyRate === null;
 
-    const { doubleHours, tripleHours } = splitTiers(overtimeHours, settings);
-    const overtimePay = computeAmount(doubleHours, tripleHours, hourlyRate, settings) ?? 0;
-    const basePay = hourlyRate !== null ? regularHours * hourlyRate : 0;
-    const estimatedPay = basePay + overtimePay;
+    const basePay = computeHourlyPay(totalHours, hourlyRate);
+    const estimatedPay = basePay;
     const adjustmentsTotal = netAdjustmentAmount(employeeAdjustments);
     const finalPay = estimatedPay + adjustmentsTotal;
 
@@ -401,7 +382,7 @@ async function computeLiveEmployeeDetail(
   const { start: clockStart, end: clockEnd } = payrollWeekInstantRange(mondayStr);
   const rateReferenceDate = new Date(clockEnd.getTime() - 1);
 
-  const [employee, entries, shifts, overtimeRecords, salaryRates, settings, userBranches, adjustments] = await Promise.all([
+  const [employee, entries, shifts, salaryRates, userBranches, adjustments] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, name: true, hourlyRate: true },
@@ -415,16 +396,11 @@ async function computeLiveEmployeeDetail(
       where: { userId, type: "TURNO", date: { gte: weekStartDate, lt: weekEndDate } },
       include: { branch: { select: { name: true } } },
     }),
-    prisma.overtimeRecord.findMany({
-      where: { userId, weekStart: weekStartDate },
-      select: { overtimeHours: true },
-    }),
     prisma.salaryRate.findMany({
       where: { userId, scheme: "HORA" },
       select: { amount: true, effectiveFrom: true, effectiveTo: true },
       orderBy: { effectiveFrom: "desc" },
     }),
-    getPayrollSettings(),
     prisma.userBranch.findMany({
       where: { userId },
       include: { branch: { select: { id: true, name: true } } },
@@ -522,11 +498,8 @@ async function computeLiveEmployeeDetail(
   });
 
   const totalHours = days.reduce((sum, d) => sum + d.hoursWorked, 0);
-  const overtimeHours =
-    overtimeRecords.length > 0
-      ? overtimeRecords.reduce((sum, r) => sum + Number(r.overtimeHours), 0)
-      : Math.max(0, totalHours - settings.weeklyHourThreshold);
-  const regularHours = Math.max(0, totalHours - overtimeHours);
+  const regularHours = totalHours;
+  const overtimeHours = 0;
 
   const hourlyRate = resolveHourlyRate(
     salaryRates.map((r) => ({ amount: Number(r.amount), effectiveFrom: r.effectiveFrom, effectiveTo: r.effectiveTo })),
@@ -534,10 +507,9 @@ async function computeLiveEmployeeDetail(
     employee.hourlyRate !== null ? Number(employee.hourlyRate) : null,
   );
 
-  const { doubleHours, tripleHours } = splitTiers(overtimeHours, settings);
-  const overtimePay = computeAmount(doubleHours, tripleHours, hourlyRate, settings) ?? 0;
-  const basePay = hourlyRate !== null ? regularHours * hourlyRate : 0;
-  const totalPay = basePay + overtimePay;
+  const overtimePay = 0;
+  const basePay = computeHourlyPay(totalHours, hourlyRate);
+  const totalPay = basePay;
 
   const adjustmentRows: PayrollAdjustmentRow[] = adjustments.map((adj) => ({
     id: adj.id,

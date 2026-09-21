@@ -395,11 +395,10 @@ export default function PayrollWeekView() {
           </Card>
 
           <section className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container" aria-label="Resumen semanal">
-            <div className="grid grid-cols-2 divide-x divide-y divide-outline-variant sm:grid-cols-5 sm:divide-y-0">
+            <div className="grid grid-cols-2 divide-x divide-y divide-outline-variant sm:grid-cols-4 sm:divide-y-0">
               {[
                 ["Usuarios activos", String(table.totals.activeEmployees)],
-                ["Horas totales", hours(table.totals.totalHours)],
-                ["Horas extra", hours(table.totals.overtimeHours)],
+                ["Horas trabajadas", hours(table.totals.totalHours)],
                 ["Total nómina", money(table.totals.finalPay)],
                 ["Pago", formatPaymentDate(table.weekStart)],
               ].map(([label, value]) => (
@@ -437,7 +436,7 @@ export default function PayrollWeekView() {
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-sm">
+                <table className="w-full min-w-[1220px] border-separate border-spacing-0 text-sm">
                   <thead className="bg-surface-container-high">
                     <tr className="text-left text-[11px] uppercase tracking-wide text-outline">
                       <th className="sticky left-0 z-20 w-56 border-b border-r border-outline-variant bg-surface-container-high px-4 py-3 font-bold">Empleado</th>
@@ -447,6 +446,7 @@ export default function PayrollWeekView() {
                         </th>
                       ))}
                       <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Total horas</th>
+                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Pago por hora</th>
                       <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Pago total</th>
                       <th className="border-b border-outline-variant px-3 py-3 text-center font-bold">Estado</th>
                     </tr>
@@ -474,6 +474,9 @@ export default function PayrollWeekView() {
                         ))}
                         <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-mono font-black tabular-nums text-on-surface">
                           {hours(employee.totalHours)}
+                        </td>
+                        <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-semibold tabular-nums text-on-surface">
+                          {employee.hourlyRate === null ? "—" : money(employee.hourlyRate)}
                         </td>
                         <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-black tabular-nums text-on-surface">
                           {employee.missingRate && employee.adjustmentsTotal === 0
@@ -752,15 +755,17 @@ function EmployeeDetailModal({
 
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Card className="p-3">
-                <CardLabel>Horas</CardLabel>
+                <CardLabel>Horas trabajadas</CardLabel>
                 <p className="text-lg font-bold text-on-surface">{hours(detail.totalHours)}</p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Extra</CardLabel>
-                <p className="text-lg font-bold text-on-surface">{hours(detail.overtimeHours)}</p>
+                <CardLabel>Pago por hora</CardLabel>
+                <p className="text-lg font-bold text-on-surface">
+                  {detail.employee.hourlyRate === null ? "—" : money(detail.employee.hourlyRate)}
+                </p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Base</CardLabel>
+                <CardLabel>Pago por horas</CardLabel>
                 <p className="text-lg font-bold text-on-surface">{money(detail.basePay)}</p>
               </Card>
               <Card className="p-3">

@@ -17,3 +17,7 @@ export function payrollWeekInstantRange(monday: string): { start: Date; end: Dat
   };
 }
 
+/** Pago lineal de nómina: todas las horas reales se pagan a la tarifa normal. */
+export function computeHourlyPay(totalHours: number, hourlyRate: number | null): number {
+  return hourlyRate === null ? 0 : totalHours * hourlyRate;
+}
