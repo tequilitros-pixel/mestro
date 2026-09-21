@@ -46,7 +46,6 @@ export default async function EventDetailPage({
   const consumableProducts = products.filter((p) => p.itemType !== "EQUIPMENT");
   const equipmentProducts = products.filter((p) => p.itemType === "EQUIPMENT");
 
-  const totalItems = event.items.length;
   const sentCount = event.items.filter((i) => i.checkedOut).length;
   const returnedCount = event.items.filter((i) => i.checkedIn).length;
   const pendingReturns = Math.max(sentCount - returnedCount, 0);

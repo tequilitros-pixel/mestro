@@ -3,11 +3,7 @@
 import { useState } from "react";
 import ProductForm from "./ProductForm";
 
-type EventPackage = { id: string; name: string };
-
-export default function NewProductModal({
-}: {
-}) {
+export default function NewProductModal() {
   const [open, setOpen] = useState(false);
 
   return (

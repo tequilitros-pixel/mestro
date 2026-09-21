@@ -581,12 +581,11 @@ export default function ScheduleGrid() {
 
   const todayStr = todayDateOnly();
 
-  const visibleEmployees = useMemo(() => {
-    if (!data) return [];
-    return employeeFilter === "all"
+  const visibleEmployees = !data
+    ? []
+    : employeeFilter === "all"
       ? data.employees
       : data.employees.filter((employee) => employee.id === employeeFilter);
-  }, [data, employeeFilter]);
 
   const visibleShifts = useMemo(() => {
     if (!data) return [];
@@ -636,7 +635,10 @@ export default function ScheduleGrid() {
   const summary = useMemo(() => {
     if (!data) return null;
 
-    const rateByUser = new Map(visibleEmployees.map((e) => [e.id, e.hourlyRate]));
+    const employees = employeeFilter === "all"
+      ? data.employees
+      : data.employees.filter((employee) => employee.id === employeeFilter);
+    const rateByUser = new Map(employees.map((e) => [e.id, e.hourlyRate]));
     const peopleSet = new Set<string>();
     let totalHours = 0;
     let totalShifts = 0;
@@ -655,7 +657,7 @@ export default function ScheduleGrid() {
     }
 
     return { totalHours, totalShifts, peopleCount: peopleSet.size, totalCost };
-  }, [data, visibleEmployees, visibleShifts]);
+  }, [data, employeeFilter, visibleShifts]);
 
   /**
    * Traslapes y "dos sucursales a la vez" se revisan por empleado y por
@@ -667,7 +669,10 @@ export default function ScheduleGrid() {
     const list: Alert[] = [];
     if (!data) return list;
 
-    const employeeNames = new Map(visibleEmployees.map((e) => [e.id, e.name]));
+    const employees = employeeFilter === "all"
+      ? data.employees
+      : data.employees.filter((employee) => employee.id === employeeFilter);
+    const employeeNames = new Map(employees.map((e) => [e.id, e.name]));
 
     const byEmployeeDay = new Map<string, Shift[]>();
     for (const s of visibleShifts) {
@@ -699,7 +704,7 @@ export default function ScheduleGrid() {
       }
     }
 
-    for (const employee of visibleEmployees) {
+    for (const employee of employees) {
       const totals = employeeTotals.get(employee.id);
       if (totals && totals.hours > data.weeklyHourThreshold) {
         list.push({
@@ -713,7 +718,7 @@ export default function ScheduleGrid() {
     }
 
     return list;
-  }, [data, employeeTotals, visibleEmployees, visibleShifts]);
+  }, [data, employeeFilter, employeeTotals, visibleShifts]);
 
   const alertCellKeys = useMemo(() => {
     const set = new Set<string>();

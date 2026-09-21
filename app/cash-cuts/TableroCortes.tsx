@@ -68,6 +68,37 @@ function colorDiferencia(d: number | null) {
   return "text-secondary";
 }
 
+function TableHeader({
+  campo,
+  children,
+  className = "",
+  orden,
+  onSort,
+}: {
+  campo?: Orden["campo"];
+  children: React.ReactNode;
+  className?: string;
+  orden: Orden;
+  onSort: (campo: Orden["campo"]) => void;
+}) {
+  return (
+    <th className={`sticky top-0 z-10 bg-surface-container-high px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant ${className}`}>
+      {campo ? (
+        <button
+          type="button"
+          onClick={() => onSort(campo)}
+          className="inline-flex items-center gap-1 hover:text-on-surface"
+        >
+          {children}
+          {orden.campo === campo && <span aria-hidden="true">{orden.asc ? "↑" : "↓"}</span>}
+        </button>
+      ) : (
+        children
+      )}
+    </th>
+  );
+}
+
 export default function TableroCortes({
   branches,
   canCreate,
@@ -94,8 +125,11 @@ export default function TableroCortes({
     if (to) params.set("to", to);
 
     const controller = new AbortController();
-    setCargando(true);
-    setError(null);
+    queueMicrotask(() => {
+      if (controller.signal.aborted) return;
+      setCargando(true);
+      setError(null);
+    });
 
     fetch(`/api/cash-cuts?${params.toString()}`, { signal: controller.signal })
       .then(async (res) => {
@@ -116,8 +150,6 @@ export default function TableroCortes({
 
     return () => controller.abort();
   }, [branchId, status, from, to]);
-
-  useEffect(() => setPagina(1), [branchId, status, from, to, busqueda, orden]);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -166,29 +198,17 @@ export default function TableroCortes({
     setFrom("");
     setTo("");
     setBusqueda("");
+    setPagina(1);
   };
 
   const hayFiltros = Boolean(branchId || status || from || to || busqueda);
 
-  const ordenarPor = (campo: Orden["campo"]) =>
-    setOrden((o) => (o.campo === campo ? { campo, asc: !o.asc } : { campo, asc: false }));
-
-  const Th = ({ campo, children, className = "" }: { campo?: Orden["campo"]; children: React.ReactNode; className?: string }) => (
-    <th className={`sticky top-0 z-10 bg-surface-container-high px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant ${className}`}>
-      {campo ? (
-        <button
-          type="button"
-          onClick={() => ordenarPor(campo)}
-          className="inline-flex items-center gap-1 hover:text-on-surface"
-        >
-          {children}
-          {orden.campo === campo && <span aria-hidden="true">{orden.asc ? "↑" : "↓"}</span>}
-        </button>
-      ) : (
-        children
-      )}
-    </th>
-  );
+  const ordenarPor = (campo: Orden["campo"]) => {
+    setOrden((current) =>
+      current.campo === campo ? { campo, asc: !current.asc } : { campo, asc: false },
+    );
+    setPagina(1);
+  };
 
   return (
     <main className="page-frame max-w-7xl space-y-4">
@@ -224,7 +244,7 @@ export default function TableroCortes({
           <input
             id="q"
             value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+            onChange={(e) => { setBusqueda(e.target.value); setPagina(1); }}
             placeholder="Código o responsable"
             className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
           />
@@ -238,7 +258,7 @@ export default function TableroCortes({
             <select
               id="suc"
               value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
+              onChange={(e) => { setBranchId(e.target.value); setPagina(1); }}
               className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
             >
               <option value="">Todas</option>
@@ -256,7 +276,7 @@ export default function TableroCortes({
           <select
             id="est"
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) => { setStatus(e.target.value); setPagina(1); }}
             className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
           >
             <option value="">Todos</option>
@@ -270,7 +290,7 @@ export default function TableroCortes({
           <label htmlFor="d1" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
             Desde
           </label>
-          <input id="d1" type="date" value={from} onChange={(e) => setFrom(e.target.value)}
+          <input id="d1" type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPagina(1); }}
             className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary" />
         </div>
 
@@ -278,7 +298,7 @@ export default function TableroCortes({
           <label htmlFor="d2" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
             Hasta
           </label>
-          <input id="d2" type="date" value={to} onChange={(e) => setTo(e.target.value)}
+          <input id="d2" type="date" value={to} onChange={(e) => { setTo(e.target.value); setPagina(1); }}
             className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary" />
         </div>
 
@@ -310,16 +330,16 @@ export default function TableroCortes({
             <table className="w-full border-collapse text-[13px]">
               <thead>
                 <tr>
-                  <Th campo="date">Fecha</Th>
-                  <Th campo="code">Código</Th>
-                  <Th campo="branch">Sucursal</Th>
-                  <Th>Responsable</Th>
-                  <Th>Apertura</Th>
-                  <Th>Cierre</Th>
-                  <Th campo="totalSales" className="text-right">Venta</Th>
-                  <Th campo="difference" className="text-right">Diferencia</Th>
-                  <Th>Estado</Th>
-                  <Th>Acción</Th>
+                  <TableHeader campo="date" orden={orden} onSort={ordenarPor}>Fecha</TableHeader>
+                  <TableHeader campo="code" orden={orden} onSort={ordenarPor}>Código</TableHeader>
+                  <TableHeader campo="branch" orden={orden} onSort={ordenarPor}>Sucursal</TableHeader>
+                  <TableHeader orden={orden} onSort={ordenarPor}>Responsable</TableHeader>
+                  <TableHeader orden={orden} onSort={ordenarPor}>Apertura</TableHeader>
+                  <TableHeader orden={orden} onSort={ordenarPor}>Cierre</TableHeader>
+                  <TableHeader campo="totalSales" orden={orden} onSort={ordenarPor} className="text-right">Venta</TableHeader>
+                  <TableHeader campo="difference" orden={orden} onSort={ordenarPor} className="text-right">Diferencia</TableHeader>
+                  <TableHeader orden={orden} onSort={ordenarPor}>Estado</TableHeader>
+                  <TableHeader orden={orden} onSort={ordenarPor}>Acción</TableHeader>
                 </tr>
               </thead>
               <tbody>

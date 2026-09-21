@@ -5,7 +5,6 @@ import { pos2ErrorResponse, requireOrderTerminal, requireTerminalRequest } from 
 import { completeSale } from "@/lib/pos2/sales/completeSale";
 import { recordPos2OperationTrace, type Pos2OperationTrace } from "@/lib/pos2/operationTrace";
 import { withRlsContext } from "@/lib/rls";
-import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   let actor: Awaited<ReturnType<typeof getCurrentCommandActor>> | undefined;

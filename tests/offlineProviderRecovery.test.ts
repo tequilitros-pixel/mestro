@@ -16,7 +16,10 @@ const source = ts.transpileModule(readFileSync(new URL("../components/offline/Of
 function provider(options: { readFails?: boolean; syncFails?: boolean; storageFails?: boolean; date?: string; malformed?: boolean }) {
   let state: SyncSnapshot;
   const updates: Array<(current: SyncSnapshot) => SyncSnapshot> = [];
-  const exports: Record<string, (props: unknown) => any> = {};
+  type RenderedProvider = {
+    props: { children: unknown; value: { syncNow: () => Promise<void> } };
+  };
+  const exports: Record<string, (props: unknown) => RenderedProvider> = {};
   runInNewContext(source, {
     exports,
     console: { error() {} },

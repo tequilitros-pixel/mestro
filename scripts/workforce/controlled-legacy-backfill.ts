@@ -73,7 +73,8 @@ async function main() {
         );
         const mapped = await insertRecord(client, false, { legacyModel: "User", legacyId: user.id, targetModel: "Employee", targetId: candidate.id, classification: "SAFE_WITH_UNKNOWN", confidence: "LEGACY_UNKNOWN", status: "MIGRATED", notes: `Employment ${candidate.employmentId}; name preserved unsplit; startedAt unknown` });
         summary.domainRowsCreated += (employee.rowCount ?? 0) + (employment.rowCount ?? 0);
-        mapped ? summary.safeWithUnknownMigrated++ : summary.skippedIdempotent++;
+        if (mapped) summary.safeWithUnknownMigrated++;
+        else summary.skippedIdempotent++;
       });
     }
 
@@ -94,7 +95,9 @@ async function main() {
         const c = mapped.candidate!;
         const result = await client.query(`INSERT INTO "PayRate" (id,"employmentId","rateType",amount,currency,"effectiveFrom","effectiveTo","createdAt","updatedAt") VALUES ($1,$2,$3,$4,null,$5,$6,now(),now()) ON CONFLICT (id) DO NOTHING`, [c.id, c.employmentId, c.rateType, c.amount, c.effectiveFrom, c.effectiveTo]);
         const recorded = await insertRecord(client, false, { legacyModel: "SalaryRate", legacyId: rate.id, targetModel: "PayRate", targetId: c.id, classification: "SAFE_WITH_UNKNOWN", confidence: "LEGACY_UNKNOWN", status: "MIGRATED", notes: "currency unknown" });
-        summary.domainRowsCreated += result.rowCount ?? 0; recorded ? summary.safeWithUnknownMigrated++ : summary.skippedIdempotent++;
+        summary.domainRowsCreated += result.rowCount ?? 0;
+        if (recorded) summary.safeWithUnknownMigrated++;
+        else summary.skippedIdempotent++;
       });
     }
 
@@ -115,7 +118,9 @@ async function main() {
         const c = mapped.candidate!;
         const result = await client.query(`INSERT INTO "WorkSession" (id,"employmentId","branchId","businessDate","startedAt","endedAt","workedMinutes","breakMinutes",origin,"reconstructionVersion",status,"reconstructedAt","createdAt","updatedAt") VALUES ($1,$2,$3,$4,$5,$6,$7,null,'LEGACY_IMPORTED',1,$8,now(),now(),now()) ON CONFLICT (id) DO NOTHING`, [c.id, c.employmentId, c.branchId, c.businessDate, c.startedAt, c.endedAt, c.workedMinutes, c.status]);
         const recorded = await insertRecord(client, false, { legacyModel: "TimeClockEntry", legacyId: clock.id, targetModel: "WorkSession", targetId: c.id, classification: "SAFE_WITH_UNKNOWN", confidence: "LEGACY_UNKNOWN", status: "MIGRATED", notes: "composite legacy record; break unknown; no ClockEvent fabricated" });
-        summary.domainRowsCreated += result.rowCount ?? 0; recorded ? summary.safeWithUnknownMigrated++ : summary.skippedIdempotent++;
+        summary.domainRowsCreated += result.rowCount ?? 0;
+        if (recorded) summary.safeWithUnknownMigrated++;
+        else summary.skippedIdempotent++;
       });
     }
 

@@ -103,7 +103,7 @@ export async function updateWorkforceBranchAction(input: {
       });
     });
     revalidatePath(BRANCHES_PATH);
-    revalidatePath("/administration/workforce/schedule");
+    revalidatePath("/administration/schedule");
     return { success: true } as const;
   } catch (error) {
     return { error: error instanceof Error ? error.message : "No se pudo actualizar." };
@@ -166,7 +166,7 @@ export async function saveWorkforceScheduleTemplateAction(input: {
       }
     });
     revalidatePath(BRANCHES_PATH);
-    revalidatePath("/administration/workforce/schedule");
+    revalidatePath("/administration/schedule");
     return { success: true } as const;
   } catch (error) {
     return { error: error instanceof Error ? error.message : "No se pudo guardar la plantilla." };

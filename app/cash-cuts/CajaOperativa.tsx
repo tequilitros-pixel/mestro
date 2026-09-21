@@ -46,9 +46,8 @@ export default function CajaOperativa({
 }) {
   // El reloj vive en el cliente solo para mostrar el tiempo transcurrido.
   // La hora que se guarda al abrir o cerrar siempre es la del servidor.
-  const [ahora, setAhora] = useState<number | null>(null);
+  const [ahora, setAhora] = useState(() => Date.now());
   useEffect(() => {
-    setAhora(Date.now());
     const t = setInterval(() => setAhora(Date.now()), 30000);
     return () => clearInterval(t);
   }, []);
@@ -148,7 +147,7 @@ export default function CajaOperativa({
             <dt className="text-on-surface-variant">Tiempo abierto</dt>
             <dd className="mt-0.5 inline-flex items-center gap-1.5 font-semibold text-on-surface">
               <ClockIcon className="h-3.5 w-3.5" />
-              {ahora === null ? "—" : tiempoTranscurrido(corte.openedAt, ahora)}
+              {tiempoTranscurrido(corte.openedAt, ahora)}
             </dd>
           </div>
           <div>

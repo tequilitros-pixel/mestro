@@ -30,7 +30,7 @@ export default function EventChecklistTable({
   const storageKey = `maestro:evento:${eventId}:${phase}:categoria`;
   useEffect(() => {
     const guardada = sessionStorage.getItem(storageKey);
-    if (guardada) setCategoria(guardada);
+    if (guardada) queueMicrotask(() => setCategoria(guardada));
   }, [storageKey]);
   useEffect(() => {
     sessionStorage.setItem(storageKey, categoria);

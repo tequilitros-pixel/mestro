@@ -499,7 +499,7 @@ export default function ClockWidget() {
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-error py-4 text-lg font-bold text-on-surface transition duration-150 ease-out hover:opacity-90 hover:scale-[1.04] active:scale-[0.97]"
           >
             <LogoutIcon className="h-5 w-5" />
-                {Date.now() - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS
+                {now - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS
                   ? "Cerrar sesión olvidada"
                   : "Checar salida"}
           </button>
@@ -511,7 +511,7 @@ export default function ClockWidget() {
             Revisa que las horas sean correctas antes de confirmar.
           </p>
 
-          {openShift && Date.now() - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS && (
+          {openShift && now - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS && (
             <div className="rounded-xl border border-secondary/40 bg-secondary/10 p-3 text-left text-sm text-secondary">
               Esta sesión lleva más de 24 horas abierta. Se cerrará como sesión olvidada,
               sin pedir GPS, y quedará marcada para revisión de nómina. Ajusta la hora real

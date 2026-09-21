@@ -1,6 +1,7 @@
 "use client";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 import DenominationWizard from "@/components/cash-cuts/DenominationWizard";
@@ -8,15 +9,12 @@ import type { CashDenominationCount } from "@/lib/cash-cuts/denominations";
 import {
   ReceiptIcon,
   CheckIcon,
-  AlertIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@/components/ui/icons";
 import { useEffect, useState, useCallback, startTransition } from "react";
 import { enqueueOperation } from "@/lib/offline/queue";
-import { Accordion } from "@/components/cash-cuts/CashCutAccordion";
 import { CompactStepper } from "@/components/cash-cuts/CompactStepper";
-import { CashCutSummaryCard } from "@/components/cash-cuts/CashCutSummaryCard";
 import { ClosedCutSummaryRefactored } from "@/components/cash-cuts/ClosedCutSummaryRefactored";
 
 function localCutKey(id: string) { return `maestro:cash-cut:${id}`; }
@@ -718,7 +716,10 @@ function EvidenciasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
               className="block overflow-hidden rounded-lg border border-outline-variant bg-surface-container-high hover:border-primary/25 transition"
             >
               {isImageUrl(ev.url) ? (
-                <img
+                <Image
+                  unoptimized
+                  width={320}
+                  height={96}
                   src={ev.url}
                   alt={label}
                   className="h-24 w-full object-cover"

@@ -6,6 +6,15 @@ import type { OfflineOperation } from "../lib/offline/types";
 // Minimal IndexedDB request harness: exercise the real queue and sync functions.
 const rows = new Map<string, OfflineOperation>();
 let storageFails = false;
+type MockRequest = { result?: unknown; onsuccess?: () => void };
+type MockTransaction = {
+  oncomplete?: () => void;
+  objectStore?: () => {
+    getAll: () => MockRequest;
+    put: (row: OfflineOperation) => MockRequest;
+    delete: (id: string) => MockRequest;
+  };
+};
 Object.defineProperty(globalThis, "window", { configurable: true, value: new EventTarget() });
 Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: true } });
 Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
@@ -13,14 +22,14 @@ Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
 } });
 Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: {
   open() {
-    const opening: any = {};
+    const opening: MockRequest = {};
     queueMicrotask(() => {
       opening.result = {
         close() {},
         transaction() {
-          const tx: any = {};
+          const tx: MockTransaction = {};
           const request = (work: () => unknown) => {
-            const result: any = {};
+            const result: MockRequest = {};
             queueMicrotask(() => { result.result = work(); result.onsuccess?.(); tx.oncomplete?.(); });
             return result;
           };
@@ -32,7 +41,7 @@ Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: {
           return tx;
         },
       };
-      opening.onsuccess();
+      opening.onsuccess?.();
     });
     return opening;
   },

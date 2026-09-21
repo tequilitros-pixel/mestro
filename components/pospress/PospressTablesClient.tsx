@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useState } from "react";
 import { AlertIcon, CheckIcon, CashRegisterIcon, ReceiptIcon, TrashIcon, XIcon } from "@/components/ui/icons";
 import { getProductVisual } from "@/lib/pos/productVisual";
 import { enqueueOperation } from "@/lib/offline/queue";
@@ -17,7 +18,8 @@ const currency = (value: number) => new Intl.NumberFormat("es-MX", { style: "cur
 const TABLES = Array.from({ length: 12 }, (_, index) => ({ id: `mesa-${index + 1}`, label: `Mesa ${index + 1}` }));
 
 export default function PospressTablesClient({ branches }: { branches: Branch[] }) {
-  const [branchId, setBranchId] = useState(branches[0]?.id ?? "");
+  const initialBranchId = branches[0]?.id ?? "";
+  const [branchId, setBranchId] = useState(initialBranchId);
   const [categories, setCategories] = useState<Category[]>([]);
   const [orders, setOrders] = useState<LocalTableOrder[]>([]);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -29,8 +31,14 @@ export default function PospressTablesClient({ branches }: { branches: Branch[] 
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    setIsOnline(navigator.onLine);
-    if (branches[0]?.id) setLocalOpenCut(Boolean(localStorage.getItem(`maestro:open-cash-cut:${branches[0].id}`)));
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setIsOnline(navigator.onLine);
+      if (initialBranchId) {
+        setLocalOpenCut(Boolean(localStorage.getItem(`maestro:open-cash-cut:${initialBranchId}`)));
+      }
+    });
     const online = () => setIsOnline(true);
     const offline = () => setIsOnline(false);
     window.addEventListener("online", online); window.addEventListener("offline", offline);
@@ -39,8 +47,11 @@ export default function PospressTablesClient({ branches }: { branches: Branch[] 
     if (cachedCatalog) {
       try {
         const data = JSON.parse(cachedCatalog) as Category[];
-        setCategories(data);
-        setCategoryId(data[0]?.id ?? null);
+        queueMicrotask(() => {
+          if (cancelled) return;
+          setCategories(data);
+          setCategoryId(data[0]?.id ?? null);
+        });
       } catch {
         localStorage.removeItem("maestro:pos-catalog");
       }
@@ -48,11 +59,17 @@ export default function PospressTablesClient({ branches }: { branches: Branch[] 
     fetch("/api/pos/products").then((response) => { if (!response.ok) throw new Error("No se pudo cargar el catálogo."); return response.json(); }).then((data: Category[]) => { setCategories(data); setCategoryId(data[0]?.id ?? null); localStorage.setItem("maestro:pos-catalog", JSON.stringify(data)); }).catch((error) => { if (!cachedCatalog) setLoadError(error.message); });
     const changed = () => void listLocalTableOrders().then(setOrders);
     window.addEventListener("maestro:tables-changed", changed);
-    return () => { window.removeEventListener("online", online); window.removeEventListener("offline", offline); window.removeEventListener("maestro:tables-changed", changed); };
-  }, []);
+    return () => { cancelled = true; window.removeEventListener("online", online); window.removeEventListener("offline", offline); window.removeEventListener("maestro:tables-changed", changed); };
+  }, [initialBranchId]);
 
   useEffect(() => {
-    setLocalOpenCut(Boolean(branchId && localStorage.getItem(`maestro:open-cash-cut:${branchId}`)));
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setLocalOpenCut(Boolean(branchId && localStorage.getItem(`maestro:open-cash-cut:${branchId}`)));
+      }
+    });
+    return () => { cancelled = true; };
   }, [branchId]);
 
   const branch = branches.find((item) => item.id === branchId) ?? null;
@@ -102,7 +119,7 @@ export default function PospressTablesClient({ branches }: { branches: Branch[] 
       <section><h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-on-surface-variant">Selecciona una mesa</h2><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{TABLES.map((table) => { const order = orders.find((item) => item.branchId === branchId && item.tableId === table.id); const amount = order?.lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0) ?? 0; return <button key={table.id} onClick={() => setSelectedTableId(table.id)} className={`min-h-28 rounded-2xl border p-4 text-left transition ${selectedTableId === table.id ? "border-primary bg-primary/10" : order ? "border-secondary/40 bg-secondary/10" : "border-outline-variant bg-surface-container hover:border-primary/50"}`}><span className="text-lg font-bold text-on-surface">{table.label}</span><span className="mt-2 block text-xs text-on-surface-variant">{order ? `${order.lines.reduce((sum, line) => sum + line.quantity, 0)} artículos · ${currency(amount)}` : "Libre"}</span></button>; })}</div></section>
       <section className="rounded-2xl border border-outline-variant bg-surface-container p-4"><div className="flex items-center justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-primary">Cuenta abierta</p><h2 className="text-xl font-bold text-on-surface">{selectedTable?.label ?? "Elige una mesa"}</h2></div>{activeOrder && <button onClick={() => void closeTable()} className="rounded-lg p-2 text-on-surface-variant hover:bg-error/10 hover:text-error" title="Cerrar cuenta sin cobrar"><TrashIcon className="h-4 w-4" /></button>}</div>{!activeOrder ? <p className="mt-8 text-center text-sm text-on-surface-variant">Selecciona una mesa libre para comenzar a agregar pedidos.</p> : <><div className="mt-4 space-y-2">{activeOrder.lines.map((line) => <div key={line.key} className="flex items-center justify-between gap-2 rounded-xl bg-surface p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-on-surface">{line.productName}</p>{line.variantName !== "Único" && <p className="text-xs text-on-surface-variant">{line.variantName}</p>}<p className="text-xs text-on-surface-variant">{currency(line.unitPrice)} c/u</p></div><div className="flex items-center gap-1"><button onClick={() => void changeQuantity(line, -1)} className="h-7 w-7 rounded-lg border border-outline-variant font-bold">−</button><span className="w-5 text-center text-sm font-bold">{line.quantity}</span><button onClick={() => void changeQuantity(line, 1)} className="h-7 w-7 rounded-lg border border-outline-variant font-bold">+</button></div></div>)}</div><div className="mt-4 border-t border-outline-variant pt-3"><div className="flex justify-between text-lg font-bold text-on-surface"><span>Total</span><span>{currency(total)}</span></div><button disabled={!hasOpenCut || !activeOrder.lines.length} onClick={() => setPaymentOpen(true)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-40"><CashRegisterIcon className="h-4 w-4" />Cobrar cuenta</button></div></>}</section>
     </div>
-    {selectedTable && <section className="rounded-2xl border border-outline-variant bg-surface-container p-4"><div className="mb-3 flex items-center justify-between"><div><h2 className="text-lg font-bold text-on-surface">Agregar a {selectedTable.label}</h2><p className="text-xs text-on-surface-variant">Puedes volver a esta mesa y agregar otra ronda.</p></div><div className="flex gap-2 overflow-x-auto">{categories.map((category) => <button key={category.id} onClick={() => setCategoryId(category.id)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold ${category.id === categoryId ? "bg-primary text-on-primary" : "bg-surface text-on-surface-variant"}`}>{category.name}</button>)}</div></div>{activeCategory && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6">{activeCategory.products.map((product) => { const visual = getProductVisual(product.icon); return <button key={product.id} onClick={() => void chooseProduct(product)} className="overflow-hidden rounded-xl border border-outline-variant bg-surface text-left hover:border-primary">{visual.type === "image" ? <img src={visual.url} alt={product.name} className="h-16 w-full object-cover" /> : <div className="flex h-16 items-center justify-center text-lg font-bold text-white" style={{ backgroundColor: visual.hex }}>{product.name.slice(0, 1).toUpperCase()}</div>}<div className="p-2"><p className="truncate text-xs font-bold text-on-surface">{product.name}</p><p className="text-[11px] text-on-surface-variant">{product.variants.length > 1 ? "Varias opciones" : currency(product.variants[0]?.price ?? 0)}</p></div></button>; })}</div>}</section>}
+    {selectedTable && <section className="rounded-2xl border border-outline-variant bg-surface-container p-4"><div className="mb-3 flex items-center justify-between"><div><h2 className="text-lg font-bold text-on-surface">Agregar a {selectedTable.label}</h2><p className="text-xs text-on-surface-variant">Puedes volver a esta mesa y agregar otra ronda.</p></div><div className="flex gap-2 overflow-x-auto">{categories.map((category) => <button key={category.id} onClick={() => setCategoryId(category.id)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold ${category.id === categoryId ? "bg-primary text-on-primary" : "bg-surface text-on-surface-variant"}`}>{category.name}</button>)}</div></div>{activeCategory && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6">{activeCategory.products.map((product) => { const visual = getProductVisual(product.icon); return <button key={product.id} onClick={() => void chooseProduct(product)} className="overflow-hidden rounded-xl border border-outline-variant bg-surface text-left hover:border-primary">{visual.type === "image" ? <Image unoptimized width={240} height={64} src={visual.url} alt={product.name} className="h-16 w-full object-cover" /> : <div className="flex h-16 items-center justify-center text-lg font-bold text-white" style={{ backgroundColor: visual.hex }}>{product.name.slice(0, 1).toUpperCase()}</div>}<div className="p-2"><p className="truncate text-xs font-bold text-on-surface">{product.name}</p><p className="text-[11px] text-on-surface-variant">{product.variants.length > 1 ? "Varias opciones" : currency(product.variants[0]?.price ?? 0)}</p></div></button>; })}</div>}</section>}
     {variantProduct && <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 p-4"><div className="w-full max-w-md rounded-2xl border border-outline-variant bg-surface-container-high p-5"><div className="mb-4 flex items-center justify-between"><h3 className="font-bold text-on-surface">{variantProduct.name}</h3><button onClick={() => setVariantProduct(null)}><XIcon className="h-5 w-5" /></button></div><div className="space-y-2">{variantProduct.variants.filter((variant) => variant.active).map((variant) => <button key={variant.id} onClick={() => { void addVariant(variantProduct, variant); setVariantProduct(null); }} className="flex w-full justify-between rounded-xl border border-outline-variant p-3 text-left text-sm font-semibold text-on-surface"><span>{variant.name}</span><span>{currency(variant.price)}</span></button>)}</div></div></div>}
     {paymentOpen && activeOrder && <TablePaymentModal total={total} branchId={branchId} order={activeOrder} isOnline={isOnline} onClose={() => setPaymentOpen(false)} onSuccess={async () => { await deleteLocalTableOrder(activeOrder.id); await refreshOrders(); setSelectedTableId(null); setPaymentOpen(false); }} />}
   </main>;

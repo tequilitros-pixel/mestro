@@ -3,8 +3,6 @@ import { prisma } from "@/lib/prisma";
 import ProcessTable from "@/components/production/ProcessTable";
 import { MetricCard, PageHeader } from "@/components/ui/CompactUI";
 
-const label = (value: string) => value.toLowerCase().replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
-
 export default async function LiquorProductionPage() {
   const batches = await prisma.liquorBatch.findMany({ orderBy: { createdAt: "desc" }, include: { product: true, recipe: true, steps: { select: { status: true, title: true } } } });
   const active = batches.filter((item) => item.status !== "TERMINADO");

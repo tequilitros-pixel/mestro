@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, startTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, startTransition } from "react";
 import Link from "next/link";
 import {
   getPersonnel,
@@ -59,7 +59,7 @@ export default function PersonnelPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  async function loadAll(includeArchived = showArchived) {
+  const loadAll = useCallback(async (includeArchived = showArchived) => {
     try {
       const [usersData, branchesData] = await Promise.all([
         getPersonnel(includeArchived),
@@ -76,11 +76,11 @@ export default function PersonnelPage() {
         setLoading(false);
       });
     }
-  }
+  }, [showArchived]);
 
   useEffect(() => {
     loadAll();
-  }, [showArchived]);
+  }, [loadAll]);
 
   function toggleBranch(branchId: string) {
     setBranchIds((prev) =>

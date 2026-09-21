@@ -40,9 +40,9 @@ function date(formData: FormData, key: string) {
 }
 function route(formData: FormData) {
   const target = value(formData, "returnTo");
-  return target.startsWith("/administration/workforce/schedule")
+  return target.startsWith("/administration/schedule")
     ? target
-    : "/administration/workforce/schedule";
+    : "/administration/schedule";
 }
 function resultRoute(target: string, key: "saved" | "error", message: string) {
   return `${target}${target.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(message)}`;
@@ -106,7 +106,7 @@ export async function saveWorkforceShiftAction(formData: FormData) {
       ),
       reason: value(formData, "reason") || null,
     });
-    revalidatePath("/administration/workforce/schedule");
+    revalidatePath("/administration/schedule");
     revalidatePath("/workforce");
     return "Turno guardado.";
   });
@@ -118,7 +118,7 @@ export async function deleteWorkforceShiftAction(formData: FormData) {
       expectedVersion: Number(value(formData, "expectedVersion")),
       reason: value(formData, "reason") || null,
     });
-    revalidatePath("/administration/workforce/schedule");
+    revalidatePath("/administration/schedule");
     revalidatePath("/workforce");
     return result.deleted
       ? "Borrador eliminado."
@@ -131,7 +131,7 @@ export async function publishWorkforceScheduleAction(formData: FormData) {
       current,
       value(formData, "periodId"),
     );
-    revalidatePath("/administration/workforce/schedule");
+    revalidatePath("/administration/schedule");
     revalidatePath("/workforce");
     return result.idempotent
       ? "La semana ya estaba publicada."
@@ -144,7 +144,7 @@ export async function copyWorkforcePreviousWeekAction(formData: FormData) {
       current,
       value(formData, "periodId"),
     );
-    revalidatePath("/administration/workforce/schedule");
+    revalidatePath("/administration/schedule");
     if (result.idempotent)
       return "La semana ya contiene turnos; no se crearon duplicados.";
     return `${result.copied} shifts copiados; ${result.skipped} omitidos.`;
@@ -162,7 +162,7 @@ export async function copyWorkforcePreviousWeekGroupAction(formData: FormData) {
       copied += result.copied;
       skipped += result.skipped;
     }
-    revalidatePath("/administration/workforce/schedule");
+    revalidatePath("/administration/schedule");
     return `${copied} turnos copiados; ${skipped} omitidos.`;
   });
 }
@@ -174,7 +174,7 @@ export async function applyWorkforceScheduleTemplateAction(formData: FormData) {
       employmentIds: formData.getAll("employmentId").map(String),
       weekStart: date(formData, "weekStart"),
     });
-    revalidatePath("/administration/workforce/schedule");
+    revalidatePath("/administration/schedule");
     revalidatePath("/workforce");
     return `${result.created} turnos borrador creados desde la plantilla.`;
   });
@@ -188,7 +188,7 @@ export async function saveWorkforceCoverageAction(formData: FormData) {
       endTime: value(formData, "endTime"),
       requiredCount: Number(value(formData, "requiredCount")),
     });
-    revalidatePath("/administration/workforce/schedule");
+    revalidatePath("/administration/schedule");
     return "Cobertura guardada.";
   });
 }

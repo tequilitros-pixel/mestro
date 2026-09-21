@@ -57,15 +57,6 @@ const METODOS = [
   { key: "OTRO", label: "Otro" },
 ];
 
-const TIPOS_EVIDENCIA = [
-  { key: "DINERO_CONTADO", label: "Dinero contado" },
-  { key: "SOBRE", label: "Sobre" },
-  { key: "TICKET", label: "Ticket" },
-  { key: "NOTA", label: "Nota" },
-  { key: "FACTURA", label: "Factura" },
-  { key: "OTRO", label: "Otro" },
-];
-
 export function ClosedCutSummaryRefactored({ cashCut }: { cashCut: CashCut }) {
   const posSales = cashCut.posSales ?? [];
   const products = new Map<string, { name: string; quantity: number; total: number }>();
@@ -80,7 +71,6 @@ export function ClosedCutSummaryRefactored({ cashCut }: { cashCut: CashCut }) {
   }
   const productRows = [...products.values()].sort((a, b) => b.total - a.total);
   const posTotal = posSales.reduce((sum, sale) => sum + sale.total, 0);
-  const discountTotal = posSales.reduce((sum, sale) => sum + sale.discountAmount, 0);
   const manualSales = Math.max(0, (cashCut.totalSales ?? 0) - posTotal);
 
   return (

@@ -65,7 +65,7 @@ export default function TransactionCenter({ branches, initialSales, canCancel }:
   }, [branchId]);
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => void refresh());
     const listener = () => void refresh();
     window.addEventListener("maestro:queue-changed", listener);
     window.addEventListener("maestro:sync-finished", listener);

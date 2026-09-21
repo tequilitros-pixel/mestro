@@ -16,17 +16,14 @@ import {
 
 export default function MainNavigation({ role, moduleKeys }: { role: string; moduleKeys: string[] }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const [openPath, setOpenPath] = useState<string | null>(null);
+  const open = openPath === pathname;
   const currentModule = getCurrentModule(pathname);
   const modules = MAIN_MODULES.filter((module) => isMainModuleVisible(role, moduleKeys, module));
 
   useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-
-  useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") setOpenPath(null);
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
@@ -50,7 +47,7 @@ export default function MainNavigation({ role, moduleKeys }: { role: string; mod
         aria-expanded={open}
         aria-controls="main-module-drawer"
         title={open ? "Cerrar menú" : "Cambiar módulo"}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setOpenPath(open ? null : pathname)}
         className="shell-icon-button fixed left-3 top-2.5 z-[70] cursor-pointer touch-manipulation"
       >
         {open ? <XIcon className="h-[18px] w-[18px]" /> : <GridIcon className="h-[18px] w-[18px]" />}
@@ -62,7 +59,7 @@ export default function MainNavigation({ role, moduleKeys }: { role: string; mod
             type="button"
             aria-label="Cerrar menú"
             className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
-            onClick={() => setOpen(false)}
+            onClick={() => setOpenPath(null)}
           />
           <aside
             id="main-module-drawer"
@@ -77,7 +74,7 @@ export default function MainNavigation({ role, moduleKeys }: { role: string; mod
               </p>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={() => setOpenPath(null)}
                 aria-label="Cerrar menú"
                 className="shell-icon-button"
               >
@@ -91,7 +88,7 @@ export default function MainNavigation({ role, moduleKeys }: { role: string; mod
                   <Link
                     key={module.module}
                     href={destinationFor(module)}
-                    onClick={() => setOpen(false)}
+                    onClick={() => setOpenPath(null)}
                     aria-current={active ? "page" : undefined}
                     className={`flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-colors duration-150 ${
                       active

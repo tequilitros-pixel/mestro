@@ -180,12 +180,14 @@ function ModuleItem({
 }) {
   const active = isActive(pathname, item);
   const hasChildren = !collapsed && Boolean(item.children?.length);
-  const [expanded, setExpanded] = useState(active);
+  const [expansionOverride, setExpansionOverride] = useState<{
+    pathname: string;
+    expanded: boolean;
+  } | null>(null);
+  const expanded = expansionOverride?.pathname === pathname
+    ? expansionOverride.expanded
+    : active;
   const Icon = item.icon;
-
-  useEffect(() => {
-    if (active) setExpanded(true);
-  }, [active]);
 
   const destination = getSubmenuItemDestination(role, moduleKeys, item);
 
@@ -216,7 +218,7 @@ function ModuleItem({
         {hasChildren && (
           <button
             type="button"
-            onClick={() => setExpanded((value) => !value)}
+            onClick={() => setExpansionOverride({ pathname, expanded: !expanded })}
             aria-label={`${expanded ? "Contraer" : "Expandir"} ${item.label}`}
             aria-expanded={expanded}
             className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-on-surface-variant hover:bg-surface-container-high"
