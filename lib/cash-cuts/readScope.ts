@@ -19,3 +19,19 @@ export function getCurrentCashCutWeek(today = todayDateOnly()): CurrentCashCutWe
     to: parseDateOnly(endDate),
   };
 }
+
+/**
+ * Los cortes cerrados se limitan a la semana vigente, pero un corte abierto
+ * siempre debe permanecer visible. De otro modo puede bloquear una apertura
+ * nueva sin que el usuario tenga forma de encontrarlo y cerrarlo.
+ */
+export function getCashCutVisibilityWhere(today = todayDateOnly()) {
+  const week = getCurrentCashCutWeek(today);
+
+  return {
+    OR: [
+      { status: "ABIERTO" as const },
+      { date: { gte: week.from, lte: week.to } },
+    ],
+  };
+}

@@ -3,7 +3,10 @@ import "server-only";
 import type { Prisma, UserRole } from "@prisma/client";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getCurrentCashCutWeek } from "@/lib/cash-cuts/readScope";
+import {
+  getCashCutVisibilityWhere,
+  getCurrentCashCutWeek,
+} from "@/lib/cash-cuts/readScope";
 
 /*
  * ============================================================
@@ -153,19 +156,19 @@ export function withCashCutScope(
 
 /**
  * Alcance de lectura: además del alcance por rol, solo la sucursal de
- * trabajo y la semana calendario actual. Un usuario sin contexto de
- * sucursal recibe una consulta vacía, nunca todas sus sucursales.
+ * trabajo y la semana calendario actual. Los cortes abiertos permanecen
+ * visibles aunque sean anteriores para que nunca bloqueen una apertura sin
+ * ofrecer una ruta de cierre. Un usuario sin contexto de sucursal recibe una
+ * consulta vacía, nunca todas sus sucursales.
  */
 export function cashCutReadScopeWhere(scope: CashCutScope): Prisma.CashCutWhereInput {
-  const week = getCurrentCashCutWeek();
-
   return {
     AND: [
       cashCutScopeWhere(scope),
       scope.workingBranchId
         ? { branchId: scope.workingBranchId }
         : { branchId: { in: [] } },
-      { date: { gte: week.from, lte: week.to } },
+      getCashCutVisibilityWhere(),
     ],
   };
 }
