@@ -45,6 +45,7 @@ export default async function LiquorBatchPage({ params }: Props) {
       bottlings: {
         select: {
           litersUsed: true,
+          finishedAt: true,
           producedBottles: true,
           rejectedBottles: true,
         },
@@ -165,7 +166,10 @@ const isReleased = releasedStatuses.includes(currentStatus);
   batchCode={batch.code}
   productName={batch.product.name}
   productIcon={batch.product.icon}
-  finishedAt={batch.finishedAt ?? batch.updatedAt}
+  finishedAt={batch.bottlings.reduce(
+    (latest, bottling) => bottling.finishedAt && bottling.finishedAt > latest ? bottling.finishedAt : latest,
+    batch.finishedAt ?? batch.updatedAt,
+  )}
   totalProducedBottles={totalProducedBottles}
   totalRejectedBottles={totalRejectedBottles}
   finalNotes={batch.finalNotes}
