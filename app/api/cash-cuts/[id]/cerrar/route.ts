@@ -21,6 +21,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
 import { denominationTotal, validDenominationRows } from "@/lib/cash-cuts/denominations";
 import { createEnvelopeForCashCut } from "@/lib/cash-cuts/safeEnvelopes";
+import { envelopeNumberForClose } from "@/lib/cash-cuts/envelopeNumber";
 
 const ROLES_QUE_PUEDEN_CERRAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -64,7 +65,6 @@ export async function POST(
   const {
     cashCounted,
     envelopeAmount,
-    envelopeNumber,
     envelopeNotes,
     nextFund,
     totalCostOfGoods,
@@ -137,6 +137,9 @@ export async function POST(
 
   const finalCashCounted = cashCounted;
   const finalEnvelopeAmount = envelopeAmount;
+  const finalEnvelopeNumber = finalEnvelopeAmount > 0
+    ? envelopeNumberForClose(closedAt)
+    : null;
   const finalNextFund = countThenEnvelope
     ? Math.max(0, cashCounted - envelopeAmount)
     : nextFund;
@@ -188,7 +191,7 @@ export async function POST(
           cashExpected,
           difference,
           envelopeAmount: finalEnvelopeAmount,
-          envelopeNumber,
+          envelopeNumber: finalEnvelopeNumber,
           envelopeNotes,
           nextFund: finalNextFund,
           totalSales,

@@ -505,7 +505,7 @@ export async function listEnvelopesForBranch(
     include: {
       createdBy: { select: { id: true, name: true } },
       receivedBy: { select: { id: true, name: true } },
-      cashCut: { select: { id: true, code: true } },
+      cashCut: { select: { id: true, code: true, envelopeNumber: true } },
     },
     orderBy: { cutDate: "desc" },
   });

@@ -15,7 +15,7 @@ interface EnvelopeSummary {
   originalAmount: number;
   currentBalance: number;
   status: "PENDIENTE" | "EN_CAJA_FUERTE" | "PARCIAL" | "VACIO";
-  cashCut: { id: string; code: string } | null;
+  cashCut: { id: string; code: string; envelopeNumber: string | null } | null;
   createdBy: { id: string; name: string } | null;
   receivedBy: { id: string; name: string } | null;
 }
@@ -81,7 +81,12 @@ export function EnvelopeRow({
     <Card>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-sm font-bold text-on-surface">{envelope.code}</p>
+          <p className="font-mono text-sm font-bold text-on-surface">
+            {envelope.cashCut?.envelopeNumber ? `Sobre ${envelope.cashCut.envelopeNumber}` : envelope.code}
+          </p>
+          {envelope.cashCut?.envelopeNumber && (
+            <p className="text-xs text-on-surface-variant">Código interno: {envelope.code}</p>
+          )}
           <p className="text-xs text-on-surface-variant capitalize">{formatDate(envelope.cutDate)}</p>
         </div>
         <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${STATUS_CLASS[envelope.status]}`}>

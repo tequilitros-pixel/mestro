@@ -17,7 +17,7 @@ interface EnvelopeItem {
   originalAmount: number;
   currentBalance: number;
   status: "PENDIENTE" | "EN_CAJA_FUERTE" | "PARCIAL" | "VACIO";
-  cashCut: { id: string; code: string } | null;
+  cashCut: { id: string; code: string; envelopeNumber: string | null } | null;
   createdBy: { id: string; name: string } | null;
   receivedBy: { id: string; name: string } | null;
 }

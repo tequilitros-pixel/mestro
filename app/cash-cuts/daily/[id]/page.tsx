@@ -15,6 +15,7 @@ import {
  import { useEffect, useState, useCallback, startTransition } from "react";
 import { enqueueOperation } from "@/lib/offline/queue";
 import { formatBusinessDateTime } from "@/lib/dateTime";
+import { envelopeNumberForClose } from "@/lib/cash-cuts/envelopeNumber";
 
 function localCutKey(id: string) { return `maestro:cash-cut:${id}`; }
 function saveLocalCut(cut: CashCut) { localStorage.setItem(localCutKey(cut.id), JSON.stringify(cut)); }
@@ -981,7 +982,7 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
   const [cashCounted, setCashCounted] = useState<number | null>(null);
   const [cashCountedBreakdown, setCashCountedBreakdown] = useState<CashDenominationCount[]>([]);
   const [envelopeAmount, setEnvelopeAmount] = useState("");
-  const [envelopeNumber, setEnvelopeNumber] = useState(cashCut.envelopeNumber ?? "");
+  const [envelopePreview, setEnvelopePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<CloseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1021,12 +1022,12 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
       cashCounted,
       cashCountedDenominations: cashCountedBreakdown,
       envelopeAmount: envelope,
-      envelopeNumber: envelopeNumber || undefined,
     };
     if (!navigator.onLine) {
       const createdAt = new Date().toISOString();
+      const offlineEnvelopeNumber = envelope > 0 ? envelopeNumberForClose(createdAt) : null;
       await enqueueOperation({ id: crypto.randomUUID(), kind: "cash-cut.close", createdAt, payload: closePayload });
-      saveLocalCut({ ...cashCut, status: "CERRADO", cashCounted, cashExpected: expectedCash, difference: cashCounted - expectedCash, envelopeAmount: envelope, envelopeNumber: envelopeNumber || null, nextFund: cashCounted - envelope });
+      saveLocalCut({ ...cashCut, status: "CERRADO", cashCounted, cashExpected: expectedCash, difference: cashCounted - expectedCash, envelopeAmount: envelope, envelopeNumber: offlineEnvelopeNumber, nextFund: cashCounted - envelope });
       localStorage.removeItem(`maestro:open-cash-cut:${cashCut.branch.id}`);
       setResult({
         assignmentWarning: "Cierre guardado en el dispositivo y pendiente de sincronización.",
@@ -1036,7 +1037,7 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
           difference: cashCounted - expectedCash,
           envelopeAmount: envelope,
           nextFund: cashCounted - envelope,
-          envelopeNumber: envelopeNumber || null,
+          envelopeNumber: offlineEnvelopeNumber,
         },
       });
       setSaving(false);
@@ -1240,18 +1241,19 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
               max={cashCounted}
               step="0.01"
               value={envelopeAmount}
-              onChange={(event) => setEnvelopeAmount(event.target.value)}
+              onChange={(event) => {
+                const amount = event.target.value;
+                setEnvelopeAmount(amount);
+                setEnvelopePreview(Number(amount) > 0 ? envelopeNumberForClose(new Date()) : null);
+              }}
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-lg font-bold text-on-surface outline-none focus:border-primary"
               placeholder="0.00"
             />
           </Card>
           <Card>
-            <CardLabel>Número de sobre (opcional)</CardLabel>
-            <input
-              value={envelopeNumber}
-              onChange={(event) => setEnvelopeNumber(event.target.value)}
-              className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none focus:border-primary"
-            />
+            <CardLabel>Número de sobre</CardLabel>
+            <p className="text-lg font-bold text-on-surface">{envelopePreview ?? "Se asignará al indicar un monto"}</p>
+            {envelopePreview && <p className="mt-1 text-xs text-on-surface-variant">Se confirma con la fecha del cierre.</p>}
           </Card>
           <Card highlight>
             <CardLabel>Fondo que queda en caja</CardLabel>
