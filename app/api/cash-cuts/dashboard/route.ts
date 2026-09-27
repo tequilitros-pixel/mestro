@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { addDaysToDateOnly, parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
 import { getCashCutScope, withCashCutReadScope } from "@/lib/cash-cuts/access";
+import { getBranchSafeSummary } from "@/lib/cash-cuts/safeEnvelopes";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUserWithAnyModuleAccess(["/cash-cuts/dashboard"]);
@@ -92,24 +93,16 @@ export async function GET(req: NextRequest) {
 
   const branches = await prisma.branch.findMany({
     where: {
-      ...(requestedBranchId ? { id: requestedBranchId } : {}),
-      ...(allowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
+      active: true,
+      ...(branchFilter ? { id: branchFilter } : {}),
     },
     select: { id: true, name: true },
   });
 
   const safeBalances = await Promise.all(
     branches.map(async (branch) => {
-      const movements = await prisma.cashSafeMovement.findMany({
-        where: { branchId: branch.id },
-      });
-      const deposits = movements
-        .filter((m) => m.type === "DEPOSITO_SOBRE")
-        .reduce((sum, m) => sum + m.amount, 0);
-      const withdrawals = movements
-        .filter((m) => m.type === "RETIRO")
-        .reduce((sum, m) => sum + m.amount, 0);
-      return { branch: branch.name, balance: deposits - withdrawals };
+      const summary = await getBranchSafeSummary(branch.id);
+      return { branch: branch.name, balance: summary.balance };
     })
   );
 

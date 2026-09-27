@@ -114,21 +114,6 @@ export async function POST(
       }));
   }
 
-  const [outflows, inflows] = await Promise.all([
-    prisma.cashOutflow.findMany({ where: { cashCutId } }),
-    prisma.cashInflow.findMany({ where: { cashCutId } }),
-  ]);
-
-  const totalOutflows = outflows.reduce((sum, o) => sum + o.amount, 0);
-  const totalInflows = inflows.reduce((sum, i) => sum + i.amount, 0);
-  const totalSales = cashCut.salesByMethod.reduce((sum, s) => sum + s.amount, 0);
-
-  const cashSales =
-    cashCut.salesByMethod.find((s) => s.method === "EFECTIVO")?.amount ?? 0;
-
-  const cashExpected =
-    cashCut.startingFund + cashSales + totalInflows - totalOutflows;
-
   const countedRows = validDenominationRows(cashCountedDenominations);
   const countedFromDenominations = denominationTotal(countedRows);
   if (countThenEnvelope && Math.abs(Number(cashCounted) - countedFromDenominations) > 0.001) {
@@ -161,13 +146,6 @@ export async function POST(
         ...toDenominationRows("CIERRE", cashCountedDenominations),
         ...toDenominationRows("SIGUIENTE_TURNO", nextFundDenominations),
       ];
-  const difference = finalCashCounted - cashExpected;
-
-  const netProfit =
-    totalCostOfGoods !== undefined
-      ? totalSales - totalCostOfGoods - totalOutflows
-      : null;
-
   const assignedCash = (finalEnvelopeAmount ?? 0) + finalNextFund;
   const assignmentWarning =
     Math.abs(assignedCash - finalCashCounted) > 1
@@ -189,6 +167,19 @@ export async function POST(
       if (lockedCuts[0]?.status !== "ABIERTO") {
         throw new CashCutAlreadyClosedError();
       }
+
+      // Read totals after taking the same lock used by sale/cancellation.
+      // A sale committed while closing was waiting must be included.
+      const payments = await tx.cashSalePayment.findMany({ where: { cashCutId } });
+      const outflows = await tx.cashOutflow.findMany({ where: { cashCutId } });
+      const inflows = await tx.cashInflow.findMany({ where: { cashCutId } });
+      const totalSales = payments.reduce((sum, payment) => sum + payment.amount, 0);
+      const totalOutflows = outflows.reduce((sum, outflow) => sum + outflow.amount, 0);
+      const totalInflows = inflows.reduce((sum, inflow) => sum + inflow.amount, 0);
+      const cashSales = payments.find((payment) => payment.method === "EFECTIVO")?.amount ?? 0;
+      const cashExpected = cashCut.startingFund + cashSales + totalInflows - totalOutflows;
+      const difference = finalCashCounted - cashExpected;
+      const netProfit = totalCostOfGoods !== undefined ? totalSales - totalCostOfGoods - totalOutflows : null;
 
       const cut = await tx.cashCut.update({
         where: { id: cashCutId },

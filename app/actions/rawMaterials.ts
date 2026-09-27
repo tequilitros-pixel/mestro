@@ -269,7 +269,7 @@ export async function registerMovementAction(
     return { success: true, message: "Movimiento registrado." };
   } catch (error) {
     console.error("Error registering raw material movement:", error);
-    return { success: false, error: "No fue posible registrar el movimiento." };
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible registrar el movimiento." };
   }
 }
 

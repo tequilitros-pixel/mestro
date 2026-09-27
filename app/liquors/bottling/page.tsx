@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { MetricCard, PageHeader } from "@/components/ui/CompactUI";
 import BottlingList, { type BottlingCard } from "./BottlingList";
+import { getEffectiveLiquorBatchStatus } from "@/lib/liquors/batchStatus";
 
 export default async function LiquorBottlingPage() {
   const batches = await prisma.liquorBatch.findMany({
@@ -22,6 +23,7 @@ export default async function LiquorBottlingPage() {
         },
         select: {
           id: true,
+          litersUsed: true,
           code: true,
           status: true,
           bottleSizeMl: true,
@@ -41,7 +43,7 @@ export default async function LiquorBottlingPage() {
     return {
       id: batch.id,
       code: batch.code,
-      status: batch.status,
+      status: getEffectiveLiquorBatchStatus(batch),
       productName: batch.product.name,
       productIcon: batch.product.icon,
       recipeName: batch.recipe.name,

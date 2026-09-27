@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getEffectiveLiquorBatchStatus } from "@/lib/liquors/batchStatus";
 import LiquorBatchAssistant from "@/components/liquors/LiquorBatchAssistant";
 import { resumeLiquorBatchAction } from "@/app/actions/liquorBatchPause";
 import { TagIcon, PackageIcon, CheckIcon, BottleIcon } from "@/components/ui/icons";
@@ -43,6 +44,7 @@ export default async function LiquorBatchPage({ params }: Props) {
 
       bottlings: {
         select: {
+          litersUsed: true,
           producedBottles: true,
           rejectedBottles: true,
         },
@@ -83,7 +85,7 @@ export default async function LiquorBatchPage({ params }: Props) {
    */
   const releasedStatuses = ["LISTO_PARA_EMBOTELLAR", "EMBOTELLANDO"];
 
-  const currentStatus = String(batch.status);
+  const currentStatus = getEffectiveLiquorBatchStatus(batch);
 
 const isTerminated = currentStatus === "TERMINADO";
 
@@ -130,7 +132,7 @@ const isReleased = releasedStatuses.includes(currentStatus);
       <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi
           title="Estado"
-          value={formatStatus(batch.status)}
+          value={formatStatus(currentStatus)}
           detail="Etapa actual del lote"
         />
 

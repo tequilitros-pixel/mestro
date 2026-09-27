@@ -37,6 +37,7 @@ export async function finishLiquorBatchWithRemainderAction(
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "LiquorBatch" WHERE "id" = ${batchId} FOR UPDATE`;
       const batch = await tx.liquorBatch.findUnique({
         where: {
           id: batchId,
@@ -95,6 +96,7 @@ export async function finishLiquorBatchWithRemainderAction(
       const remainingLiters = roundLiters(
         Math.max(totalBatchLiters - bottledLiters, 0)
       );
+      if (batch.status === LiquorBatchStatus.TERMINADO) return { remainingLiters };
 
       const closureNote = [
         `Lote finalizado con remanente de ${formatLiters(

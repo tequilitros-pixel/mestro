@@ -1,3 +1,5 @@
+import { withOpenCashCutWrite } from "@/lib/cash-cuts/openCutWrite";
+import { DomainError } from "@/lib/domain/errors";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
@@ -9,10 +11,6 @@ const ROLES_QUE_PUEDEN_EDITAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 async function recalcularTotalSalidas(cashCutId: string) {
   const salidas = await prisma.cashOutflow.findMany({ where: { cashCutId } });
   const totalOutflows = salidas.reduce((sum, s) => sum + s.amount, 0);
-  await prisma.cashCut.update({
-    where: { id: cashCutId },
-    data: { totalOutflows },
-  });
   return totalOutflows;
 }
 
@@ -115,7 +113,9 @@ export async function POST(
 
   const occurredAt = clientCreatedAt ? new Date(clientCreatedAt) : null;
   if (occurredAt && Number.isNaN(occurredAt.getTime())) return NextResponse.json({ error: "Fecha de salida inválida" }, { status: 400 });
-  const salida = await prisma.cashOutflow.create({
+  try {
+    const result = await withOpenCashCutWrite(cashCutId, async (tx) => {
+  const salida = await tx.cashOutflow.create({
     data: {
       cashCutId,
       concept,
@@ -131,7 +131,14 @@ export async function POST(
     },
   });
 
-  const totalOutflows = await recalcularTotalSalidas(cashCutId);
-
-  return NextResponse.json({ salida, totalOutflows }, { status: 201 });
+  const records = await tx.cashOutflow.findMany({ where: { cashCutId } });
+  const totalOutflows = records.reduce((sum, record) => sum + record.amount, 0);
+  await tx.cashCut.update({ where: { id: cashCutId }, data: { totalOutflows } });
+  return { salida, totalOutflows };
+    });
+    return NextResponse.json(result, { status: 201 });
+  } catch (error) {
+    if (error instanceof DomainError) return NextResponse.json(error.toResponse(), { status: error.httpStatus });
+    throw error;
+  }
 }

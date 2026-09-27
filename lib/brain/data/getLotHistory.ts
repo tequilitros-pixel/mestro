@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getProductionVolume } from "@/lib/lots/productionVolume";
 
 export type HistoricLot = {
   lotId: string;
@@ -65,7 +66,7 @@ export async function getLotHistory(): Promise<HistoricLot[]> {
     ) ?? lot.distillations[0];
 
     const alcohol = distillation?.finalAlcohol ?? null;
-    const litersProduced = distillation?.heartLiters ?? null;
+    const litersProduced = getProductionVolume(lot);
 
     // --- Costos ---
     const totalCost = lot.expenses.reduce((s, e) => s + e.amount, 0);

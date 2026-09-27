@@ -30,6 +30,15 @@ export async function cancelPosSaleAtomic(input: {
       },
     });
     if (!sale) return { kind: "not_found" as const };
+    if (input.user.role !== "ADMIN") {
+      const access = await tx.userBranch.findFirst({ where: { userId: input.user.id, branchId: sale.branchId }, select: { id: true } });
+      if (!access) return { kind: "not_found" as const };
+    }
+    const lockedCuts = await tx.$queryRaw<Array<{ status: string }>>`
+      SELECT "status" FROM "CashCut" WHERE "id" = ${sale.cashCutId} FOR UPDATE
+    `;
+    if (!lockedCuts[0]) return { kind: "not_found" as const };
+    sale.cashCut.status = lockedCuts[0].status as typeof sale.cashCut.status;
     if (sale.status === "CANCELADA") return { kind: "duplicate" as const, sale };
     if (sale.cashCut.status !== "ABIERTO" && input.user.role !== "ADMIN") {
       return { kind: "closed_cut" as const };

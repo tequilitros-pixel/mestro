@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { addDaysToDateOnly, mondayOfWeek } from "@/lib/dateOnly";
+import { addDaysToDateOnly } from "@/lib/dateOnly";
+import { groupCalendarWeeks } from "@/lib/workforce/calendarWeeks";
 import { CalendarIcon, ClockIcon, MapPinIcon, PartyIcon } from "@/components/ui/icons";
 
 type ScheduleEventInfo = {
@@ -77,14 +78,7 @@ export default function CalendarView({ shifts, openShift, todayKey }: CalendarVi
   }, [shifts]);
 
   const days = useMemo(() => Array.from({ length: 21 }, (_, index) => addDaysToDateOnly(todayKey, index)), [todayKey]);
-  const weeks = useMemo(() => {
-    const grouped: Array<{ start: string; days: string[] }> = [];
-    for (let index = 0; index < days.length; index += 7) {
-      const weekDays = days.slice(index, index + 7);
-      grouped.push({ start: mondayOfWeek(weekDays[0]), days: weekDays });
-    }
-    return grouped;
-  }, [days]);
+  const weeks = useMemo(() => groupCalendarWeeks(days), [days]);
   const workDays = days.filter((key) => (byDate.get(key) ?? []).some((shift) => shift.type === "TURNO")).length;
   const restDays = days.filter((key) => {
     const dayShifts = byDate.get(key) ?? [];

@@ -60,6 +60,7 @@ export default function CajaOperativa({
   }, []);
 
   const hoy = new Date().toLocaleDateString("es-MX", {
+    timeZone: "America/Mexico_City",
     weekday: "long",
     day: "numeric",
     month: "long",

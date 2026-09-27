@@ -1,3 +1,5 @@
+import { withOpenCashCutWrite } from "@/lib/cash-cuts/openCutWrite";
+import { DomainError } from "@/lib/domain/errors";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
@@ -11,10 +13,6 @@ const TIPOS_VALIDOS = ["CAMBIO_RECIBIDO", "REEMBOLSO", "AJUSTE", "PRESTAMO", "OT
 async function recalcularTotalEntradas(cashCutId: string) {
   const entradas = await prisma.cashInflow.findMany({ where: { cashCutId } });
   const totalInflows = entradas.reduce((sum, e) => sum + e.amount, 0);
-  await prisma.cashCut.update({
-    where: { id: cashCutId },
-    data: { totalInflows },
-  });
   return totalInflows;
 }
 
@@ -113,11 +111,20 @@ export async function POST(
 
   const occurredAt = clientCreatedAt ? new Date(clientCreatedAt) : null;
   if (occurredAt && Number.isNaN(occurredAt.getTime())) return NextResponse.json({ error: "Fecha de entrada inválida" }, { status: 400 });
-  const entrada = await prisma.cashInflow.create({
+  try {
+    const result = await withOpenCashCutWrite(cashCutId, async (tx) => {
+  const entrada = await tx.cashInflow.create({
     data: { ...(clientOperationId ? { id: clientOperationId } : {}), cashCutId, type, categoryId: categoryRef.id, categoryNameSnapshot: categoryRef.name, amount, notes, receiptPhotoUrl: body.receiptPhotoUrl ?? null, ...(occurredAt ? { occurredAt, createdAt: occurredAt } : {}) },
   });
 
-  const totalInflows = await recalcularTotalEntradas(cashCutId);
-
-  return NextResponse.json({ entrada, totalInflows }, { status: 201 });
+  const records = await tx.cashInflow.findMany({ where: { cashCutId } });
+  const totalInflows = records.reduce((sum, record) => sum + record.amount, 0);
+  await tx.cashCut.update({ where: { id: cashCutId }, data: { totalInflows } });
+  return { entrada, totalInflows };
+    });
+    return NextResponse.json(result, { status: 201 });
+  } catch (error) {
+    if (error instanceof DomainError) return NextResponse.json(error.toResponse(), { status: error.httpStatus });
+    throw error;
+  }
 }

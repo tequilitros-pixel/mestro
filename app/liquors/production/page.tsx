@@ -2,9 +2,11 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import ProcessTable from "@/components/production/ProcessTable";
 import { MetricCard, PageHeader } from "@/components/ui/CompactUI";
+import { getEffectiveLiquorBatchStatus } from "@/lib/liquors/batchStatus";
 
 export default async function LiquorProductionPage() {
-  const batches = await prisma.liquorBatch.findMany({ orderBy: { createdAt: "desc" }, include: { product: true, recipe: true, steps: { select: { status: true, title: true } } } });
+  const storedBatches = await prisma.liquorBatch.findMany({ orderBy: { createdAt: "desc" }, include: { product: true, recipe: true, steps: { select: { status: true, title: true } }, bottlings: { select: { litersUsed: true } } } });
+  const batches = storedBatches.map((batch) => ({ ...batch, status: getEffectiveLiquorBatchStatus(batch) }));
   const active = batches.filter((item) => item.status !== "TERMINADO");
   const volume = active.reduce((total, item) => total + (item.actualLiters ?? item.plannedLiters), 0);
   const finished = batches.filter((item) => item.status === "TERMINADO").length;

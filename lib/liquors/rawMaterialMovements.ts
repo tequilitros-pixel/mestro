@@ -24,18 +24,28 @@ export async function applyRawMaterialMovement(
     createdById?: string | null;
     negative?: boolean;
   },
-) {
+): Promise<void> {
+  if (!Number.isFinite(input.amount) || input.amount === 0) {
+    throw new Error("La cantidad de materia prima debe ser un número distinto de cero.");
+  }
+  if (client === prisma) {
+    return prisma.$transaction((tx) => applyRawMaterialMovement(tx, input));
+  }
   const magnitude = Math.abs(input.amount);
   const isOutgoing =
     OUTGOING.includes(input.type) ||
     (input.type === RawMaterialMovementType.AJUSTE && input.negative === true);
   const signed = isOutgoing ? -magnitude : magnitude;
 
-  const material = await client.rawMaterial.findUnique({
-    where: { id: input.rawMaterialId },
-    select: { currentStock: true, averageCost: true },
-  });
+  const materials = await client.$queryRaw<Array<{ currentStock: number; averageCost: number | null }>>`
+    SELECT "currentStock", "averageCost" FROM "RawMaterial"
+    WHERE "id" = ${input.rawMaterialId} FOR UPDATE
+  `;
+  const material = materials[0];
   if (!material) throw new Error("La materia prima ya no existe.");
+  if (isOutgoing && magnitude > material.currentStock) {
+    throw new Error(`Existencia insuficiente de materia prima: disponible ${material.currentStock}, requerida ${magnitude}. Registra la entrada real antes de continuar.`);
+  }
 
   let averageCost = material.averageCost;
   if (!isOutgoing && input.unitCost != null && input.unitCost >= 0) {

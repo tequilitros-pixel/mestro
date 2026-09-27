@@ -119,9 +119,14 @@ export async function completeLiquorBatchStepAction(
   const now = new Date();
 
   await prisma.$transaction(async (tx) => {
-    await tx.liquorBatchStep.update({
+    const batches = await tx.$queryRaw<Array<{ status: string }>>`
+      SELECT "status" FROM "LiquorBatch" WHERE "id" = ${batchId} FOR UPDATE
+    `;
+    if (batches[0]?.status !== "EN_ELABORACION") throw new Error("Este lote ya no se encuentra en elaboración.");
+    const claimed = await tx.liquorBatchStep.updateMany({
       where: {
         id: step.id,
+        status: { not: "COMPLETADO" },
       },
       data: {
         status: "COMPLETADO",
@@ -136,6 +141,7 @@ export async function completeLiquorBatchStepAction(
         validationPassed: true,
       },
     });
+    if (claimed.count === 0) return;
 
     if (step.batchIngredientId) {
       await tx.liquorBatchIngredient.update({

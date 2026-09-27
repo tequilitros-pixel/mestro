@@ -1,3 +1,5 @@
+import { withOpenCashCutWrite } from "@/lib/cash-cuts/openCutWrite";
+import { DomainError } from "@/lib/domain/errors";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
@@ -15,16 +17,6 @@ const METODOS_VALIDOS = [
   "VALES",
   "OTRO",
 ];
-
-async function recalcularTotalVentas(cashCutId: string) {
-  const ventas = await prisma.cashSalePayment.findMany({ where: { cashCutId } });
-  const totalSales = ventas.reduce((sum, v) => sum + v.amount, 0);
-  await prisma.cashCut.update({
-    where: { id: cashCutId },
-    data: { totalSales },
-  });
-  return totalSales;
-}
 
 async function checkAccessToCut(userId: string, role: string, cashCutId: string, readOnly = false) {
   /*
@@ -86,15 +78,24 @@ export async function POST(
     return NextResponse.json({ error: "method inválido o amount faltante" }, { status: 400 });
   }
 
-  const venta = await prisma.cashSalePayment.upsert({
+  try {
+    const result = await withOpenCashCutWrite(cashCutId, async (tx) => {
+  const venta = await tx.cashSalePayment.upsert({
     where: { cashCutId_method: { cashCutId, method } },
     update: { amount, notes },
     create: { cashCutId, method, amount, notes },
   });
 
-  const totalSales = await recalcularTotalVentas(cashCutId);
-
-  return NextResponse.json({ venta, totalSales });
+  const records = await tx.cashSalePayment.findMany({ where: { cashCutId } });
+  const totalSales = records.reduce((sum, record) => sum + record.amount, 0);
+  await tx.cashCut.update({ where: { id: cashCutId }, data: { totalSales } });
+  return { venta, totalSales };
+    });
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof DomainError) return NextResponse.json(error.toResponse(), { status: error.httpStatus });
+    throw error;
+  }
 }
 
 export async function GET(

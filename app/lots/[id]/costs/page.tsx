@@ -1,3 +1,4 @@
+import { getProductionVolume } from "@/lib/lots/productionVolume";
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import LotMenu from "@/components/LotMenu";
@@ -17,7 +18,7 @@ export default async function LotCostsPage({ params }: Props) {
       cookings: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
       millings: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
       fermentations: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
-      distillations: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
+      distillations: { orderBy: { createdAt: "desc" } },
     },
   });
 
@@ -25,11 +26,10 @@ export default async function LotCostsPage({ params }: Props) {
 
   const totalCost = lot.expenses.reduce((sum, e) => sum + e.amount, 0);
 
-  // Igual que en el Centro de Costos: usamos el total autoritativo
-  // fijado en "Finalizar lote", no la suma de lecturas intermedias
-  // de litros registradas durante la destilación.
-  const totalLiters = lot.totalLitersObtained ?? 0;
-  const isFinished = lot.totalLitersObtained !== null;
+  // Prioriza el volumen fijado al finalizar. Para lotes históricos
+  // terminados, usa únicamente rectificaciones completas.
+  const totalLiters = getProductionVolume(lot) ?? 0;
+  const isFinished = getProductionVolume(lot) !== null;
 
   const costPerLiter = totalLiters > 0 ? totalCost / totalLiters : 0;
 

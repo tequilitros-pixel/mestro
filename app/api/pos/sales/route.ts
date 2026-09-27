@@ -541,6 +541,12 @@ export async function POST(request: NextRequest) {
   try {
     const sale = await prisma.$transaction(async (tx) => {
     await setRlsContext(tx, user);
+    const lockedCuts = await tx.$queryRaw<Array<{ status: string }>>`
+      SELECT "status" FROM "CashCut" WHERE "id" = ${openCashCut.id} FOR UPDATE
+    `;
+    if (lockedCuts[0]?.status !== "ABIERTO") {
+      throw new DomainError("CASH_SESSION_NOT_OPEN", { cashCutId: openCashCut.id });
+    }
     const createdSale = await tx.posSale.create({
       data: {
         ...(clientOperationId ? { id: clientOperationId } : {}),

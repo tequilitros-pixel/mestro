@@ -226,6 +226,7 @@ export async function createEnvelopeForCashCut(
    * ya ve el sobre del otro corte y genera el siguiente numero.
    */
   const code = await generateEnvelopeCode(tx, params.branchCode, params.cutDate);
+  const receivedAt = new Date();
   return tx.cashSafeEnvelope.create({
     data: {
       code,
@@ -234,10 +235,12 @@ export async function createEnvelopeForCashCut(
       cutDate: params.cutDate,
       originalAmount: params.amount,
       currentBalance: params.amount,
-      status: "PENDIENTE",
+      status: params.amount > 0 ? "EN_CAJA_FUERTE" : "VACIO",
       createdById: params.userId,
+      receivedById: params.userId,
+      receivedAt,
       movements: {
-        create: {
+        create: [{
           type: "INGRESO",
           amount: params.amount,
           previousBalance: 0,
@@ -245,7 +248,15 @@ export async function createEnvelopeForCashCut(
           cashCutId: params.cashCutId,
           userId: params.userId,
           notes: "Generado al cerrar el corte",
-        },
+        }, {
+          type: "RECEPCION",
+          amount: params.amount,
+          previousBalance: params.amount,
+          newBalance: params.amount,
+          cashCutId: params.cashCutId,
+          userId: params.userId,
+          notes: "Recepción automática al cerrar el corte",
+        }],
       },
     },
   });
