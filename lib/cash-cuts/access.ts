@@ -1,11 +1,13 @@
 import "server-only";
 
 import type { Prisma, UserRole } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import {
   getAccessibleBranchIds,
   getCurrentUserWithAnyModuleAccess,
 } from "@/lib/auth";
 import { addDaysToDateOnly, businessDayStart, mondayOfWeek, todayDateOnly } from "@/lib/dateOnly";
+import { getCurrentCashCutWeek } from "@/lib/cash-cuts/readScope";
 
 /*
  * ============================================================
@@ -43,7 +45,49 @@ export type CashCutScope = {
   canSeeHistory: boolean;
   /** Puede crear, capturar y cerrar. */
   canManage: boolean;
+  /** Sucursal de trabajo resuelta desde cortes propios o acceso único. */
+  workingBranchId: string | null;
 };
+
+async function resolveWorkingBranchId(
+  userId: string,
+  branchIds: string[] | null,
+): Promise<string | null> {
+  const branchWhere: Prisma.BranchWhereInput = {
+    active: true,
+    ...(branchIds === null ? {} : { id: { in: branchIds } }),
+  };
+
+  const openCut = await prisma.cashCut.findFirst({
+    where: {
+      responsibleId: userId,
+      status: "ABIERTO",
+      branch: { is: branchWhere },
+    },
+    orderBy: { openedAt: "desc" },
+    select: { branchId: true },
+  });
+  if (openCut) return openCut.branchId;
+
+  const week = getCurrentCashCutWeek();
+  const latestCutThisWeek = await prisma.cashCut.findFirst({
+    where: {
+      responsibleId: userId,
+      date: { gte: week.from, lte: week.to },
+      branch: { is: branchWhere },
+    },
+    orderBy: [{ date: "desc" }, { openedAt: "desc" }],
+    select: { branchId: true },
+  });
+  if (latestCutThisWeek) return latestCutThisWeek.branchId;
+
+  const candidates = await prisma.branch.findMany({
+    where: branchWhere,
+    select: { id: true },
+    take: 2,
+  });
+  return candidates.length === 1 ? candidates[0].id : null;
+}
 
 /**
  * Resuelve el alcance SIEMPRE desde la sesion autenticada.
@@ -57,11 +101,14 @@ export async function getCashCutScope(
   if (!user) return null;
   if (!ROLES_CON_ACCESO.includes(user.role)) return null;
 
+  const branchIds = await getAccessibleBranchIds();
+
   return {
     user: { id: user.id, name: user.name, role: user.role },
-    branchIds: await getAccessibleBranchIds(),
+    branchIds,
     canSeeHistory: ROLES_CON_HISTORIAL.includes(user.role),
     canManage: ROLES_QUE_OPERAN.includes(user.role),
+    workingBranchId: await resolveWorkingBranchId(user.id, branchIds),
   };
 }
 
@@ -115,6 +162,40 @@ export function withCashCutScope(
   extra?: Prisma.CashCutWhereInput,
 ): Prisma.CashCutWhereInput {
   const base = cashCutScopeWhere(scope);
+  return extra ? { AND: [base, extra] } : base;
+}
+
+/**
+ * Lecturas de cortes: semana actual y sucursal de trabajo. Los usuarios no
+ * administradores además quedan limitados a sus propios cortes, aunque su
+ * rol tenga permiso para consultar historial.
+ */
+export function cashCutReadScopeWhere(scope: CashCutScope): Prisma.CashCutWhereInput {
+  const week = getCurrentCashCutWeek();
+  const ownCutOnly: Prisma.CashCutWhereInput =
+    scope.user.role === "ADMIN" ? {} : { responsibleId: scope.user.id };
+  const branchWhere: Prisma.CashCutWhereInput =
+    scope.user.role === "ADMIN"
+      ? {}
+      : scope.workingBranchId
+        ? { branchId: scope.workingBranchId }
+        : { branchId: { in: [] } };
+
+  return {
+    AND: [
+      cashCutScopeWhere(scope),
+      ownCutOnly,
+      branchWhere,
+      { date: { gte: week.from, lte: week.to } },
+    ],
+  };
+}
+
+export function withCashCutReadScope(
+  scope: CashCutScope,
+  extra?: Prisma.CashCutWhereInput,
+): Prisma.CashCutWhereInput {
+  const base = cashCutReadScopeWhere(scope);
   return extra ? { AND: [base, extra] } : base;
 }
 

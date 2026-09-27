@@ -55,9 +55,11 @@ type Sale = {
 
 type AnalyticsSale = {
   id: string;
+  code: string;
   total: number;
   createdAt: string;
   branch: { id: string; name: string };
+  soldBy: { id: string; name: string };
   payments: SalePayment[];
   items: Array<{
     name: string;
@@ -360,6 +362,68 @@ export default function SalesDashboardClient({
       .map((total, hour) => ({ label: `${String(hour).padStart(2, "0")}h`, total, hour }))
       .filter((point) => point.total > 0);
   }, [scopedAnalytics]);
+
+  const customCharges = useMemo(
+    () =>
+      scopedAnalytics.flatMap((sale) =>
+        sale.items
+          .filter((item) => item.isCustom)
+          .map((item, index) => ({
+            id: `${sale.id}-${index}`,
+            saleId: sale.id,
+            code: sale.code,
+            createdAt: sale.createdAt,
+            branch: sale.branch,
+            soldBy: sale.soldBy,
+            description: item.name,
+            quantity: item.quantity,
+            amount: item.lineTotal,
+          })),
+      ),
+    [scopedAnalytics],
+  );
+
+  const customChargeSummary = useMemo(() => {
+    const total = customCharges.reduce((sum, charge) => sum + charge.amount, 0);
+    const days = new Set(customCharges.map((charge) => dayKey(charge.createdAt)));
+    return {
+      total,
+      count: customCharges.length,
+      days: days.size,
+      average: customCharges.length ? total / customCharges.length : 0,
+    };
+  }, [customCharges]);
+
+  const customByEmployee = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const charge of customCharges) {
+      totals.set(charge.soldBy.name, (totals.get(charge.soldBy.name) ?? 0) + charge.amount);
+    }
+    return Array.from(totals.entries())
+      .map(([name, value]) => ({ name, value: Math.round(value) }))
+      .sort((a, b) => b.value - a.value);
+  }, [customCharges]);
+
+  const customByBranch = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const charge of customCharges) {
+      totals.set(charge.branch.name, (totals.get(charge.branch.name) ?? 0) + charge.amount);
+    }
+    return Array.from(totals.entries())
+      .map(([name, value]) => ({ name, value: Math.round(value) }))
+      .sort((a, b) => b.value - a.value);
+  }, [customCharges]);
+
+  const customByDay = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const charge of customCharges) {
+      const key = dayKey(charge.createdAt);
+      totals.set(key, (totals.get(key) ?? 0) + charge.amount);
+    }
+    return Array.from(totals.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, value]) => ({ name: formatDayLabel(day), value: Math.round(value) }));
+  }, [customCharges]);
 
   /** Filtro de la lista: aplica el buscador sobre las ventas del día. */
   const filteredSales = useMemo(() => {
@@ -777,6 +841,103 @@ export default function SalesDashboardClient({
                             </div>
                           );
                         })}
+                      </div>
+                    </Card>
+                  </>
+                )}
+              </div>
+            ),
+          },
+
+          {
+            key: "personalizados",
+            label: "Cobros personalizados",
+            icon: <ReceiptIcon className="h-4 w-4" />,
+            content: (
+              <div className="space-y-6">
+                {analyticsScopeSelector}
+
+                {customCharges.length === 0 ? (
+                  <Card className="text-center">
+                    <p className="text-sm text-on-surface-variant">
+                      No hay cobros personalizados en el periodo y sucursal seleccionados.
+                    </p>
+                  </Card>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                      <Card className="p-4">
+                        <CardLabel>Total personalizado</CardLabel>
+                        <CardValue>{formatCurrency(customChargeSummary.total)}</CardValue>
+                      </Card>
+                      <Card className="p-4">
+                        <CardLabel>Cobros</CardLabel>
+                        <CardValue>{customChargeSummary.count}</CardValue>
+                      </Card>
+                      <Card className="p-4">
+                        <CardLabel>Promedio</CardLabel>
+                        <CardValue>{formatCurrency(customChargeSummary.average)}</CardValue>
+                      </Card>
+                      <Card className="p-4">
+                        <CardLabel>Días con cobro</CardLabel>
+                        <CardValue>{customChargeSummary.days}</CardValue>
+                      </Card>
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Card>
+                        <CardLabel>Total por empleado</CardLabel>
+                        <RankingBarChart
+                          data={customByEmployee}
+                          valueLabel="Cobros personalizados"
+                        />
+                      </Card>
+                      <Card>
+                        <CardLabel>Total por sucursal</CardLabel>
+                        <RankingBarChart
+                          data={customByBranch}
+                          valueLabel="Cobros personalizados"
+                        />
+                      </Card>
+                    </div>
+
+                    <Card>
+                      <CardLabel>Total por día</CardLabel>
+                      <RankingBarChart
+                        data={customByDay}
+                        valueLabel="Cobros personalizados"
+                      />
+                    </Card>
+
+                    <Card>
+                      <CardLabel>Detalle para localizar cada cobro</CardLabel>
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="w-full min-w-[760px] text-left text-sm">
+                          <thead className="border-b border-outline-variant text-xs uppercase tracking-wide text-on-surface-variant">
+                            <tr>
+                              <th className="px-3 py-3">Fecha y hora</th>
+                              <th className="px-3 py-3">Folio</th>
+                              <th className="px-3 py-3">Descripción</th>
+                              <th className="px-3 py-3">Empleado</th>
+                              <th className="px-3 py-3">Sucursal</th>
+                              <th className="px-3 py-3 text-right">Importe</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {customCharges.map((charge) => (
+                              <tr key={charge.id} className="border-b border-outline-variant last:border-0">
+                                <td className="px-3 py-3 text-on-surface-variant">
+                                  {formatDayLabel(dayKey(charge.createdAt))} · {formatTime(charge.createdAt)}
+                                </td>
+                                <td className="px-3 py-3 font-semibold text-on-surface">{charge.code}</td>
+                                <td className="max-w-[280px] truncate px-3 py-3 text-on-surface">{charge.description}</td>
+                                <td className="px-3 py-3 text-on-surface-variant">{charge.soldBy.name}</td>
+                                <td className="px-3 py-3 text-on-surface-variant">{charge.branch.name}</td>
+                                <td className="px-3 py-3 text-right font-bold text-on-surface">{formatCurrency(charge.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </Card>
                   </>

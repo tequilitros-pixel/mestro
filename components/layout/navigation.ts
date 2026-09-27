@@ -45,6 +45,7 @@ import {
   ListChecksIcon,
   ArrowsRangeIcon,
   CashRegisterIcon,
+  PrinterIcon,
 } from "@/components/ui/icons";
 
 export type AppModule =
@@ -256,6 +257,19 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "Producción",
       icon: MartiniIcon,
       iconVariant: "purple",
+      children: [
+        {
+          href: "/liquors/production",
+          label: "Proceso de elaboración",
+          icon: MartiniIcon,
+        },
+        {
+          href: "/liquors/production/labels",
+          label: "Crear etiquetas",
+          icon: PrinterIcon,
+          permissionKey: "/liquors/qr",
+        },
+      ],
     },
     {
       href: "/liquors/bottling",
@@ -369,6 +383,27 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "Mesas",
       icon: StoreIcon,
       iconVariant: "purple",
+      permissionKey: "/pos",
+    },
+    {
+      href: "/pospress/catalog",
+      label: "Editor de productos",
+      icon: PackageIcon,
+      iconVariant: "orange",
+      permissionKey: "/pos",
+    },
+    {
+      href: "/pospress/recipes",
+      label: "Recetas POS",
+      icon: BookIcon,
+      iconVariant: "purple",
+      permissionKey: "/pos",
+    },
+    {
+      href: "/pospress/discounts",
+      label: "Editor de descuentos",
+      icon: TagIcon,
+      iconVariant: "blue",
       permissionKey: "/pos",
     },
   ],

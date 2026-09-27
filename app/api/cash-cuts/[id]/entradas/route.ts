@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { getCashCutScope, withCashCutReadScope, withCashCutScope } from "@/lib/cash-cuts/access";
 import { requireFinancialMovementCategory } from "@/lib/financialMovementCategories";
 
 const ROLES_QUE_PUEDEN_EDITAR = ["ADMIN", "GERENTE", "ENCARGADO"];
@@ -18,7 +18,7 @@ async function recalcularTotalEntradas(cashCutId: string) {
   return totalInflows;
 }
 
-async function checkAccessToCut(userId: string, role: string, cashCutId: string) {
+async function checkAccessToCut(userId: string, role: string, cashCutId: string, readOnly = false) {
   /*
    * El alcance se resuelve desde la sesion, no desde los parametros.
    * Los argumentos solo se usan para comprobar que coinciden con la
@@ -30,7 +30,7 @@ async function checkAccessToCut(userId: string, role: string, cashCutId: string)
   }
 
   const cashCut = await prisma.cashCut.findFirst({
-    where: withCashCutScope(scope, { id: cashCutId }),
+    where: (readOnly ? withCashCutReadScope : withCashCutScope)(scope, { id: cashCutId }),
     select: { branchId: true, status: true },
   });
 
@@ -80,7 +80,7 @@ export async function POST(
 
   const { id: cashCutId } = await params;
 
-  const access = await checkAccessToCut(user.id, user.role, cashCutId);
+  const access = await checkAccessToCut(user.id, user.role, cashCutId, true);
   if (!access.ok) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }

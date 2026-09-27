@@ -244,6 +244,7 @@ model Lot {
   millings            Milling[]
   liquorBatches       LiquorBatch[]
   rawMaterialEntries  RawMaterialMovement[]
+  publicQrProfiles    PublicQrProfile[]
   boilerProcessLinks   BoilerProcessLink[]
   sweetHoneyRecoveries SweetHoneyRecovery[]
 }
@@ -988,6 +989,52 @@ model LiquorRecipeIngredient {
   @@index([position])
 }
 
+enum PublicQrStatus {
+  BORRADOR
+  PUBLICADO
+  ARCHIVADO
+}
+
+model PublicQrProfile {
+  id          String         @id @default(cuid())
+  publicId    String         @unique @default(cuid())
+  batchId     String?
+  lotId       String?
+  createdById String
+  productName String
+  lotCode     String?
+  payload     Json
+  visibility  Json
+  status      PublicQrStatus @default(BORRADOR)
+  createdAt   DateTime       @default(now())
+  publishedAt DateTime?
+  updatedAt   DateTime       @updatedAt
+
+  batch  LiquorBatch?        @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  lot    Lot?                @relation(fields: [lotId], references: [id], onDelete: SetNull)
+  audits PublicQrAuditEvent[]
+
+  @@index([batchId])
+  @@index([lotId])
+  @@index([status])
+  @@index([createdById])
+}
+
+model PublicQrAuditEvent {
+  id        String   @id @default(cuid())
+  profileId String
+  userId    String
+  field     String
+  oldValue  Json?
+  newValue  Json?
+  createdAt DateTime @default(now())
+
+  profile PublicQrProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, createdAt])
+  @@index([userId])
+}
+
 /// *
 ///  * Cada elaboración física de un licor.
 ///  * El campo sequence mantiene el consecutivo permanente global:
@@ -1039,6 +1086,7 @@ model LiquorBatch {
   steps                LiquorBatchStep[]
   bottlings            LiquorBottling[]
   rawMaterialMovements RawMaterialMovement[]
+  publicQrProfiles     PublicQrProfile[]
 
   @@index([productId])
   @@index([recipeId])
@@ -1299,6 +1347,7 @@ model Branch {
   updatedAt        DateTime         @updatedAt
   counts           InventoryCount[]
   entries          InventoryEntry[]
+  inventoryMinimums BranchInventoryMinimum[]
   timeClockEntries TimeClockEntry[]
 
   users                         UserBranch[]
@@ -2108,6 +2157,7 @@ model InventoryProduct {
   inventoryBalances InventoryBalance[]
   inventoryMovements InventoryMovement[]
   inventoryCountDeclarations InventoryCountDeclaration[]
+  branchMinimums    BranchInventoryMinimum[]
   liquorProduct     LiquorProduct?
   rawMaterialLinks  RawMaterial[]          @relation("RawMaterialInventoryLink")
 
@@ -2161,6 +2211,24 @@ model InventoryBalance {
   updatedAt DateTime @updatedAt
   @@unique([branchId, inventoryProductId])
   @@index([branchId])
+}
+
+/// Nivel operativo mínimo configurable por producto y por sucursal.
+/// Es configuración de reposición: no modifica saldos, movimientos ni conteos.
+model BranchInventoryMinimum {
+  id                 String   @id @default(cuid())
+  branchId           String
+  inventoryProductId String
+  minimumQuantity    Decimal  @default(0) @db.Decimal(18, 6)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  branch           Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  inventoryProduct InventoryProduct @relation(fields: [inventoryProductId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, inventoryProductId])
+  @@index([branchId])
+  @@index([inventoryProductId])
 }
 
 model InventoryMovement {

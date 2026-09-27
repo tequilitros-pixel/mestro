@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds } from "@/lib/auth";
-import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { getCashCutScope, withCashCutReadScope, withCashCutScope } from "@/lib/cash-cuts/access";
 import { isBranchAllowed } from "@/lib/branches/access";
 import { denominationTotal, validDenominationRows } from "@/lib/cash-cuts/denominations";
 import { parseDateOnly } from "@/lib/dateOnly";
@@ -41,7 +41,7 @@ export async function GET(request: Request) {
    * y el filtro del querystring no puede sobreescribirlo.
    */
   const cashCuts = await prisma.cashCut.findMany({
-    where: withCashCutScope(scope, {
+      where: withCashCutReadScope(scope, {
       branchId: requestedBranchId,
       status: status as (typeof CASH_CUT_STATUSES)[number] | undefined,
       date: {

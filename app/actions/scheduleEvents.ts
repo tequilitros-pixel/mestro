@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { ensureWeekStartsAsDraftIfEmpty } from "@/app/actions/schedule";
-import { parseDateOnly } from "@/lib/dateOnly";
+import { ensureEmployeeStartsAsDraft } from "@/app/actions/schedule";
+import { formatDateOnly, parseDateOnly } from "@/lib/dateOnly";
 
 /**
  * ==========================================================
@@ -79,7 +79,9 @@ export async function createScheduleEventAction(input: EventInput) {
       },
     });
 
-    await ensureWeekStartsAsDraftIfEmpty(tx, input.date);
+    for (const userId of employeeIds) {
+      await ensureEmployeeStartsAsDraft(tx, input.date, userId);
+    }
 
     await tx.scheduledShift.createMany({
       data: employeeIds.map((userId) => ({
@@ -90,8 +92,8 @@ export async function createScheduleEventAction(input: EventInput) {
         startTime: input.startTime,
         endTime: input.endTime,
         position: input.position?.trim() || null,
-        eventId: event.id,
         publicationStatus: "DRAFT" as const,
+        eventId: event.id,
       })),
     });
 
@@ -121,7 +123,7 @@ export async function updateScheduleEventAction(input: EventInput & { eventId: s
 
   const existing = await prisma.scheduleEvent.findUnique({
     where: { id: input.eventId },
-    include: { shifts: { select: { id: true, userId: true } } },
+    include: { shifts: { select: { id: true, userId: true, date: true } } },
   });
 
   if (!existing) return { error: "Evento no encontrado" };
@@ -132,6 +134,16 @@ export async function updateScheduleEventAction(input: EventInput & { eventId: s
   const toAdd = employeeIds.filter((id) => !currentIds.has(id));
 
   await prisma.$transaction(async (tx) => {
+    const affectedEmployees = new Set([
+      ...existing.shifts.map((shift) => shift.userId),
+      ...employeeIds,
+    ]);
+    for (const userId of affectedEmployees) {
+      for (const date of [input.date, ...existing.shifts.filter((shift) => shift.userId === userId).map((shift) => formatDateOnly(shift.date))]) {
+        await ensureEmployeeStartsAsDraft(tx, date, userId);
+      }
+    }
+
     await tx.scheduleEvent.update({
       where: { id: input.eventId },
       data: {
@@ -165,7 +177,6 @@ export async function updateScheduleEventAction(input: EventInput & { eventId: s
     }
 
     if (toAdd.length > 0) {
-      await ensureWeekStartsAsDraftIfEmpty(tx, input.date);
       await tx.scheduledShift.createMany({
         data: toAdd.map((userId) => ({
           userId,
@@ -175,8 +186,8 @@ export async function updateScheduleEventAction(input: EventInput & { eventId: s
           startTime: input.startTime,
           endTime: input.endTime,
           position: input.position?.trim() || null,
-          eventId: input.eventId,
           publicationStatus: "DRAFT" as const,
+          eventId: input.eventId,
         })),
       });
     }

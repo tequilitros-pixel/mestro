@@ -138,6 +138,7 @@ export async function updateCountItemQuantityAction(
     itemId: string;
     countId: string;
     quantity: string;
+    loosePieces?: string;
     captureUnit: InventoryCaptureUnit;
   },
 ): Promise<ActionResult> {
@@ -162,6 +163,7 @@ export async function updateCountItemQuantityAction(
 
       const normalized = normalizeInventoryCountCapture({
         quantity: input.quantity,
+        loosePieces: input.loosePieces,
         captureUnit: input.captureUnit,
         product: item.product,
       });
@@ -192,6 +194,18 @@ export async function updateCountItemQuantityAction(
     }
     if (error instanceof Error && error.message === "COUNT_QUANTITY_PRECISION") {
       return { success: false, error: "La cantidad admite hasta 3 decimales." };
+    }
+    if (error instanceof Error && error.message === "COUNT_PACKAGES_WHOLE") {
+      return { success: false, error: "Los paquetes completos deben ser un número entero." };
+    }
+    if (error instanceof Error && error.message === "COUNT_LOOSE_PIECES_WHOLE") {
+      return { success: false, error: "Las piezas sueltas deben ser un número entero." };
+    }
+    if (error instanceof Error && error.message === "COUNT_LOOSE_PIECES_LIMIT") {
+      return { success: false, error: "Las piezas sueltas deben ser menores a las que contiene un paquete." };
+    }
+    if (error instanceof Error && error.message === "COUNT_LOOSE_PIECES_NOT_ALLOWED") {
+      return { success: false, error: "Este producto no está configurado como paquete de piezas." };
     }
     if (error instanceof Error && error.message === "PRESENTATION_NOT_CONFIGURED") {
       return { success: false, error: "La presentación comercial no está configurada." };

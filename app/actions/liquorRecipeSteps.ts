@@ -10,7 +10,7 @@ export type LiquorRecipeStepState = {
   error: string | null;
 };
 
-export const initialLiquorRecipeStepState: LiquorRecipeStepState = {
+const initialLiquorRecipeStepState: LiquorRecipeStepState = {
   success: false,
   error: null,
 };

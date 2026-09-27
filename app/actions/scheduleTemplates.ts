@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { ensureWeekStartsAsDraftIfEmpty } from "@/app/actions/schedule";
+import { ensureEmployeeStartsAsDraft } from "@/app/actions/schedule";
 import {
   addDaysToDateOnly,
   formatDateOnly,
@@ -362,7 +362,9 @@ export async function applyTemplateAction(input: {
   }
 
   await prisma.$transaction(async (tx) => {
-    await ensureWeekStartsAsDraftIfEmpty(tx, mondayStr);
+    for (const userId of new Set(rows.map((row) => row.userId))) {
+      await ensureEmployeeStartsAsDraft(tx, mondayStr, userId);
+    }
     await tx.scheduledShift.createMany({ data: rows });
   });
 

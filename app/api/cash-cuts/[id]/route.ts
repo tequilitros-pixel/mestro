@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { canWriteCashCut, getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { canWriteCashCut, getCashCutScope, withCashCutReadScope, withCashCutScope } from "@/lib/cash-cuts/access";
 
 const ROLES_QUE_PUEDEN_EDITAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -24,7 +24,7 @@ export async function GET(
   let cashCut;
   try {
     cashCut = await prisma.cashCut.findFirst({
-      where: withCashCutScope(scope, { id }),
+      where: withCashCutReadScope(scope, { id }),
       include: {
         branch: true,
         responsible: { select: { id: true, name: true } },

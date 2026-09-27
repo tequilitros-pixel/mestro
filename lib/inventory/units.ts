@@ -92,6 +92,32 @@ export function getNormalizedContentPerUnit(config: InventoryProductUnitConfig) 
   return derived;
 }
 
+/**
+ * Returns the number of individual pieces in a commercial package when the
+ * stock is tracked as pieces. This lets count screens capture full packages
+ * and loose pieces without changing the product's stored base unit.
+ */
+export function getPiecePresentationSize(config: InventoryProductUnitConfig) {
+  const base = config.inventoryBaseUnit?.trim().toUpperCase();
+  const contentUnit = config.contentUnit?.trim().toUpperCase();
+  const handling = config.handlingUnit?.trim().toLocaleLowerCase("es-MX");
+  const content = getNormalizedContentPerUnit(config);
+
+  if (
+    base !== "UNIT" ||
+    contentUnit !== "PIEZAS" ||
+    !handling ||
+    handling === "pieza" ||
+    content === null ||
+    !Number.isInteger(content) ||
+    content <= 1
+  ) {
+    return null;
+  }
+
+  return content;
+}
+
 export function getCommercialQuantity(
   baseQuantity: number | string,
   config: InventoryProductUnitConfig,
@@ -201,15 +227,8 @@ export function formatCommercialQuantity(
   if (!content || !handling) return formatBaseQuantity(quantity, config);
 
   const commercialQuantity = quantity / content;
-  const base = config.inventoryBaseUnit?.trim().toUpperCase();
-  const contentUnit = config.contentUnit?.trim().toUpperCase();
 
-  if (
-    base === "UNIT" &&
-    contentUnit === "PIEZAS" &&
-    handling !== "pieza" &&
-    quantity > 0
-  ) {
+  if (getPiecePresentationSize(config) !== null && quantity > 0) {
     const contentUnit = config.contentUnit?.toUpperCase() ?? "PIEZAS";
     const itemLabel = contentLabel(config, contentUnit);
     const packages = Math.floor(quantity / content);

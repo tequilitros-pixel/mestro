@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { addDaysToDateOnly, parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
+import { getCashCutScope, withCashCutReadScope } from "@/lib/cash-cuts/access";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUserWithAnyModuleAccess(["/cash-cuts/dashboard"]);
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+
+  const scope = await getCashCutScope(["/cash-cuts/dashboard"]);
+  if (!scope) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const allowedBranchIds = await getAccessibleBranchIds();
 
@@ -48,11 +52,11 @@ export async function GET(req: NextRequest) {
     : new Date();
 
   const cuts = await prisma.cashCut.findMany({
-    where: {
+    where: withCashCutReadScope(scope, {
       status: "CERRADO",
       date: { gte: dateFrom, lte: dateTo },
       ...(branchFilter ? { branchId: branchFilter } : {}),
-    },
+    }),
     include: { branch: true },
     orderBy: { date: "desc" },
   });

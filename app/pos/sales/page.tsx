@@ -53,9 +53,11 @@ export default async function PosSalesPage() {
       },
       select: {
         id: true,
+        code: true,
         total: true,
         createdAt: true,
         branch: { select: { id: true, name: true } },
+        soldBy: { select: { id: true, name: true } },
         payments: { select: { method: true, amount: true } },
         items: {
           select: {
@@ -86,9 +88,11 @@ export default async function PosSalesPage() {
       branches={branches}
       analytics={analyticsSales.map((s) => ({
         id: s.id,
+        code: s.code,
         total: s.total,
         createdAt: s.createdAt.toISOString(),
         branch: s.branch,
+        soldBy: s.soldBy,
         payments: s.payments.map((p) => ({ method: p.method, amount: p.amount })),
         items: s.items.map((i) => ({
           name: i.name,

@@ -17,6 +17,7 @@ import { DomainError } from "@/lib/domain/errors";
 import { appendAuditEvent } from "@/lib/pos2/audit";
 import { appendOutboxEvent } from "@/lib/pos2/outbox";
 import { evaluateCapabilityShadow } from "@/lib/pos2/capabilities";
+import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
 
 const ROLES_QUE_PUEDEN_VENDER = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -68,8 +69,17 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const branchId = searchParams.get("branchId") ?? undefined;
+  const soldById = searchParams.get("soldById") ?? undefined;
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
+
+  const currentCashCut = user.role === "ADMIN" ? null : await getCurrentPospressCashCut(user);
+  const scopedBranchId = user.role === "ADMIN" ? undefined : currentCashCut?.branch.id;
+
+  if (user.role !== "ADMIN" && !currentCashCut) return NextResponse.json([]);
+  if (scopedBranchId && branchId && branchId !== scopedBranchId) {
+    return NextResponse.json({ error: "No autorizado en esta sucursal" }, { status: 403 });
+  }
 
   let branchFilter: string | { in: string[] } | undefined;
 
@@ -88,7 +98,8 @@ export async function GET(request: NextRequest) {
 
   const sales = await withRlsContext(user, (tx) => tx.posSale.findMany({
     where: {
-      ...(branchFilter ? { branchId: branchFilter } : {}),
+      ...(scopedBranchId ? { branchId: scopedBranchId, cashCutId: currentCashCut!.id } : branchFilter ? { branchId: branchFilter } : {}),
+      ...(soldById ? { soldById } : {}),
       createdAt: {
         gte: rangeStart,
         lt: rangeEnd,

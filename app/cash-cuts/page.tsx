@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { getCurrentCashCutWeek } from "@/lib/cash-cuts/readScope";
 import CajaOperativa from "./CajaOperativa";
 import TableroCortes from "./TableroCortes";
 
@@ -29,6 +30,7 @@ export default async function CashCutsPage() {
       orderBy: { openedAt: "desc" },
       select: {
         id: true,
+        branchId: true,
         code: true,
         openedAt: true,
         totalSales: true,
@@ -57,6 +59,7 @@ export default async function CashCutsPage() {
           corte
             ? {
                 id: corte.id,
+                branchId: corte.branchId,
                 code: corte.code,
                 openedAt: corte.openedAt.toISOString(),
                 branchName: corte.branch.name,
@@ -71,14 +74,20 @@ export default async function CashCutsPage() {
   }
 
   /* ---------- Gerente / Administrador / Consulta ---------- */
-  const branches = await prisma.branch.findMany({
-    where: {
-      active: true,
-      ...(scope.branchIds === null ? {} : { id: { in: scope.branchIds } }),
-    },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
+  const branches = scope.workingBranchId
+    ? await prisma.branch.findMany({
+        where: { id: scope.workingBranchId, active: true },
+        select: { id: true, name: true },
+      })
+    : [];
 
-  return <TableroCortes branches={branches} canCreate={scope.canManage} />;
+  const week = getCurrentCashCutWeek();
+
+  return (
+    <TableroCortes
+      branches={branches}
+      canCreate={scope.canManage}
+      currentWeek={{ startDate: week.startDate, endDate: week.endDate }}
+    />
+  );
 }

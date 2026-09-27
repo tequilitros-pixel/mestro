@@ -11,6 +11,7 @@ import {
   AlertIcon,
   CheckIcon,
   GearIcon,
+  TagIcon,
   ReceiptIcon,
   ChartLineIcon,
 } from "@/components/ui/icons";
@@ -406,13 +407,22 @@ export default function PosSellClient({
             </select>
 
             {canManageCatalog && (
-              <Link
-                href="/administration/inventory/products"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
-              >
-                <GearIcon className="h-4 w-4" />
-                Catálogo
-              </Link>
+              <>
+                <Link
+                  href="/pospress/catalog"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+                >
+                  <GearIcon className="h-4 w-4" />
+                  Editar productos
+                </Link>
+                <Link
+                  href="/pospress/discounts"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+                >
+                  <TagIcon className="h-4 w-4" />
+                  Editar descuentos
+                </Link>
+              </>
             )}
 
             <Link

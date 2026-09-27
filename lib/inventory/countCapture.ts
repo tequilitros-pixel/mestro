@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import {
+  getPiecePresentationSize,
   getNormalizedContentPerUnit,
   type InventoryCaptureUnit,
   type InventoryProductUnitConfig,
@@ -44,6 +45,7 @@ function validateBaseQuantity(quantity: Prisma.Decimal) {
 
 export function normalizeInventoryCountCapture(input: {
   quantity: unknown;
+  loosePieces?: unknown;
   captureUnit: InventoryCaptureUnit;
   product: InventoryCountCaptureProduct;
 }): NormalizedInventoryCountCapture {
@@ -55,7 +57,21 @@ export function normalizeInventoryCountCapture(input: {
   const capturedQuantity = parseNonNegativeQuantity(input.quantity);
   let baseQuantity = capturedQuantity;
 
-  if (input.captureUnit === "PRESENTATION") {
+  if (input.loosePieces !== undefined) {
+    const packageSize = getPiecePresentationSize(product);
+    if (input.captureUnit !== "PRESENTATION" || packageSize === null) {
+      throw new Error("COUNT_LOOSE_PIECES_NOT_ALLOWED");
+    }
+    if (!capturedQuantity.isInteger()) throw new Error("COUNT_PACKAGES_WHOLE");
+
+    const loosePieces = parseNonNegativeQuantity(input.loosePieces);
+    if (!loosePieces.isInteger()) throw new Error("COUNT_LOOSE_PIECES_WHOLE");
+    if (loosePieces.gte(packageSize)) throw new Error("COUNT_LOOSE_PIECES_LIMIT");
+
+    baseQuantity = capturedQuantity
+      .times(new Prisma.Decimal(packageSize.toString()))
+      .plus(loosePieces);
+  } else if (input.captureUnit === "PRESENTATION") {
     const factor = getNormalizedContentPerUnit(product);
     if (factor === null) throw new Error("PRESENTATION_NOT_CONFIGURED");
     baseQuantity = capturedQuantity.times(new Prisma.Decimal(factor.toString()));

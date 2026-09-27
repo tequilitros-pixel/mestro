@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PlusIcon } from "@/components/ui/icons";
 import {
@@ -10,13 +10,11 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/ui/CompactUI";
-import { formatBusinessTime } from "@/lib/dateTime";
-import { formatDateOnly } from "@/lib/dateOnly";
 
 /*
- * Tablero de historial para ADMIN, GERENTE y CONSULTA.
- * El Server Component solo monta este componente para roles con
- * historial; un ENCARGADO nunca recibe este arbol ni sus datos.
+ * Tablero de cortes para ADMIN, GERENTE y CONSULTA.
+ * El alcance de sucursal y semana ya viene fijado por el servidor;
+ * este componente solo filtra y ordena lo que recibió.
  *
  * La busqueda, el orden y la paginacion son sobre la lista que ya
  * llego acotada por el servidor. Los indicadores se derivan de esa
@@ -48,9 +46,9 @@ const money = (n: number | null | undefined) =>
     : "—";
 
 const hora = (v: string | null) =>
-  v ? formatBusinessTime(v) : "—";
+  v ? new Date(v).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) : "—";
 
-const fecha = (v: string) => formatDateOnly(new Date(v));
+const fecha = (v: string) => new Date(v).toLocaleDateString("es-MX", { timeZone: "UTC" });
 
 /** El esquema solo tiene ABIERTO/CERRADO/AUDITADO; el resto se deriva. */
 function etiquetaEstado(c: Corte): { texto: string; tono: "neutral" | "success" | "warning" | "danger" } {
@@ -68,18 +66,18 @@ function colorDiferencia(d: number | null) {
   return "text-secondary";
 }
 
-function TableHeader({
+function SortableHeader({
   campo,
-  children,
-  className = "",
-  orden,
+  sort,
   onSort,
+  className = "",
+  children,
 }: {
   campo?: Orden["campo"];
-  children: React.ReactNode;
-  className?: string;
-  orden: Orden;
+  sort: Orden;
   onSort: (campo: Orden["campo"]) => void;
+  className?: string;
+  children: React.ReactNode;
 }) {
   return (
     <th className={`sticky top-0 z-10 bg-surface-container-high px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant ${className}`}>
@@ -90,7 +88,7 @@ function TableHeader({
           className="inline-flex items-center gap-1 hover:text-on-surface"
         >
           {children}
-          {orden.campo === campo && <span aria-hidden="true">{orden.asc ? "↑" : "↓"}</span>}
+          {sort.campo === campo && <span aria-hidden="true">{sort.asc ? "↑" : "↓"}</span>}
         </button>
       ) : (
         children
@@ -102,14 +100,13 @@ function TableHeader({
 export default function TableroCortes({
   branches,
   canCreate,
+  currentWeek,
 }: {
   branches: Branch[];
   canCreate: boolean;
+  currentWeek: { startDate: string; endDate: string };
 }) {
-  const [branchId, setBranchId] = useState("");
   const [status, setStatus] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [cortes, setCortes] = useState<Corte[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -119,14 +116,10 @@ export default function TableroCortes({
 
   useEffect(() => {
     const params = new URLSearchParams();
-    if (branchId) params.set("branchId", branchId);
     if (status) params.set("status", status);
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
 
     const controller = new AbortController();
-    queueMicrotask(() => {
-      if (controller.signal.aborted) return;
+    startTransition(() => {
       setCargando(true);
       setError(null);
     });
@@ -149,7 +142,7 @@ export default function TableroCortes({
       });
 
     return () => controller.abort();
-  }, [branchId, status, from, to]);
+  }, [status]);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -193,28 +186,23 @@ export default function TableroCortes({
   const visibles = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
   const limpiar = () => {
-    setBranchId("");
-    setStatus("");
-    setFrom("");
-    setTo("");
-    setBusqueda("");
     setPagina(1);
+    setStatus("");
+    setBusqueda("");
   };
 
-  const hayFiltros = Boolean(branchId || status || from || to || busqueda);
+  const hayFiltros = Boolean(status || busqueda);
 
   const ordenarPor = (campo: Orden["campo"]) => {
-    setOrden((current) =>
-      current.campo === campo ? { campo, asc: !current.asc } : { campo, asc: false },
-    );
     setPagina(1);
+    setOrden((o) => (o.campo === campo ? { campo, asc: !o.asc } : { campo, asc: false }));
   };
 
   return (
     <main className="page-frame max-w-7xl space-y-4">
       <PageHeader
         title="Cortes de caja"
-        description="Historial y control de los cortes de tus sucursales."
+        description={`Sucursal de trabajo: ${branches[0]?.name ?? "sin definir"} · Semana actual: ${currentWeek.startDate} al ${currentWeek.endDate}.`}
         actions={
           canCreate ? (
             <Link
@@ -244,30 +232,14 @@ export default function TableroCortes({
           <input
             id="q"
             value={busqueda}
-            onChange={(e) => { setBusqueda(e.target.value); setPagina(1); }}
+            onChange={(e) => {
+              setPagina(1);
+              setBusqueda(e.target.value);
+            }}
             placeholder="Código o responsable"
             className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
           />
         </div>
-
-        {branches.length > 1 && (
-          <div>
-            <label htmlFor="suc" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
-              Sucursal
-            </label>
-            <select
-              id="suc"
-              value={branchId}
-              onChange={(e) => { setBranchId(e.target.value); setPagina(1); }}
-              className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
-            >
-              <option value="">Todas</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
 
         <div>
           <label htmlFor="est" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
@@ -276,7 +248,10 @@ export default function TableroCortes({
           <select
             id="est"
             value={status}
-            onChange={(e) => { setStatus(e.target.value); setPagina(1); }}
+            onChange={(e) => {
+              setPagina(1);
+              setStatus(e.target.value);
+            }}
             className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
           >
             <option value="">Todos</option>
@@ -284,22 +259,6 @@ export default function TableroCortes({
             <option value="CERRADO">Cerrado</option>
             <option value="AUDITADO">Auditado</option>
           </select>
-        </div>
-
-        <div>
-          <label htmlFor="d1" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
-            Desde
-          </label>
-          <input id="d1" type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPagina(1); }}
-            className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary" />
-        </div>
-
-        <div>
-          <label htmlFor="d2" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
-            Hasta
-          </label>
-          <input id="d2" type="date" value={to} onChange={(e) => { setTo(e.target.value); setPagina(1); }}
-            className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary" />
         </div>
 
         {hayFiltros && (
@@ -317,7 +276,9 @@ export default function TableroCortes({
 
       {!cargando && !error && filtrados.length === 0 && (
         <EmptyState>
-          {hayFiltros
+          {!branches.length
+            ? "No hay una sucursal de trabajo definida. Inicia un corte o pide que te asignen una única sucursal."
+            : hayFiltros
             ? "No hay cortes que coincidan con esos filtros."
             : "Todavía no hay cortes registrados."}
         </EmptyState>
@@ -330,16 +291,16 @@ export default function TableroCortes({
             <table className="w-full border-collapse text-[13px]">
               <thead>
                 <tr>
-                  <TableHeader campo="date" orden={orden} onSort={ordenarPor}>Fecha</TableHeader>
-                  <TableHeader campo="code" orden={orden} onSort={ordenarPor}>Código</TableHeader>
-                  <TableHeader campo="branch" orden={orden} onSort={ordenarPor}>Sucursal</TableHeader>
-                  <TableHeader orden={orden} onSort={ordenarPor}>Responsable</TableHeader>
-                  <TableHeader orden={orden} onSort={ordenarPor}>Apertura</TableHeader>
-                  <TableHeader orden={orden} onSort={ordenarPor}>Cierre</TableHeader>
-                  <TableHeader campo="totalSales" orden={orden} onSort={ordenarPor} className="text-right">Venta</TableHeader>
-                  <TableHeader campo="difference" orden={orden} onSort={ordenarPor} className="text-right">Diferencia</TableHeader>
-                  <TableHeader orden={orden} onSort={ordenarPor}>Estado</TableHeader>
-                  <TableHeader orden={orden} onSort={ordenarPor}>Acción</TableHeader>
+                  <SortableHeader campo="date" sort={orden} onSort={ordenarPor}>Fecha</SortableHeader>
+                  <SortableHeader campo="code" sort={orden} onSort={ordenarPor}>Código</SortableHeader>
+                  <SortableHeader campo="branch" sort={orden} onSort={ordenarPor}>Sucursal</SortableHeader>
+                  <SortableHeader sort={orden} onSort={ordenarPor}>Responsable</SortableHeader>
+                  <SortableHeader sort={orden} onSort={ordenarPor}>Apertura</SortableHeader>
+                  <SortableHeader sort={orden} onSort={ordenarPor}>Cierre</SortableHeader>
+                  <SortableHeader campo="totalSales" sort={orden} onSort={ordenarPor} className="text-right">Venta</SortableHeader>
+                  <SortableHeader campo="difference" sort={orden} onSort={ordenarPor} className="text-right">Diferencia</SortableHeader>
+                  <SortableHeader sort={orden} onSort={ordenarPor}>Estado</SortableHeader>
+                  <SortableHeader sort={orden} onSort={ordenarPor}>Acción</SortableHeader>
                 </tr>
               </thead>
               <tbody>

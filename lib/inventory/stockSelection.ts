@@ -49,3 +49,13 @@ export function classifyStock(quantity: number, minimum: number): StockAlert {
   if (minimum > 0 && quantity < minimum) return "LOW";
   return "OK";
 }
+
+/**
+ * Cantidad que se necesita reponer para alcanzar el mínimo operativo de una
+ * sucursal. No redondea ni altera el saldo: solo prepara la lista de surtido.
+ */
+export function getStockShortfall(quantity: number, minimum: number): number {
+  const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
+  const safeMinimum = Number.isFinite(minimum) && minimum > 0 ? minimum : 0;
+  return Math.max(0, safeMinimum - safeQuantity);
+}
