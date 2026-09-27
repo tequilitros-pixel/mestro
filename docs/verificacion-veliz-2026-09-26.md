@@ -12,14 +12,14 @@ La fuente se recuperó del candidato que generó el deployment `dpl_CKM1JmR2D4Xq
 - Ventas, cancelaciones, entradas, salidas y pagos manuales: bloqueo del corte y comprobación de estado dentro de la transacción. El cierre vuelve a leer pagos y movimientos después de adquirir el bloqueo. Cancelar exige pertenecer a la sucursal para usuarios no ADMIN.
 - Sobres futuros: recepción automática al cerrar, con usuario, fecha e ingreso/recepción inmutables, sin duplicar saldo. Los sobres y cortes históricos permanecen intactos.
 - Materia prima: movimientos atómicos, bloqueo de existencia y rechazo de consumo superior a la existencia. Dos compras concurrentes conservan el costo promedio ponderado.
-- Licores: completar pasos, terminar, pausar/reanudar y embotellar bloquean el lote. Los reintentos no consumen dos veces ni duplican botellas; los lotes terminados no se reabren mediante finalización. Agotar el volumen termina el lote. Las pantallas derivan correctamente el estado de lotes históricos agotados sin reescribirlos.
+- Licores: completar pasos, terminar, pausar/reanudar y embotellar bloquean el lote. Los reintentos no consumen dos veces ni duplican botellas; los lotes terminados no se reabren mediante finalización. Agotar el volumen termina el lote. Las pantallas derivan correctamente el estado de lotes históricos agotados sin reescribirlos; la fecha de cierre considera el último embotellado registrado.
 - Costos: volumen final autoritativo, o rectificaciones completas de lotes históricos terminados; no se mezclan destrozado ni corridas activas. Promedio por litro excluye costos en proceso y lotes sin costo registrado.
 - Presentación: fecha de corte sin desplazamiento de día; fecha actual de caja con la zona central existente; calendario agrupa las fechas en su semana correcta. No cambió la zona central ni el almacenamiento/conversión de fechas.
 - Alertas: se configuró el secreto ausente del endpoint. No se dispararon mensajes de prueba ni se añadió una programación.
 
 ## Evidencia de pruebas
 
-**PASS — 399 pruebas automáticas**, 0 fallos, 0 omitidas. Incluye regresiones de volumen, lotes agotados y agrupación semanal.
+**PASS — 399 pruebas automáticas**, 0 fallos, 0 omitidas. Incluye regresiones de volumen, lotes agotados y agrupación semanal. TypeScript y ESLint de los archivos modificados pasaron. El primer build local no pudo leer las variables secretas descargadas como `[SENSITIVE]`; se descartó su salida y se compiló el código fuente en Vercel con las variables de producción.
 
 **PASS — 24 comprobaciones de integración locales**:
 
@@ -41,4 +41,16 @@ Pendientes operativos: conciliar existencias negativas y completar costos reales
 
 ## Entrega
 
-Pendiente de completar con el commit, deployment, compilación remota y revisión autenticada del dominio.
+**PASS — publicación y verificación del dominio.**
+
+- Fuente final: commit `4f63cd1cee1bf37805ef4ec1c72385710a62dee7`; correcciones transaccionales en `04d7be358e9069bad08b69bbdcc200d105574241`; base productiva conservada en `132ca25f0b47d3dbc75afe5c3893f51c32c392a8`.
+- Deployment final: `dpl_BVXjL5rM3y8jDHuhdJW9jfBUgAxG`, `mestro-ao0ae6quw-maestro-destiladora-del-norte.vercel.app`, READY. Compilación remota, TypeScript y 151 páginas estáticas completadas. La CLI perdió la conexión durante el seguimiento; la API confirmó READY y se promovió el mismo candidato, sin crear otro deployment.
+- Promoción confirmada y resolución de `maestro-destiladora.space` al deployment final, sin error de alias. Ninguna migración; hash del esquema idéntico a la base.
+- Revisión autenticada: Dashboard $8,052 = Canoas $252 + Tlaltenango $6,800 + Colotlán $1,000, coincidente con Caja Fuerte; Veliz $0. Fecha del corte de Veliz 25/9/2026; corte de referencia conserva $563 de fondo/esperado/contado/fondo siguiente, $0 de ventas y diferencia. POS de Veliz bloquea cobro por ausencia de corte abierto.
+- Lote Mango `LM-23-09-2026-022`: Terminado, 50 botellas y enlace a etiquetas; sin modificar lote ni movimientos históricos. La fecha presentada considera la terminación del último embotellado, además del cierre registrado.
+- Costos: total $31,000, volumen 585 L, promedio comparable $40.74/L; $9,000 en proceso quedan fuera del promedio y el lote de 45 L sin costo registrado no se usa para diluirlo. Mi horario agrupa 26–27 de septiembre bajo la semana 21–27 y 28 de septiembre–4 de octubre en su semana siguiente.
+- HTTP final: `/login` 200; `/api/cash-cuts` y `/api/push/check-overdue` sin autorización 401. No se llamó el endpoint con el secreto ni se enviaron alertas.
+- Consulta de logs del deployment final: sin entradas 5xx en el intervalo revisado. Consola del navegador: sin errores/advertencias capturados. Esto se limita al recorrido realizado.
+- Servidor y PostgreSQL de prueba detenidos; datos y logs locales conservados. Worktree disponible para revisar los cambios.
+
+**PENDIENTE — certificación integral:** la aprobación de estos casos no equivale a certificar todos los módulos ni dispositivos. Se requiere conciliación de datos negativos/faltantes, confirmar la presentación real de HIELO (se solicitó al usuario), pruebas físicas y las comprobaciones RLS/roles productivos que no se reprodujeron en el entorno local.
