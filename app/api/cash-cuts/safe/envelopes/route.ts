@@ -5,12 +5,14 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { getBranchSafeSummary, listEnvelopesForBranch } from "@/lib/cash-cuts/safeEnvelopes";
 import { currentBusinessWeekRange } from "@/lib/cash-cuts/access";
+import { resolveSafeEnvelopeWeek, SafeEnvelopeWeekError } from "@/lib/cash-cuts/safeWeek";
 
 /**
  * GET /api/cash-cuts/safe/envelopes
  * Sin ?branchId: resumen por sucursal (para las tarjetas superiores).
- * Con ?branchId: sobres individuales de esa sucursal (para el
- * detalle al seleccionar una tarjeta).
+ * Con ?branchId: sobres de una sola semana de esa sucursal. ADMIN
+ * puede indicar ?week=YYYY-MM-DD (lunes); los demás roles permanecen
+ * en la semana actual. La consulta se filtra en la base de datos.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUserWithAnyModuleAccess(["/cash-cuts/safe"]);
@@ -27,9 +29,25 @@ export async function GET(req: NextRequest) {
     if (allowedBranchIds && !allowedBranchIds.includes(requestedBranchId)) {
       return NextResponse.json({ error: "No tienes acceso a esta sucursal" }, { status: 403 });
     }
-    const envelopes = await listEnvelopesForBranch(requestedBranchId);
-    const visible = dateRange ? envelopes.filter((envelope) => envelope.cutDate >= dateRange.from && envelope.cutDate < dateRange.toExclusive) : envelopes;
-    return NextResponse.json(visible);
+    let week;
+    try {
+      week = resolveSafeEnvelopeWeek(searchParams.get("week"), user.role);
+    } catch (error) {
+      if (error instanceof SafeEnvelopeWeekError) {
+        return NextResponse.json(
+          { error: error.code === "INVALID_WEEK" ? "Semana inválida" : "No tienes acceso a esa semana" },
+          { status: error.code === "INVALID_WEEK" ? 400 : 403 },
+        );
+      }
+      throw error;
+    }
+    const envelopes = await listEnvelopesForBranch(requestedBranchId, week);
+    return NextResponse.json({
+      envelopes,
+      weekStart: week.weekStart,
+      currentWeekStart: week.currentWeekStart,
+      canNavigateWeeks: week.canNavigateWeeks,
+    });
   }
 
   if (allowedBranchIds && allowedBranchIds.length === 0) {

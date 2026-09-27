@@ -5,7 +5,8 @@ import { Money } from "@/lib/domain/money";
 import { DomainError } from "@/lib/domain/errors";
 import type { CommandActor } from "@/lib/pos2/authorization";
 import { requireActorBranch, lockCashSession } from "@/lib/pos2/cash/guards";
-import { formatDateOnly } from "@/lib/dateOnly";
+import { formatDateOnly, parseDateOnly } from "@/lib/dateOnly";
+import { formatBusinessDateOnly } from "@/lib/dateTime";
 import { requireFinancialMovementCategory } from "@/lib/financialMovementCategories";
 
 /*
@@ -239,6 +240,7 @@ export async function createEnvelopeForCashCut(
       createdById: params.userId,
       receivedById: params.userId,
       receivedAt,
+      receivedAmount: params.amount,
       movements: {
         create: [{
           type: "INGRESO",
@@ -466,10 +468,16 @@ export interface BranchSafeSummary {
  * en vez de repetir la formula -- ver DISENO.md #3 y #10.
  */
 export async function getBranchSafeSummary(branchId: string, dateRange?: { from: Date; toExclusive: Date }): Promise<BranchSafeSummary> {
+  const cutDateRange = dateRange
+    ? {
+        gte: parseDateOnly(formatBusinessDateOnly(dateRange.from)),
+        lt: parseDateOnly(formatBusinessDateOnly(dateRange.toExclusive)),
+      }
+    : undefined;
   const [branch, legacyMovements, envelopes] = await Promise.all([
     prisma.branch.findUniqueOrThrow({ where: { id: branchId }, select: { name: true } }),
     prisma.cashSafeMovement.findMany({ where: { branchId, ...(dateRange ? { createdAt: { gte: dateRange.from, lt: dateRange.toExclusive } } : {}) } }),
-    prisma.cashSafeEnvelope.findMany({ where: { branchId, ...(dateRange ? { cutDate: { gte: dateRange.from, lt: dateRange.toExclusive } } : {}) } }),
+    prisma.cashSafeEnvelope.findMany({ where: { branchId, ...(cutDateRange ? { cutDate: cutDateRange } : {}) } }),
   ]);
 
   const legacyBalance = legacyMovements.reduce(
@@ -498,10 +506,15 @@ export async function getBranchSafeSummary(branchId: string, dateRange?: { from:
 
 export async function listEnvelopesForBranch(
   branchId: string,
-  status?: CashSafeEnvelopeStatus[]
+  dateRange: { from: Date; toExclusive: Date },
+  status?: CashSafeEnvelopeStatus[],
 ) {
   return prisma.cashSafeEnvelope.findMany({
-    where: { branchId, ...(status ? { status: { in: status } } : {}) },
+    where: {
+      branchId,
+      cutDate: { gte: dateRange.from, lt: dateRange.toExclusive },
+      ...(status ? { status: { in: status } } : {}),
+    },
     include: {
       createdBy: { select: { id: true, name: true } },
       receivedBy: { select: { id: true, name: true } },
