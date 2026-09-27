@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { recordManualInventoryMovement } from "@/lib/inventory/manualMovements";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds, requireModuleActionAccess } from "@/lib/auth";
 import { isBranchAllowed } from "@/lib/branches/access";
@@ -11,8 +12,9 @@ export type ActionResult =
 
 export async function createTransferAction(formData: FormData): Promise<ActionResult> {
   try {
+    let user;
     try {
-      await requireModuleActionAccess("/administration/inventory/sucursales/traspasos");
+      user = await requireModuleActionAccess("/administration/inventory/sucursales/traspasos");
     } catch {
       return { success: false, error: "No tienes permiso para realizar traspasos." };
     }
@@ -58,26 +60,10 @@ export async function createTransferAction(formData: FormData): Promise<ActionRe
       return { success: false, error: "Sucursal no encontrada." };
     }
 
-    await prisma.$transaction([
-      prisma.inventoryEntry.create({
-        data: {
-          branchId: fromBranchId,
-          productId,
-          type: "TRASPASO",
-          quantity: -quantity,
-          notes: `Traspaso a ${toBranch.name}${notes ? `: ${notes}` : ""}`,
-        },
-      }),
-      prisma.inventoryEntry.create({
-        data: {
-          branchId: toBranchId,
-          productId,
-          type: "TRASPASO",
-          quantity,
-          notes: `Traspaso desde ${fromBranch.name}${notes ? `: ${notes}` : ""}`,
-        },
-      }),
-    ]);
+    await recordManualInventoryMovement({
+      actorId: user.id, operationId: formData.get("operationId")?.toString(),
+      branchId: fromBranchId, toBranchId, productId, type: "TRASPASO", quantity, notes,
+    });
 
     revalidatePath("/administration/inventory/sucursales/traspasos");
     revalidatePath("/administration/inventory/sucursales");
@@ -87,6 +73,6 @@ export async function createTransferAction(formData: FormData): Promise<ActionRe
     return { success: true, message: "Traspaso registrado correctamente." };
   } catch (error) {
     console.error("Error creating transfer:", error);
-    return { success: false, error: "No fue posible registrar el traspaso." };
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible registrar el traspaso." };
   }
 }

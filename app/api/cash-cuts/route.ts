@@ -1,3 +1,5 @@
+import { applyEventInventoryMovement } from "@/lib/inventory/eventMovements";
+import { generateOperationId } from "@/lib/pos2/operationId";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds } from "@/lib/auth";
@@ -166,7 +168,19 @@ export async function POST(request: Request) {
   const openedAt = clientCreatedAt ? new Date(clientCreatedAt) : new Date();
   if (Number.isNaN(openedAt.getTime())) return NextResponse.json({ error: "Fecha de apertura inválida" }, { status: 400 });
 
+  try {
   const cashCut = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Branch" WHERE "id"=${branchId} FOR UPDATE`;
+    if (clientOperationId) {
+      const existing = await tx.cashCut.findUnique({ where: { id: clientOperationId } });
+      if (existing) {
+        if (existing.branchId !== branchId || existing.createdById !== user.id) throw new Error("La operación pertenece a otro corte.");
+        return existing;
+      }
+    }
+    if (eventId) await tx.$queryRaw`SELECT "id" FROM "ServiceEvent" WHERE "id"=${eventId} FOR UPDATE`;
+    const lockedEvent = eventId ? await tx.serviceEvent.findUnique({ where: { id: eventId }, include: { items: { orderBy: { productId: "asc" } } } }) : null;
+    if (eventId && (!lockedEvent || lockedEvent.stockDeductedAt || !lockedEvent.checkoutConfirmedAt || lockedEvent.returnConfirmedAt || lockedEvent.status === "CANCELLED")) throw new Error("Confirma la salida de un evento que no tenga inventario descontado antes de vincularlo al corte.");
     const created = await tx.cashCut.create({
       data: {
         ...(clientOperationId ? { id: clientOperationId } : {}),
@@ -195,31 +209,17 @@ export async function POST(request: Request) {
     // Si se vinculó un evento, descuenta del inventario de esta
     // sucursal lo que se cargó a ese evento (lo enviado, o lo
     // planeado si aún no se registró envío).
-    if (event) {
-      for (const item of event.items) {
-        const quantity = Number(item.sentQuantity ?? item.plannedQuantity);
-
-        if (!(quantity > 0)) continue;
-
-        await tx.inventoryEntry.create({
-          data: {
-            branchId,
-            productId: item.productId,
-            type: "SALIDA_EVENTO",
-            quantity: -quantity,
-            notes: `Evento ${event.code} — ${event.clientName}`,
-          },
-        });
-      }
-
-      await tx.serviceEvent.update({
-        where: { id: event.id },
-        data: { stockDeductedAt: new Date() },
-      });
+    if (lockedEvent) {
+      const operationId = generateOperationId();
+      for (const item of lockedEvent.items) await applyEventInventoryMovement(tx, { item, branchId, actorId: user.id, operationId, eventId: lockedEvent.id, returning: false });
+      await tx.serviceEvent.update({ where: { id: lockedEvent.id }, data: { stockDeductedAt: new Date() } });
     }
 
     return created;
   });
 
   return NextResponse.json(cashCut, { status: 201 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "No fue posible abrir el corte." }, { status: 409 });
+  }
 }

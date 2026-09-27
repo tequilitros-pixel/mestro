@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { recordManualInventoryMovement } from "@/lib/inventory/manualMovements";
 import { prisma } from "@/lib/prisma";
 import { InventoryEntryType } from "@prisma/client";
 import { getAccessibleBranchIds, getCurrentUser, requireModuleActionAccess } from "@/lib/auth";
@@ -53,7 +54,7 @@ export async function createInventoryEntryAction(
       return { success: false, error: "La cantidad debe ser mayor a cero." };
     }
 
-    if (!Object.values(InventoryEntryType).includes(typeValue as InventoryEntryType)) {
+    if (!["COMPRA", "AJUSTE", "TRASPASO"].includes(typeValue)) {
       return { success: false, error: "Selecciona un tipo de entrada válido." };
     }
 
@@ -78,23 +79,21 @@ export async function createInventoryEntryAction(
     const signedQuantity =
       typeValue === "AJUSTE" && direction === "RESTA" ? -quantity : quantity;
 
-    const entry = await prisma.inventoryEntry.create({
-      data: {
-        branchId,
-        productId,
-        type: typeValue as InventoryEntryType,
-        quantity: signedQuantity,
-        unitCost,
-        notes,
-      },
-      select: { id: true },
+    if (formData.get("unitCost")?.toString().trim() && unitCost === null) return { success: false, error: "El costo debe ser un número válido." };
+    if (typeValue === "AJUSTE" && !["SUMA", "RESTA"].includes(direction)) return { success: false, error: "Selecciona el sentido del ajuste." };
+    if (unitCost !== null && unitCost < 0) return { success: false, error: "El costo no puede ser negativo." };
+    const outcome = await recordManualInventoryMovement({
+      actorId: user.id, operationId: formData.get("operationId")?.toString(),
+      branchId, productId, type: typeValue as InventoryEntryType,
+      quantity: signedQuantity, unitCost, notes,
     });
 
     revalidatePath("/administration/inventory/branch-entries");
+    revalidatePath("/administration/inventory/sucursales/stock");
 
-    return { success: true, message: "Entrada registrada correctamente.", id: entry.id };
+    return { success: true, message: "Entrada registrada correctamente.", id: String(outcome.result.id) };
   } catch (error) {
     console.error("Error creating inventory entry:", error);
-    return { success: false, error: "No fue posible registrar la entrada." };
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible registrar la entrada." };
   }
 }

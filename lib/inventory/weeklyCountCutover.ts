@@ -49,6 +49,9 @@ export async function reconcileWeeklyCountCutover(
     throw new Error(`COUNT_ITEMS_PENDING:${pendingItems.length}`);
   }
 
+  for (const productId of [...new Set(count.items.map((item) => item.productId))].sort()) {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${count.branchId}:${productId}`},0))::text`;
+  }
   const reconciled: ReconciledItem[] = [];
   for (const item of count.items) {
     const product = item.product;

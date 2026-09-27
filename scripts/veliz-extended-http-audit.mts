@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { readFileSync } from 'node:fs';
+import { generateOperationId } from '../lib/pos2/operationId';
+import { createRequire } from 'node:module';
+const url=process.env.DATABASE_URL!;
+if(new URL(url).hostname!=='127.0.0.1'||!url.endsWith('/veliz_audit'))throw Error('LOCAL_TEST_DATABASE_REQUIRED');
+const db=new PrismaClient({adapter:new PrismaPg({connectionString:url})});
+const {encodeReply}=createRequire(import.meta.url)('next/dist/compiled/react-server-dom-webpack/client.node');
+function form(values:Record<string,string>){const f=new FormData();for(const [k,v]of Object.entries(values))f.set(k,v);return f}
+async function action(path:string,name:string,args:unknown[],user="qa-admin"){
+ await fetch('http://127.0.0.1:3107'+path,{headers:{Cookie:'maestro_session=local-'+user}});
+ const m=JSON.parse(readFileSync('.next/dev/server/server-reference-manifest.json','utf8')) as {node:Record<string,{exportedName:string}>};
+ const id=Object.entries(m.node).find(([,v])=>v.exportedName===name)?.[0];assert.ok(id,name);
+ const body=await encodeReply(args);
+ const r=await fetch('http://127.0.0.1:3107'+path,{method:'POST',headers:{Cookie:'maestro_session=local-'+user,Origin:'http://127.0.0.1:3107','Next-Action':id,Accept:'text/x-component'},body,signal:AbortSignal.timeout(60000)});
+ return{status:r.status,text:await r.text()};
+}
+const suffix=Date.now();const p='qa-extended-'+suffix;const eventA=p+'a',eventB=p+'b',itemId=p+'item';
+await db.inventoryProduct.create({data:{id:p,code:p,name:'Prueba de piezas',category:'TEST',unit:'Pza',itemType:'CONSUMABLE',trackStock:true,inventoryBaseUnit:'UNIT'}});
+await db.inventoryBalance.createMany({data:[{branchId:'veliz',inventoryProductId:p,quantity:10,unit:'UNIT'},{branchId:'other',inventoryProductId:p,quantity:0,unit:'UNIT'}]});
+await db.serviceEvent.createMany({data:[eventA,eventB].map(id=>({id,code:id,clientName:'Cliente de prueba aislada',location:'LOCAL',eventDate:new Date(),guestCount:10}))});
+await db.serviceEventItem.create({data:{id:itemId,eventId:eventB,productId:p,productName:'Prueba',unit:'Pza',itemType:'CONSUMABLE',plannedQuantity:2}});
+
+await db.inventoryMovement.create({data:{branchId:'veliz',inventoryProductId:p,movementType:'OPENING_BALANCE',quantityDelta:10,unit:'UNIT',balanceBefore:0,balanceAfter:10,sourceType:'LEGACY_OPENING',sourceId:p,actorId:'qa-admin',operationId:generateOperationId(),reasonCode:'LOCAL_QA_OPENING'}});
+const eventPath='/administration/inventory/events/'+eventA;
+const cross=await action(eventPath,'updateSentQuantityAction',[itemId,eventA,2]);
+assert.ok(cross.text.includes('no pertenece'));assert.equal((await db.serviceEventItem.findUniqueOrThrow({where:{id:itemId}})).sentQuantity,null);console.log('PASS Cross-event checklist write rejected');
+const movementPath='/administration/inventory/branch-entries';
+const entry=await action(movementPath,'createInventoryEntryAction',[form({branchId:'veliz',productId:p,type:'COMPRA',quantity:'5'})]);
+assert.ok(entry.text.includes('Entrada registrada'),entry.text);
+const qty=async(branchId='veliz')=>(await db.inventoryBalance.findUniqueOrThrow({where:{branchId_inventoryProductId:{branchId,inventoryProductId:p}}})).quantity.toNumber();
+assert.equal(await qty(),15);console.log('PASS Purchase updates authoritative V2 stock and legacy history atomically');
+const replayId=generateOperationId();const entryForm=()=>form({branchId:'veliz',productId:p,type:'COMPRA',quantity:'2',operationId:replayId});
+await Promise.all([action(movementPath,'createInventoryEntryAction',[entryForm()]),action(movementPath,'createInventoryEntryAction',[entryForm()])]);assert.equal(await qty(),17);assert.equal(await db.inventoryMovement.count({where:{operationId:replayId}}),1);console.log('PASS Concurrent purchase retries have one stock effect');
+const changed=await action(movementPath,'createInventoryEntryAction',[form({branchId:'veliz',productId:p,type:'COMPRA',quantity:'3',operationId:replayId})]);assert.ok(changed.text.includes('false'));assert.equal(await qty(),17);console.log('PASS Reusing movement ID with changed quantity rejected');
+await action(movementPath,'createInventoryEntryAction',[form({branchId:'veliz',productId:p,type:'AJUSTE',direction:'RESTA',quantity:'100',operationId:generateOperationId()})]);assert.equal(await qty(),17);console.log('PASS Over-stock adjustment rolls back all writes');
+const transferId=generateOperationId();const transferForm=()=>form({fromBranchId:'veliz',toBranchId:'other',productId:p,quantity:'7',operationId:transferId});
+await Promise.all([action('/administration/inventory/sucursales/traspasos','createTransferAction',[transferForm()]),action('/administration/inventory/sucursales/traspasos','createTransferAction',[transferForm()])]);assert.equal(await qty(),10);assert.equal(await qty('other'),7);assert.equal(await db.inventoryMovement.count({where:{operationId:transferId}}),2);console.log('PASS Transfer and replay preserve both balances and one ledger pair');
+await action(movementPath,'createInventoryEntryAction',[form({branchId:'veliz',productId:p,type:'VENTA_POS',quantity:'50'})]);assert.equal(await qty(),10);console.log('PASS Manual entry cannot forge an automatic POS movement');
+await db.modulePermission.create({data:{userId:'qa-other',moduleKey:movementPath}}).catch(()=>{});
+await action(movementPath,'createInventoryEntryAction',[form({branchId:'veliz',productId:p,type:'COMPRA',quantity:'50'})],'qa-other');assert.equal(await qty(),10);console.log('PASS Authorized module user cannot move another branch stock');
+const eventBPath='/administration/inventory/events/'+eventB;
+await action(eventBPath,'updateSentQuantityAction',[itemId,eventB,2]);
+const empty=await action(eventPath,'confirmEventCheckoutAction',[eventA]);assert.ok(empty.text.includes('false'));assert.equal((await db.serviceEvent.findUniqueOrThrow({where:{id:eventA}})).checkoutConfirmedAt,null);console.log('PASS Empty event cannot confirm checkout');
+await action(eventBPath,'updateEventStatusAction',[eventB,'COMPLETED']);assert.equal((await db.serviceEvent.findUniqueOrThrow({where:{id:eventB}})).status,'DRAFT');console.log('PASS Status selector cannot bypass return confirmation');
+await Promise.all([action(eventBPath,'confirmEventCheckoutAction',[eventB]),action(eventBPath,'confirmEventCheckoutAction',[eventB])]);
+const checked=(await db.serviceEvent.findUniqueOrThrow({where:{id:eventB}})).checkoutConfirmedAt!;
+await action(eventBPath,'updateSentQuantityAction',[itemId,eventB,1]);assert.equal((await db.serviceEventItem.findUniqueOrThrow({where:{id:itemId}})).sentQuantity?.toNumber(),2);console.log('PASS Confirmed checkout cannot be edited');
+async function post(path:string,body:unknown){const r=await fetch('http://127.0.0.1:3107'+path,{method:'POST',headers:{Cookie:'maestro_session=local-qa-admin','Content-Type':'application/json'},body:JSON.stringify(body)});return{status:r.status,data:await r.json()}}
+const cutId=generateOperationId();const opening={branchId:'veliz',date:'2026-09-27',startingFund:0,eventId:eventB,clientOperationId:cutId};
+const cuts=await Promise.all([post('/api/cash-cuts',opening),post('/api/cash-cuts',opening)]);assert.ok(cuts.every(r=>r.status===200||r.status===201),JSON.stringify(cuts));assert.equal(await db.cashCut.count({where:{id:cutId}}),1);assert.equal(await qty(),8);assert.equal(await db.inventoryMovement.count({where:{sourceId:eventB,movementType:'EVENT_LOAD'}}),1);console.log('PASS Concurrent event-linked opening deducts stock exactly once');
+await action(eventBPath,'updateReturnedQuantityAction',[itemId,eventB,2,1]);assert.equal((await db.serviceEventItem.findUniqueOrThrow({where:{id:itemId}})).returnedQuantity,null);console.log('PASS Returned plus damaged quantity cannot exceed sent');
+await action(eventBPath,'updateReturnedQuantityAction',[itemId,eventB,1,0]);
+await Promise.all([action(eventBPath,'confirmEventReturnAction',[eventB]),action(eventBPath,'confirmEventReturnAction',[eventB])]);assert.equal(await qty(),9);assert.equal(await db.inventoryMovement.count({where:{sourceId:eventB,movementType:'EVENT_RETURN'}}),1);console.log('PASS Confirmed event return credits actual returned stock once');
+const returned=(await db.serviceEvent.findUniqueOrThrow({where:{id:eventB}})).returnConfirmedAt!;
+await action(eventBPath,'updateReturnedQuantityAction',[itemId,eventB,0,0]);await action(eventBPath,'removeEventItemAction',[itemId,eventB]);await action(eventBPath,'updateEventStatusAction',[eventB,'DRAFT']);
+assert.equal((await db.serviceEventItem.findUniqueOrThrow({where:{id:itemId}})).returnedQuantity?.toNumber(),1);const finished=await db.serviceEvent.findUniqueOrThrow({where:{id:eventB}});assert.equal(finished.status,'COMPLETED');assert.equal(finished.returnConfirmedAt?.getTime(),returned.getTime());assert.equal(finished.checkoutConfirmedAt?.getTime(),checked.getTime());console.log('PASS Completed event history and confirmation timestamps stay immutable');
+const sum=(await db.inventoryMovement.aggregate({where:{branchId:'veliz',inventoryProductId:p},_sum:{quantityDelta:true}}))._sum.quantityDelta!.toNumber();assert.equal(sum,await qty());console.log('PASS Inventory ledger equals displayed balance after purchase transfer load and return');
+await db.$disconnect();
