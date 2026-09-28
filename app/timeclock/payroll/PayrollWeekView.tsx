@@ -21,6 +21,8 @@ import {
   deletePayrollAdjustmentAction,
   submitPayrollPeriodAction,
   approvePayrollEntryAction,
+  reopenPayrollEntryAction,
+  closePayrollReviewAction,
   markPayrollPeriodPaidAction,
   reopenPayrollPeriodAction,
   justifyIncidentAction,
@@ -42,6 +44,7 @@ import {
   todayDateOnly,
 } from "@/lib/dateOnly";
 import { useToast } from "@/components/ui/Toast";
+import { payrollApprovalProgress } from "@/lib/payroll/approvalProgress";
 
 const STATUS_LABELS: Record<PayrollPeriodInfo["status"], string> = {
   BORRADOR: "Borrador",
@@ -238,6 +241,7 @@ export default function PayrollWeekView() {
       ? table.employees.filter((employee) => employee.name.toLocaleLowerCase("es-MX").includes(query))
       : table.employees;
   }, [search, table]);
+  const approvalAmounts = table ? payrollApprovalProgress(table.employees) : null;
 
   const historyOptions = useMemo(() => {
     const options = new Map<string, PayrollWeekHistoryItem>();
@@ -346,18 +350,15 @@ export default function PayrollWeekView() {
               )}
 
               {table.period.status === "REVISION" && (
-                <>
+                table.period.totalEntries > 0 && table.period.approvedEntries === table.period.totalEntries ? (
                   <button
                     disabled={actionBusy}
-                    onClick={() =>
-                      reopenWeek()
-                    }
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high disabled:opacity-50"
+                    onClick={() => handlePeriodAction(closePayrollReviewAction, "Revisión cerrada sin cambios")}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:opacity-50"
                   >
-                    <RefreshIcon className="h-3.5 w-3.5" />
-                    Reabrir
+                    <CheckIcon className="h-3.5 w-3.5" /> Cerrar revisión sin cambios
                   </button>
-                </>
+                ) : null
               )}
 
               {table.period.status === "APROBADA" && (
@@ -417,6 +418,19 @@ export default function PayrollWeekView() {
               Semana trabajada: {formatWeekRange(table.weekStart)} · pago: {formatPaymentDate(table.weekStart)}
             </p>
           </Card>
+
+          {table.period.status !== "BORRADOR" && (
+            <section className="grid gap-3 sm:grid-cols-2" aria-label="Avance de aprobación de nómina">
+              <Card className="border-secondary/30 bg-secondary/[0.05]">
+                <CardLabel>Pendiente por aprobar</CardLabel>
+                <p className="mt-1 text-2xl font-black tabular-nums text-on-surface">{money(approvalAmounts?.remaining ?? 0)}</p>
+              </Card>
+              <Card className="border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/[0.05]">
+                <CardLabel>Aprobado para pago</CardLabel>
+                <p className="mt-1 text-2xl font-black tabular-nums text-on-surface">{money(approvalAmounts?.approved ?? 0)}</p>
+              </Card>
+            </section>
+          )}
 
           <section className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest">
             <div className="flex flex-wrap items-end justify-between gap-3 border-b border-outline-variant bg-surface-container px-4 py-3">
@@ -488,8 +502,9 @@ export default function PayrollWeekView() {
                             {employee.approval.status === "PAGADA"
                               ? "Pagado"
                               : employee.approval.status === "APROBADA"
-                                ? "Aprobado"
-                                : "Pendiente"}
+                                ? (employee.approval.history?.length ?? 0) > 1 ? "Reaprobado" : "Aprobado"
+                                : employee.approval.status === "BORRADOR" ? "Sin expediente"
+                                : (employee.approval.history?.length ?? 0) > 0 ? "Por reaprobación" : "Pendiente"}
                           </button>
                         </td>
                       </tr>
@@ -540,7 +555,10 @@ function EmployeeDetailModal({
   const [entryClockOut, setEntryClockOut] = useState("");
   const [savingEntry, setSavingEntry] = useState(false);
   const [approving, setApproving] = useState(false);
-  const locked = detail ? detail.period.status !== "BORRADOR" : false;
+  const locked = detail
+    ? detail.period.status === "APROBADA" || detail.period.status === "PAGADA" ||
+      (detail.period.status === "REVISION" && detail.approval.status !== "REVISION")
+    : false;
   const branchOptions = detail?.branches ?? [];
 
   useEffect(() => {
@@ -712,13 +730,31 @@ function EmployeeDetailModal({
       showToast(
         result.completed
           ? `${detail.employee.name} aprobado. La semana quedó completamente aprobada.`
-          : `${detail.employee.name} aprobado`,
+          : `${detail.employee.name} ${(result.revision ?? 0) > 1 ? "reaprobado" : "aprobado"}`,
         "success",
       );
       setRefreshKey((key) => key + 1);
       onDataChanged();
     } catch (actionError) {
       showToast(actionError instanceof Error ? actionError.message : "No se pudo aprobar al empleado", "error");
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function reopenEmployee() {
+    if (!detail || detail.period.status !== "REVISION" || detail.approval.status !== "APROBADA") return;
+    if (!confirm(`¿Abrir la nómina de ${detail.employee.name} para corregirla? Tendrás que aprobarla otra vez.`)) return;
+    setApproving(true);
+    try {
+      const result = await reopenPayrollEntryAction(detail.weekStart, detail.employee.id);
+      if ("error" in result) {
+        showToast(result.error ?? "No se pudo abrir al empleado", "error");
+        return;
+      }
+      showToast(`${detail.employee.name} abierto para corrección`, "success");
+      setRefreshKey((key) => key + 1);
+      onDataChanged();
     } finally {
       setApproving(false);
     }
@@ -781,19 +817,37 @@ function EmployeeDetailModal({
               </Card>
             </div>
 
-            {detail.period.status === "REVISION" && (
+            {detail.period.status !== "BORRADOR" && (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant bg-surface-container p-3">
                 <div>
                   <p className="text-sm font-bold text-on-surface">
-                    {detail.approval.status === "APROBADA" ? "Nómina individual aprobada" : "Aprobación individual pendiente"}
+                    {detail.approval.status === "BORRADOR"
+                      ? "Sin expediente de revisión"
+                      : detail.approval.status === "PAGADA"
+                      ? "Nómina individual pagada"
+                      : detail.approval.status === "APROBADA"
+                      ? (detail.approval.history?.length ?? 0) > 1 ? "Nómina individual reaprobada" : "Nómina individual aprobada"
+                      : (detail.approval.history?.length ?? 0) > 0 ? "Pendiente de reaprobación" : "Aprobación individual pendiente"}
                   </p>
                   <p className="text-xs text-on-surface-variant">
-                    {detail.approval.status === "APROBADA"
+                    {detail.approval.status === "BORRADOR"
+                      ? "Este empleado no formó parte de la semana enviada a revisión."
+                      : detail.approval.status === "APROBADA" || detail.approval.status === "PAGADA"
                       ? `Aprobada por ${detail.approval.approvedByName ?? "—"}${detail.approval.approvedAt ? ` · ${formatDateTime(detail.approval.approvedAt)}` : ""}`
                       : "Revisa las horas y el pago de este empleado antes de aprobarlo."}
                   </p>
                 </div>
-                {detail.approval.status === "REVISION" && (
+                {detail.period.status === "REVISION" && detail.approval.status === "APROBADA" && (
+                  <button
+                    type="button"
+                    onClick={reopenEmployee}
+                    disabled={approving}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface disabled:opacity-50"
+                  >
+                    <RefreshIcon className="h-3.5 w-3.5" /> Modificar este empleado
+                  </button>
+                )}
+                {detail.period.status === "REVISION" && detail.approval.status === "REVISION" && (
                   <button
                     type="button"
                     onClick={approveEmployee}
@@ -803,6 +857,16 @@ function EmployeeDetailModal({
                     <CheckIcon className="h-3.5 w-3.5" />
                     {approving ? "Aprobando..." : `Aprobar solo a ${detail.employee.name}`}
                   </button>
+                )}
+                {(detail.approval.history?.length ?? 0) > 0 && (
+                  <div className="w-full border-t border-outline-variant pt-2 text-xs text-on-surface-variant">
+                    <p className="font-semibold">Aprobaciones anteriores</p>
+                    {detail.approval.history?.map((approval) => (
+                      <p key={approval.revision}>
+                        {approval.revision}. {money(approval.totalPay)} · {approval.approvedByName} · {formatDateTime(approval.approvedAt)}
+                      </p>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
@@ -1104,7 +1168,9 @@ function EmployeeDetailModal({
               {locked && (
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-outline">
                   <LockIcon className="h-3.5 w-3.5" />
-                  Semana {STATUS_LABELS[detail.period.status].toLowerCase()} — reábrela para modificar ajustes.
+                  {detail.period.status === "REVISION"
+                    ? "Este empleado ya está aprobado. Ábrelo para corrección antes de modificar ajustes."
+                    : `Semana ${STATUS_LABELS[detail.period.status].toLowerCase()} — reábrela para modificar ajustes.`}
                 </p>
               )}
 

@@ -3163,10 +3163,9 @@ enum PayrollAdjustmentType {
 ///  * paga." Mientras un periodo está en BORRADOR (o no existe fila
 ///  * todavía — se crea perezosamente, igual que ScheduleWeek), la
 ///  * tabla y el expediente de Nómina se calculan EN VIVO desde
-///  * TimeClockEntry/ScheduledShift/PayrollAdjustment. Al enviarlo a
-///  * revisión, esos números se congelan en PayrollEntry: aunque
-///  * después alguien corrija una checada vieja, la nómina ya
-///  * decidida no cambia sola.
+///  * TimeClockEntry/ScheduledShift/PayrollAdjustment. En revisión,
+///  * cada empleado pendiente sigue editable; al aprobarse se congela
+///  * su snapshot y se conserva cada revisión aprobada.
 model PayrollPeriod {
   id        String   @id @default(cuid())
   /// Lunes de la semana (mismo grano que OvertimeRecord/PayrollAdjustment).
@@ -3242,10 +3241,29 @@ model PayrollEntry {
   period     PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
   user       User          @relation("PayrollEntryOwner", fields: [userId], references: [id])
   approvedBy User?         @relation("PayrollEntryApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvals  PayrollEntryApproval[]
 
   @@unique([periodId, userId])
   @@index([userId])
   @@index([periodId, status])
+}
+
+/// Registro inmutable de cada aprobación individual. Una corrección posterior
+/// crea otra revisión y conserva el importe y el expediente ya aprobados.
+model PayrollEntryApproval {
+  id             String   @id @default(cuid())
+  entryId        String
+  revision       Int
+  approvedById   String?
+  approvedByName String
+  approvedAt     DateTime
+  totalPay       Decimal  @db.Decimal(12, 2)
+  snapshot       Json
+
+  entry PayrollEntry @relation(fields: [entryId], references: [id], onDelete: Restrict)
+
+  @@unique([entryId, revision])
+  @@index([entryId])
 }
 
 /// Justificación de una incidencia del expediente (llegada tarde,

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
@@ -26,11 +27,11 @@ import {
  * partir de TimeClockEntry, ScheduledShift, OvertimeRecord y
  * PayrollAdjustment: son números estimados.
  *
- * Al enviar la semana a revisión (fase 3), esos números se congelan
- * en PayrollEntry — un snapshot por empleado — y de ahí en adelante
- * se leen tal cual, aunque después alguien corrija una checada vieja.
- * Solo se puede volver a editar reabriendo la semana (REVISION o
- * APROBADA -> BORRADOR); una vez PAGADA queda cerrada por completo.
+ * Al enviar la semana a revisión se crea un PayrollEntry por empleado.
+ * Los pendientes siguen calculándose en vivo hasta su aprobación; cada
+ * aprobación guarda un snapshot y una revisión histórica inmutable.
+ * Reabrir una semana aprobada conserva a quienes no se modifican.
+ * Una semana PAGADA queda cerrada por completo.
  * ==========================================================
  */
 
@@ -126,6 +127,7 @@ export type PayrollEmployeeApproval = {
   status: PayrollEmployeeApprovalStatus;
   approvedByName: string | null;
   approvedAt: string | null;
+  history?: { revision: number; approvedByName: string; approvedAt: string; totalPay: number }[];
 };
 
 export type PayrollWeekEmployee = {
@@ -235,7 +237,7 @@ export type PayrollEmployeeDetail = {
  * Calcula EN VIVO (sin snapshot) las filas de la tabla semanal a
  * partir del checador, tarifas y ajustes manuales.
  */
-async function computeLiveWeekEmployees(mondayStr: string): Promise<{
+async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: string[] = []): Promise<{
   employees: PayrollWeekEmployee[];
   totals: PayrollWeekTable["totals"];
 }> {
@@ -252,7 +254,9 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
       select: { userId: true, clockIn: true, clockOut: true },
     }),
     prisma.user.findMany({
-      where: { active: true },
+      where: includedUserIds.length > 0
+        ? { OR: [{ active: true }, { id: { in: includedUserIds } }] }
+        : { active: true },
       select: { id: true, name: true, hourlyRate: true },
       orderBy: { name: "asc" },
     }),
@@ -375,6 +379,7 @@ async function computeLiveWeekEmployees(mondayStr: string): Promise<{
 async function computeLiveEmployeeDetail(
   userId: string,
   mondayStr: string,
+  db: Prisma.TransactionClient = prisma,
 ): Promise<{ error: string } | Omit<PayrollEmployeeDetail, "period">> {
   const dayKeys = weekDayKeys(mondayStr);
   const weekStartDate = parseDateOnly(mondayStr);
@@ -383,30 +388,30 @@ async function computeLiveEmployeeDetail(
   const rateReferenceDate = new Date(clockEnd.getTime() - 1);
 
   const [employee, entries, shifts, salaryRates, userBranches, adjustments] = await Promise.all([
-    prisma.user.findUnique({
+    db.user.findUnique({
       where: { id: userId },
       select: { id: true, name: true, hourlyRate: true },
     }),
-    prisma.timeClockEntry.findMany({
+    db.timeClockEntry.findMany({
       where: { userId, clockIn: { gte: clockStart, lt: clockEnd } },
       include: { branch: { select: { name: true } } },
       orderBy: { clockIn: "asc" },
     }),
-    prisma.scheduledShift.findMany({
+    db.scheduledShift.findMany({
       where: { userId, type: "TURNO", date: { gte: weekStartDate, lt: weekEndDate } },
       include: { branch: { select: { name: true } } },
     }),
-    prisma.salaryRate.findMany({
+    db.salaryRate.findMany({
       where: { userId, scheme: "HORA" },
       select: { amount: true, effectiveFrom: true, effectiveTo: true },
       orderBy: { effectiveFrom: "desc" },
     }),
-    prisma.userBranch.findMany({
+    db.userBranch.findMany({
       where: { userId },
       include: { branch: { select: { id: true, name: true } } },
       orderBy: { branch: { name: "asc" } },
     }),
-    prisma.payrollAdjustment.findMany({
+    db.payrollAdjustment.findMany({
       where: { userId, weekStart: weekStartDate },
       include: { createdBy: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
@@ -524,7 +529,7 @@ async function computeLiveEmployeeDetail(
     adjustmentRows.map((a) => ({ type: a.type, amount: a.amount })),
   );
 
-  const justifications = await loadJustificationsMap(userId, mondayStr);
+  const justifications = await loadJustificationsMap(userId, mondayStr, db);
 
   return {
     employee: { id: employee.id, name: employee.name, hourlyRate },
@@ -554,11 +559,11 @@ async function computeLiveEmployeeDetail(
  * no un número de pago — se puede justificar antes o después de que
  * la nómina se apruebe o se pague.
  */
-async function loadJustificationsMap(userId: string, mondayStr: string) {
+async function loadJustificationsMap(userId: string, mondayStr: string, db: Prisma.TransactionClient = prisma) {
   const start = parseDateOnly(mondayStr);
   const end = parseDateOnly(addDaysToDateOnly(mondayStr, 7));
 
-  const justifications = await prisma.payrollIncidentJustification.findMany({
+  const justifications = await db.payrollIncidentJustification.findMany({
     where: { userId, date: { gte: start, lt: end } },
     include: { justifiedBy: { select: { name: true } } },
   });
@@ -597,6 +602,10 @@ async function loadPeriodWithEntries(mondayStr: string) {
         include: {
           user: { select: { id: true, name: true } },
           approvedBy: { select: { name: true } },
+          approvals: {
+            select: { revision: true, approvedByName: true, approvedAt: true, totalPay: true },
+            orderBy: { revision: "asc" },
+          },
         },
       },
     },
@@ -636,10 +645,7 @@ function periodInfoFrom(
 }
 
 /**
- * Vista semanal principal de Nómina: una fila por empleado, horas
- * reales trabajadas por día (checador), y los totales de la semana.
- * Si la semana ya fue enviada a revisión, se lee el snapshot
- * congelado en vez de recalcular.
+ * Vista semanal principal: pendientes en vivo, aprobados desde su snapshot.
  */
 export async function getPayrollWeekTable(
   weekStart: string,
@@ -652,13 +658,21 @@ export async function getPayrollWeekTable(
   const period = await loadPeriodWithEntries(mondayStr);
 
   if (period && period.status !== "BORRADOR") {
-    const activeUsers = await prisma.user.findMany({
-      where: { active: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    });
+    const [activeUsers, live] = await Promise.all([
+      prisma.user.findMany({
+        where: { active: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      period.status === "REVISION"
+        ? computeLiveWeekEmployees(mondayStr, period.entries.map((entry) => entry.userId))
+        : Promise.resolve(null),
+    ]);
     const entriesByUserId = new Map(period.entries.map((entry) => [entry.userId, entry]));
-    const employees: PayrollWeekEmployee[] = activeUsers
+    const liveByUserId = new Map(live?.employees.map((employee) => [employee.id, employee]) ?? []);
+    const visibleUsers = new Map(activeUsers.map((user) => [user.id, user]));
+    for (const entry of period.entries) visibleUsers.set(entry.userId, entry.user);
+    const employees: PayrollWeekEmployee[] = Array.from(visibleUsers.values())
       .map((user) => {
         const entry = entriesByUserId.get(user.id);
         if (!entry) {
@@ -675,8 +689,27 @@ export async function getPayrollWeekTable(
             estimatedPay: 0,
             adjustmentsTotal: 0,
             finalPay: 0,
-            approval: { status: period.status, approvedByName: null, approvedAt: null },
+            approval: { status: "BORRADOR" as const, approvedByName: null, approvedAt: null },
           };
+        }
+        if (period.status === "REVISION" && entry.status === "REVISION") {
+          const pending = liveByUserId.get(user.id);
+          if (pending) {
+            return {
+              ...pending,
+              approval: {
+                status: "REVISION" as const,
+                approvedByName: entry.approvedBy?.name ?? null,
+                approvedAt: entry.approvedAt?.toISOString() ?? null,
+                history: entry.approvals.map((approval) => ({
+                  revision: approval.revision,
+                  approvedByName: approval.approvedByName,
+                  approvedAt: approval.approvedAt.toISOString(),
+                  totalPay: Number(approval.totalPay),
+                })),
+              },
+            };
+          }
         }
         const hoursByDay = entry.hoursByDay as number[];
         return {
@@ -696,6 +729,12 @@ export async function getPayrollWeekTable(
             status: entry.status,
             approvedByName: entry.approvedBy?.name ?? null,
             approvedAt: entry.approvedAt?.toISOString() ?? null,
+            history: entry.approvals.map((approval) => ({
+              revision: approval.revision,
+              approvedByName: approval.approvedByName,
+              approvedAt: approval.approvedAt.toISOString(),
+              totalPay: Number(approval.totalPay),
+            })),
           },
         };
       })
@@ -735,8 +774,7 @@ export async function getPayrollWeekTable(
 }
 
 /**
- * Expediente semanal de un empleado. Igual que la tabla, si la semana
- * ya fue enviada a revisión se lee el snapshot congelado.
+ * Expediente semanal: pendientes en vivo, aprobados desde su snapshot.
  */
 export async function getEmployeePayrollDetail(
   userId: string,
@@ -759,6 +797,29 @@ export async function getEmployeePayrollDetail(
     const entry = period.entries.find((e) => e.userId === userId);
     const periodInfo = periodInfoFrom(period);
     const justifications = await loadJustificationsMap(userId, mondayStr);
+
+    if (period.status === "REVISION" && entry?.status === "REVISION") {
+      const live = await computeLiveEmployeeDetail(userId, mondayStr);
+      if ("error" in live) return live;
+      return {
+        success: true,
+        data: {
+          ...live,
+          period: periodInfo,
+          approval: {
+            status: "REVISION",
+            approvedByName: entry.approvedBy?.name ?? null,
+            approvedAt: entry.approvedAt?.toISOString() ?? null,
+            history: entry.approvals.map((approval) => ({
+              revision: approval.revision,
+              approvedByName: approval.approvedByName,
+              approvedAt: approval.approvedAt.toISOString(),
+              totalPay: Number(approval.totalPay),
+            })),
+          },
+        },
+      };
+    }
 
     if (!entry) {
       // No trabajó ni tuvo ajustes esta semana al momento de congelarla.
@@ -792,7 +853,7 @@ export async function getEmployeePayrollDetail(
           adjustmentsTotal: 0,
           finalPay: 0,
           period: periodInfo,
-          approval: { status: period.status, approvedByName: null, approvedAt: null },
+          approval: { status: "BORRADOR", approvedByName: null, approvedAt: null },
         },
       };
     }
@@ -828,6 +889,12 @@ export async function getEmployeePayrollDetail(
           status: entry.status,
           approvedByName: entry.approvedBy?.name ?? null,
           approvedAt: entry.approvedAt?.toISOString() ?? null,
+          history: entry.approvals.map((approval) => ({
+            revision: approval.revision,
+            approvedByName: approval.approvedByName,
+            approvedAt: approval.approvedAt.toISOString(),
+            totalPay: Number(approval.totalPay),
+          })),
         },
       },
     };
@@ -841,10 +908,21 @@ export async function getEmployeePayrollDetail(
 
 /**
  * Crea un bono o deducción manual para un empleado en una semana
- * específica (propinas repartidas, préstamos, faltas de caja,
- * premios, etc). Solo admins, y solo mientras la semana sigue en
- * borrador (si ya se envió a revisión, hay que reabrirla primero).
+ * específica (propinas repartidas, préstamos, faltas de caja, premios).
+ * Solo admins y solo para empleados aún sin aprobar.
  */
+async function payrollAdjustmentEditError(userId: string, weekStart: Date) {
+  const period = await prisma.payrollPeriod.findUnique({
+    where: { weekStart },
+    select: { status: true, entries: { where: { userId }, select: { status: true } } },
+  });
+  if (!period || period.status === "BORRADOR") return null;
+  if (period.status === "REVISION" && period.entries[0]?.status === "REVISION") return null;
+  return period.status === "REVISION"
+    ? "Este empleado ya está aprobado. Ábrelo para corrección antes de modificarlo."
+    : "Esta nómina ya está aprobada o pagada.";
+}
+
 export async function createPayrollAdjustmentAction(input: {
   userId: string;
   weekStart: string;
@@ -863,13 +941,8 @@ export async function createPayrollAdjustmentAction(input: {
   const mondayStr = mondayOfWeek(input.weekStart);
   const start = parseDateOnly(mondayStr);
 
-  const period = await prisma.payrollPeriod.findUnique({
-    where: { weekStart: start },
-    select: { status: true },
-  });
-  if (period && period.status !== "BORRADOR") {
-    return { error: "Esta semana ya fue enviada a revisión. Reábrela para modificar ajustes." };
-  }
+  const editError = await payrollAdjustmentEditError(input.userId, start);
+  if (editError) return { error: editError };
 
   await prisma.payrollAdjustment.create({
     data: {
@@ -887,24 +960,19 @@ export async function createPayrollAdjustmentAction(input: {
   return { success: true };
 }
 
-/** Elimina un bono/deducción manual. Solo admins, solo si la semana sigue en borrador. */
+/** Elimina un bono/deducción manual de un empleado aún sin aprobar. */
 export async function deletePayrollAdjustmentAction(id: string) {
   const admin = await requireAdmin();
   if (!admin) return { error: "No tienes permiso" };
 
   const adjustment = await prisma.payrollAdjustment.findUnique({
     where: { id },
-    select: { weekStart: true },
+    select: { weekStart: true, userId: true },
   });
   if (!adjustment) return { error: "No encontrado" };
 
-  const period = await prisma.payrollPeriod.findUnique({
-    where: { weekStart: adjustment.weekStart },
-    select: { status: true },
-  });
-  if (period && period.status !== "BORRADOR") {
-    return { error: "Esta semana ya fue enviada a revisión. Reábrela para modificar ajustes." };
-  }
+  const editError = await payrollAdjustmentEditError(adjustment.userId, adjustment.weekStart);
+  if (editError) return { error: editError };
 
   await prisma.payrollAdjustment.delete({ where: { id } });
 
@@ -913,11 +981,8 @@ export async function deletePayrollAdjustmentAction(id: string) {
 }
 
 /**
- * Envía la semana a revisión: congela en PayrollEntry los números
- * que hasta ahora se calculaban en vivo (tabla + expediente de cada
- * empleado con horas o ajustes). De aquí en adelante, aunque cambien
- * checadas o turnos de esa semana, la nómina ya decidida no se mueve
- * sola — hay que reabrirla explícitamente.
+ * Envía la semana a revisión y crea los expedientes iniciales. Cada
+ * pendiente puede seguir corrigiéndose; se congela al aprobarlo.
  */
 export async function submitPayrollPeriodAction(weekStart: string) {
   const admin = await requireAdmin();
@@ -1025,10 +1090,56 @@ export async function approvePayrollEntryAction(weekStart: string, userId: strin
     if (!entry) return { error: "Este empleado no forma parte de la nómina enviada" };
     if (entry.status !== "REVISION") return { success: true, completed: false };
 
+    const live = await computeLiveEmployeeDetail(userId, mondayStr, tx);
+    if ("error" in live) return live;
+    const hoursByDay = live.days.map((day) => day.hoursWorked);
+    const snapshot = {
+      hourlyRate: live.employee.hourlyRate,
+      regularHours: live.regularHours,
+      overtimeHours: live.overtimeHours,
+      totalHours: live.totalHours,
+      basePay: live.basePay,
+      overtimePay: live.overtimePay,
+      adjustmentsTotal: live.adjustmentsTotal,
+      totalPay: live.finalPay,
+      hoursByDay,
+      daysSnapshot: live.days,
+      adjustmentsSnapshot: live.adjustments,
+    };
     const approvedAt = new Date();
     await tx.payrollEntry.update({
       where: { id: entry.id },
-      data: { status: "APROBADA", approvedById: admin.id, approvedAt },
+      data: {
+        status: "APROBADA", approvedById: admin.id, approvedAt,
+        hourlyRate: live.employee.hourlyRate,
+        regularHours: live.regularHours,
+        overtimeHours: live.overtimeHours,
+        totalHours: live.totalHours,
+        basePay: live.basePay,
+        overtimePay: live.overtimePay,
+        adjustmentsTotal: live.adjustmentsTotal,
+        totalPay: live.finalPay,
+        hoursByDay,
+        daysSnapshot: live.days,
+        adjustmentsSnapshot: live.adjustments,
+      },
+    });
+    const previous = await tx.payrollEntryApproval.findFirst({
+      where: { entryId: entry.id },
+      orderBy: { revision: "desc" },
+      select: { revision: true },
+    });
+    const revision = (previous?.revision ?? 0) + 1;
+    await tx.payrollEntryApproval.create({
+      data: {
+        entryId: entry.id,
+        revision,
+        approvedById: admin.id,
+        approvedByName: admin.name,
+        approvedAt,
+        totalPay: live.finalPay,
+        snapshot,
+      },
     });
 
     const pending = await tx.payrollEntry.count({
@@ -1041,7 +1152,7 @@ export async function approvePayrollEntryAction(weekStart: string, userId: strin
       });
     }
 
-    return { success: true, completed: pending === 0 };
+    return { success: true, completed: pending === 0, revision };
   });
 
   revalidatePath("/timeclock/payroll");
@@ -1054,61 +1165,120 @@ export async function markPayrollPeriodPaidAction(weekStart: string) {
   if (!admin) return { error: "No tienes permiso" };
 
   const mondayStr = mondayOfWeek(weekStart);
-  const period = await prisma.payrollPeriod.findUnique({ where: { weekStart: parseDateOnly(mondayStr) } });
-  if (!period || period.status !== "APROBADA") {
-    return { error: "Esta semana no está aprobada" };
-  }
-
-  await prisma.$transaction([
-    prisma.payrollEntry.updateMany({
+  const result = await prisma.$transaction(async (tx) => {
+    const periods = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT "id", "status"::text AS "status"
+      FROM "PayrollPeriod"
+      WHERE "weekStart" = ${parseDateOnly(mondayStr)}
+      FOR UPDATE
+    `;
+    const period = periods[0];
+    if (!period || period.status !== "APROBADA") {
+      return { error: "Esta semana no está aprobada" };
+    }
+    await tx.payrollEntry.updateMany({
       where: { periodId: period.id, status: "APROBADA" },
       data: { status: "PAGADA" },
-    }),
-    prisma.payrollPeriod.update({
+    });
+    await tx.payrollPeriod.update({
       where: { id: period.id },
       data: { status: "PAGADA", paidById: admin.id, paidAt: new Date() },
-    }),
-  ]);
+    });
+    return { success: true };
+  });
 
   revalidatePath("/timeclock/payroll");
-  return { success: true };
+  return result;
 }
 
 /**
- * Reabre una semana en REVISION o APROBADA de vuelta a BORRADOR:
- * borra el snapshot congelado y la tabla vuelve a calcularse en
- * vivo. Una semana PAGADA ya no se puede reabrir.
+ * Reabre una semana aprobada para correcciones individuales. Conserva los
+ * snapshots y aprobaciones; solo quien se abra para edición requerirá otra.
  */
 export async function reopenPayrollPeriodAction(weekStart: string, notes?: string) {
   const admin = await requireAdmin();
   if (!admin) return { error: "No tienes permiso" };
 
   const mondayStr = mondayOfWeek(weekStart);
-  const period = await prisma.payrollPeriod.findUnique({ where: { weekStart: parseDateOnly(mondayStr) } });
-  if (!period) return { error: "No hay nada que reabrir" };
-  if (period.status === "PAGADA") return { error: "Ya está pagada, no se puede reabrir" };
-  if (period.status === "BORRADOR") return { error: "Ya está en borrador" };
-
   const reopenReason = notes?.trim();
   if (!reopenReason) return { error: "Es obligatorio escribir el motivo de reapertura" };
 
-  await prisma.$transaction([
-    prisma.payrollEntry.deleteMany({ where: { periodId: period.id } }),
-    prisma.payrollPeriod.update({
+  const result = await prisma.$transaction(async (tx) => {
+    const periods = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT "id", "status"::text AS "status"
+      FROM "PayrollPeriod"
+      WHERE "weekStart" = ${parseDateOnly(mondayStr)}
+      FOR UPDATE
+    `;
+    const period = periods[0];
+    if (!period) return { error: "No hay nada que reabrir" };
+    if (period.status === "PAGADA") return { error: "Ya está pagada, no se puede reabrir" };
+    if (period.status !== "APROBADA") return { error: "La semana ya admite revisión" };
+    await tx.payrollPeriod.update({
       where: { id: period.id },
-      data: {
-        status: "BORRADOR",
-        submittedById: null,
-        submittedAt: null,
-        approvedById: null,
-        approvedAt: null,
-        rejectedNotes: reopenReason,
-      },
-    }),
-  ]);
+      data: { status: "REVISION", rejectedNotes: reopenReason },
+    });
+    return { success: true };
+  });
 
   revalidatePath("/timeclock/payroll");
-  return { success: true };
+  return result;
+}
+
+/** Un empleado aprobado solo se desbloquea de forma explícita. */
+export async function reopenPayrollEntryAction(weekStart: string, userId: string) {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "No tienes permiso" };
+
+  const mondayStr = mondayOfWeek(weekStart);
+  const result = await prisma.$transaction(async (tx) => {
+    const periods = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT "id", "status"::text AS "status"
+      FROM "PayrollPeriod"
+      WHERE "weekStart" = ${parseDateOnly(mondayStr)}
+      FOR UPDATE
+    `;
+    const period = periods[0];
+    if (!period || period.status !== "REVISION") return { error: "La semana no está en revisión" };
+    const entry = await tx.payrollEntry.findUnique({
+      where: { periodId_userId: { periodId: period.id, userId } },
+      select: { id: true, status: true },
+    });
+    if (!entry || entry.status !== "APROBADA") return { error: "Este empleado no está aprobado" };
+    await tx.payrollEntry.update({ where: { id: entry.id }, data: { status: "REVISION" } });
+    return { success: true };
+  });
+  revalidatePath("/timeclock/payroll");
+  return result;
+}
+
+/** Cierra una revisión reabierta en la que no hubo cambios pendientes. */
+export async function closePayrollReviewAction(weekStart: string) {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "No tienes permiso" };
+  const mondayStr = mondayOfWeek(weekStart);
+  const result = await prisma.$transaction(async (tx) => {
+    const periods = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT "id", "status"::text AS "status"
+      FROM "PayrollPeriod"
+      WHERE "weekStart" = ${parseDateOnly(mondayStr)}
+      FOR UPDATE
+    `;
+    const period = periods[0];
+    if (!period || period.status !== "REVISION") return { error: "La semana no está en revisión" };
+    const [pending, approved] = await Promise.all([
+      tx.payrollEntry.count({ where: { periodId: period.id, status: "REVISION" } }),
+      tx.payrollEntry.count({ where: { periodId: period.id, status: "APROBADA" } }),
+    ]);
+    if (pending > 0 || approved === 0) return { error: "Hay empleados pendientes de aprobación" };
+    await tx.payrollPeriod.update({
+      where: { id: period.id },
+      data: { status: "APROBADA", approvedById: admin.id, approvedAt: new Date() },
+    });
+    return { success: true };
+  });
+  revalidatePath("/timeclock/payroll");
+  return result;
 }
 
 /**

@@ -567,6 +567,10 @@ export async function createManualTimeClockEntryAction(input: {
     return { error: "La hora de salida debe ser después de la entrada" };
   }
 
+  if (await isPayrollDateLocked(clockIn, input.userId)) {
+    return { error: PAYROLL_LOCKED_MESSAGE };
+  }
+
   const scheduledShiftId = await prisma.scheduledShift
     .findFirst({
       where: {
@@ -619,7 +623,7 @@ export async function updateManualTimeClockEntryAction(input: {
 
   const entry = await prisma.timeClockEntry.findUnique({
     where: { id: input.entryId },
-    select: { id: true, clockIn: true },
+    select: { id: true, userId: true, clockIn: true },
   });
   if (!entry) return { error: "Turno no encontrado" };
 
@@ -631,7 +635,7 @@ export async function updateManualTimeClockEntryAction(input: {
   if (clockOut <= clockIn) {
     return { error: "La hora de salida debe ser después de la entrada" };
   }
-  if (await isPayrollDateLocked(entry.clockIn) || await isPayrollDateLocked(clockIn)) {
+  if (await isPayrollDateLocked(entry.clockIn, entry.userId) || await isPayrollDateLocked(clockIn, entry.userId)) {
     return { error: PAYROLL_LOCKED_MESSAGE };
   }
 
@@ -660,7 +664,7 @@ export async function deleteManualTimeClockEntryAction(entryId: string) {
 
   const entry = await prisma.timeClockEntry.findUnique({
     where: { id: entryId },
-    select: { id: true, clockOut: true, clockIn: true, source: true },
+    select: { id: true, userId: true, clockOut: true, clockIn: true, source: true },
   });
   if (!entry) return { error: "Turno no encontrado" };
   if (!entry.clockOut) return { error: "No se puede borrar un turno abierto. Ciérralo primero." };
@@ -669,7 +673,7 @@ export async function deleteManualTimeClockEntryAction(entryId: string) {
   if (entry.source !== "MANUAL") {
     return { error: "No se puede borrar una checada original. Edita el turno para corregir sus horas." };
   }
-  if (await isPayrollDateLocked(entry.clockIn)) {
+  if (await isPayrollDateLocked(entry.clockIn, entry.userId)) {
     return { error: PAYROLL_LOCKED_MESSAGE };
   }
 
