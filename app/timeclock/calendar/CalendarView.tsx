@@ -95,7 +95,7 @@ export default function CalendarView({ shifts, openShift, todayKey }: CalendarVi
             <h1 className="mt-1 text-3xl font-bold text-on-surface">Mi horario</h1>
             <p className="mt-2 text-sm leading-6 text-on-surface-variant">Aquí puedes ver claramente qué días trabajas y cuáles son de descanso.</p>
           </div>
-          <Link href="/timeclock" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-outline-variant bg-surface-container text-on-surface-variant transition hover:border-primary/25 hover:text-primary" aria-label="Ir al checador"><ClockIcon className="h-5 w-5" /></Link>
+          <Link href="/timeclock" className="flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-outline-variant bg-surface-container px-3 text-sm font-semibold text-on-surface transition hover:border-primary/25 hover:text-primary"><ClockIcon className="h-5 w-5" />Checador</Link>
         </header>
 
         <nav className="grid grid-cols-2 gap-3">

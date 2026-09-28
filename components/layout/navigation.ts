@@ -147,9 +147,9 @@ export const MAIN_MODULES: MainModule[] = [
     module: "pos",
   },
   {
-    href: "/administration/schedule",
-    label: "Horario",
-    shortLabel: "Horario",
+    href: "/timeclock",
+    label: "Checador y horario",
+    shortLabel: "Checador",
     icon: ClockIcon,
     iconVariant: "blue",
     module: "timeclock",
@@ -486,6 +486,13 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
 
   timeclock: [
     {
+      href: "/timeclock",
+      label: "Checador",
+      icon: CalendarIcon,
+      iconVariant: "green",
+      operatorAllowed: true,
+    },
+    {
       href: "/timeclock/calendar",
       label: "Mi horario",
       icon: ClockIcon,
@@ -497,13 +504,6 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "Mi disponibilidad",
       icon: CalendarIcon,
       iconVariant: "amber",
-      operatorAllowed: true,
-    },
-    {
-      href: "/timeclock",
-      label: "Checador",
-      icon: CalendarIcon,
-      iconVariant: "green",
       operatorAllowed: true,
     },
     {
