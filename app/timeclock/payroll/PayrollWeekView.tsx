@@ -161,6 +161,7 @@ export default function PayrollWeekView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [reviewUserIds, setReviewUserIds] = useState<string[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [actionBusy, setActionBusy] = useState(false);
   const [search, setSearch] = useState("");
@@ -242,6 +243,12 @@ export default function PayrollWeekView() {
       : table.employees;
   }, [search, table]);
   const approvalAmounts = table ? payrollApprovalProgress(table.employees) : null;
+  const selectedReviewIndex = reviewUserIds.findIndex((id) => id === selectedUserId);
+
+  function openEmployeeReview(userId: string) {
+    setReviewUserIds(visibleEmployees.map((employee) => employee.id));
+    setSelectedUserId(userId);
+  }
 
   const historyOptions = useMemo(() => {
     const options = new Map<string, PayrollWeekHistoryItem>();
@@ -470,8 +477,8 @@ export default function PayrollWeekView() {
                       <tr key={employee.id} className="group hover:bg-primary/[0.025]">
                         <td className="sticky left-0 z-10 border-b border-r border-outline-variant bg-surface-container-lowest px-4 py-2.5 group-hover:bg-surface-container font-semibold text-on-surface">
                           <div className="flex flex-col items-start gap-1">
-                            <button type="button" onClick={() => setSelectedUserId(employee.id)} className="text-left hover:text-primary hover:underline">{employee.name}</button>
-                            <button type="button" onClick={() => setSelectedUserId(employee.id)} className="text-[10px] font-bold text-primary hover:underline">
+                            <button type="button" onClick={() => openEmployeeReview(employee.id)} className="text-left hover:text-primary hover:underline">{employee.name}</button>
+                            <button type="button" onClick={() => openEmployeeReview(employee.id)} className="text-[10px] font-bold text-primary hover:underline">
                               {table.period.status === "BORRADOR" ? "Editar horas y turnos" : "Revisar detalle"}
                             </button>
                           </div>
@@ -481,7 +488,7 @@ export default function PayrollWeekView() {
                         </td>
                         {employee.hoursByDay.map((h, i) => (
                           <td key={i} className="border-b border-r border-outline-variant p-1.5 text-center">
-                            <button onClick={() => setSelectedUserId(employee.id)} className={`w-full rounded-md px-2 py-2 font-mono text-xs font-bold tabular-nums ${h > 0 ? "bg-tertiary-fixed-dim/12 text-tertiary-fixed-dim hover:bg-tertiary-fixed-dim/20" : "bg-surface-container text-outline"}`}>
+                            <button onClick={() => openEmployeeReview(employee.id)} className={`w-full rounded-md px-2 py-2 font-mono text-xs font-bold tabular-nums ${h > 0 ? "bg-tertiary-fixed-dim/12 text-tertiary-fixed-dim hover:bg-tertiary-fixed-dim/20" : "bg-surface-container text-outline"}`}>
                               {h > 0 ? hours(h) : "—"}
                             </button>
                           </td>
@@ -498,7 +505,7 @@ export default function PayrollWeekView() {
                             : money(employee.finalPay)}
                         </td>
                         <td className="border-b border-outline-variant px-3 py-2.5 text-center">
-                          <button onClick={() => setSelectedUserId(employee.id)} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${employee.approval.status === "APROBADA" || employee.approval.status === "PAGADA" ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim" : "bg-secondary/15 text-secondary"}`}>
+                          <button onClick={() => openEmployeeReview(employee.id)} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${employee.approval.status === "APROBADA" || employee.approval.status === "PAGADA" ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim" : "bg-secondary/15 text-secondary"}`}>
                             {employee.approval.status === "PAGADA"
                               ? "Pagado"
                               : employee.approval.status === "APROBADA"
@@ -520,8 +527,14 @@ export default function PayrollWeekView() {
 
       {selectedUserId && (
         <EmployeeDetailModal
+          key={selectedUserId}
           userId={selectedUserId}
           weekStart={weekStart}
+          reviewPosition={selectedReviewIndex + 1}
+          reviewTotal={reviewUserIds.length}
+          previousUserId={selectedReviewIndex > 0 ? reviewUserIds[selectedReviewIndex - 1] : null}
+          nextUserId={selectedReviewIndex >= 0 ? reviewUserIds[selectedReviewIndex + 1] ?? null : null}
+          onNavigate={setSelectedUserId}
           onClose={() => setSelectedUserId(null)}
           onDataChanged={() => setRefreshKey((k) => k + 1)}
         />
@@ -533,11 +546,21 @@ export default function PayrollWeekView() {
 function EmployeeDetailModal({
   userId,
   weekStart,
+  reviewPosition,
+  reviewTotal,
+  previousUserId,
+  nextUserId,
+  onNavigate,
   onClose,
   onDataChanged,
 }: {
   userId: string;
   weekStart: string;
+  reviewPosition: number;
+  reviewTotal: number;
+  previousUserId: string | null;
+  nextUserId: string | null;
+  onNavigate: (userId: string) => void;
   onClose: () => void;
   onDataChanged: () => void;
 }) {
@@ -560,6 +583,13 @@ function EmployeeDetailModal({
       (detail.period.status === "REVISION" && detail.approval.status !== "REVISION")
     : false;
   const branchOptions = detail?.branches ?? [];
+
+  function navigateToEmployee(nextUserId: string) {
+    if (editingEntry || showAdjustForm || justifyingDate) {
+      if (!confirm("Hay un formulario abierto. ¿Continuar y descartar los cambios sin guardar?")) return;
+    }
+    onNavigate(nextUserId);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -786,6 +816,28 @@ function EmployeeDetailModal({
                 className="rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high"
               >
                 Cerrar
+              </button>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2 border-b border-outline-variant pb-3">
+              <button
+                type="button"
+                onClick={() => previousUserId && navigateToEmployee(previousUserId)}
+                disabled={!previousUserId || approving || savingEntry}
+                className="inline-flex items-center gap-1 rounded-lg border border-outline-variant px-2.5 py-1.5 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeftIcon className="h-3.5 w-3.5" /> Anterior
+              </button>
+              <span className="text-center text-xs font-semibold tabular-nums text-on-surface-variant">
+                {reviewPosition} de {reviewTotal}
+              </span>
+              <button
+                type="button"
+                onClick={() => nextUserId && navigateToEmployee(nextUserId)}
+                disabled={!nextUserId || approving || savingEntry}
+                className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-bold text-on-primary hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Siguiente <ChevronRightIcon className="h-3.5 w-3.5" />
               </button>
             </div>
 
