@@ -24,7 +24,9 @@ export async function GET(
   let cashCut;
   try {
     cashCut = await prisma.cashCut.findFirst({
-      where: withCashCutReadScope(scope, { id }),
+      where: scope.user.role === "ADMIN"
+        ? withCashCutScope(scope, { id })
+        : withCashCutReadScope(scope, { id, archivedAt: null }),
       include: {
         branch: true,
         responsible: { select: { id: true, name: true } },

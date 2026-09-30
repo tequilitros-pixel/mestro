@@ -3,8 +3,8 @@
 import { NextResponse } from "next/server";
 import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canWithdraw, withdrawFromEnvelope } from "@/lib/cash-cuts/safeEnvelopes";
-import { isCurrentManagerBusinessWeek } from "@/lib/cash-cuts/access";
+import { withdrawFromEnvelope } from "@/lib/cash-cuts/safeEnvelopes";
+import { canAccessSafeEnvelopeDate, resolveSafeEnvelopeWeek } from "@/lib/cash-cuts/safeWeek";
 
 /**
  * body: { amount: number, reason: string } -> retiro parcial
@@ -18,20 +18,16 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
-  if (!canWithdraw(user.role)) {
-    return NextResponse.json({ error: "No tienes permiso para retirar" }, { status: 403 });
-  }
-
   const { id } = await params;
   const envelope = await prisma.cashSafeEnvelope.findUnique({ where: { id } });
   if (!envelope) {
     return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
   }
-  if (!isCurrentManagerBusinessWeek(user.role, envelope.cutDate)) return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
+  if (!canAccessSafeEnvelopeDate(user.role, envelope.cutDate)) return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
 
   const allowedBranchIds = await getAccessibleBranchIds();
   if (allowedBranchIds && !allowedBranchIds.includes(envelope.branchId)) {
-    return NextResponse.json({ error: "No tienes acceso a esta sucursal" }, { status: 403 });
+    return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
   }
 
   const body = await request.json().catch(() => ({}));
@@ -50,6 +46,8 @@ export async function POST(
       categoryId: typeof categoryId === "string" ? categoryId : undefined,
       receiptPhotoUrl: typeof body.receiptPhotoUrl === "string" ? body.receiptPhotoUrl : undefined,
       userId: user.id,
+      allowedBranchIds,
+      currentWeek: user.role === "ADMIN" ? null : resolveSafeEnvelopeWeek(null, user.role),
     });
     return NextResponse.json(updated);
   } catch (err) {

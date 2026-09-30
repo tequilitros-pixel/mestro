@@ -144,6 +144,15 @@ test("Cortes activa su módulo principal sin conceder las demás pantallas", () 
   assert.deepEqual(visible, ["Cortes"]);
 });
 
+test("el historial de cortes queda reservado a administración", () => {
+  const history = SUBMENUS["cash-cuts"]
+    .find((item) => item.label === "Control")!
+    .children!.find((item) => item.href === "/cash-cuts/history")!;
+  assert.equal(isAdminOnlyPath(history.href), true);
+  assert.equal(isSubmenuItemVisible("GERENTE", ["/cash-cuts/safe", "/cash-cuts/history"], history), false);
+  assert.equal(isSubmenuItemVisible("ADMIN", [], history), true);
+});
+
 test("Control de Cortes abre su dashboard", () => {
   const control = SUBMENUS["cash-cuts"].find((item) => item.label === "Control")!;
 

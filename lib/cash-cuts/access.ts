@@ -186,7 +186,7 @@ export function cashCutReadScopeWhere(scope: CashCutScope): Prisma.CashCutWhereI
       cashCutScopeWhere(scope),
       ownCutOnly,
       branchWhere,
-      { date: { gte: week.from, lte: week.to } },
+      { OR: [{ date: { gte: week.from, lte: week.to } }, { status: "ABIERTO" }] },
     ],
   };
 }

@@ -8,6 +8,9 @@ export async function GET(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  if (user.role !== "ADMIN") {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
 
   const allowedBranchIds = await getAccessibleBranchIds();
 

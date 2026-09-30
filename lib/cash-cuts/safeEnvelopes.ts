@@ -21,7 +21,6 @@ import { requireFinancialMovementCategory } from "@/lib/financialMovementCategor
  * ============================================================
  */
 
-const ROLES_QUE_PUEDEN_RETIRAR: string[] = ["ADMIN", "GERENTE"];
 /** Un ajuste corrige un error: mas restringido que un retiro normal. */
 const ROLES_QUE_PUEDEN_AJUSTAR: string[] = ["ADMIN"];
 const ROLES_QUE_PUEDEN_RECIBIR: string[] = ["ADMIN", "GERENTE", "ENCARGADO"];
@@ -145,9 +144,6 @@ async function lockEnvelopeForUpdate(
   return envelope;
 }
 
-export function canWithdraw(role: string) {
-  return ROLES_QUE_PUEDEN_RETIRAR.includes(role);
-}
 export function canAdjust(role: string) {
   return ROLES_QUE_PUEDEN_AJUSTAR.includes(role);
 }
@@ -345,6 +341,8 @@ export async function withdrawFromEnvelope(params: {
   categoryId?: string;
   receiptPhotoUrl?: string;
   userId: string;
+  allowedBranchIds: string[] | null;
+  currentWeek: { from: Date; toExclusive: Date } | null;
 }) {
   if (!params.reason || !params.reason.trim()) {
     throw new Error("El motivo del retiro es obligatorio");
@@ -352,6 +350,12 @@ export async function withdrawFromEnvelope(params: {
 
   return withEnvelopeWriteTransaction(async (tx) => {
     const envelope = await lockEnvelopeForUpdate(tx, params.envelopeId);
+    if (params.allowedBranchIds !== null && !params.allowedBranchIds.includes(envelope.branchId)) {
+      throw new Error("Sobre no encontrado");
+    }
+    if (params.currentWeek && (envelope.cutDate < params.currentWeek.from || envelope.cutDate >= params.currentWeek.toExclusive)) {
+      throw new Error("Sobre no encontrado");
+    }
 
     if (envelope.status === "PENDIENTE") {
       throw new Error("Este sobre aun no se ha recibido en caja fuerte");

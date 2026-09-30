@@ -1505,6 +1505,8 @@ model CashCut {
   openedAt DateTime      @default(now())
   closedAt DateTime?
   status   CashCutStatus @default(ABIERTO)
+  archivedAt DateTime?
+  archivedById String?
 
   startingFund Float
   nextFund     Float?
@@ -1550,6 +1552,7 @@ model CashCut {
   @@index([createdById])
   @@index([status])
   @@index([date])
+  @@index([archivedAt])
   @@index([eventId])
 }
 

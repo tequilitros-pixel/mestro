@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveSafeEnvelopeWeek, SafeEnvelopeWeekError } from "../lib/cash-cuts/safeWeek";
+import { canAccessSafeEnvelopeDate, resolveSafeEnvelopeWeek, SafeEnvelopeWeekError } from "../lib/cash-cuts/safeWeek";
 
 const sundayNightInMexico = new Date("2026-09-28T05:30:00.000Z");
 
@@ -37,4 +37,16 @@ test("el filtro requiere una fecha válida que sea lunes", () => {
       (error) => error instanceof SafeEnvelopeWeekError && error.code === "INVALID_WEEK",
     );
   }
+});
+
+test("un usuario de caja fuerte solo puede operar sobres de la semana actual", () => {
+  const current = new Date("2026-09-21T00:00:00.000Z");
+  const previous = new Date("2026-09-20T00:00:00.000Z");
+  const next = new Date("2026-09-28T00:00:00.000Z");
+  for (const role of ["GERENTE", "ENCARGADO", "OPERATOR", "CONSULTA"]) {
+    assert.equal(canAccessSafeEnvelopeDate(role, current, sundayNightInMexico), true);
+    assert.equal(canAccessSafeEnvelopeDate(role, previous, sundayNightInMexico), false);
+    assert.equal(canAccessSafeEnvelopeDate(role, next, sundayNightInMexico), false);
+  }
+  assert.equal(canAccessSafeEnvelopeDate("ADMIN", previous, sundayNightInMexico), true);
 });

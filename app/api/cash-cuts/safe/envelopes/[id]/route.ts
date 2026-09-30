@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { getEnvelopeWithMovements } from "@/lib/cash-cuts/safeEnvelopes";
-import { isCurrentManagerBusinessWeek } from "@/lib/cash-cuts/access";
+import { canAccessSafeEnvelopeDate } from "@/lib/cash-cuts/safeWeek";
 
 /** GET: detalle de un sobre con su historial completo de movimientos. */
 export async function GET(
@@ -20,14 +20,17 @@ export async function GET(
   if (!envelope) {
     return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
   }
-  if (!isCurrentManagerBusinessWeek(user.role, envelope.cutDate)) {
+  if (!canAccessSafeEnvelopeDate(user.role, envelope.cutDate)) {
     return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
   }
 
   const allowedBranchIds = await getAccessibleBranchIds();
   if (allowedBranchIds && !allowedBranchIds.includes(envelope.branch.id)) {
-    return NextResponse.json({ error: "No tienes acceso a esta sucursal" }, { status: 403 });
+    return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
   }
 
+  if (user.role !== "ADMIN") {
+    return NextResponse.json({ ...envelope, movements: undefined });
+  }
   return NextResponse.json(envelope);
 }

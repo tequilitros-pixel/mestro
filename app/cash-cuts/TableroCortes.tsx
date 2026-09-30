@@ -100,10 +100,12 @@ function SortableHeader({
 export default function TableroCortes({
   branches,
   canCreate,
+  canArchive,
   currentWeek,
 }: {
   branches: Branch[];
   canCreate: boolean;
+  canArchive: boolean;
   currentWeek: { startDate: string; endDate: string };
 }) {
   const [status, setStatus] = useState("");
@@ -113,6 +115,24 @@ export default function TableroCortes({
   const [error, setError] = useState<string | null>(null);
   const [orden, setOrden] = useState<Orden>({ campo: "date", asc: false });
   const [pagina, setPagina] = useState(1);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+
+  async function archiveCut(cut: Corte) {
+    if (!confirm(`¿Archivar el corte ${cut.code}? Seguirá disponible en Historial.`)) return;
+    setArchivingId(cut.id);
+    setError(null);
+    try {
+      const response = await fetch(`/api/cash-cuts/${cut.id}/archive`, { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "No se pudo archivar el corte.");
+      setCortes((previous) => previous.filter((item) => item.id !== cut.id));
+      setPagina(1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo archivar el corte.");
+    } finally {
+      setArchivingId(null);
+    }
+  }
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -215,6 +235,11 @@ export default function TableroCortes({
           ) : undefined
         }
       />
+
+      <nav aria-label="Vistas de cortes" className="flex gap-2 border-b border-outline-variant pb-2 text-sm font-bold">
+        <span aria-current="page" className="rounded-lg bg-primary px-4 py-2 text-on-primary">Cortes actuales</span>
+        {canArchive && <Link href="/cash-cuts/history" className="rounded-lg px-4 py-2 text-on-surface-variant hover:bg-surface-container">Historial</Link>}
+      </nav>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
         <MetricCard label="Cortes abiertos" value={String(indicadores.abiertos)} />
@@ -323,6 +348,11 @@ export default function TableroCortes({
                         <Link href={`/cash-cuts/daily/${c.id}`} className="font-semibold text-on-surface underline-offset-2 hover:underline">
                           Ver
                         </Link>
+                        {canArchive && c.status !== "ABIERTO" && (
+                          <button type="button" onClick={() => void archiveCut(c)} disabled={archivingId === c.id} className="ml-3 font-semibold text-primary hover:underline disabled:opacity-50">
+                            {archivingId === c.id ? "Archivando..." : "Archivar"}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -361,6 +391,11 @@ export default function TableroCortes({
                     className="mt-4 flex min-h-11 items-center justify-center rounded-lg border border-outline-variant text-sm font-semibold text-on-surface transition hover:bg-surface-container">
                     Ver detalle
                   </Link>
+                  {canArchive && c.status !== "ABIERTO" && (
+                    <button type="button" onClick={() => void archiveCut(c)} disabled={archivingId === c.id} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-lg border border-outline-variant text-sm font-semibold text-primary disabled:opacity-50">
+                      {archivingId === c.id ? "Archivando..." : "Archivar"}
+                    </button>
+                  )}
                 </div>
               );
             })}

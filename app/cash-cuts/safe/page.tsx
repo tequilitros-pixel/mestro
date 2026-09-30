@@ -29,6 +29,8 @@ interface EnvelopeWeekResponse {
   weekStart: string;
   currentWeekStart: string;
   canNavigateWeeks: boolean;
+  canAdjust: boolean;
+  canViewHistory: boolean;
 }
 
 interface LegacyMovement {
@@ -56,6 +58,8 @@ export default function SafePage() {
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
   const [currentWeekStart, setCurrentWeekStart] = useState(() => mondayOfWeek(todayDateOnly()));
   const [canNavigateWeeks, setCanNavigateWeeks] = useState(false);
+  const [canAdjust, setCanAdjust] = useState(false);
+  const [canViewHistory, setCanViewHistory] = useState(false);
   const [envelopesLoading, setEnvelopesLoading] = useState(true);
   const [envelopesError, setEnvelopesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,6 +109,8 @@ export default function SafePage() {
       setEnvelopes(data.envelopes);
       setCurrentWeekStart(data.currentWeekStart);
       setCanNavigateWeeks(data.canNavigateWeeks);
+      setCanAdjust(data.canAdjust);
+      setCanViewHistory(data.canViewHistory);
       setEnvelopesLoading(false);
     } catch (err) {
       if (requestId !== envelopeRequestRef.current) return;
@@ -123,9 +129,12 @@ export default function SafePage() {
 
   useEffect(() => {
     void loadSummaries();
-    void loadLegacyMovements("", "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (canViewHistory) void loadLegacyMovements("", "");
+  }, [canViewHistory, loadLegacyMovements]);
 
   useEffect(() => {
     if (selectedBranchId) void loadEnvelopes(selectedBranchId, selectedWeek);
@@ -232,7 +241,9 @@ export default function SafePage() {
 
           {!envelopesLoading && !envelopesError && (
             <p className="mb-3 text-xs text-on-surface-variant">
-              {envelopes.length} {envelopes.length === 1 ? "sobre registrado" : "sobres registrados"} en esta semana.
+              {envelopes.length} {canViewHistory
+                ? envelopes.length === 1 ? "sobre registrado" : "sobres registrados"
+                : envelopes.length === 1 ? "sobre disponible" : "sobres disponibles"} en esta semana.
             </p>
           )}
 
@@ -240,16 +251,16 @@ export default function SafePage() {
           {envelopesError ? null : envelopesLoading ? (
             <Card><p className="text-sm text-on-surface-variant">Cargando sobres...</p></Card>
           ) : validEnvelopes.length === 0 && pendingEnvelopes.length === 0 ? (
-            <Card><p className="text-sm text-on-surface-variant">No hay sobres registrados en esta semana.</p></Card>
+            <Card><p className="text-sm text-on-surface-variant">{canViewHistory ? "No hay sobres registrados en esta semana." : "No hay sobres disponibles en esta semana."}</p></Card>
           ) : validEnvelopes.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {validEnvelopes.map((env) => (
-                <EnvelopeRow key={env.id} envelope={env} canWithdraw onChanged={refreshAll} />
+                <EnvelopeRow key={env.id} envelope={env} canWithdraw canAdjust={canAdjust} canViewHistory={canViewHistory} onChanged={refreshAll} />
               ))}
             </div>
           ) : null}
 
-          {!envelopesLoading && pendingEnvelopes.length > 0 && (
+          {!envelopesLoading && canViewHistory && pendingEnvelopes.length > 0 && (
             <div className="mt-5">
               <h3 className="mb-2 text-sm font-bold text-on-surface">Registros históricos por conciliar</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -261,12 +272,12 @@ export default function SafePage() {
       )}
 
       {/* Retiro de saldo histórico -- se oculta sola cuando ya no queda nada */}
-      {totalLegacy > 0.01 && (
+      {canViewHistory && totalLegacy > 0.01 && (
         <LegacyWithdrawCard summaries={summaries} onDone={refreshAll} />
       )}
 
       {/* Historial / movimientos legado */}
-      <section>
+      {canViewHistory && <section>
         <Card>
           <div className="flex flex-wrap items-end justify-between gap-3 p-4">
             <div>
@@ -320,7 +331,7 @@ export default function SafePage() {
             </table>
           </div>
         </Card>
-      </section>
+      </section>}
     </div>
   );
 }

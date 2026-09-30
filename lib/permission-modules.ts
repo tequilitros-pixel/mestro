@@ -38,6 +38,7 @@ export const ADMIN_ONLY_PATH_PREFIXES = [
   "/pos/categories",
   "/pos/products",
   "/pos/settings",
+  "/cash-cuts/history",
 ] as const;
 
 /** Pantallas administrativas exactas de Workforce; horario se delega aparte. */
@@ -105,7 +106,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "/cash-cuts/envelopes", label: "Sobres" },
       { key: "/cash-cuts/safe", label: "Caja fuerte" },
       { key: "/cash-cuts/audit", label: "Auditoría" },
-      { key: "/cash-cuts/history", label: "Historial" },
     ],
   },
   {

@@ -87,6 +87,7 @@ export default async function CashCutsPage() {
     <TableroCortes
       branches={branches}
       canCreate={scope.canManage}
+      canArchive={scope.user.role === "ADMIN"}
       currentWeek={{ startDate: week.startDate, endDate: week.endDate }}
     />
   );

@@ -39,3 +39,9 @@ export function resolveSafeEnvelopeWeek(
     toExclusive: parseDateOnly(addDaysToDateOnly(weekStart, 7)),
   };
 }
+
+export function canAccessSafeEnvelopeDate(role: string, cutDate: Date, now: Date = new Date()) {
+  if (role === "ADMIN") return true;
+  const week = resolveSafeEnvelopeWeek(null, role, now);
+  return cutDate >= week.from && cutDate < week.toExclusive;
+}

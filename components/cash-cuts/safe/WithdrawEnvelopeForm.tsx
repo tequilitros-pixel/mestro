@@ -38,7 +38,7 @@ export function WithdrawEnvelopeForm({
       return;
     }
     if (!categoryId) { setError("Selecciona una categoría."); return; }
-    if (selected?.requiresReason && !reason.trim()) {
+    if (!reason.trim()) {
       setError("El motivo es obligatorio.");
       return;
     }
@@ -86,10 +86,11 @@ export function WithdrawEnvelopeForm({
       </div>
       <div>
         <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">
-          Motivo{selected?.requiresReason ? " (obligatorio)" : ""}
+          Motivo (obligatorio)
         </label>
         <input
           value={reason}
+          required
           onChange={(e) => setReason(e.target.value)}
           className="w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
           placeholder="Ej. Pago a proveedor"

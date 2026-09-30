@@ -7,6 +7,7 @@ import { getCashCutScope, withCashCutReadScope, withCashCutScope } from "@/lib/c
 import { isBranchAllowed } from "@/lib/branches/access";
 import { denominationTotal, validDenominationRows } from "@/lib/cash-cuts/denominations";
 import { parseDateOnly } from "@/lib/dateOnly";
+import { getCurrentCashCutWeek } from "@/lib/cash-cuts/readScope";
 
 const ROLES_QUE_PUEDEN_ABRIR_CORTE = ["ADMIN", "GERENTE", "ENCARGADO"];
 const CASH_CUT_STATUSES = ["ABIERTO", "CERRADO", "AUDITADO"] as const;
@@ -24,6 +25,14 @@ export async function GET(request: Request) {
   const status = searchParams.get("status") ?? undefined;
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+  const view = searchParams.get("view") ?? "current";
+
+  if (view !== "current" && view !== "history") {
+    return NextResponse.json({ error: "Vista inválida." }, { status: 400 });
+  }
+  if (view === "history" && scope.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
 
   if (status && !CASH_CUT_STATUSES.includes(status as (typeof CASH_CUT_STATUSES)[number])) {
     return NextResponse.json({ error: "Estado inválido." }, { status: 400 });
@@ -31,9 +40,54 @@ export async function GET(request: Request) {
   if ((from && !DATE_ONLY_PATTERN.test(from)) || (to && !DATE_ONLY_PATTERN.test(to))) {
     return NextResponse.json({ error: "Fecha inválida." }, { status: 400 });
   }
+  let fromDate: Date | undefined;
+  let toDate: Date | undefined;
+  try {
+    fromDate = from ? parseDateOnly(from) : undefined;
+    toDate = to ? parseDateOnly(to) : undefined;
+  } catch {
+    return NextResponse.json({ error: "Fecha inválida." }, { status: 400 });
+  }
+  if (fromDate && toDate && fromDate > toDate) {
+    return NextResponse.json({ error: "Rango de fechas inválido." }, { status: 400 });
+  }
 
   if (requestedBranchId && !isBranchAllowed(scope.branchIds, requestedBranchId)) {
     return NextResponse.json({ error: "No tienes acceso a esa sucursal." }, { status: 403 });
+  }
+
+  if (view === "history") {
+    const employee = searchParams.get("employee")?.trim() ?? "";
+    const pageValue = Number(searchParams.get("page") ?? "1");
+    if (!Number.isInteger(pageValue) || pageValue < 1 || pageValue > 10000 || employee.length > 100) {
+      return NextResponse.json({ error: "Filtro inválido." }, { status: 400 });
+    }
+    const pageSize = 50;
+    const week = getCurrentCashCutWeek();
+    const where = withCashCutScope(scope, {
+      status: { in: ["CERRADO", "AUDITADO"] },
+      OR: [{ archivedAt: { not: null } }, { date: { lt: week.from } }],
+      ...(requestedBranchId ? { branchId: requestedBranchId } : {}),
+      ...(employee ? { responsible: { name: { contains: employee, mode: "insensitive" } } } : {}),
+      ...(fromDate || toDate ? { date: { gte: fromDate, lte: toDate } } : {}),
+    });
+    const [items, total, branches] = await Promise.all([
+      prisma.cashCut.findMany({
+        where,
+        select: {
+          id: true, code: true, status: true, date: true, closedAt: true,
+          totalSales: true, difference: true, archivedAt: true,
+          branch: { select: { id: true, name: true } },
+          responsible: { select: { id: true, name: true } },
+        },
+        orderBy: [{ date: "desc" }, { closedAt: "desc" }],
+        skip: (pageValue - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.cashCut.count({ where }),
+      prisma.branch.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    ]);
+    return NextResponse.json({ items, total, page: pageValue, pageSize, branches });
   }
 
   /*
@@ -43,12 +97,13 @@ export async function GET(request: Request) {
    * y el filtro del querystring no puede sobreescribirlo.
    */
   const cashCuts = await prisma.cashCut.findMany({
-      where: withCashCutReadScope(scope, {
+    where: withCashCutReadScope(scope, {
+      archivedAt: null,
       branchId: requestedBranchId,
       status: status as (typeof CASH_CUT_STATUSES)[number] | undefined,
       date: {
-        gte: from ? parseDateOnly(from) : undefined,
-        lte: to ? parseDateOnly(to) : undefined,
+        gte: fromDate,
+        lte: toDate,
       },
     }),
     include: {

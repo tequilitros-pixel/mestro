@@ -52,6 +52,9 @@ export default async function ModuleLayout({
   if (!scope.canSeeHistory && esRutaDeHistorial(pathname)) {
     notFound();
   }
+  if (esRutaDeHistorial(pathname) && pathname.startsWith("/cash-cuts/history") && scope.user.role !== "ADMIN") {
+    notFound();
+  }
 
   return <>{children}</>;
 }

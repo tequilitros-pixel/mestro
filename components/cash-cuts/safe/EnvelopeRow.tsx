@@ -43,10 +43,14 @@ const STATUS_CLASS: Record<EnvelopeSummary["status"], string> = {
 export function EnvelopeRow({
   envelope,
   canWithdraw,
+  canAdjust,
+  canViewHistory,
   onChanged,
 }: {
   envelope: EnvelopeSummary;
   canWithdraw: boolean;
+  canAdjust: boolean;
+  canViewHistory: boolean;
   onChanged: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -112,9 +116,11 @@ export function EnvelopeRow({
           <Button size="sm" variant="secondary" onClick={() => setShowWithdraw((v) => !v)}>
             Retirar
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setShowAdjust((v) => !v)}>
-            Ajustar saldo
-          </Button>
+          {canAdjust && (
+            <Button size="sm" variant="ghost" onClick={() => setShowAdjust((v) => !v)}>
+              Ajustar saldo
+            </Button>
+          )}
           {!confirmingFull ? (
             <Button size="sm" variant="ghost" onClick={() => setConfirmingFull(true)}>
               Retirar sobre completo
@@ -159,16 +165,16 @@ export function EnvelopeRow({
         />
       )}
 
-      <button
+      {canViewHistory && <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-on-surface-variant hover:text-on-surface"
       >
         <ChevronDownIcon className={`h-3.5 w-3.5 transition ${expanded ? "rotate-90" : ""}`} />
         {expanded ? "Ocultar movimientos" : "Ver movimientos"}
-      </button>
+      </button>}
 
-      {expanded && <EnvelopeMovementHistory envelopeId={envelope.id} />}
+      {canViewHistory && expanded && <EnvelopeMovementHistory envelopeId={envelope.id} />}
     </Card>
   );
 }

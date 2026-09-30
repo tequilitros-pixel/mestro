@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { getBranchSafeSummary, listEnvelopesForBranch } from "@/lib/cash-cuts/safeEnvelopes";
-import { currentBusinessWeekRange } from "@/lib/cash-cuts/access";
 import { resolveSafeEnvelopeWeek, SafeEnvelopeWeekError } from "@/lib/cash-cuts/safeWeek";
 
 /**
@@ -23,7 +22,6 @@ export async function GET(req: NextRequest) {
   const allowedBranchIds = await getAccessibleBranchIds();
   const { searchParams } = new URL(req.url);
   const requestedBranchId = searchParams.get("branchId");
-  const dateRange = user.role === "GERENTE" ? currentBusinessWeekRange() : undefined;
 
   if (requestedBranchId) {
     if (allowedBranchIds && !allowedBranchIds.includes(requestedBranchId)) {
@@ -41,12 +39,18 @@ export async function GET(req: NextRequest) {
       }
       throw error;
     }
-    const envelopes = await listEnvelopesForBranch(requestedBranchId, week);
+    const envelopes = await listEnvelopesForBranch(
+      requestedBranchId,
+      week,
+      user.role === "ADMIN" ? undefined : ["EN_CAJA_FUERTE", "PARCIAL"],
+    );
     return NextResponse.json({
       envelopes,
       weekStart: week.weekStart,
       currentWeekStart: week.currentWeekStart,
       canNavigateWeeks: week.canNavigateWeeks,
+      canAdjust: user.role === "ADMIN",
+      canViewHistory: user.role === "ADMIN",
     });
   }
 
@@ -63,7 +67,7 @@ export async function GET(req: NextRequest) {
   });
 
   const summaries = await Promise.all(
-    branches.map((b) => getBranchSafeSummary(b.id, dateRange))
+    branches.map((b) => getBranchSafeSummary(b.id))
   );
 
   return NextResponse.json(summaries);
