@@ -68,6 +68,8 @@ model User {
   timeClockEntriesClosed    TimeClockEntry[]           @relation("TimeClockClosedBy")
   timeClockEditRequests     TimeClockEditRequest[]     @relation("TimeClockEditRequestedBy")
   timeClockEditReviews      TimeClockEditRequest[]     @relation("TimeClockEditReviewedBy")
+  timeClockLocationRequests TimeClockLocationRequest[] @relation("TimeClockLocationRequestedBy")
+  timeClockLocationReviews  TimeClockLocationRequest[] @relation("TimeClockLocationReviewedBy")
   scheduledShifts           ScheduledShift[]           @relation("ScheduledShifts")
   scheduleWeeksPublished    ScheduleWeek[]             @relation("ScheduleWeekPublishedBy")
   geofenceAlerts            GeofenceAlert[]
@@ -1349,6 +1351,7 @@ model Branch {
   entries          InventoryEntry[]
   inventoryMinimums BranchInventoryMinimum[]
   timeClockEntries TimeClockEntry[]
+  timeClockLocationRequests TimeClockLocationRequest[]
 
   users                         UserBranch[]
   cashCuts                      CashCut[]
@@ -2644,6 +2647,7 @@ model TimeClockEntry {
   geofenceAlerts   GeofenceAlert[]
   legacyGeolocationEvidence ClockGeolocationEvidence[]
   editRequests     TimeClockEditRequest[]
+  locationRequest  TimeClockLocationRequest?
 
   @@index([userId])
   @@index([branchId])
@@ -2697,6 +2701,32 @@ enum TimeClockEditStatus {
   PENDIENTE
   APROBADO
   RECHAZADO
+}
+
+/// Entrada solicitada sin una ubicación válida. No crea una checada
+/// contabilizable hasta que un administrador la aprueba.
+model TimeClockLocationRequest {
+  id               String              @id @default(cuid())
+  userId           String
+  branchId         String
+  clockIn          DateTime             @default(now())
+  clockOut         DateTime?
+  reason           String
+  status           TimeClockEditStatus @default(PENDIENTE)
+  reviewedById     String?
+  reviewedAt       DateTime?
+  reviewNotes      String?
+  timeClockId      String?             @unique
+  createdAt        DateTime            @default(now())
+
+  user             User                @relation("TimeClockLocationRequestedBy", fields: [userId], references: [id], onDelete: Restrict)
+  branch           Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  reviewedBy       User?               @relation("TimeClockLocationReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  timeClock        TimeClockEntry?     @relation(fields: [timeClockId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status, clockOut])
+  @@index([status, createdAt])
+  @@index([branchId, createdAt])
 }
 
 model ScheduledShift {

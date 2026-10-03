@@ -32,6 +32,23 @@ export async function getMyOpenShift() {
   });
 }
 
+export async function getMyRecentLocationRequest() {
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  return prisma.timeClockLocationRequest.findFirst({
+    where: {
+      userId: user.id,
+      OR: [
+        { status: "PENDIENTE", clockOut: null },
+        { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+    include: { branch: { select: BRANCH_LOCATION_SELECT } },
+  });
+}
+
 export async function getMyBranches() {
   const user = await getCurrentUser();
   if (!user) return [];
@@ -108,6 +125,12 @@ export async function clockInAction(branchId: string, coords?: Coords) {
     return { error: "Ya tienes un turno abierto. Debes cerrarlo antes de checar entrada de nuevo." };
   }
 
+  const pendingEntry = await prisma.timeClockLocationRequest.findFirst({
+    where: { userId: user.id, status: "PENDIENTE", clockOut: null },
+    select: { id: true },
+  });
+  if (pendingEntry) return { error: "Ya tienes una entrada sin ubicación pendiente. Registra su salida antes de checar otra entrada." };
+
   const branch = await prisma.branch.findUnique({
     where: { id: branchId },
     select: BRANCH_LOCATION_SELECT,
@@ -136,6 +159,62 @@ export async function clockInAction(branchId: string, coords?: Coords) {
   revalidatePath("/timeclock");
 
   return { success: true, entry };
+}
+
+/** Registra una entrada provisional; solo ADMIN puede convertirla en checada. */
+export async function requestClockInWithoutLocationAction(branchId: string, reason: string) {
+  const user = await getCurrentUser();
+  if (!user?.active) return { error: "No autorizado" };
+  if (typeof branchId !== "string" || !branchId || typeof reason !== "string") return { error: "Datos de entrada inválidos." };
+  const note = reason.trim();
+  if (note.length < 10 || note.length > 500) {
+    return { error: "Explica qué pasó con la ubicación (entre 10 y 500 caracteres)." };
+  }
+
+  const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { id: true, active: true } });
+  if (!branch?.active) return { error: "Sucursal no disponible." };
+
+  const today = parseDateOnly(todayDateOnly());
+  const tomorrow = parseDateOnly(addDaysToDateOnly(todayDateOnly(), 1));
+  const [assigned, scheduled, openShift, pendingEntry] = await Promise.all([
+    prisma.userBranch.findUnique({ where: { userId_branchId: { userId: user.id, branchId } }, select: { id: true } }),
+    prisma.scheduledShift.findFirst({
+      where: { userId: user.id, branchId, date: { gte: today, lt: tomorrow }, type: "TURNO", publicationStatus: "PUBLISHED" },
+      select: { id: true },
+    }),
+    prisma.timeClockEntry.findFirst({ where: { userId: user.id, clockOut: null }, select: { id: true } }),
+    prisma.timeClockLocationRequest.findFirst({ where: { userId: user.id, status: "PENDIENTE", clockOut: null }, select: { id: true } }),
+  ]);
+  if (!assigned && !scheduled) return { error: "Solo puedes solicitar entrada sin ubicación en una sucursal asignada o con turno publicado hoy." };
+  if (openShift || pendingEntry) return { error: "Ya tienes una entrada abierta. Registra la salida antes de iniciar otra." };
+
+  await prisma.timeClockLocationRequest.create({
+    data: { userId: user.id, branchId, reason: note },
+  });
+  revalidatePath("/timeclock");
+  revalidatePath("/administration/personnel/timeclock");
+  return { success: true, pendingApproval: true };
+}
+
+export async function closeLocationRequestAction(requestId: string) {
+  const user = await getCurrentUser();
+  if (!user?.active) return { error: "No autorizado" };
+  if (typeof requestId !== "string" || !requestId) return { error: "Solicitud inválida." };
+  const request = await prisma.timeClockLocationRequest.findFirst({
+    where: { id: requestId, userId: user.id, status: "PENDIENTE", clockOut: null },
+    select: { clockIn: true },
+  });
+  if (!request) return { error: "La solicitud ya fue revisada. Actualiza el checador para registrar la salida." };
+  const now = new Date();
+  if (now <= request.clockIn) return { error: "La salida debe ser posterior a la entrada." };
+  const updated = await prisma.timeClockLocationRequest.updateMany({
+    where: { id: requestId, userId: user.id, status: "PENDIENTE", clockOut: null },
+    data: { clockOut: now },
+  });
+  if (updated.count !== 1) return { error: "La solicitud cambió. Actualiza el checador." };
+  revalidatePath("/timeclock");
+  revalidatePath("/administration/personnel/timeclock");
+  return { success: true, pendingApproval: true };
 }
 
 export async function clockOutAction(
@@ -405,6 +484,94 @@ export async function reviewTimeClockEditRequestAction(
   revalidatePath("/timeclock");
   revalidatePath("/administration/personnel/timeclock");
 
+  return { success: true };
+}
+
+export async function getPendingLocationRequests() {
+  const admin = await getCurrentUser();
+  if (!admin || admin.role !== "ADMIN") return [];
+
+  return prisma.timeClockLocationRequest.findMany({
+    where: { status: "PENDIENTE" },
+    include: {
+      user: { select: { id: true, name: true } },
+      branch: { select: { id: true, name: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+export async function reviewLocationRequestAction(requestId: string, approve: boolean, reviewNotes?: string) {
+  const admin = await getCurrentUser();
+  if (!admin || admin.role !== "ADMIN") return { error: "No tienes permiso" };
+  if (typeof requestId !== "string" || !requestId || typeof approve !== "boolean" || (reviewNotes !== undefined && typeof reviewNotes !== "string")) {
+    return { error: "Datos de revisión inválidos." };
+  }
+  const request = await prisma.timeClockLocationRequest.findUnique({ where: { id: requestId } });
+  if (!request || request.status !== "PENDIENTE") return { error: "La solicitud ya fue revisada o no existe." };
+  if (approve && !request.clockOut) return { error: "Espera a que el empleado registre su salida antes de aprobar la checada." };
+  if (approve && await isPayrollDateLocked(request.clockIn)) return { error: PAYROLL_LOCKED_MESSAGE };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const claimed = await tx.timeClockLocationRequest.updateMany({
+        where: { id: requestId, status: "PENDIENTE", timeClockId: null },
+        data: {
+          status: approve ? "APROBADO" : "RECHAZADO",
+          reviewedById: admin.id,
+          reviewedAt: new Date(),
+          reviewNotes: reviewNotes?.trim().slice(0, 500) || null,
+        },
+      });
+      if (claimed.count !== 1) throw new Error("La solicitud ya fue revisada.");
+      if (!approve) return;
+      const current = await tx.timeClockLocationRequest.findUniqueOrThrow({ where: { id: requestId } });
+      if (!current.clockOut) throw new Error("La salida todavía no se registró.");
+
+      const overlap = await tx.timeClockEntry.findFirst({
+        where: {
+          userId: current.userId,
+          clockIn: { lt: current.clockOut },
+          OR: [{ clockOut: null }, { clockOut: { gt: current.clockIn } }],
+        },
+        select: { id: true },
+      });
+      if (overlap) throw new Error("Hay otra checada que se cruza con esta solicitud. Revísala antes de aprobar.");
+
+      const day = formatBusinessDateOnly(current.clockIn);
+      const scheduled = await tx.scheduledShift.findFirst({
+        where: {
+          userId: current.userId,
+          branchId: current.branchId,
+          date: { gte: parseDateOnly(day), lt: parseDateOnly(addDaysToDateOnly(day, 1)) },
+          type: "TURNO",
+          publicationStatus: "PUBLISHED",
+          timeClockEntries: { none: {} },
+        },
+        orderBy: { startTime: "asc" },
+        select: { id: true },
+      });
+      const entry = await tx.timeClockEntry.create({
+        data: {
+          userId: current.userId,
+          branchId: current.branchId,
+          clockIn: current.clockIn,
+          clockOut: current.clockOut,
+          scheduledShiftId: scheduled?.id ?? null,
+          confirmedByEmployee: true,
+          notes: `Entrada sin ubicación aprobada. Motivo: ${current.reason}`,
+        },
+        select: { id: true },
+      });
+      await tx.timeClockLocationRequest.update({ where: { id: requestId }, data: { timeClockId: entry.id } });
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "No se pudo revisar la solicitud." };
+  }
+
+  revalidatePath("/timeclock");
+  revalidatePath("/timeclock/payroll");
+  revalidatePath("/administration/personnel/timeclock");
   return { success: true };
 }
 

@@ -203,6 +203,11 @@ export async function kioskClockInAction(userId: string, pin: string, branchId: 
   if (openShift) {
     return { error: `${employee.name} ya tiene un turno abierto.` };
   }
+  const pendingEntry = await prisma.timeClockLocationRequest.findFirst({
+    where: { userId: employee.id, status: "PENDIENTE", clockOut: null },
+    select: { id: true },
+  });
+  if (pendingEntry) return { error: `${employee.name} ya tiene una entrada sin ubicación pendiente.` };
 
   const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: BRANCH_LOCATION_SELECT });
   if (!branch) return { error: "Sucursal no encontrada" };

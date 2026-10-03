@@ -21,6 +21,8 @@ export async function POST(request: Request) {
     if (duplicate) return NextResponse.json({ success: true, duplicate: true });
     const existingOpen = await prisma.timeClockEntry.findFirst({ where: { userId: user.id, clockOut: null } });
     if (existingOpen) return response("Ya existe un turno abierto", 409);
+    const pendingEntry = await prisma.timeClockLocationRequest.findFirst({ where: { userId: user.id, status: "PENDIENTE", clockOut: null }, select: { id: true } });
+    if (pendingEntry) return response("Ya existe una entrada sin ubicación pendiente", 409);
     const [branch, assignment, policy] = await Promise.all([
       prisma.branch.findUnique({ where: { id: branchId }, select: BRANCH_LOCATION_SELECT }),
       prisma.userBranch.findUnique({ where: { userId_branchId: { userId: user.id, branchId } }, select: { id: true } }),
@@ -30,11 +32,12 @@ export async function POST(request: Request) {
     const scheduledShiftId = await matchTodaysScheduledShift(user.id, branchId);
     if (!assignment && !scheduledShiftId) return response("Sucursal no autorizada", 403);
     const geofence = evaluateGeofence(branch, location, policy.requireGeolocationClockIn, policy.maximumAccuracyMeters);
-    const decision = geofenceDecision(geofence.result, policy.outsideBehavior);
-    if (!decision.allow) return response(geofenceMessage(geofence) ?? "No se pudo validar la ubicación", 409);
+    if (geofence.result !== "INSIDE" && geofence.result !== "NOT_REQUIRED") {
+      return response(`${geofenceMessage(geofence) ?? "No se pudo validar la ubicación"}. Usa el checador con conexión para enviar una entrada sin ubicación con nota a aprobación.`, 409);
+    }
     await prisma.$transaction(async (tx) => {
       await tx.timeClockEntry.create({ data: { id: operation.id, userId: user.id, branchId, clockIn, scheduledShiftId, createdAt: clockIn } });
-      await tx.clockGeolocationEvidence.create({ data: { timeClockId: operation.id, action: "CLOCK_IN", result: geofence.result, distanceMeters: geofence.distanceMeters, accuracyMeters: geofence.accuracyMeters, checkedAt: geofence.checkedAt, reviewStatus: decision.needsReview && policy.requireOutsideReview ? "PENDING" : "NOT_REQUIRED" } });
+      await tx.clockGeolocationEvidence.create({ data: { timeClockId: operation.id, action: "CLOCK_IN", result: geofence.result, distanceMeters: geofence.distanceMeters, accuracyMeters: geofence.accuracyMeters, checkedAt: geofence.checkedAt, reviewStatus: "NOT_REQUIRED" } });
     });
     return NextResponse.json({ success: true });
   }
