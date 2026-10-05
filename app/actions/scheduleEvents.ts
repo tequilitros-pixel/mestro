@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { ensureEmployeeStartsAsDraft } from "@/app/actions/schedule";
 import { formatDateOnly, parseDateOnly } from "@/lib/dateOnly";
+import { resolveBranchHourlyRate } from "@/lib/payroll/branchRates";
 
 /**
  * ==========================================================
@@ -283,8 +284,12 @@ export async function getScheduleEventCost(eventId: string) {
     include: {
       shifts: {
         include: {
-          user: { select: { id: true, name: true, hourlyRate: true } },
-          timeClockEntries: { select: { clockIn: true, clockOut: true } },
+          user: { select: { id: true, name: true, hourlyRate: true, salaryRates: {
+            where: { scheme: "HORA", branchId: { not: null } },
+            select: { branchId: true, amount: true, effectiveFrom: true, effectiveTo: true },
+            orderBy: { effectiveFrom: "desc" },
+          } } },
+          timeClockEntries: { select: { branchId: true, clockIn: true, clockOut: true } },
         },
       },
     },
@@ -303,16 +308,26 @@ export async function getScheduleEventCost(eventId: string) {
       shift.startTime && shift.endTime ? hoursBetween(shift.startTime, shift.endTime) : 0;
 
     let employeeWorkedHours = 0;
+    let employeeCost = 0;
+    const fallbackRate = shift.user.hourlyRate !== null ? Number(shift.user.hourlyRate) : null;
+    const rates = shift.user.salaryRates.map((rate) => ({ ...rate, amount: Number(rate.amount) }));
+    let missingRate = false;
     for (const entry of shift.timeClockEntries) {
       if (!entry.clockOut) {
         hasOpenShift = true;
         continue;
       }
-      employeeWorkedHours += workedHours(entry);
+      const hours = workedHours(entry);
+      employeeWorkedHours += hours;
+      const appliedRate = resolveBranchHourlyRate(rates, entry.branchId, entry.clockIn, fallbackRate);
+      if (appliedRate === null) missingRate = true;
+      else employeeCost += hours * appliedRate;
     }
 
-    const hourlyRate = shift.user.hourlyRate !== null ? Number(shift.user.hourlyRate) : null;
-    const cost = hourlyRate !== null ? employeeWorkedHours * hourlyRate : null;
+    const hourlyRate = shift.branchId
+      ? resolveBranchHourlyRate(rates, shift.branchId, new Date(), fallbackRate)
+      : fallbackRate;
+    const cost = missingRate || (hourlyRate === null && employeeWorkedHours === 0) ? null : employeeCost;
 
     totalPlannedHours += plannedHours;
     totalWorkedHours += employeeWorkedHours;

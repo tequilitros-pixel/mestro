@@ -19,6 +19,7 @@ import {
   type Coords,
 } from "@/lib/timeclockShared";
 import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/periodLock";
+import { resolveBranchHourlyRate, summarizeHourlyRates } from "@/lib/payroll/branchRates";
 
 const FORGOTTEN_SHIFT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
@@ -879,6 +880,12 @@ export async function getWeeklyPayrollReport(weekStart: string, branchId?: strin
     orderBy: { clockIn: "asc" },
   });
 
+  const salaryRates = await prisma.salaryRate.findMany({
+    where: { scheme: "HORA", userId: { in: [...new Set(entries.map((entry) => entry.userId))] } },
+    select: { userId: true, branchId: true, amount: true, effectiveFrom: true, effectiveTo: true },
+    orderBy: { effectiveFrom: "desc" },
+  });
+
   type Summary = {
     userId: string;
     name: string;
@@ -898,7 +905,11 @@ export async function getWeeklyPayrollReport(weekStart: string, branchId?: strin
       (entry.clockOut.getTime() - entry.clockIn.getTime()) / (1000 * 60 * 60);
 
     const key = `${entry.userId}-${entry.branchId}`;
-    const rate = entry.user.hourlyRate !== null ? Number(entry.user.hourlyRate) : null;
+    const generalRate = entry.user.hourlyRate !== null ? Number(entry.user.hourlyRate) : null;
+    const rate = resolveBranchHourlyRate(
+      salaryRates.filter((item) => item.userId === entry.userId).map((item) => ({ ...item, amount: Number(item.amount) })),
+      entry.branchId, entry.clockIn, generalRate,
+    );
 
     const existing = byUser.get(key) ?? {
       userId: entry.userId,
@@ -913,6 +924,8 @@ export async function getWeeklyPayrollReport(weekStart: string, branchId?: strin
     existing.totalHours += hours;
     if (rate !== null && existing.totalPay !== null) {
       existing.totalPay += hours * rate;
+    } else if (rate === null) {
+      existing.totalPay = null;
     }
     existing.shifts += 1;
 
@@ -957,12 +970,22 @@ export async function getMyTimeClockSummary() {
     orderBy: { clockIn: "asc" },
   });
 
+  const salaryRates = await prisma.salaryRate.findMany({
+    where: { userId: user.id, scheme: "HORA" },
+    select: { branchId: true, amount: true, effectiveFrom: true, effectiveTo: true },
+    orderBy: { effectiveFrom: "desc" },
+  });
+  const rates = salaryRates.map((item) => ({ ...item, amount: Number(item.amount) }));
+
   const rate = user.hourlyRate !== null ? Number(user.hourlyRate) : null;
   const now = new Date();
 
   let todayHours = 0;
   let weekHours = 0;
   let hasOpenShift = false;
+  let todayPay = 0;
+  let weekPay = 0;
+  const appliedRates: Array<number | null> = [];
 
   for (const entry of entries) {
     const end = entry.clockOut ?? now;
@@ -971,20 +994,25 @@ export async function getMyTimeClockSummary() {
     if (!entry.clockOut) hasOpenShift = true;
 
     weekHours += hours;
+    const appliedRate = resolveBranchHourlyRate(rates, entry.branchId, entry.clockIn, rate);
+    appliedRates.push(appliedRate);
+    weekPay += hours * (appliedRate ?? 0);
 
     if (entry.clockIn >= todayStart && entry.clockIn < todayEnd) {
       todayHours += hours;
+      todayPay += hours * (appliedRate ?? 0);
     }
   }
 
   return {
     success: true,
-    hourlyRate: rate,
+    hourlyRate: summarizeHourlyRates(appliedRates, rate).hourlyRate,
+    variableRate: summarizeHourlyRates(appliedRates, rate).variableRate,
     hasOpenShift,
     todayHours,
     weekHours,
-    todayPay: rate !== null ? todayHours * rate : null,
-    weekPay: rate !== null ? weekHours * rate : null,
+    todayPay: appliedRates.includes(null) || (appliedRates.length === 0 && rate === null) ? null : todayPay,
+    weekPay: appliedRates.includes(null) || (appliedRates.length === 0 && rate === null) ? null : weekPay,
   };
 }
 

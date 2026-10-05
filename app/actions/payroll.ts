@@ -15,6 +15,7 @@ import {
   payrollBusinessDate,
   payrollWeekInstantRange,
 } from "@/lib/payroll/legacyRules";
+import { resolveBranchHourlyRate, summarizeHourlyRates, type HourlyRateRow } from "@/lib/payroll/branchRates";
 
 /**
  * ==========================================================
@@ -135,6 +136,7 @@ export type PayrollWeekEmployee = {
   name: string;
   hourlyRate: number | null;
   missingRate: boolean;
+  variableRate?: boolean;
   hoursByDay: number[];
   daysWorked: number;
   regularHours: number;
@@ -196,6 +198,8 @@ export type PayrollDayDetail = {
     clockIn: string;
     clockOut: string | null;
     source: "CHECADOR" | "MANUAL";
+    hourlyRate?: number | null;
+    pay?: number;
   }[];
   hoursWorked: number;
   incident: "SIN_SALIDA" | "SIN_TURNO" | "TURNO_NO_TRABAJADO" | "LLEGADA_TARDE" | "SALIDA_ANTICIPADA" | null;
@@ -251,7 +255,7 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
   const [entries, employees, salaryRates, adjustments] = await Promise.all([
     prisma.timeClockEntry.findMany({
       where: { clockIn: { gte: clockStart, lt: clockEnd }, clockOut: { not: null } },
-      select: { userId: true, clockIn: true, clockOut: true },
+      select: { userId: true, branchId: true, clockIn: true, clockOut: true },
     }),
     prisma.user.findMany({
       where: includedUserIds.length > 0
@@ -262,7 +266,7 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
     }),
     prisma.salaryRate.findMany({
       where: { scheme: "HORA" },
-      select: { userId: true, amount: true, effectiveFrom: true, effectiveTo: true },
+      select: { userId: true, branchId: true, amount: true, effectiveFrom: true, effectiveTo: true },
       orderBy: { effectiveFrom: "desc" },
     }),
     prisma.payrollAdjustment.findMany({
@@ -278,14 +282,15 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
     adjustmentsByUser.set(adj.userId, list);
   }
 
-  const ratesByUser = new Map<string, RateRow[]>();
+  const ratesByUser = new Map<string, HourlyRateRow[]>();
   for (const r of salaryRates) {
     const list = ratesByUser.get(r.userId) ?? [];
-    list.push({ amount: Number(r.amount), effectiveFrom: r.effectiveFrom, effectiveTo: r.effectiveTo });
+    list.push({ branchId: r.branchId, amount: Number(r.amount), effectiveFrom: r.effectiveFrom, effectiveTo: r.effectiveTo });
     ratesByUser.set(r.userId, list);
   }
 
   const hoursByUserDay = new Map<string, number[]>();
+  const shiftsByUser = new Map<string, { hours: number; branchId: string; clockIn: Date }[]>();
   for (const entry of entries) {
     if (!entry.clockOut) continue;
     const hours = hoursBetween(entry.clockIn, entry.clockOut);
@@ -298,6 +303,9 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
     const arr = hoursByUserDay.get(entry.userId) ?? new Array(7).fill(0);
     arr[dayIndex] += hours;
     hoursByUserDay.set(entry.userId, arr);
+    const shifts = shiftsByUser.get(entry.userId) ?? [];
+    shifts.push({ hours, branchId: entry.branchId, clockIn: entry.clockIn });
+    shiftsByUser.set(entry.userId, shifts);
   }
 
   const employeeRows: PayrollWeekEmployee[] = [];
@@ -320,14 +328,18 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
     const regularHours = totalHours;
     const overtimeHours = 0;
 
-    const hourlyRate = resolveHourlyRate(
-      ratesByUser.get(employee.id) ?? [],
+    const employeeRates = ratesByUser.get(employee.id) ?? [];
+    const generalRate = resolveHourlyRate(
+      employeeRates.filter((rate) => rate.branchId === null),
       rateReferenceDate,
       employee.hourlyRate !== null ? Number(employee.hourlyRate) : null,
     );
-    const missingRate = hourlyRate === null;
-
-    const basePay = computeHourlyPay(totalHours, hourlyRate);
+    const ratedShifts = (shiftsByUser.get(employee.id) ?? []).map((shift) => ({
+      ...shift,
+      rate: resolveBranchHourlyRate(employeeRates, shift.branchId, shift.clockIn, generalRate),
+    }));
+    const { hourlyRate, missingRate, variableRate } = summarizeHourlyRates(ratedShifts.map((shift) => shift.rate), generalRate);
+    const basePay = ratedShifts.reduce((sum, shift) => sum + computeHourlyPay(shift.hours, shift.rate), 0);
     const estimatedPay = basePay;
     const adjustmentsTotal = netAdjustmentAmount(employeeAdjustments);
     const finalPay = estimatedPay + adjustmentsTotal;
@@ -337,6 +349,7 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
       name: employee.name,
       hourlyRate,
       missingRate,
+      variableRate,
       hoursByDay,
       daysWorked: hoursByDay.filter((h) => h > 0).length,
       regularHours,
@@ -403,7 +416,7 @@ async function computeLiveEmployeeDetail(
     }),
     db.salaryRate.findMany({
       where: { userId, scheme: "HORA" },
-      select: { amount: true, effectiveFrom: true, effectiveTo: true },
+      select: { branchId: true, amount: true, effectiveFrom: true, effectiveTo: true },
       orderBy: { effectiveFrom: "desc" },
     }),
     db.userBranch.findMany({
@@ -435,6 +448,15 @@ async function computeLiveEmployeeDetail(
     shiftsByDay.set(formatDateOnly(shift.date), shift);
   }
 
+  const employeeRates: HourlyRateRow[] = salaryRates.map((rate) => ({
+    branchId: rate.branchId, amount: Number(rate.amount), effectiveFrom: rate.effectiveFrom, effectiveTo: rate.effectiveTo,
+  }));
+  const generalRate = resolveHourlyRate(
+    employeeRates.filter((rate) => rate.branchId === null),
+    rateReferenceDate,
+    employee.hourlyRate !== null ? Number(employee.hourlyRate) : null,
+  );
+
   const days: PayrollDayDetail[] = dayKeys.map((dateKey) => {
     const dayEntries = entriesByDay.get(dateKey) ?? [];
     const shift = shiftsByDay.get(dateKey) ?? null;
@@ -454,6 +476,8 @@ async function computeLiveEmployeeDetail(
       clockIn: entry.clockIn.toISOString(),
       clockOut: entry.clockOut ? entry.clockOut.toISOString() : null,
       source: entry.source,
+      hourlyRate: resolveBranchHourlyRate(employeeRates, entry.branchId, entry.clockIn, generalRate),
+      pay: entry.clockOut ? computeHourlyPay(hoursBetween(entry.clockIn, entry.clockOut), resolveBranchHourlyRate(employeeRates, entry.branchId, entry.clockIn, generalRate)) : 0,
     }));
     const hasOpenEntry = dayEntries.some((e) => !e.clockOut);
 
@@ -506,14 +530,11 @@ async function computeLiveEmployeeDetail(
   const regularHours = totalHours;
   const overtimeHours = 0;
 
-  const hourlyRate = resolveHourlyRate(
-    salaryRates.map((r) => ({ amount: Number(r.amount), effectiveFrom: r.effectiveFrom, effectiveTo: r.effectiveTo })),
-    rateReferenceDate,
-    employee.hourlyRate !== null ? Number(employee.hourlyRate) : null,
-  );
+  const closedRates = days.flatMap((day) => day.entries.filter((entry) => entry.clockOut).map((entry) => entry.hourlyRate ?? null));
+  const { hourlyRate } = summarizeHourlyRates(closedRates, generalRate);
 
   const overtimePay = 0;
-  const basePay = computeHourlyPay(totalHours, hourlyRate);
+  const basePay = days.reduce((sum, day) => sum + day.entries.reduce((daySum, entry) => daySum + (entry.pay ?? 0), 0), 0);
   const totalPay = basePay;
 
   const adjustmentRows: PayrollAdjustmentRow[] = adjustments.map((adj) => ({
@@ -712,11 +733,17 @@ export async function getPayrollWeekTable(
           }
         }
         const hoursByDay = entry.hoursByDay as number[];
+        const snapshotDays = entry.daysSnapshot as PayrollDayDetail[];
+        const snapshotRates = snapshotDays.flatMap((day) => (day.entries ?? [])
+          .filter((shift) => shift.clockOut)
+          .map((shift) => shift.hourlyRate === undefined ? (entry.hourlyRate === null ? null : Number(entry.hourlyRate)) : shift.hourlyRate));
+        const snapshotSummary = summarizeHourlyRates(snapshotRates, entry.hourlyRate === null ? null : Number(entry.hourlyRate));
         return {
           id: user.id,
           name: user.name,
           hourlyRate: entry.hourlyRate !== null ? Number(entry.hourlyRate) : null,
-          missingRate: entry.hourlyRate === null,
+          missingRate: snapshotSummary.missingRate,
+          variableRate: snapshotSummary.variableRate,
           hoursByDay,
           daysWorked: hoursByDay.filter((h) => h > 0).length,
           regularHours: Number(entry.regularHours),
@@ -1092,6 +1119,9 @@ export async function approvePayrollEntryAction(weekStart: string, userId: strin
 
     const live = await computeLiveEmployeeDetail(userId, mondayStr, tx);
     if ("error" in live) return live;
+    if (live.days.some((day) => day.entries.some((shift) => shift.clockOut && shift.hourlyRate === null))) {
+      return { error: "Hay horas trabajadas sin tarifa. Configura la tarifa general o la de esa sucursal antes de aprobar." };
+    }
     const hoursByDay = live.days.map((day) => day.hoursWorked);
     const snapshot = {
       hourlyRate: live.employee.hourlyRate,

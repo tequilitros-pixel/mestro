@@ -11,6 +11,7 @@ import {
 } from "@/lib/dateOnly";
 import { formatCivilDate } from "@/lib/dateTime";
 import { withRlsContext } from "@/lib/rls";
+import { resolveBranchHourlyRate } from "@/lib/payroll/branchRates";
 
 /**
  * Analítica de nómina para dirección: costo real de mano de obra,
@@ -18,10 +19,8 @@ import { withRlsContext } from "@/lib/rls";
  * abierto por sucursal, por persona y por día.
  *
  * Notas importantes sobre los datos disponibles:
- * - El costo se calcula al vuelo como `horas × User.hourlyRate`. No
- *   existe un campo de costo guardado en el turno, ni historial de
- *   tarifas: si cambias la tarifa de alguien, los periodos pasados se
- *   recalculan con la tarifa nueva.
+ * - El costo se calcula al vuelo por checada con la tarifa específica
+ *   de sucursal vigente entonces, o la tarifa general si no la hay.
  * - Quien no tiene `hourlyRate` capturado aporta horas pero no costo.
  *   Por eso se reporta aparte `hoursWithoutRate` y `peopleWithoutRate`:
  *   sin eso, el costo total se vería artificialmente bajo.
@@ -80,6 +79,8 @@ export type PayrollAnalytics = {
     id: string;
     name: string;
     hourlyRate: number | null;
+    variableRate: boolean;
+    missingRate: boolean;
     cost: number;
     baseCost: number;
     overtimeCost: number;
@@ -257,6 +258,17 @@ export async function getPayrollAnalytics(
   ]);
 
   const branchNames = new Map(branchList.map((b) => [b.id, b.name]));
+  const salaryRates = await prisma.salaryRate.findMany({
+    where: { scheme: "HORA", userId: { in: [...new Set(entries.map((entry) => entry.userId))] } },
+    select: { userId: true, branchId: true, amount: true, effectiveFrom: true, effectiveTo: true },
+    orderBy: { effectiveFrom: "desc" },
+  });
+  const ratesByUser = new Map<string, typeof salaryRates>();
+  for (const rate of salaryRates) {
+    const list = ratesByUser.get(rate.userId) ?? [];
+    list.push(rate);
+    ratesByUser.set(rate.userId, list);
+  }
 
   type BranchAcc = {
     id: string;
@@ -275,6 +287,8 @@ export async function getPayrollAnalytics(
     id: string;
     name: string;
     hourlyRate: number | null;
+    variableRate: boolean;
+    missingRate: boolean;
     cost: number;
     overtimeCost: number;
     overtimeHours: number;
@@ -328,8 +342,11 @@ export async function getPayrollAnalytics(
     const hours = hoursBetween(entry.clockIn, entry.clockOut);
     if (!(hours > 0)) continue;
 
-    const rate =
-      entry.user.hourlyRate !== null ? Number(entry.user.hourlyRate) : null;
+    const rate = resolveBranchHourlyRate(
+      (ratesByUser.get(entry.userId) ?? []).map((item) => ({ ...item, amount: Number(item.amount) })),
+      entry.branchId, entry.clockIn,
+      entry.user.hourlyRate !== null ? Number(entry.user.hourlyRate) : null,
+    );
     const cost = rate !== null ? hours * rate : 0;
 
     if (rate === null) {
@@ -352,6 +369,8 @@ export async function getPayrollAnalytics(
         id: entry.userId,
         name: entry.user.name,
         hourlyRate: rate,
+        variableRate: false,
+        missingRate: rate === null,
         cost: 0,
         overtimeCost: 0,
         overtimeHours: 0,
@@ -359,6 +378,10 @@ export async function getPayrollAnalytics(
         shifts: 0,
         branches: new Set<string>(),
       };
+
+    if (rate === null) person.missingRate = true;
+    else if (person.hourlyRate !== null && person.hourlyRate !== rate) person.variableRate = true;
+    else if (person.hourlyRate === null && !person.missingRate) person.hourlyRate = rate;
 
     person.hours += hours;
     person.cost += cost;
@@ -466,6 +489,8 @@ export async function getPayrollAnalytics(
         id: p.id,
         name: p.name,
         hourlyRate: p.hourlyRate,
+        variableRate: p.variableRate,
+        missingRate: p.missingRate,
         cost: p.cost,
         baseCost: p.cost - p.overtimeCost,
         overtimeCost: p.overtimeCost,

@@ -41,10 +41,10 @@ export default async function MyHoursPage() {
             <Card highlight className="col-span-2">
               <CardLabel><span className="inline-flex items-center gap-1.5"><DollarIcon className="h-3.5 w-3.5" />Pago estimado esta semana</span></CardLabel>
               <CardValue>{summary.weekPay === null ? "—" : formatCurrency(summary.weekPay)}</CardValue>
-              {summary.hourlyRate === null ? (
+              {summary.weekPay === null ? (
                 <p className="mt-2 text-xs text-on-surface-variant">Tu pago por hora todavía no está configurado.</p>
               ) : (
-                <p className="mt-2 text-xs text-on-surface-variant">Tarifa registrada: {formatCurrency(summary.hourlyRate)} por hora. El total es estimado hasta que cierre la nómina.</p>
+                <p className="mt-2 text-xs text-on-surface-variant">{summary.variableRate ? "Se aplicaron distintas tarifas según la sucursal." : summary.hourlyRate !== null ? `Tarifa registrada: ${formatCurrency(summary.hourlyRate)} por hora.` : "Tarifa por sucursal aplicada."} El total es estimado hasta que cierre la nómina.</p>
               )}
             </Card>
           </div>

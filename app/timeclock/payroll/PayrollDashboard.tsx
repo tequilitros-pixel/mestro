@@ -512,14 +512,18 @@ export default function PayrollDashboard() {
                                 )}
                               </td>
                               <td className="py-3 text-right text-on-surface-variant">
-                                {person.hourlyRate !== null ? (
+                                {person.missingRate ? (
+                                  <span className="text-error">Falta tarifa</span>
+                                ) : person.variableRate ? (
+                                  "Varias"
+                                ) : person.hourlyRate !== null ? (
                                   money(person.hourlyRate)
                                 ) : (
                                   <span className="text-error">Falta tarifa</span>
                                 )}
                               </td>
                               <td className="py-3 text-right font-bold text-on-surface">
-                                {person.hourlyRate !== null ? money(person.cost) : "—"}
+                                {person.missingRate ? "—" : money(person.cost)}
                               </td>
                             </tr>
                           ))}

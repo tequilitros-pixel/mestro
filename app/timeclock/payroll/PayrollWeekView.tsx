@@ -497,7 +497,7 @@ export default function PayrollWeekView() {
                           {hours(employee.totalHours)}
                         </td>
                         <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-semibold tabular-nums text-on-surface">
-                          {employee.hourlyRate === null ? "—" : money(employee.hourlyRate)}
+                          {employee.variableRate ? "Varias" : employee.hourlyRate === null ? "—" : money(employee.hourlyRate)}
                         </td>
                         <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-black tabular-nums text-on-surface">
                           {employee.missingRate && employee.adjustmentsTotal === 0
@@ -849,7 +849,9 @@ function EmployeeDetailModal({
               <Card className="p-3">
                 <CardLabel>Pago por hora</CardLabel>
                 <p className="text-lg font-bold text-on-surface">
-                  {detail.employee.hourlyRate === null ? "—" : money(detail.employee.hourlyRate)}
+                  {new Set(detail.days.flatMap((day) => day.entries.filter((entry) => entry.clockOut && entry.hourlyRate !== undefined).map((entry) => entry.hourlyRate))).size > 1
+                    ? "Varias tarifas"
+                    : detail.employee.hourlyRate === null ? "—" : money(detail.employee.hourlyRate)}
                 </p>
               </Card>
               <Card className="p-3">
@@ -972,6 +974,11 @@ function EmployeeDetailModal({
                               <span className="text-on-surface">
                                 {entry.branchName} · {formatTime(entry.clockIn)}–
                                 {entry.clockOut ? formatTime(entry.clockOut) : "abierto"}
+                                {entry.clockOut && entry.hourlyRate !== undefined && (
+                                  <span className="ml-1 text-[10px] text-on-surface-variant">
+                                    · {entry.hourlyRate === null ? "Sin tarifa" : `${money(entry.hourlyRate)}/h · ${money(entry.pay ?? 0)}`}
+                                  </span>
+                                )}
                                 <span className="ml-1 text-[10px] text-outline">
                                   {entry.source === "MANUAL" ? "(manual)" : "(checador)"}
                                 </span>

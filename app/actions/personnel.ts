@@ -25,6 +25,8 @@ export async function getPersonnel(includeArchived = false) {
 }
 
 export async function getPersonnelById(userId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || currentUser.role !== "ADMIN") return null;
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -36,6 +38,10 @@ export async function getPersonnelById(userId: string) {
       role: true,
       active: true,
       hourlyRate: true,
+      salaryRates: {
+        where: { scheme: "HORA", branchId: { not: null }, effectiveTo: null },
+        select: { branchId: true, amount: true },
+      },
       pinHash: true,
       branches: { include: { branch: { select: { id: true, name: true } } } },
     },
@@ -184,8 +190,8 @@ export async function updateHourlyRate(userId: string, hourlyRate: number | null
     return { error: "No tienes permiso" };
   }
 
-  if (hourlyRate !== null && hourlyRate < 0) {
-    return { error: "La tarifa no puede ser negativa" };
+  if (hourlyRate !== null && (!Number.isFinite(hourlyRate) || hourlyRate < 0 || hourlyRate > 99999999.99 || Math.abs(Math.round(hourlyRate * 100) - hourlyRate * 100) > 0.000001)) {
+    return { error: "Captura una tarifa válida con máximo dos decimales" };
   }
 
   const now = new Date();
@@ -200,7 +206,7 @@ export async function updateHourlyRate(userId: string, hourlyRate: number | null
     // para que la nómina de semanas pasadas siga usando lo que se
     // pagaba entonces aunque el sueldo cambie hoy.
     await tx.salaryRate.updateMany({
-      where: { userId, scheme: "HORA", effectiveTo: null },
+      where: { userId, branchId: null, scheme: "HORA", effectiveTo: null },
       data: { effectiveTo: now },
     });
 
@@ -220,6 +226,37 @@ export async function updateHourlyRate(userId: string, hourlyRate: number | null
   revalidatePath("/administration/personnel");
   revalidatePath(`/administration/personnel/${userId}`);
 
+  return { success: true };
+}
+
+export async function updateBranchHourlyRate(userId: string, branchId: string, hourlyRate: number | null) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || currentUser.role !== "ADMIN") return { error: "No tienes permiso" };
+  if (hourlyRate !== null && (!Number.isFinite(hourlyRate) || hourlyRate < 0 || hourlyRate > 99999999.99 || Math.abs(Math.round(hourlyRate * 100) - hourlyRate * 100) > 0.000001)) {
+    return { error: "Captura una tarifa válida con máximo dos decimales" };
+  }
+
+  const [employee, branch] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { id: true } }),
+    prisma.branch.findUnique({ where: { id: branchId }, select: { id: true, active: true } }),
+  ]);
+  if (!employee || !branch?.active) return { error: "Trabajador o sucursal no disponible" };
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.salaryRate.updateMany({
+      where: { userId, branchId, scheme: "HORA", effectiveTo: null },
+      data: { effectiveTo: now },
+    });
+    if (hourlyRate !== null) {
+      await tx.salaryRate.create({
+        data: { userId, branchId, scheme: "HORA", amount: hourlyRate, effectiveFrom: now, createdById: currentUser.id },
+      });
+    }
+  });
+
+  revalidatePath(`/administration/personnel/${userId}`);
+  revalidatePath("/timeclock/payroll");
   return { success: true };
 }
 

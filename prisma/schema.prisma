@@ -1351,6 +1351,7 @@ model Branch {
   entries          InventoryEntry[]
   inventoryMinimums BranchInventoryMinimum[]
   timeClockEntries TimeClockEntry[]
+  salaryRates      SalaryRate[]
   timeClockLocationRequests TimeClockLocationRequest[]
 
   users                         UserBranch[]
@@ -2849,6 +2850,8 @@ enum ShiftType {
 model SalaryRate {
   id     String           @id @default(cuid())
   userId String
+  /// Nulo = tarifa general del perfil; con sucursal = tarifa específica.
+  branchId String?
   scheme SalarySchemeType @default(HORA)
 
   /// Monto según el esquema: tarifa por hora, sueldo diario o sueldo
@@ -2864,9 +2867,11 @@ model SalaryRate {
   createdAt   DateTime @default(now())
 
   user      User  @relation("SalaryRateOwner", fields: [userId], references: [id], onDelete: Cascade)
+  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
   createdBy User? @relation("SalaryRateCreatedBy", fields: [createdById], references: [id])
 
   @@index([userId, effectiveFrom])
+  @@index([userId, branchId, effectiveFrom])
 }
 
 enum SalarySchemeType {

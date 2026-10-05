@@ -12,6 +12,16 @@ import {
   mondayOfWeek,
 } from "@/lib/dateOnly";
 import { splitTiers, computeAmount } from "@/lib/overtimeCalc";
+import { resolveBranchHourlyRate } from "@/lib/payroll/branchRates";
+
+async function currentOvertimeRate(userId: string, branchId: string, fallback: number | null) {
+  const rates = await prisma.salaryRate.findMany({
+    where: { userId, branchId, scheme: "HORA" },
+    select: { branchId: true, amount: true, effectiveFrom: true, effectiveTo: true },
+    orderBy: { effectiveFrom: "desc" },
+  });
+  return resolveBranchHourlyRate(rates.map((rate) => ({ ...rate, amount: Number(rate.amount) })), branchId, new Date(), fallback);
+}
 
 /**
  * Tiempo extra.
@@ -298,6 +308,11 @@ export async function syncOvertimeForRange(
       user: { select: { hourlyRate: true } },
     },
   });
+  const branchRates = await prisma.salaryRate.findMany({
+    where: { scheme: "HORA", branchId: { not: null }, userId: { in: [...new Set(entries.map((entry) => entry.userId))] } },
+    select: { userId: true, branchId: true, amount: true, effectiveFrom: true, effectiveTo: true },
+    orderBy: { effectiveFrom: "desc" },
+  });
 
   type Acc = {
     userId: string;
@@ -326,8 +341,11 @@ export async function syncOvertimeForRange(
         branchId: entry.branchId,
         weekStart,
         hours: 0,
-        hourlyRate:
+        hourlyRate: resolveBranchHourlyRate(
+          branchRates.filter((rate) => rate.userId === entry.userId).map((rate) => ({ ...rate, amount: Number(rate.amount) })),
+          entry.branchId, entry.clockIn,
           entry.user.hourlyRate !== null ? Number(entry.user.hourlyRate) : null,
+        ),
       };
 
     current.hours += hours;
@@ -485,8 +503,8 @@ export async function reviewOvertimeAction(
 
     const settings = await getPayrollSettings(record.branchId);
 
-    const hourlyRate =
-      record.user.hourlyRate !== null ? Number(record.user.hourlyRate) : null;
+    const hourlyRate = await currentOvertimeRate(record.userId, record.branchId,
+      record.user.hourlyRate !== null ? Number(record.user.hourlyRate) : null);
 
     if (decision === "APROBADO" && hourlyRate === null) {
       return {
@@ -555,8 +573,8 @@ export async function approveAllPendingOvertimeAction(
     let skipped = 0;
 
     for (const record of pending) {
-      const hourlyRate =
-        record.user.hourlyRate !== null ? Number(record.user.hourlyRate) : null;
+      const hourlyRate = await currentOvertimeRate(record.userId, record.branchId,
+        record.user.hourlyRate !== null ? Number(record.user.hourlyRate) : null);
 
       // Sin tarifa no se puede costear: se deja pendiente en vez de
       // aprobar un importe en cero que se vería como "ya pagado".
