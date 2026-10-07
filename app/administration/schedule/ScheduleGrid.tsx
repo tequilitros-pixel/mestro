@@ -151,38 +151,41 @@ function ShiftBlock({
   onClick: () => void;
 }) {
   const published = shift.publicationStatus === "PUBLISHED";
+  const publicationLabel = published ? "Publicado" : "Borrador";
+  const statusSurface = published
+    ? "border-emerald-600 bg-emerald-200 hover:bg-emerald-300 dark:border-emerald-400 dark:bg-emerald-950 dark:hover:bg-emerald-900"
+    : "border-amber-600 bg-amber-200 hover:bg-amber-300 dark:border-amber-400 dark:bg-amber-950 dark:hover:bg-amber-900";
+  const statusBadge = published
+    ? "bg-emerald-700 text-white dark:bg-emerald-400 dark:text-emerald-950"
+    : "bg-amber-700 text-white dark:bg-amber-400 dark:text-amber-950";
   if (shift.type === "DESCANSO") {
     return (
       <button
         onClick={onClick}
-        className={`group/shift w-full rounded-md border px-2 py-2 text-left transition hover:border-outline ${
-          published
-            ? "border-tertiary-fixed-dim/45 bg-tertiary-fixed-dim/10"
-            : "border-outline-variant bg-surface-container-high"
-        }`}
+        aria-label={`Descanso · ${publicationLabel}`}
+        data-publication-status={shift.publicationStatus}
+        className={`group/shift w-full rounded-md border-2 px-2 py-2 text-left transition ${statusSurface}`}
       >
         <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Descanso</p>
+        <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${statusBadge}`}>
+          {publicationLabel}
+        </span>
       </button>
     );
   }
 
   const color =
     shift.branch?.color || fallbackBranchColor(shift.event?.id ?? shift.branchId ?? shift.id);
-  const branchTint = `color-mix(in srgb, ${color} ${published ? "18%" : "6%"}, transparent)`;
 
   return (
     <button
       onClick={onClick}
       aria-label={`${shift.event?.name ?? shift.branch?.name ?? "Turno"} · ${
-        published ? "Publicado" : "Borrador"
+        publicationLabel
       }`}
-      className={`group/shift relative w-full rounded-md border px-2 py-1.5 text-left transition hover:border-outline ${
-        published
-          ? "border-tertiary-fixed-dim/45 bg-tertiary-fixed-dim/10 hover:bg-tertiary-fixed-dim/15"
-          : "border-outline-variant bg-surface-container-high hover:bg-surface-container-highest"
-      }`}
+      data-publication-status={shift.publicationStatus}
+      className={`group/shift relative w-full rounded-md border-2 px-2 py-1.5 text-left transition ${statusSurface}`}
       style={{
-        backgroundColor: branchTint,
         borderLeftColor: color,
         borderLeftWidth: 4,
       }}
@@ -194,6 +197,9 @@ function ShiftBlock({
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
         <span className="truncate">{shift.event?.name ?? shift.branch?.name ?? "Sin sucursal"}</span>
       </p>
+      <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${statusBadge}`}>
+        {publicationLabel}
+      </span>
       <p className="mt-1 break-words font-mono text-[10px] font-semibold leading-tight tracking-tight text-on-surface">
         {shift.startTime ? formatTime12(shift.startTime) : "—"}
         {" – "}
