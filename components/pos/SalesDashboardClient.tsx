@@ -267,6 +267,31 @@ export default function SalesDashboardClient({
     };
   }, [scopedAnalytics]);
 
+  const branchSalesSummary = useMemo(() => {
+    const totals = new Map(
+      branches.map((branch) => [
+        branch.id,
+        { id: branch.id, name: branch.name, total: 0 },
+      ]),
+    );
+
+    for (const sale of scopedAnalytics) {
+      const current = totals.get(sale.branch.id) ?? {
+        id: sale.branch.id,
+        name: sale.branch.name,
+        total: 0,
+      };
+      current.total += sale.total;
+      totals.set(sale.branch.id, current);
+    }
+
+    return Array.from(totals.values())
+      .filter((branch) => !analyticsBranchId || branch.id === analyticsBranchId)
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, "es"));
+  }, [analyticsBranchId, branches, scopedAnalytics]);
+
+  const highestBranchTotal = Math.max(0, ...branchSalesSummary.map((branch) => branch.total));
+
   /** Serie diaria: una columna por sucursal para comparar. */
   const dailyByBranch = useMemo(() => {
     const branchNames = Array.from(
@@ -592,6 +617,42 @@ export default function SalesDashboardClient({
                     </p>
                   </Card>
                 </div>
+
+                <Card>
+                  <CardLabel>Total vendido por sucursal</CardLabel>
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    Ventas completadas del periodo seleccionado.
+                  </p>
+                  <div className="mt-4 space-y-4">
+                    {branchSalesSummary.map((branch) => (
+                      <div key={branch.id}>
+                        <div className="mb-1.5 flex items-center justify-between gap-3 text-sm">
+                          <span className="min-w-0 truncate font-medium text-on-surface">
+                            {branch.name}
+                          </span>
+                          <strong className="shrink-0 tabular-nums text-on-surface">
+                            {formatCurrency(branch.total)}
+                          </strong>
+                        </div>
+                        <div className="h-3 overflow-hidden rounded-full bg-surface-container-high">
+                          <div
+                            className="h-full rounded-full bg-primary"
+                            style={{
+                              width: highestBranchTotal > 0
+                                ? `${(branch.total / highestBranchTotal) * 100}%`
+                                : "0%",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {branchSalesSummary.length === 0 && (
+                      <p className="text-sm text-on-surface-variant">
+                        No hay sucursales disponibles para mostrar.
+                      </p>
+                    )}
+                  </div>
+                </Card>
 
                 {emptyPeriod ? (
                   emptyPeriodCard
