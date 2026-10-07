@@ -153,8 +153,11 @@ function ShiftBlock({
   const published = shift.publicationStatus === "PUBLISHED";
   const publicationLabel = published ? "Publicado" : "Borrador";
   const statusSurface = published
-    ? "border-emerald-600 bg-emerald-200 hover:bg-emerald-300 dark:border-emerald-400 dark:bg-emerald-950 dark:hover:bg-emerald-900"
-    : "border-amber-600 bg-amber-200 hover:bg-amber-300 dark:border-amber-400 dark:bg-amber-950 dark:hover:bg-amber-900";
+    ? "bg-emerald-200 hover:bg-emerald-300 dark:bg-emerald-950 dark:hover:bg-emerald-900"
+    : "bg-amber-200 hover:bg-amber-300 dark:bg-amber-950 dark:hover:bg-amber-900";
+  const statusBorder = published
+    ? "border-emerald-600 dark:border-emerald-400"
+    : "border-amber-600 dark:border-amber-400";
   const statusBadge = published
     ? "bg-emerald-700 text-white dark:bg-emerald-400 dark:text-emerald-950"
     : "bg-amber-700 text-white dark:bg-amber-400 dark:text-amber-950";
@@ -164,7 +167,7 @@ function ShiftBlock({
         onClick={onClick}
         aria-label={`Descanso · ${publicationLabel}`}
         data-publication-status={shift.publicationStatus}
-        className={`group/shift w-full rounded-md border-2 px-2 py-2 text-left transition ${statusSurface}`}
+        className={`group/shift w-full rounded-md border-2 px-2 py-2 text-left transition ${statusSurface} ${statusBorder}`}
       >
         <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Descanso</p>
         <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${statusBadge}`}>
@@ -175,7 +178,7 @@ function ShiftBlock({
   }
 
   const color =
-    shift.branch?.color || fallbackBranchColor(shift.event?.id ?? shift.branchId ?? shift.id);
+    shift.branch?.color || fallbackBranchColor(shift.branch?.name ?? shift.event?.id ?? shift.branchId ?? shift.id);
 
   return (
     <button
@@ -184,10 +187,9 @@ function ShiftBlock({
         publicationLabel
       }`}
       data-publication-status={shift.publicationStatus}
-      className={`group/shift relative w-full rounded-md border-2 px-2 py-1.5 text-left transition ${statusSurface}`}
+      className={`group/shift relative w-full rounded-md border-[3px] px-2 py-1.5 text-left transition ${statusSurface}`}
       style={{
-        borderLeftColor: color,
-        borderLeftWidth: 4,
+        borderColor: color,
       }}
     >
       <span className="absolute right-1.5 top-1 text-[10px] tracking-wider text-on-surface-variant opacity-0 transition group-hover/shift:opacity-100">
