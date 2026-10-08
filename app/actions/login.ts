@@ -44,8 +44,8 @@ export async function loginAction(formData: FormData) {
   const user = await prisma.user.findFirst({
     where: {
       OR: [
-        { email: identifier },
-        { username: identifier },
+        { email: { equals: identifier, mode: "insensitive" } },
+        { username: { equals: identifier, mode: "insensitive" } },
         ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
       ],
     },
