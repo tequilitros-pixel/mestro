@@ -1,5 +1,7 @@
 import { getActiveProcesses } from "./data/getActiveProcesses";
 
+type ActiveProcesses = Awaited<ReturnType<typeof getActiveProcesses>>;
+
 export type RecordingStatus = {
   id: string;
   label: string;
@@ -14,9 +16,9 @@ function minutesSince(date: Date) {
   return (Date.now() - date.getTime()) / (1000 * 60);
 }
 
-export async function getRecordingStatus() {
+export async function getRecordingStatus(processes?: ActiveProcesses) {
   const { cookings, millings, fermentations, distillations } =
-    await getActiveProcesses();
+    processes ?? await getActiveProcesses();
 
   const cooking: RecordingStatus[] = cookings.map((c) => {
     const last = c.events[0]?.createdAt ?? c.startedAt;

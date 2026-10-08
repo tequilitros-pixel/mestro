@@ -50,17 +50,13 @@ export default async function HomePage() {
       ? "Edita, revisa y publica los turnos por empleado o sucursal."
       : "Consulta tu horario publicado y tus turnos de trabajo.";
 
-  const [
-    { cookings, millings, fermentations, distillations },
-    recordingStatus,
-    expiringBottles,
-    lotsCount,
-  ] = await Promise.all([
-    getActiveProcesses(),
-    getRecordingStatus(),
+  const processes = await getActiveProcesses();
+  const [recordingStatus, expiringBottles, lotsCount] = await Promise.all([
+    getRecordingStatus(processes),
     getExpiringBottles(),
     prisma.lot.count(),
   ]);
+  const { cookings, millings, fermentations, distillations } = processes;
 
   const now = new Date();
 
