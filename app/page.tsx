@@ -14,6 +14,8 @@ import {
   WalletIcon,
   PackageIcon,
   ClockIcon,
+  CalendarIcon,
+  CashRegisterIcon,
   UsersIcon,
   AlertIcon,
   InfoIcon,
@@ -208,12 +210,30 @@ export default async function HomePage() {
             eyebrow="Eventos y sucursales"
             title="Inventario"
             description="Productos, paquetes, equipo, eventos y conteos."
-            href="/administration"
+            href="/administration/inventory"
+            status="Disponible"
+          />
+
+          <ModuleCard
+            icon={CashRegisterIcon}
+            eyebrow="Operación de ventas"
+            title="Punto de Venta"
+            description="Cobros, mesas, transacciones y resumen de ventas."
+            href="/pospress"
             status="Disponible"
           />
 
           <ModuleCard
             icon={ClockIcon}
+            eyebrow="Entradas y salidas"
+            title="Checador"
+            description="Registra asistencia y consulta horas, pagos e historial."
+            href="/timeclock"
+            status="Disponible"
+          />
+
+          <ModuleCard
+            icon={CalendarIcon}
             eyebrow="Personal, horarios y nómina"
             title={scheduleCardTitle}
             description={scheduleCardDescription}
