@@ -3,8 +3,11 @@ import { put } from "@vercel/blob";
 import { requireAdmin } from "@/lib/auth";
 import { randomUUID } from "crypto";
 import { validateUploadedFile } from "@/lib/uploads";
+import sharp from "sharp";
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 1200;
+const IMAGE_QUALITY = 82;
 
 export async function POST(req: NextRequest) {
   await requireAdmin();
@@ -27,10 +30,34 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const blob = await put(`pos/products/${randomUUID()}.${validated.extension}`, validated.bytes, {
+  let compressed: Buffer;
+  try {
+    compressed = await sharp(Buffer.from(validated.bytes), { failOn: "error" })
+      .rotate()
+      .resize({
+        width: MAX_IMAGE_DIMENSION,
+        height: MAX_IMAGE_DIMENSION,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .webp({ quality: IMAGE_QUALITY, effort: 4 })
+      .toBuffer();
+  } catch {
+    return NextResponse.json(
+      { error: "No se pudo procesar la imagen. Prueba con otro archivo." },
+      { status: 400 },
+    );
+  }
+
+  const blob = await put(`pos/products/${randomUUID()}.webp`, compressed, {
     access: "public",
-    contentType: validated.contentType,
+    contentType: "image/webp",
   });
 
-  return NextResponse.json({ url: blob.url });
+  return NextResponse.json({
+    url: blob.url,
+    contentType: "image/webp",
+    originalBytes: file.size,
+    storedBytes: compressed.byteLength,
+  });
 }
