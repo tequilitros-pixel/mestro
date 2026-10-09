@@ -182,6 +182,9 @@ const formatDateTime = (value: string | null | undefined) =>
 
 function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
   const posSales = cashCut.posSales ?? [];
+  const aperturaBreakdown = cashCut.denominations.filter((d) => d.context === "APERTURA");
+  const cierreBreakdown = cashCut.denominations.filter((d) => d.context === "CIERRE");
+  const siguienteTurnoBreakdown = cashCut.denominations.filter((d) => d.context === "SIGUIENTE_TURNO");
   const products = new Map<string, { name: string; quantity: number; total: number }>();
   for (const sale of posSales) {
     for (const item of sale.items) {
@@ -253,6 +256,26 @@ function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
             {cashCut.envelopeNotes && <p className="text-sm text-on-surface-variant">{cashCut.envelopeNotes}</p>}
           </Card>
         )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-base font-bold text-on-surface">Denominaciones registradas</h2>
+        <div className="space-y-3">
+          {aperturaBreakdown.length > 0 && (
+            <DenominationBreakdownView title="Fondo registrado al abrir" rows={aperturaBreakdown} />
+          )}
+          {cierreBreakdown.length > 0 && (
+            <DenominationBreakdownView title="Efectivo contado al cerrar" rows={cierreBreakdown} />
+          )}
+          {siguienteTurnoBreakdown.length > 0 && (
+            <DenominationBreakdownView title="Fondo dejado para el siguiente turno" rows={siguienteTurnoBreakdown} />
+          )}
+          {aperturaBreakdown.length === 0 && cierreBreakdown.length === 0 && siguienteTurnoBreakdown.length === 0 && (
+            <Card>
+              <p className="text-sm text-on-surface-variant">Este corte no tiene desglose de billetes y monedas registrado.</p>
+            </Card>
+          )}
+        </div>
       </section>
 
       <section>
@@ -531,6 +554,8 @@ const load = useCallback(async () => {
         )}
       </div>
 
+      <OpenCashSummary cashCut={cashCut} />
+
       <Stepper current={step} cashCut={cashCut} onSelect={setStep} />
 
       {step === "ventas" && (
@@ -551,6 +576,40 @@ const load = useCallback(async () => {
 
       <StepFooterNav current={step} onSelect={setStep} />
     </div>
+  );
+}
+
+function OpenCashSummary({ cashCut }: { cashCut: CashCut }) {
+  const cashSales = cashCut.salesByMethod.find((sale) => sale.method === "EFECTIVO")?.amount ?? 0;
+  const totalInflows = cashCut.inflows.reduce((sum, inflow) => sum + inflow.amount, 0);
+  const totalOutflows = cashCut.outflows.reduce((sum, outflow) => sum + outflow.amount, 0);
+  const expectedCash = cashCut.startingFund + cashSales + totalInflows - totalOutflows;
+  const openingBreakdown = cashCut.denominations.filter((d) => d.context === "APERTURA");
+
+  return (
+    <section className="mb-6 space-y-3" aria-label="Efectivo registrado del corte">
+      <div>
+        <h2 className="text-base font-bold text-on-surface">Efectivo registrado</h2>
+        <p className="mt-1 text-xs text-on-surface-variant">
+          El efectivo esperado se calcula con el fondo, ventas en efectivo, entradas y salidas. El conteo físico se confirma al cerrar.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Card><CardLabel>Fondo inicial</CardLabel><CardValue>{formatMoney(cashCut.startingFund)}</CardValue></Card>
+        <Card><CardLabel>Ventas en efectivo</CardLabel><CardValue>{formatMoney(cashSales)}</CardValue></Card>
+        <Card><CardLabel>Entradas</CardLabel><CardValue>{formatMoney(totalInflows)}</CardValue></Card>
+        <Card><CardLabel>Salidas</CardLabel><CardValue>{formatMoney(totalOutflows)}</CardValue></Card>
+        <Card highlight className="col-span-2 sm:col-span-1"><CardLabel>Efectivo esperado en caja</CardLabel><CardValue>{formatMoney(expectedCash)}</CardValue></Card>
+      </div>
+      {openingBreakdown.length > 0 ? (
+        <DenominationBreakdownView title="Desglose registrado al abrir" rows={openingBreakdown} />
+      ) : (
+        <Card>
+          <CardLabel>Desglose de apertura</CardLabel>
+          <p className="mt-1 text-sm text-on-surface-variant">No hay billetes o monedas desglosados para este corte.</p>
+        </Card>
+      )}
+    </section>
   );
 }
 
