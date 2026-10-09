@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
 import EventStatusSelector from "./EventStatusSelector";
 import AddCustomItemForm from "./AddCustomItemForm";
 import EventDetailTabs from "./EventDetailTabs";
@@ -16,6 +17,8 @@ export default async function EventDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const currentUser = await getCurrentUser();
+  const isAdmin = currentUser?.role === "ADMIN";
 
   const event = await prisma.serviceEvent.findUnique({
     where: { id },
@@ -159,6 +162,7 @@ export default async function EventDetailPage({
         phase="salida"
         items={event.items.map(toRowItem)}
         confirmed={Boolean(event.checkoutConfirmedAt)}
+        isAdmin={isAdmin}
       />
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -182,6 +186,7 @@ export default async function EventDetailPage({
       phase="regreso"
       items={event.items.map(toRowItem)}
       confirmed={Boolean(event.returnConfirmedAt)}
+      isAdmin={isAdmin}
     />
   );
 

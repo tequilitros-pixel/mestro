@@ -210,6 +210,38 @@ export async function updateSentQuantityAction(
   }
 }
 
+export async function updatePlannedQuantityAction(
+  itemId: string,
+  eventId: string,
+  plannedQuantity: number,
+): Promise<ActionResult> {
+  try {
+    const user = await getEventActor();
+    if (!user || user.role !== "ADMIN") {
+      return { success: false, error: "Solo los administradores pueden cambiar la cantidad necesaria." };
+    }
+    if (!Number.isFinite(plannedQuantity) || plannedQuantity < 0) {
+      return { success: false, error: "La cantidad no puede ser negativa." };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const event = await lockEvent(tx, eventId);
+      if (event.checkoutConfirmedAt || event.stockDeductedAt || event.returnConfirmedAt) {
+        throw new Error("La salida ya fue confirmada; no puedes cambiar la cantidad necesaria.");
+      }
+      const item = await tx.serviceEventItem.findFirst({ where: { id: itemId, eventId } });
+      if (!item) throw new Error("El artículo no pertenece a este evento.");
+      await tx.serviceEventItem.update({ where: { id: itemId }, data: { plannedQuantity } });
+    });
+
+    revalidatePath(`/administration/inventory/events/${eventId}`);
+    return { success: true, message: "Cantidad necesaria actualizada." };
+  } catch (error) {
+    console.error("Error updating planned quantity:", error);
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible actualizar la cantidad necesaria." };
+  }
+}
+
 export async function updateReturnedQuantityAction(
   itemId: string,
   eventId: string,

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { updateReturnedQuantityAction, updateSentQuantityAction } from "../actions";
+import { updatePlannedQuantityAction, updateReturnedQuantityAction, updateSentQuantityAction } from "../actions";
 import { CheckIcon } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/Toast";
 
@@ -68,15 +68,18 @@ export default function ChecklistItemRow({
   eventId,
   phase,
   locked = false,
+  isAdmin = false,
 }: {
   item: EventChecklistItem;
   eventId: string;
   phase: "salida" | "regreso";
   locked?: boolean;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [saving, setSaving] = useState(false);
+  const [plannedValue, setPlannedValue] = useState(item.plannedQuantity);
   const [sentValue, setSentValue] = useState(item.sentQuantity ?? item.plannedQuantity);
   const [returnedValue, setReturnedValue] = useState(item.returnedQuantity ?? 0);
   const [openValue, setOpenValue] = useState(item.returnedOpenQuantity ?? 0);
@@ -92,7 +95,8 @@ export default function ChecklistItemRow({
       ? `${handlingUnit[0].toLocaleUpperCase("es-MX")}${handlingUnit.slice(1)} de ${item.contentPerUnit} ${CONTENT_LABEL[item.contentUnit ?? ""] ?? ""}`
       : "Presentación sin configurar";
   const sent = item.sentQuantity ?? item.plannedQuantity;
-  const difference = isReturn ? sent - returnedValue - damagedValue : sentValue - item.plannedQuantity;
+  const difference = isReturn ? sent - returnedValue - damagedValue : sentValue - plannedValue;
+  const canEditPlanned = !isReturn && isAdmin && !locked;
   const hasOpenRemainder = item.contentPerUnit !== null && item.itemType !== "EQUIPMENT";
   const consumedBase = hasOpenRemainder
     ? Math.max(
@@ -111,7 +115,8 @@ export default function ChecklistItemRow({
       : quantityLabel(consumedClosedUnits, handlingUnit)
     : null;
 
-  async function save(next?: { sent?: number; returned?: number; open?: number; damaged?: number }) {
+  async function save(next?: { planned?: number; sent?: number; returned?: number; open?: number; damaged?: number }) {
+    const nextPlanned = next?.planned ?? plannedValue;
     const nextSent = next?.sent ?? sentValue;
     const nextReturned = next?.returned ?? returnedValue;
     const nextOpen = next?.open ?? openValue;
@@ -119,11 +124,16 @@ export default function ChecklistItemRow({
     setSaving(true);
     const result = isReturn
       ? await updateReturnedQuantityAction(item.id, eventId, nextReturned, nextDamaged, nextOpen)
-      : await updateSentQuantityAction(item.id, eventId, nextSent);
+      : next?.planned !== undefined
+        ? await updatePlannedQuantityAction(item.id, eventId, nextPlanned)
+        : await updateSentQuantityAction(item.id, eventId, nextSent);
     setSaving(false);
     if (!result.success) {
       showToast(result.error);
       return;
+    }
+    if (!isReturn && next?.planned !== undefined && item.sentQuantity === null) {
+      setSentValue(nextPlanned);
     }
     router.refresh();
   }
@@ -154,7 +164,7 @@ export default function ChecklistItemRow({
         : "bg-surface-container-high text-on-surface-variant";
 
   return (
-    <article className="grid min-h-14 gap-3 border-b border-outline-variant px-3 py-3 last:border-b-0 transition-colors hover:bg-on-surface/[0.035] md:grid-cols-[2.5rem_minmax(13rem,1.8fr)_minmax(9rem,1fr)_7rem_12rem_8rem_7rem_6.5rem_2rem] md:items-center md:gap-2 md:py-2">
+    <article className="grid min-h-14 gap-3 border-b border-outline-variant px-3 py-3 last:border-b-0 transition-colors hover:bg-on-surface/[0.035] md:grid-cols-[2.5rem_minmax(13rem,1.8fr)_minmax(9rem,1fr)_8.5rem_12rem_8rem_7rem_6.5rem_2rem] md:items-center md:gap-2 md:py-2">
       <div className="order-1 flex items-center md:order-none">
         <button
           type="button"
@@ -177,7 +187,28 @@ export default function ChecklistItemRow({
       </div>
 
       <p className="order-3 text-xs text-on-surface-variant md:order-none md:text-sm">{presentation}</p>
-      <p className="order-4 text-sm text-on-surface-variant md:order-none">{isReturn ? quantityLabel(sent, handlingUnit) : quantityLabel(item.plannedQuantity, handlingUnit)}</p>
+      <div className="order-4 md:order-none">
+        {isReturn ? (
+          <p className="text-sm text-on-surface-variant">{quantityLabel(sent, handlingUnit)}</p>
+        ) : canEditPlanned ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              aria-label="Cantidad necesaria"
+              type="number"
+              min="0"
+              step="0.001"
+              value={plannedValue}
+              disabled={saving}
+              onChange={(event) => setPlannedValue(Number(event.target.value))}
+              onBlur={() => void save({ planned: plannedValue })}
+              className="h-8 w-16 rounded-md border border-outline-variant bg-background px-1 text-center text-sm font-semibold text-on-surface outline-none focus:border-on-surface"
+            />
+            <span className="text-xs text-on-surface-variant">{handlingUnit}</span>
+          </div>
+        ) : (
+          <p className="text-sm text-on-surface-variant">{quantityLabel(plannedValue, handlingUnit)}</p>
+        )}
+      </div>
 
       <div className="order-5 flex items-center gap-1.5 md:order-none">
         <button type="button" onClick={() => changeQuantity(-1)} disabled={saving || locked || !canReview} className="h-8 w-8 rounded-md border border-outline-variant text-lg leading-none hover:bg-surface-container-high disabled:opacity-40">−</button>
