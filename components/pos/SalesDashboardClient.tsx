@@ -378,6 +378,68 @@ export default function SalesDashboardClient({
       .sort((a, b) => b.value - a.value);
   }, [scopedAnalytics]);
 
+  /** Serie diaria de cobros con tarjeta, separada por sucursal. */
+  const cardPaymentDailyByBranch = useMemo(() => {
+    const branchNames = new Set<string>();
+    const byDay = new Map<string, Record<string, number>>();
+    const detail = new Map<
+      string,
+      { day: string; branchId: string; branchName: string; amount: number; count: number }
+    >();
+
+    for (const sale of scopedAnalytics) {
+      const cardAmount = sale.payments
+        .filter((payment) => payment.method === "TARJETA")
+        .reduce((sum, payment) => sum + payment.amount, 0);
+
+      if (cardAmount <= 0) continue;
+
+      const day = dayKey(sale.createdAt);
+      const branchName = sale.branch.name;
+      branchNames.add(branchName);
+
+      const row = byDay.get(day) ?? {};
+      row[branchName] = (row[branchName] ?? 0) + cardAmount;
+      byDay.set(day, row);
+
+      const detailKey = `${day}:${sale.branch.id}`;
+      const current = detail.get(detailKey) ?? {
+        day,
+        branchId: sale.branch.id,
+        branchName,
+        amount: 0,
+        count: 0,
+      };
+      current.amount += cardAmount;
+      current.count += 1;
+      detail.set(detailKey, current);
+    }
+
+    const sortedBranchNames = Array.from(branchNames).sort((a, b) =>
+      a.localeCompare(b, "es"),
+    );
+    const data = Array.from(byDay.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, row]) => {
+        const point: Record<string, string | number> = {
+          day,
+          label: formatDayLabel(day),
+        };
+        for (const branchName of sortedBranchNames) {
+          point[branchName] = Math.round(row[branchName] ?? 0);
+        }
+        return point;
+      });
+
+    return {
+      data,
+      branchNames: sortedBranchNames,
+      detail: Array.from(detail.values()).sort(
+        (a, b) => b.day.localeCompare(a.day) || a.branchName.localeCompare(b.branchName, "es"),
+      ),
+    };
+  }, [scopedAnalytics]);
+
   const hourlyData = useMemo(() => {
     const totals = new Array(24).fill(0) as number[];
     for (const sale of scopedAnalytics) {
@@ -1056,6 +1118,67 @@ export default function SalesDashboardClient({
                         </div>
                       </Card>
                     </div>
+
+                    {cardPaymentDailyByBranch.detail.length > 0 ? (
+                      <>
+                        <Card>
+                          <CardLabel>Cobros con tarjeta por día y sucursal</CardLabel>
+                          <p className="mt-1 text-xs text-on-surface-variant">
+                            Solo pagos registrados como tarjeta en el periodo seleccionado.
+                          </p>
+                          <div className="mt-4">
+                            <DailyBranchChart
+                              data={cardPaymentDailyByBranch.data}
+                              branchNames={cardPaymentDailyByBranch.branchNames}
+                            />
+                          </div>
+                        </Card>
+
+                        <Card>
+                          <CardLabel>Detalle de cobros con tarjeta</CardLabel>
+                          <div className="mt-3 overflow-x-auto">
+                            <table className="w-full min-w-[540px] text-left text-sm">
+                              <thead className="border-b border-outline-variant text-xs uppercase tracking-wide text-on-surface-variant">
+                                <tr>
+                                  <th className="px-3 py-3">Día</th>
+                                  <th className="px-3 py-3">Sucursal</th>
+                                  <th className="px-3 py-3 text-right">Cobros</th>
+                                  <th className="px-3 py-3 text-right">Importe con tarjeta</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {cardPaymentDailyByBranch.detail.map((row) => (
+                                  <tr
+                                    key={`${row.day}:${row.branchId}`}
+                                    className="border-b border-outline-variant last:border-0"
+                                  >
+                                    <td className="px-3 py-3 text-on-surface-variant">
+                                      {formatDayLabel(row.day)}
+                                    </td>
+                                    <td className="px-3 py-3 font-semibold text-on-surface">
+                                      {row.branchName}
+                                    </td>
+                                    <td className="px-3 py-3 text-right text-on-surface-variant">
+                                      {row.count}
+                                    </td>
+                                    <td className="px-3 py-3 text-right font-bold text-on-surface">
+                                      {formatCurrency(row.amount)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </Card>
+                      </>
+                    ) : (
+                      <Card className="text-center">
+                        <CardLabel>Cobros con tarjeta por día y sucursal</CardLabel>
+                        <p className="mt-1 text-sm text-on-surface-variant">
+                          No hay cobros con tarjeta en el periodo y sucursal seleccionados.
+                        </p>
+                      </Card>
+                    )}
 
                     <Card>
                       <CardLabel>Ventas por hora del día</CardLabel>
