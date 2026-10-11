@@ -2,13 +2,14 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import CountItemRow from "./CountItemRow";
 import CloseCountButton from "./CloseCountButton";
+import AddCountProduct from "./AddCountProduct";
 import { formatDateOnly } from "@/lib/dateOnly";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility";
 import { generateOperationId } from "@/lib/pos2/operationId";
 import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresentation";
 import { formatBusinessDateTime } from "@/lib/dateTime";
-import { inventoryCountTypeLabel } from "@/lib/inventory/countScope";
+import { inventoryCountTypeLabel, isProductIncludedInInventoryCount } from "@/lib/inventory/countScope";
 
 export default async function CountDetailPage({
   params,
@@ -39,6 +40,19 @@ export default async function CountDetailPage({
   }
 
   const editable = count.status === "BORRADOR";
+  const missingProducts = editable
+    ? (await prisma.inventoryProduct.findMany({
+        where: {
+          isActive: true,
+          archivedAt: null,
+          trackStock: true,
+          ...(count.countType === "WEEKLY" ? { countFrequency: "WEEKLY" } : {}),
+          id: { notIn: count.items.map((item) => item.productId) },
+        },
+        select: { id: true, name: true, isActive: true, archivedAt: true, trackStock: true, countFrequency: true },
+        orderBy: { name: "asc" },
+      })).filter((product) => isProductIncludedInInventoryCount(product, count.countType))
+    : [];
   const pendingItems = editable
     ? count.items.filter((item) => item.quantityCounted === null || item.countedAt === null)
     : [];
@@ -120,6 +134,10 @@ export default async function CountDetailPage({
             />
           ))}
         </div>
+
+        {editable && missingProducts.length > 0 && (
+          <AddCountProduct key={missingProducts.map(({ id }) => id).join(",")} countId={count.id} products={missingProducts.map(({ id, name }) => ({ id, name }))} />
+        )}
 
         {editable && <CloseCountButton countId={count.id} operationId={generateOperationId()} />}
       </div>

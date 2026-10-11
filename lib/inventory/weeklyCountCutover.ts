@@ -42,6 +42,21 @@ export async function reconcileWeeklyCountCutover(
   });
   if (!count) throw new Error("COUNT_NOT_FOUND");
 
+  const eligibleProducts = await tx.inventoryProduct.findMany({
+    where: {
+      isActive: true,
+      archivedAt: null,
+      trackStock: true,
+      ...(count.countType === "WEEKLY" ? { countFrequency: "WEEKLY" } : {}),
+    },
+    select: { id: true },
+  });
+  const countedProductIds = new Set(count.items.map((item) => item.productId));
+  const missingProducts = eligibleProducts.filter((product) => !countedProductIds.has(product.id));
+  if (missingProducts.length > 0) {
+    throw new Error(`COUNT_PRODUCTS_MISSING:${missingProducts.length}`);
+  }
+
   const pendingItems = count.items.filter(
     (item) => item.quantityCounted === null || item.countedAt === null,
   );

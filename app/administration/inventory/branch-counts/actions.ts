@@ -133,6 +133,78 @@ export async function createInventoryCountAction(
   }
 }
 
+export async function addInventoryCountProductAction(
+  countId: string,
+  productId: string,
+): Promise<ActionResult> {
+  try {
+    if (!countId || !productId) {
+      return { success: false, error: "Selecciona un producto válido." };
+    }
+
+    const scope = await prisma.inventoryCount.findUnique({
+      where: { id: countId },
+      select: { branchId: true },
+    });
+    if (!scope) return { success: false, error: "Conteo no encontrado." };
+    await authorizeCountBranch(scope.branchId);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>`SELECT "id", "status"::text FROM "InventoryCount" WHERE "id"=${countId} FOR UPDATE`;
+      if (!locked[0]) throw new Error("COUNT_NOT_FOUND");
+      if (locked[0].status !== "BORRADOR") throw new Error("COUNT_ALREADY_CLOSED");
+
+      const count = await tx.inventoryCount.findUnique({
+        where: { id: countId },
+        select: { branchId: true, countType: true },
+      });
+      if (!count || count.branchId !== scope.branchId) throw new Error("COUNT_NOT_FOUND");
+
+      const product = await tx.inventoryProduct.findUnique({ where: { id: productId } });
+      if (!product || !isProductIncludedInInventoryCount(product, count.countType)) {
+        throw new Error("PRODUCT_NOT_COUNTABLE");
+      }
+
+      const existing = await tx.inventoryCountItem.findUnique({
+        where: { countId_productId: { countId, productId } },
+        select: { id: true },
+      });
+      if (existing) return "already-added" as const;
+
+      const previousCount = await tx.inventoryCount.findFirst({
+        where: { branchId: count.branchId, status: "CERRADO", countType: count.countType },
+        orderBy: { countDate: "desc" },
+        select: { items: { where: { productId }, select: { quantityCounted: true } } },
+      });
+      await tx.inventoryCountItem.create({
+        data: {
+          countId,
+          productId,
+          quantityCounted: null,
+          countedAt: null,
+          previousQuantity: previousCount?.items[0]?.quantityCounted ?? 0,
+        },
+      });
+      return "added" as const;
+    });
+
+    revalidatePath(`/administration/inventory/branch-counts/${countId}`);
+    return {
+      success: true,
+      message: result === "added" ? "Producto agregado al conteo; falta capturar su cantidad." : "El producto ya está en el conteo.",
+    };
+  } catch (error) {
+    console.error("Error adding product to inventory count:", error);
+    if (error instanceof Error && error.message === "COUNT_ALREADY_CLOSED") {
+      return { success: false, error: "Este conteo ya está cerrado." };
+    }
+    if (error instanceof Error && error.message === "PRODUCT_NOT_COUNTABLE") {
+      return { success: false, error: "El producto ya no pertenece al alcance de este conteo." };
+    }
+    return { success: false, error: "No fue posible agregar el producto al conteo." };
+  }
+}
+
 export async function updateCountItemQuantityAction(
   input: {
     itemId: string;
@@ -245,6 +317,15 @@ export async function closeInventoryCountAction(
     console.error("Error closing inventory count:", error);
     if (error instanceof Error && error.message === "COUNT_ALREADY_CLOSED") {
       return { success: false, error: "Este conteo ya está cerrado." };
+    }
+    const missingProductsMatch = error instanceof Error
+      ? /^COUNT_PRODUCTS_MISSING:(\d+)$/.exec(error.message)
+      : null;
+    if (missingProductsMatch) {
+      return {
+        success: false,
+        error: `Faltan ${missingProductsMatch[1]} productos en el conteo. Agrégalos y captura su cantidad antes de cerrar.`,
+      };
     }
     const pendingMatch = error instanceof Error
       ? /^COUNT_ITEMS_PENDING:(\d+)$/.exec(error.message)
