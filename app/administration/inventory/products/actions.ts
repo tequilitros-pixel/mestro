@@ -5,6 +5,7 @@ import {
   InventoryCountFrequency,
   InventoryHandlingUnit,
   InventoryItemType,
+  CatalogBaseUnit,
 } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -58,6 +59,13 @@ function readPresentation(formData: FormData, unit: string) {
   if (contentPerUnit === null || contentPerUnit <= 0 || !Object.values(InventoryContentUnit).includes(contentUnitValue as InventoryContentUnit)) throw new Error("Captura un contenido por unidad mayor a cero y su unidad.");
   const contentUnit = contentUnitValue as InventoryContentUnit; const normalizedContentPerUnit = contentPerUnit * ({ ML: 1, L: 1000, G: 1, KG: 1000, PIEZAS: 1 }[contentUnit]);
   return { handlingUnit: handlingUnits[unit] ?? "OTRA", contentPerUnit, contentUnit, normalizedContentPerUnit };
+}
+
+function inferInventoryBaseUnit(contentUnit: InventoryContentUnit | null) {
+  if (contentUnit === "ML" || contentUnit === "L") return CatalogBaseUnit.ML;
+  if (contentUnit === "G" || contentUnit === "KG") return CatalogBaseUnit.G;
+  if (contentUnit === "PIEZAS") return CatalogBaseUnit.UNIT;
+  return null;
 }
 
 export async function createInventoryProductAction(
@@ -163,6 +171,7 @@ export async function createInventoryProductAction(
           category,
           unit,
           ...presentation,
+          inventoryBaseUnit: inferInventoryBaseUnit(presentation.contentUnit),
           unitCost,
           minimumStock,
           itemType: itemTypeValue as InventoryItemType,
@@ -419,6 +428,14 @@ export async function updateInventoryProductAction(
       return { success: false, error: "La existencia mínima no puede ser negativa." };
     }
 
+    const currentProduct = await prisma.inventoryProduct.findUnique({
+      where: { id: productId },
+      select: { inventoryBaseUnit: true },
+    });
+    if (!currentProduct) {
+      return { success: false, error: "Producto no encontrado." };
+    }
+
     await prisma.inventoryProduct.update({
       where: { id: productId },
       data: {
@@ -427,6 +444,7 @@ export async function updateInventoryProductAction(
         category,
         unit,
         ...presentation,
+        inventoryBaseUnit: currentProduct.inventoryBaseUnit ?? inferInventoryBaseUnit(presentation.contentUnit),
         unitCost,
         minimumStock,
         itemType: itemTypeValue as InventoryItemType,
