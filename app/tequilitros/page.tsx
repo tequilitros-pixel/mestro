@@ -8,6 +8,9 @@ const whatsappUrl =
   "https://wa.me/525662989202?text=" +
   encodeURIComponent("Hola, quiero información de Tequilitros para mi evento.");
 
+const facebookUrl = "https://www.facebook.com/profile.php?id=1348925031634852";
+const instagramUrl = "https://www.instagram.com/tequilitros_eventos/";
+
 const cocktailMenu = [
   { name: "Cantarito", description: "Cítrico, refrescante y con el sello de la casa.", image: "/tequilitros/cantarito.jpg" },
   { name: "Paloma", description: "Toronja, limón y tequila para brindar sin complicaciones.", image: "/tequilitros/paloma.jpg" },
@@ -52,7 +55,7 @@ function jsonLd() {
         email: "tequilitros@gmail.com",
         telephone: "+52 56 6298 9202",
         areaServed: ["Jalisco", "Zacatecas", "Colotlán"],
-        sameAs: ["https://wa.me/525662989202"],
+        sameAs: ["https://wa.me/525662989202", facebookUrl, instagramUrl],
       },
       {
         "@type": "LocalBusiness",
@@ -135,7 +138,7 @@ export default function TequilitrosPage() {
         <section className={styles.contact} id="contacto"><div><p className={styles.sectionNo}>07 / HABLEMOS DE TU EVENTO</p><h2>¿Ya tienes <em>fecha?</em></h2><p>Escríbenos con fecha y lugar. Te confirmamos cobertura y opciones disponibles.</p></div><div className={styles.contactCard}><p>CONTACTO DIRECTO</p><a href={whatsappUrl} target="_blank" rel="noopener noreferrer">WhatsApp <span>↗</span></a><a href="tel:+525662989202">56 6298 9202</a><a href="mailto:tequilitros@gmail.com">tequilitros@gmail.com</a><small>Contenido dirigido a personas mayores de edad. Consume con moderación.</small></div></section>
       </main>
 
-      <footer className={styles.footer}><div className={styles.footerTop}><Link href="#inicio" className={styles.logo}><span>✳</span> TEQUILITROS</Link><div><a href="https://www.instagram.com/tequilitros/" target="_blank" rel="noopener noreferrer">Instagram ↗</a><a href={whatsappUrl} target="_blank" rel="noopener noreferrer">WhatsApp ↗</a></div></div><div className={styles.footerBottom}><span>COLOTLÁN · JALISCO · MÉXICO</span><span>© {new Date().getFullYear()} TEQUILITROS · DESTILADORA DEL NORTE</span><Link href="/privacy-policy">Privacidad</Link></div></footer>
+      <footer className={styles.footer}><div className={styles.footerTop}><Link href="#inicio" className={styles.logo}><span>✳</span> TEQUILITROS</Link><div><a href={facebookUrl} target="_blank" rel="noopener noreferrer" aria-label="Facebook de Tequilitros para Eventos">Facebook ↗</a><a href={instagramUrl} target="_blank" rel="noopener noreferrer" aria-label="Instagram de Tequilitros para Eventos">Instagram ↗</a><a href={whatsappUrl} target="_blank" rel="noopener noreferrer">WhatsApp ↗</a></div></div><div className={styles.footerBottom}><span>COLOTLÁN · JALISCO · MÉXICO</span><span>© {new Date().getFullYear()} TEQUILITROS · DESTILADORA DEL NORTE</span><Link href="/privacy-policy">Privacidad</Link></div></footer>
     </div>
   );
 }
