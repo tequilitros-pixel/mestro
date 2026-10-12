@@ -4,6 +4,7 @@ import { computeStockMatrix, totalStockByProduct } from "../lib/stock";
 import {
   InventoryFlowChart,
   InventoryBranchComparisonChart,
+  InventoryPeriodComparisonChart,
   InventoryRankingChart,
   InventoryShareChart,
 } from "../InventoryCharts";
@@ -94,8 +95,11 @@ export default async function SucursalesInventoryPage() {
     .sort((a, b) => a.stock - b.stock);
 
   const control = dashboard.analytics;
+  const weekly = dashboard.weeklyAnalytics;
   const mostConsumedProduct = control.topProducts[0] ?? null;
+  const mostConsumedProductWeekly = weekly.topProducts[0] ?? null;
   const mostActiveBranch = [...control.branches].sort((a, b) => b.consumed - a.consumed)[0] ?? null;
+  const mostActiveBranchWeekly = [...weekly.branches].sort((a, b) => b.consumed - a.consumed)[0] ?? null;
   const mostWastefulBranch = [...control.branches].sort((a, b) => b.waste - a.waste)[0] ?? null;
   const mostMismatchedBranch = [...control.branches].sort((a, b) => b.mismatchUnits - a.mismatchUnits)[0] ?? null;
   const mismatchProducts = [...control.topProducts]
@@ -112,6 +116,42 @@ export default async function SucursalesInventoryPage() {
       waste: Math.round(branch.waste * 10) / 10,
       mismatchUnits: Math.round(branch.mismatchUnits * 10) / 10,
     }));
+  const weeklyBranchById = new Map(weekly.branches.map((branch) => [branch.id, branch]));
+  const branchPeriodComparison = control.branches
+    .map((branch) => ({
+      name: branch.name,
+      weekly: Math.round((weeklyBranchById.get(branch.id)?.consumed ?? 0) * 10) / 10,
+      monthly: Math.round(branch.consumed * 10) / 10,
+    }))
+    .filter((branch) => branch.weekly > 0 || branch.monthly > 0)
+    .sort((a, b) => b.monthly - a.monthly)
+    .slice(0, 10);
+  const productPeriodById = new Map<string, { name: string; weekly: number; monthly: number; unit: string }>();
+  for (const product of weekly.topProducts) {
+    productPeriodById.set(product.id, { name: product.name, weekly: product.consumed, monthly: 0, unit: product.unit });
+  }
+  for (const product of control.topProducts) {
+    const current = productPeriodById.get(product.id);
+    productPeriodById.set(product.id, {
+      name: product.name,
+      weekly: current?.weekly ?? 0,
+      monthly: product.consumed,
+      unit: product.unit,
+    });
+  }
+  const productPeriodComparison = Array.from(productPeriodById.values())
+    .filter((product) => product.weekly > 0 || product.monthly > 0)
+    .sort((a, b) => b.monthly - a.monthly)
+    .slice(0, 10)
+    .map(({ name, weekly: weeklyConsumed, monthly: monthlyConsumed }) => ({
+      name,
+      weekly: Math.round(weeklyConsumed * 10) / 10,
+      monthly: Math.round(monthlyConsumed * 10) / 10,
+    }));
+  const productPeriodRows = Array.from(productPeriodById.values())
+    .filter((product) => product.weekly > 0 || product.monthly > 0)
+    .sort((a, b) => b.monthly - a.monthly)
+    .slice(0, 12);
   const negativeRows = dashboard.negativeLegacy.slice(0, 20);
   const negativeByBranch = Array.from(
     dashboard.negativeLegacy.reduce((map, row) => {
@@ -221,10 +261,106 @@ export default async function SucursalesInventoryPage() {
                     </Card>
                   </section>
 
+                  <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+                    <Card>
+                      <CardLabel>Consumo · 7 días</CardLabel>
+                      <CardValue>{weekly.totals.consumedUnits.toFixed(1)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">
+                        {weekly.totals.movements} movimientos
+                      </p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Entradas · 7 días</CardLabel>
+                      <CardValue>{weekly.totals.receivedUnits.toFixed(1)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">unidades recibidas</p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Mermas · 7 días</CardLabel>
+                      <CardValue>{weekly.totals.wasteUnits.toFixed(1)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">pérdidas registradas</p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Diferencias · 7 días</CardLabel>
+                      <CardValue>{weekly.totals.mismatchCount}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">{weekly.totals.mismatchUnits.toFixed(1)} unidades</p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Producto líder · 7 días</CardLabel>
+                      <p className="mt-1 truncate text-lg font-bold text-on-surface">
+                        {mostConsumedProductWeekly?.name ?? "Sin datos"}
+                      </p>
+                      <p className="mt-1 text-xs text-on-surface-variant">
+                        {mostConsumedProductWeekly ? `${mostConsumedProductWeekly.consumed.toFixed(1)} ${mostConsumedProductWeekly.unit}` : "Sin salidas"}
+                      </p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Sucursal líder · 7 días</CardLabel>
+                      <p className="mt-1 truncate text-lg font-bold text-on-surface">
+                        {mostActiveBranchWeekly?.name ?? "Sin datos"}
+                      </p>
+                      <p className="mt-1 text-xs text-on-surface-variant">
+                        {mostActiveBranchWeekly ? `${mostActiveBranchWeekly.consumed.toFixed(1)} unidades` : "Sin salidas"}
+                      </p>
+                    </Card>
+                  </section>
+
                   <section className="grid gap-4 lg:grid-cols-2">
                     <Card>
-                      <CardLabel>Evolución de entradas y salidas</CardLabel>
+                      <CardLabel>Consumo por sucursal · semanal vs mensual</CardLabel>
+                      {branchPeriodComparison.length > 0 ? (
+                        <InventoryPeriodComparisonChart data={branchPeriodComparison} />
+                      ) : (
+                        <p className="py-12 text-center text-sm text-on-surface-variant">Sin consumo registrado.</p>
+                      )}
+                    </Card>
+                    <Card>
+                      <CardLabel>Productos que más se mueven · semanal vs mensual</CardLabel>
+                      {productPeriodComparison.length > 0 ? (
+                        <InventoryPeriodComparisonChart data={productPeriodComparison} />
+                      ) : (
+                        <p className="py-12 text-center text-sm text-on-surface-variant">Sin consumo registrado.</p>
+                      )}
+                    </Card>
+                  </section>
+
+                  <Card>
+                    <CardLabel>Productos con más movimiento · semanal y mensual</CardLabel>
+                    {productPeriodRows.length === 0 ? (
+                      <p className="mt-3 text-sm text-on-surface-variant">No hay consumo registrado en los periodos seleccionados.</p>
+                    ) : (
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="w-full min-w-[620px] text-sm">
+                          <thead>
+                            <tr className="border-b border-outline-variant text-left text-xs text-outline">
+                              <th className="pb-2 font-medium">Producto</th>
+                              <th className="pb-2 text-right font-medium">7 días</th>
+                              <th className="pb-2 text-right font-medium">30 días</th>
+                              <th className="pb-2 text-right font-medium">Unidad</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-outline-variant">
+                            {productPeriodRows.map((product) => (
+                              <tr key={product.name}>
+                                <td className="py-3 font-semibold text-on-surface">{product.name}</td>
+                                <td className="py-3 text-right text-secondary">{product.weekly.toFixed(1)}</td>
+                                <td className="py-3 text-right text-on-surface-variant">{product.monthly.toFixed(1)}</td>
+                                <td className="py-3 text-right text-on-surface-variant">{product.unit}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </Card>
+
+                  <section className="grid gap-4 lg:grid-cols-3">
+                    <Card>
+                      <CardLabel>Evolución · últimos 30 días</CardLabel>
                       <InventoryFlowChart data={control.daily} />
+                    </Card>
+                    <Card>
+                      <CardLabel>Evolución · últimos 7 días</CardLabel>
+                      <InventoryFlowChart data={weekly.daily} />
                     </Card>
                     <Card>
                       <CardLabel>Tipos de movimiento</CardLabel>
@@ -290,7 +426,7 @@ export default async function SucursalesInventoryPage() {
 
                   <section className="grid gap-4 lg:grid-cols-2">
                     <Card>
-                      <CardLabel>Detalle por sucursal · últimos {control.days} días</CardLabel>
+                      <CardLabel>Consumo por sucursal · semanal y mensual</CardLabel>
                       {control.branches.length === 0 ? (
                         <p className="mt-3 text-sm text-on-surface-variant">No hay sucursales visibles.</p>
                       ) : (
@@ -299,7 +435,8 @@ export default async function SucursalesInventoryPage() {
                             <thead>
                               <tr className="border-b border-outline-variant text-left text-xs text-outline">
                                 <th className="pb-2 font-medium">Sucursal</th>
-                                <th className="pb-2 text-right font-medium">Consumido</th>
+                                <th className="pb-2 text-right font-medium">7 días</th>
+                                <th className="pb-2 text-right font-medium">30 días</th>
                                 <th className="pb-2 text-right font-medium">Costo</th>
                                 <th className="pb-2 text-right font-medium">Merma</th>
                                 <th className="pb-2 text-right font-medium">Diferencias</th>
@@ -315,6 +452,7 @@ export default async function SucursalesInventoryPage() {
                                   <td className="py-3 font-semibold text-on-surface">
                                     <span className="mr-2 text-xs text-outline">#{index + 1}</span>{branch.name}
                                   </td>
+                                  <td className="py-3 text-right text-secondary">{(weeklyBranchById.get(branch.id)?.consumed ?? 0).toFixed(1)}</td>
                                   <td className="py-3 text-right text-on-surface-variant">{branch.consumed.toFixed(1)}</td>
                                   <td className="py-3 text-right text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.consumedCost)}</td>
                                   <td className="py-3 text-right text-error">{branch.waste.toFixed(1)}</td>

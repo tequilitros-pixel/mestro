@@ -26,6 +26,7 @@ type DashboardProduct = {
 
 export type InventoryDashboardData = {
   analytics: InventoryAnalytics;
+  weeklyAnalytics: InventoryAnalytics;
   branches: Array<{ id: string; name: string }>;
   pendingCounts: Array<{ id: string; code: string; branchName: string; countDate: string; countType: "WEEKLY" | "MONTHLY" }>;
   counts: Array<{
@@ -102,8 +103,9 @@ export async function getInventoryDashboardData(
     ...(allowedBranchIds === null ? {} : { id: { in: allowedBranchIds } }),
   };
 
-  const [analytics, branches, productsRows, counts, balances, declarations] = await Promise.all([
+  const [analytics, weeklyAnalytics, branches, productsRows, counts, balances, declarations] = await Promise.all([
     getInventoryAnalytics(30, allowedBranchIds),
+    getInventoryAnalytics(7, allowedBranchIds),
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.inventoryProduct.findMany({
       where: { isActive: true, archivedAt: null, trackStock: true },
@@ -231,6 +233,7 @@ export async function getInventoryDashboardData(
 
   return {
     analytics,
+    weeklyAnalytics,
     branches,
     pendingCounts: counts
       .filter((count) => count.status === "BORRADOR")

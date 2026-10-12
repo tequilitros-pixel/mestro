@@ -162,6 +162,35 @@ export function InventoryBranchComparisonChart({
   );
 }
 
+/** Compara consumo semanal y mensual para sucursales o productos. */
+export function InventoryPeriodComparisonChart({
+  data,
+  height = 300,
+}: {
+  data: Array<{ name: string; weekly: number; monthly: number }>;
+  height?: number;
+}) {
+  return (
+    <div style={{ height: Math.max(height, data.length * 42) }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart
+          data={data}
+          layout="vertical"
+          margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" horizontal={false} />
+          <XAxis type="number" stroke="var(--color-outline)" fontSize={12} tickFormatter={(value) => units(Number(value))} />
+          <YAxis type="category" dataKey="name" stroke="var(--color-outline)" fontSize={12} width={150} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [units(Number(value)), name]} />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Bar dataKey="weekly" name="Últimos 7 días" fill="var(--color-secondary)" radius={[0, 6, 6, 0]} />
+          <Bar dataKey="monthly" name="Últimos 30 días" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 /** Distribución (categorías, tipos de movimiento). */
 export function InventoryShareChart({
   data,
