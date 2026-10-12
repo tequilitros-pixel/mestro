@@ -596,13 +596,62 @@ export default async function SucursalesInventoryPage() {
               icon: <ChartLineIcon className="h-4 w-4" />,
               content: (
                 <>
-                  <section className="grid gap-5 lg:grid-cols-3">
-                    <div className="rounded-2xl border border-outline-variant bg-surface-container p-5 lg:col-span-2">
+                  <section className="grid gap-5 lg:grid-cols-2">
+                    <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
                       <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
-                        Evolución del inventario (últimos {control.days} días)
+                        Evolución del inventario · últimos 30 días
                       </h2>
                       <InventoryFlowChart data={control.daily} />
                     </div>
+
+                    <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+                      <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
+                        Evolución del inventario · últimos 7 días
+                      </h2>
+                      <InventoryFlowChart data={weekly.daily} />
+                    </div>
+                  </section>
+
+                  <section className="mt-5 grid gap-5 lg:grid-cols-2">
+                    <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+                      <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
+                        Consumo por sucursal · semanal vs mensual
+                      </h2>
+                      <InventoryPeriodComparisonChart data={branchPeriodComparison} />
+                    </div>
+
+                    <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+                      <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
+                        Productos con más movimiento · semanal vs mensual
+                      </h2>
+                      <InventoryPeriodComparisonChart data={productPeriodComparison} />
+                    </div>
+                  </section>
+
+                  <section className="mt-5 grid gap-4 grid-cols-2 lg:grid-cols-4">
+                    <Card>
+                      <CardLabel>Consumo semanal</CardLabel>
+                      <CardValue>{weekly.totals.consumedUnits.toFixed(1)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">unidades en 7 días</p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Consumo mensual</CardLabel>
+                      <CardValue>{control.totals.consumedUnits.toFixed(1)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">unidades en 30 días</p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Merma semanal</CardLabel>
+                      <CardValue>{weekly.totals.wasteUnits.toFixed(1)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">unidades registradas</p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Diferencias mensuales</CardLabel>
+                      <CardValue>{control.totals.mismatchCount}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">en declaraciones de conteo</p>
+                    </Card>
+                  </section>
+
+                  <section className="mt-5">
 
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
                       <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-on-surface-variant">
