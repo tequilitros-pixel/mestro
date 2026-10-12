@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import Image from "next/image";
 
@@ -19,31 +19,31 @@ export const DRINK_FLAVORS: DrinkFlavor[] = [
   {
     id: "cantarito",
     name: "Cantarito",
-    subtitle: "Cítricos, tequila blanco y sal de grano",
+    subtitle: "Cítricos, tequila blanco y escarchado",
     liquidColor: 0xe59424,
     frostColor: 0xc84224,
     frostType: "sal_chile",
-    description: "Naranja, toronja y limón fresco con tequila blanco de la casa y refresco de toronja. Escarchado con sal de grano y chile en polvo.",
+    description: "Naranja, toronja y limón con tequila blanco, refresco de toronja y escarchado. La receta se confirma por evento.",
     photoUrl: "/tequilitros/cantarito.jpg",
   },
   {
     id: "paloma",
     name: "Paloma",
-    subtitle: "Toronja natural y tequila reposado",
+    subtitle: "Toronja, limón y tequila reposado",
     liquidColor: 0xe89785,
     frostColor: 0xf5f0ea,
     frostType: "sal_fina",
-    description: "Zumo de toronja, limón, tequila reposado madurado en roble y escarchado de sal pura.",
+    description: "Toronja, limón, tequila reposado y escarchado. La receta se confirma por evento.",
     photoUrl: "/tequilitros/paloma.jpg",
   },
   {
     id: "vampiro",
     name: "Vampiro",
-    subtitle: "Sangrita artesanal del norte de Jalisco",
+    subtitle: "Sangrita, cítricos y tequila",
     liquidColor: 0x8a181b,
     frostColor: 0xb52c1b,
     frostType: "sal_chile",
-    description: "Sangrita casera especiada, cítricos, tequila blanco y sal de mar. Intenso y botanero.",
+    description: "Sangrita, cítricos, tequila blanco y sal. La receta se confirma por evento.",
     photoUrl: "/tequilitros/vampiro.jpg",
   },
   {
@@ -53,17 +53,17 @@ export const DRINK_FLAVORS: DrinkFlavor[] = [
     liquidColor: 0xe6a817,
     frostColor: 0x9b2418,
     frostType: "chamoy_tajin",
-    description: "Pulpa de mango natural, licor artesanal de mango, tequila y escarchado con chamoy y miguelito.",
+    description: "Mango, licor de mango, tequila y escarchado. La receta se confirma por evento.",
     photoUrl: "/tequilitros/tequimango.jpg",
   },
   {
     id: "tequimora",
     name: "Tequimora",
-    subtitle: "Zarzamora silvestre y notas gourmet",
+    subtitle: "Zarzamora, cítricos y tequila",
     liquidColor: 0x5a1838,
     frostColor: 0xe0d4cb,
     frostType: "sal_fina",
-    description: "Zarzamora silvestre macerada con tequila blanco. Dulzor equilibrado y perfil aromático elegante.",
+    description: "Zarzamora macerada con tequila blanco y cítricos. La receta se confirma por evento.",
     photoUrl: "/tequilitros/zarzamora.jpg",
   },
   {
@@ -73,7 +73,7 @@ export const DRINK_FLAVORS: DrinkFlavor[] = [
     liquidColor: 0x542b14,
     frostColor: 0xb8381d,
     frostType: "sal_chile",
-    description: "Receta secreta de salsas sazonadoras, limón fresco y escarchado especial para amantes del picante y la sal.",
+    description: "Salsas sazonadoras, limón y escarchado. La receta se confirma por evento.",
     photoUrl: "/tequilitros/tequimiche.jpg",
   },
 ];
@@ -141,7 +141,7 @@ function createLabelTexture(): THREE.CanvasTexture {
     ctx.fillStyle = "#F5F2EB";
     ctx.font = "bold 24px monospace";
     ctx.letterSpacing = "2px";
-    ctx.fillText("VASO 1 LITRO · REYMA 32 EU", 512, 395);
+    ctx.fillText("VASO 946 ML · REYMA 32 EU", 512, 395);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -157,19 +157,12 @@ export default function TequilitrosCup3D({
   onSelectDrink?: (id: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [activeDrink, setActiveDrink] = useState<DrinkFlavor>(
-    DRINK_FLAVORS.find((d) => d.id === selectedDrinkId) ?? DRINK_FLAVORS[0]
-  );
+  const [internalDrinkId, setInternalDrinkId] = useState(DRINK_FLAVORS[0].id);
+  const activeDrink =
+    DRINK_FLAVORS.find((drink) => drink.id === selectedDrinkId) ??
+    DRINK_FLAVORS.find((drink) => drink.id === internalDrinkId) ??
+    DRINK_FLAVORS[0];
   const [webglSupported, setWebglSupported] = useState(true);
-  const [isRotating, setIsRotating] = useState(true);
-
-  // Sincronizar selección externa si cambia
-  useEffect(() => {
-    if (selectedDrinkId) {
-      const found = DRINK_FLAVORS.find((d) => d.id === selectedDrinkId);
-      if (found) setActiveDrink(found);
-    }
-  }, [selectedDrinkId]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -180,11 +173,11 @@ export default function TequilitrosCup3D({
       const testCanvas = document.createElement("canvas");
       const gl = testCanvas.getContext("webgl") || testCanvas.getContext("experimental-webgl");
       if (!gl) {
-        setWebglSupported(false);
+        startTransition(() => setWebglSupported(false));
         return;
       }
     } catch {
-      setWebglSupported(false);
+      startTransition(() => setWebglSupported(false));
       return;
     }
 
@@ -271,7 +264,7 @@ export default function TequilitrosCup3D({
     // 2. Líquido dinámico interior
     const liquidGeometry = new THREE.CylinderGeometry(0.495, 0.295, 1.55, 40);
     const liquidMaterial = new THREE.MeshPhysicalMaterial({
-      color: activeDrink.liquidColor,
+      color: DRINK_FLAVORS[0].liquidColor,
       transmission: 0.72,
       opacity: 0.96,
       transparent: true,
@@ -312,7 +305,7 @@ export default function TequilitrosCup3D({
     // 4. Escarchado (Rim Frosting de sal de grano y chile)
     const frostGeometry = new THREE.TorusGeometry(0.536, 0.024, 12, 52);
     const frostMaterial = new THREE.MeshStandardMaterial({
-      color: activeDrink.frostColor,
+      color: DRINK_FLAVORS[0].frostColor,
       roughness: 0.92,
       metalness: 0.05,
     });
@@ -461,7 +454,7 @@ export default function TequilitrosCup3D({
   }, [activeDrink]);
 
   const selectDrink = (drink: DrinkFlavor) => {
-    setActiveDrink(drink);
+    setInternalDrinkId(drink.id);
     onSelectDrink?.(drink.id);
   };
 
@@ -472,7 +465,7 @@ export default function TequilitrosCup3D({
         <div>
           <div className="flex items-center gap-2">
             <span className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-[#E28735]">
-              Especificación Técnica 3D · 1 Litro
+              Especificación Técnica 3D · 946 ml
             </span>
             <span className="inline-flex h-2 w-2 rounded-full bg-[#30D158] animate-pulse" />
           </div>
@@ -480,7 +473,7 @@ export default function TequilitrosCup3D({
             Vaso Reyma 32 EU
           </h3>
           <p className="mt-1 text-xs text-[#9AA5AC] sm:text-sm">
-            Capacidad nominal de 946 ml. El formato insignia con el que servimos en cada evento.
+            Capacidad nominal de 946 ml. La presentación se confirma para cada evento.
           </p>
         </div>
 

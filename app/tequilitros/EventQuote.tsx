@@ -45,9 +45,9 @@ export default function EventQuote() {
     <section className={styles.section} id="cotizar" aria-labelledby="quote-title">
       <div className={styles.heading}>
         <p className={styles.eyebrow}>TU EVENTO EMPIEZA AQUÍ · 08</p>
-        <h2 id="quote-title">Hagamos algo <em>inolvidable.</em></h2>
+        <h2 id="quote-title">Hablemos de <em>tu evento.</em></h2>
         <p>Cuéntanos cómo será tu celebración. Preparamos tu solicitud y la enviamos directamente por WhatsApp, con todos los datos que necesitamos para darte una propuesta.</p>
-        <div className={styles.trust}><span>01 · Sin compromiso</span><span>02 · Atención personalizada</span><span>03 · Viáticos claros</span></div>
+        <div className={styles.trust}><span>01 · Datos del evento</span><span>02 · Carta por confirmar</span><span>03 · Traslado detallado</span></div>
       </div>
       <form className={styles.form} onSubmit={event => {event.preventDefault(); if (valid) window.open("https://wa.me/525662989202?text=" + encodeURIComponent(message), "_blank", "noopener,noreferrer");}}>
         <div className={styles.formHeader}><span>DATOS DE TU EVENTO</span><span>Los campos * son obligatorios</span></div>

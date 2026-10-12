@@ -19,10 +19,10 @@ const COCKTAILS: CocktailItem[] = [
     id: "cantarito",
     name: "Cantarito Tequilitros",
     category: "citrico",
-    tag: "El Más Solicitado · Insignia",
-    description: "Cítricos naturales recién exprimidos, tequila blanco de la casa y refresco de toronja. Servido bien frío con escarchado de sal de grano y chile.",
-    ingredients: "Tequila blanco Destiladora del Norte, toronja, naranja, limón, sal de mar y chile en polvo.",
-    glass: "Vaso Reyma 32 EU (1 Litro) o Cantarito de Barro",
+    tag: "Cítrico",
+    description: "Preparación con cítricos, tequila blanco, refresco de toronja y escarchado. La receta y disponibilidad se confirman por evento.",
+    ingredients: "Toronja, naranja, limón, tequila blanco y escarchado, sujetos a confirmación.",
+    glass: "Vaso Reyma 32 EU o presentación por confirmar",
     image: "/tequilitros/cantarito.jpg",
   },
   {
@@ -30,19 +30,19 @@ const COCKTAILS: CocktailItem[] = [
     name: "Paloma Tradicional",
     category: "citrico",
     tag: "Clásico Mexicano",
-    description: "Toronja pura, limón fresco, tequila reposado madurado en roble y escarchado de sal fina. Refrescante, balanceado y elegante para toda ocasión.",
-    ingredients: "Tequila reposado de la casa, jugo de toronja natural, limón criollo y sal de mesa.",
-    glass: "Vaso Reyma 32 EU / Copa para evento",
+    description: "Preparación con toronja, limón, tequila reposado y escarchado. La receta y presentación se confirman por evento.",
+    ingredients: "Toronja, limón, tequila reposado y escarchado, sujetos a confirmación.",
+    glass: "Vaso Reyma 32 EU o copa, por confirmar",
     image: "/tequilitros/paloma.jpg",
   },
   {
     id: "vampiro",
     name: "Vampiro del Norte",
     category: "especial",
-    tag: "Receta Regional de la Casa",
-    description: "Elaborado con nuestra sangrita artesanal casera, cítricos, tequila blanco y sal. Carácter firme, color vibrante y sabor inconfundible.",
-    ingredients: "Sangrita artesanal, tequila blanco, limón fresco, sal de grano y refresco de toronja.",
-    glass: "Vaso Reyma 32 EU (1 Litro)",
+    tag: "Especialidad",
+    description: "Preparación con sangrita, cítricos, tequila blanco y sal. La receta y disponibilidad se confirman por evento.",
+    ingredients: "Sangrita, tequila blanco, limón, sal y refresco de toronja, sujetos a confirmación.",
+    glass: "Vaso Reyma 32 EU o presentación por confirmar",
     image: "/tequilitros/vampiro.jpg",
   },
   {
@@ -50,19 +50,19 @@ const COCKTAILS: CocktailItem[] = [
     name: "Tequimango Tropical",
     category: "frutal",
     tag: "Fruta Natural",
-    description: "La propuesta frutal más refrescante: pulpa de mango natural, licor artesanal de mango, tequila y escarchado agridulce con chamoy y tajín.",
-    ingredients: "Pulpa de mango maduro, tequila blanco, licor de mango, limón y escarchado chamoy.",
-    glass: "Vaso Reyma 32 EU (1 Litro)",
+    description: "Preparación con mango, licor de mango, tequila y escarchado agridulce. La receta y disponibilidad se confirman por evento.",
+    ingredients: "Mango, tequila blanco, licor de mango, limón y escarchado, sujetos a confirmación.",
+    glass: "Vaso Reyma 32 EU o presentación por confirmar",
     image: "/tequilitros/tequimango.jpg",
   },
   {
     id: "tequimora",
-    name: "Tequimora Gourmet",
+    name: "Tequimora",
     category: "frutal",
-    tag: "Edición Especial",
-    description: "Zarzamora silvestre macerada, notas dulces y ácidas con tequila blanco. Un perfil aromático refinado para eventos que buscan distinción.",
-    ingredients: "Zarzamora natural macerada, tequila blanco, cítricos y jarabe artesanal.",
-    glass: "Vaso Reyma 32 EU / Vaso corto",
+    tag: "Frutal",
+    description: "Preparación con zarzamora, tequila blanco, cítricos y jarabe. La receta y disponibilidad se confirman por evento.",
+    ingredients: "Zarzamora, tequila blanco, cítricos y jarabe, sujetos a confirmación.",
+    glass: "Vaso Reyma 32 EU o vaso corto, por confirmar",
     image: "/tequilitros/zarzamora.jpg",
   },
   {
@@ -70,29 +70,29 @@ const COCKTAILS: CocktailItem[] = [
     name: "Tequimiche",
     category: "especial",
     tag: "Perfil Botanero y Salado",
-    description: "Receta secreta de salsas sazonadoras negras, limón y tequila. Creado especialmente para quienes disfrutan el perfil michelado con carácter destilado.",
-    ingredients: "Mezcla de salsas negras, limón, sal de apio, chile en polvo y tequila.",
-    glass: "Vaso Reyma 32 EU (1 Litro)",
+    description: "Preparación con salsas sazonadoras, limón y tequila. La receta y disponibilidad se confirman por evento.",
+    ingredients: "Salsas, limón, sal, chile y tequila, sujetos a confirmación.",
+    glass: "Vaso Reyma 32 EU o presentación por confirmar",
     image: "/tequilitros/tequimiche.jpg",
   },
   {
     id: "blanco",
     name: "Tequila Blanco Destiladora del Norte",
     category: "botella",
-    tag: "100% Agave · Grado Artesanal",
-    description: "Embotellado directo del alambique de cobre en Colotlán. Perfil limpio, notas herbales y frescura inigualable para centros de mesa.",
-    ingredients: "100% Agave Azul Tequilana Weber. Destilación tradicional.",
-    glass: "Botella 750 ml para mesa",
+    tag: "Botella",
+    description: "Tequila Blanco de Destiladora del Norte. La presentación, disponibilidad y uso para el evento se confirman por cotización.",
+    ingredients: "Información de elaboración y presentación por confirmar.",
+    glass: "Botella o presentación por confirmar",
     image: "/tequilitros/blanco.jpg",
   },
   {
     id: "reposado",
     name: "Tequila Reposado Destiladora del Norte",
     category: "botella",
-    tag: "Madurado en Roble",
-    description: "Reposo paciente en barrica de roble. Notas de madera suave, vainilla natural y caramelo sutil. La joya de la destilería para brindar con calma.",
-    ingredients: "100% Agave madurado en barrica de roble.",
-    glass: "Botella 750 ml para mesa",
+    tag: "Botella",
+    description: "Tequila Reposado de Destiladora del Norte. La presentación, disponibilidad y uso para el evento se confirman por cotización.",
+    ingredients: "Información de elaboración y presentación por confirmar.",
+    glass: "Botella o presentación por confirmar",
     image: "/tequilitros/reposado.jpg",
   },
 ];
@@ -119,12 +119,27 @@ export default function CocktailCatalog({
 
   return (
     <div className="w-full">
+      <div className="mb-8 flex flex-col items-start justify-between gap-4 rounded-2xl border border-[#242E37] bg-[#0E1318]/70 p-5 sm:flex-row sm:items-center">
+        <p className="max-w-2xl text-xs leading-relaxed text-[#9AA5AC]">
+          Consulta el menú vigente con sus preparaciones y precios publicados. La disponibilidad,
+          presentación y condiciones para tu evento se confirman por WhatsApp.
+        </p>
+        <a
+          href="/tequilitros/menu-oficial.pdf"
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 rounded-lg border border-[#E28735]/50 bg-[#E28735]/10 px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-[#E28735] transition hover:border-[#E28735] hover:bg-[#E28735]/20"
+        >
+          Abrir menú actual ↗
+        </a>
+      </div>
+
       {/* Filtros de Categoría */}
       <div className="mb-10 flex flex-wrap items-center justify-center gap-2 sm:gap-3">
         {[
           { id: "all", label: "Toda la Carta (8)" },
           { id: "citrico", label: "Cítricos & Tradicionales" },
-          { id: "frutal", label: "Frutales de Autor" },
+          { id: "frutal", label: "Frutales" },
           { id: "especial", label: "Especialidades Saladas" },
           { id: "botella", label: "Botellas Destiladora del Norte" },
         ].map((filter) => (
