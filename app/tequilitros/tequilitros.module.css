@@ -85,3 +85,24 @@
 }
 @media(max-width:430px){.headerButton{display:inline-flex;font-size:9px;padding:10px 12px;gap:8px}.logo{font-size:19px}.logo span{font-size:23px;margin-right:3px}}
 .site a:focus-visible,.site button:focus-visible{outline:3px solid #a76a4c;outline-offset:3px}
+
+
+/* Organic social proof gallery: local images, zero external widgets */
+.socialSection{padding:clamp(75px,9vw,125px) 7vw;background:#f6efe5;color:#261a15;scroll-margin-top:35px}
+.socialIntro{display:grid;grid-template-columns:1.2fr .65fr;gap:6vw;align-items:end;margin-bottom:37px}
+.socialIntro h2{font:400 clamp(49px,5.6vw,89px)/1.03 Georgia,"Times New Roman",serif;letter-spacing:-.065em;margin:0;max-width:800px}
+.socialIntro h2 em{color:#9b523c;font-weight:400}
+.socialIntro>p{max-width:390px;font-size:16px;line-height:1.7;color:#625247;margin:0 0 6px}
+.socialGallery{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:14px}
+.socialPhoto{position:relative;min-height:380px;overflow:hidden;background:#d3bca4}
+.socialPhoto:first-child{min-height:475px}
+.socialPhoto img{object-fit:cover;transition:transform .65s cubic-bezier(.2,.8,.2,1)}
+.socialPhoto:hover img{transform:scale(1.045)}
+.socialActions{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:15px}
+.socialActions a{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:22px 21px;border:1px solid #c9b9a6;transition:background .2s}
+.socialActions a:hover{background:#e8dacc}
+.socialActions a span{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.socialActions a strong{font:400 17px Georgia,serif}
+@media(max-width:800px){.socialSection{padding:75px 24px}.socialIntro{grid-template-columns:1fr;gap:21px}.socialPhoto,.socialPhoto:first-child{min-height:330px}}
+@media(max-width:550px){.socialGallery{grid-template-columns:1fr 1fr;gap:9px}.socialPhoto:first-child{grid-column:1/-1;min-height:380px}.socialPhoto{min-height:240px}.socialActions{grid-template-columns:1fr;gap:9px}.socialActions a{padding:18px 15px}.socialIntro h2{font-size:clamp(47px,11vw,64px)}}
+@media(prefers-reduced-motion:reduce){.socialPhoto img,.socialActions a{transition:none}}
