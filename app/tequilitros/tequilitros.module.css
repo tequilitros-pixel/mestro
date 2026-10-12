@@ -5,3 +5,59 @@
 @media(prefers-reduced-motion:reduce){.site *{scroll-behavior:auto!important;transition-duration:.01ms!important}}
 .videoSection{display:grid;grid-template-columns:.72fr 1.28fr;gap:9vw;align-items:center;padding:clamp(70px,8vw,112px) 7vw;background:#d9d2c5}.videoCopy h2{margin:0 0 22px;font-size:clamp(43px,4.6vw,70px);line-height:1.02;letter-spacing:-.06em}.videoCopy h2 em{font-family:Georgia,serif;font-weight:400;color:var(--red)}.videoCopy>p:last-child{max-width:400px;color:#4e5854;font-size:16px;line-height:1.65}.videoFrame{position:relative;overflow:hidden;aspect-ratio:16/9;background:#172127;box-shadow:16px 16px 0 rgba(170,66,52,.85)}.videoFrame video{width:100%;height:100%;display:block;object-fit:cover}
 @media(max-width:720px){.videoSection{display:block;padding:78px 24px}.videoCopy{margin-bottom:32px}.videoFrame{box-shadow:9px 9px 0 rgba(170,66,52,.85)}}
+
+
+/* 2026 Tequilitros editorial redesign — scoped to the public landing page */
+.site{--ink:#171310;--cream:#f6f0e6;--paper:#eae0d2;--lime:#e7bd88;--red:#913f31;--orange:#cfa078;--line:rgba(23,19,16,.18);font-family:Arial,Helvetica,sans-serif}
+.site:focus-within{scroll-behavior:smooth}
+.topbar{background:#261a15;color:#f1e1cb;letter-spacing:.19em}
+.header{background:rgba(246,240,230,.97);backdrop-filter:blur(14px);border-color:rgba(23,19,16,.1)}
+.logo{font-family:Georgia,"Times New Roman",serif;letter-spacing:-.07em;font-weight:700}
+.logo span{color:#a9573b}
+.nav a{transition:opacity .2s}
+.headerButton{border-color:rgba(23,19,16,.45);transition:background .2s,color .2s}
+.hero{position:relative;display:flex;min-height:min(860px,calc(100svh - 110px));align-items:center;isolation:isolate;overflow:hidden;background:#120f0e;color:#faf4e9}
+.heroImage{position:absolute;inset:0;min-height:0;z-index:-2}
+.heroImage img{object-fit:cover;object-position:76% 53%;transform:scale(1.015);animation:tequilitrosReveal 1.5s ease-out both}
+.heroImage:after{background:linear-gradient(90deg,rgba(13,10,9,.97) 0%,rgba(13,10,9,.87) 35%,rgba(13,10,9,.32) 72%,rgba(13,10,9,.12) 100%),linear-gradient(0deg,rgba(13,10,9,.45),transparent 24%);z-index:1}
+.heroCopy{position:relative;z-index:2;width:min(760px,70%);padding:clamp(96px,10vw,154px) 0 clamp(92px,8vw,110px) 7vw}
+.hero h1{font-family:Georgia,"Times New Roman",serif;font-weight:400;font-size:clamp(66px,7.3vw,118px);letter-spacing:-.07em;line-height:.96;text-wrap:balance;text-shadow:0 2px 30px rgba(0,0,0,.14)}
+.hero h1 em{color:#e9bd91;font-weight:400}
+.kicker{color:#ebc49d;letter-spacing:.2em}
+.lead{color:#f2e4d4;max-width:450px;font-size:clamp(16px,1.35vw,19px)}
+.button{background:#e2ad7b;color:#211711;padding:18px 25px;transition:transform .25s,background .25s}
+.button:hover{background:#f0c9a2;transform:translateY(-2px)}
+.underLink{color:#f8eadb;border-color:#ad9d8b}
+.heroFoot{padding-top:72px;color:#d0bca4}
+.heroImageLabel{position:absolute;z-index:2;right:4vw;bottom:35px;display:flex;gap:20px;align-items:center;color:#fff1df;font-size:10px;font-weight:700;letter-spacing:.17em}
+.heroImageLabel strong{font-weight:400;opacity:.8}
+.ribbon{background:#d8a87f;color:#221911}
+.sectionDark{background:#1b1512}
+.sectionDark .sectionNo,.process .sectionNo,.contact .sectionNo,.steps b,.cardMeta>span{color:#e8bd8f}
+.sectionDark h2 em,.process h2 em,.contact h2 em{color:#e4ad7b}
+.drinkCard .cardImage{border-radius:2px}
+.cardImage img{transition:transform .6s cubic-bezier(.2,.8,.2,1)}
+.drinkCard:hover .cardImage img{transform:scale(1.065)}
+.contact{background:#743a2e}
+.contact h2 em{color:#f6cfaa}
+.footer{background:#130f0d}
+.footer .logo span,.footerBottom a{color:#e4ad7b}
+@keyframes tequilitrosReveal{from{opacity:.6;transform:scale(1.075)}to{opacity:1;transform:scale(1.015)}}
+@media(max-width:720px){
+ .header{position:relative}
+ .hero{min-height:750px;align-items:flex-start}
+ .heroImage img{object-position:62% center}
+ .heroImage:after{background:linear-gradient(180deg,rgba(12,9,8,.88) 0%,rgba(12,9,8,.65) 43%,rgba(12,9,8,.08) 73%,rgba(12,9,8,.55) 100%)}
+ .heroCopy{width:100%;padding:76px 24px 100px}
+ .hero h1{font-size:clamp(56px,12vw,80px);max-width:590px}
+ .lead{max-width:430px;font-size:16px}
+ .heroFoot{padding-top:45px;max-width:280px;line-height:1.7}
+ .heroImageLabel{right:24px;bottom:22px;font-size:8px}
+}
+@media(max-width:430px){
+ .hero{min-height:720px}
+ .hero h1{font-size:clamp(52px,13vw,67px)}
+ .heroImage img{object-position:60% center}
+ .heroImageLabel span{display:none}
+}
+@media(prefers-reduced-motion:reduce){.heroImage img{animation:none;transform:none}.site:focus-within{scroll-behavior:auto}}
