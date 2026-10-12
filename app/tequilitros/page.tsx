@@ -15,14 +15,14 @@ const cocktailMenu = [
   { name: "Tequimango", description: "El lado frutal de Tequilitros.", image: "/tequilitros/tequimango.jpg" },
   { name: "Tequimiche", description: "Una opción preparada con notas saladas y especiadas.", image: "/tequilitros/tequimiche.jpg" },
   { name: "Tequimora", description: "Zarzamora y tequila en una combinación intensa.", image: "/tequilitros/zarzamora.jpg" },
-  { name: "Tequimojito", description: "Fresco, herbal y pensado para compartir.", image: "/tequilitros/tequimango.jpg" },
-  { name: "Coscorrón", description: "Un shot para la carta de momentos especiales.", image: "/tequilitros/vampiro.jpg" },
+  
+  
 ];
 
 const bottleMenu = [
   { name: "Tequila Blanco", image: "/tequilitros/blanco.jpg", text: "Perfil limpio y versátil para servir solo o preparar bebidas." },
   { name: "Tequila Reposado", image: "/tequilitros/reposado.jpg", text: "Una expresión con más tiempo y carácter para la mesa." },
-  { name: "Tequila Añejo", image: "/tequilitros/reposado.jpg", text: "Consulta disponibilidad y presentación para tu evento." },
+
 ];
 
 const serviceAreas = [
@@ -120,6 +120,15 @@ export default function TequilitrosPage() {
 
         <section className={styles.coverage} id="cobertura"><div><p className={styles.sectionNo}>05 / DÓNDE ATENDEMOS</p><h2>De Colotlán<br />para <em>tu celebración.</em></h2></div><div><p className={styles.coverageLead}>Atendemos eventos en nuestra región y revisamos solicitudes de Jalisco, Zacatecas y localidades cercanas.</p><ul>{serviceAreas.map((area) => <li key={area}><span>✳</span>{area}</li>)}</ul><p className={styles.coverageNote}>La cobertura depende de la fecha, el lugar y el alcance del servicio. Escríbenos para confirmar antes de anunciar tu evento.</p></div></section>
 
+        <section className={styles.travelSection} id="viaticos">
+          <div><p className={styles.sectionNo}>06 / COBERTURA Y TRASLADOS</p><h2>Vamos hasta donde <em>esté la fiesta.</em></h2><p>Partimos de Colotlán, Jalisco. Para eventos fuera de nuestra zona base, revisamos la ruta, la duración del servicio y las necesidades de personal antes de confirmar el presupuesto.</p></div>
+          <div className={styles.travelCards}>
+            <article><span>01</span><h3>Distancia y traslado</h3><p>Consideramos destino, recorrido y transporte necesario. El costo se especifica en la propuesta, cuando aplique.</p></article>
+            <article><span>02</span><h3>Duración y personal</h3><p>El horario del evento y la modalidad solicitada determinan el equipo humano y la logística.</p></article>
+            <article><span>03</span><h3>Viáticos transparentes</h3><p>Casetas, alimentación u hospedaje se consideran únicamente si son necesarios y se informan antes de contratar.</p></article>
+          </div>
+          <p className={styles.travelNote}>No existe una tarifa universal publicada por kilómetro. Para conocer un importe exacto, envíanos los datos en el cotizador.</p>
+        </section>
         <section className={styles.faq} id="preguntas"><div className={styles.sectionHeader}><div><p className={styles.sectionNo}>06 / PREGUNTAS FRECUENTES</p><h2>Lo que conviene <em>saber.</em></h2></div><p>Información clara para empezar a planear.</p></div><div className={styles.faqGrid}>{faq.map(([question, answer]) => <details key={question}><summary>{question}<span>+</span></summary><p>{answer}</p></details>)}</div></section>
 
         <EventQuote />
