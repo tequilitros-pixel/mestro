@@ -74,3 +74,14 @@
 .travelCards p{color:#5e4d40;font-size:14px;line-height:1.6;margin:7px 0 0}
 .travelNote{grid-column:2;max-width:610px;margin:0;font-size:12px;color:#5e4d40;line-height:1.6}
 @media(max-width:800px){.travelSection{grid-template-columns:1fr;padding:75px 24px}.travelNote{grid-column:1}}
+
+
+/* Keep core navigation accessible on phones rather than hiding it entirely. */
+@media(max-width:720px){
+ .header{height:auto;min-height:70px;flex-wrap:wrap;gap:4px 12px;padding:12px 20px}
+ .header .nav{display:flex;order:3;flex:0 0 100%;gap:18px;overflow-x:auto;padding:12px 0 6px;scrollbar-width:thin;white-space:nowrap}
+ .nav a{font-size:10px;flex-shrink:0}
+ .headerButton{margin-left:auto}
+}
+@media(max-width:430px){.headerButton{display:inline-flex;font-size:9px;padding:10px 12px;gap:8px}.logo{font-size:19px}.logo span{font-size:23px;margin-right:3px}}
+.site a:focus-visible,.site button:focus-visible{outline:3px solid #a76a4c;outline-offset:3px}
