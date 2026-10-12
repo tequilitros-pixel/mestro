@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { updateCountItemQuantityAction } from "../actions";
 import { CheckIcon } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/Toast";
@@ -48,7 +47,6 @@ export default function CountItemRow({
   countId: string;
   editable: boolean;
 }) {
-  const router = useRouter();
   const { showToast } = useToast();
   const capture = getInventoryCaptureDescriptor(item.quantityCounted, item);
   const packageSize = getPiecePresentationSize(item);
@@ -61,28 +59,43 @@ export default function CountItemRow({
   );
   const [packages, setPackages] = useState(() => packageInputs?.packages ?? "");
   const [loosePieces, setLoosePieces] = useState(() => packageInputs?.loosePieces ?? "");
+  const [savedInputs, setSavedInputs] = useState(() => ({
+    quantity: getInventoryCountInputValue(item),
+    packages: packageInputs?.packages ?? "",
+    loosePieces: packageInputs?.loosePieces ?? "",
+  }));
   const [saving, setSaving] = useState(false);
+  const dirty = isPiecePackage
+    ? packages !== savedInputs.packages || loosePieces !== savedInputs.loosePieces
+    : quantity !== savedInputs.quantity;
 
   async function handleSave() {
+    if (saving) return;
+    const submitted = { quantity, packages, loosePieces };
     setSaving(true);
-    const result = await updateCountItemQuantityAction({
-      itemId: item.id,
-      countId,
-      quantity: isPiecePackage ? packages.trim() : quantity.trim(),
-      loosePieces: isPiecePackage ? loosePieces.trim() : undefined,
-      captureUnit: capture.captureUnit,
-    });
-    setSaving(false);
+    try {
+      const result = await updateCountItemQuantityAction({
+        itemId: item.id,
+        countId,
+        quantity: isPiecePackage ? submitted.packages.trim() : submitted.quantity.trim(),
+        loosePieces: isPiecePackage ? submitted.loosePieces.trim() : undefined,
+        captureUnit: capture.captureUnit,
+      });
 
-    if (result.success) {
-      router.refresh();
-      showToast(
-        isPiecePackage
-          ? "Cantidad guardada: paquetes y piezas sueltas."
-          : `Cantidad guardada: ${quantity.trim()} ${capture.unitLabel}.`,
-      );
-    } else {
-      showToast(result.error);
+      if (result.success) {
+        setSavedInputs(submitted);
+        showToast(
+          isPiecePackage
+            ? "Cantidad guardada: paquetes y piezas sueltas."
+            : `Cantidad guardada: ${submitted.quantity.trim()} ${capture.unitLabel}.`,
+        );
+      } else {
+        showToast(result.error);
+      }
+    } catch {
+      showToast("No fue posible guardar la cantidad. Intenta de nuevo.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -103,7 +116,7 @@ export default function CountItemRow({
   const pieceUnitLabel = loosePiecesLabel.startsWith("Vasos") ? "vasos" : "piezas";
 
   return (
-    <div className={`grid gap-3 border-b border-outline-variant p-4 md:grid-cols-[1.5fr_repeat(4,minmax(0,1fr))] md:items-center ${editable && !item.isCaptured ? "bg-secondary/5" : ""}`}>
+    <div data-count-dirty={editable && dirty ? "true" : undefined} className={`grid gap-3 border-b border-outline-variant p-4 md:grid-cols-[1.5fr_repeat(4,minmax(0,1fr))] md:items-center ${editable && !item.isCaptured ? "bg-secondary/5" : ""}`}>
       <div>
         <div className="flex items-center gap-2">
           <p className="font-medium text-on-surface">{item.productName}</p>
@@ -115,11 +128,16 @@ export default function CountItemRow({
         </div>
         <p className="mt-1 text-xs text-on-surface-variant">{presentation}</p>
         {captureHint && <p className="mt-1 text-xs text-on-surface-variant">{captureHint}</p>}
+        {editable && (
+          <p className={`mt-1 text-xs font-semibold ${dirty ? "text-error" : "text-on-surface-variant"}`}>
+            {saving ? "Guardando…" : dirty ? "Cambio sin guardar" : item.isCaptured ? "Guardado" : "Pendiente de captura"}
+          </p>
+        )}
       </div>
 
       {editable ? (
         isPiecePackage ? (
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
+          <form onSubmit={(event) => { event.preventDefault(); void handleSave(); }} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
             <label className="space-y-1" htmlFor={`count-packages-${item.id}`}>
               <span className="block text-xs font-semibold text-on-surface">Paquetes completos</span>
               <span className="block text-[11px] text-on-surface-variant">Solo paquetes cerrados</span>
@@ -130,6 +148,7 @@ export default function CountItemRow({
                 min="0"
                 step="1"
                 value={packages}
+                disabled={saving}
                 onChange={(event) => setPackages(event.target.value)}
                 className="w-full rounded-xl border border-outline-variant bg-background px-3 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
                 style={countNumberInputStyle}
@@ -146,14 +165,14 @@ export default function CountItemRow({
                 max={packageSize - 1}
                 step="1"
                 value={loosePieces}
+                disabled={saving}
                 onChange={(event) => setLoosePieces(event.target.value)}
                 className="w-full rounded-xl border border-outline-variant bg-background px-3 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
                 style={countNumberInputStyle}
               />
             </label>
             <button
-              type="button"
-              onClick={handleSave}
+              type="submit"
               disabled={saving}
               className="mt-6 flex items-center justify-center rounded-lg bg-surface-container-high px-2 text-on-surface-variant hover:bg-surface-container-highest disabled:opacity-60"
             >
@@ -163,9 +182,9 @@ export default function CountItemRow({
             <p className="col-span-3 text-[11px] text-on-surface-variant">
               Ejemplo: 17 paquetes completos + 5 {loosePiecesLabel.toLocaleLowerCase("es-MX")} = {17 * packageSize + 5} {pieceUnitLabel}.
             </p>
-          </div>
+          </form>
         ) : (
-          <div className="flex gap-1">
+          <form onSubmit={(event) => { event.preventDefault(); void handleSave(); }} className="flex gap-1">
             <label className="sr-only" htmlFor={`count-${item.id}`}>
               Cantidad contada de {item.productName} en {capture.unitLabel}
             </label>
@@ -176,6 +195,7 @@ export default function CountItemRow({
               min="0"
               step="0.001"
               value={quantity}
+              disabled={saving}
               onChange={(event) => setQuantity(event.target.value)}
               className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
               style={countNumberInputStyle}
@@ -184,15 +204,14 @@ export default function CountItemRow({
               {capture.unitLabel}
             </span>
             <button
-              type="button"
-              onClick={handleSave}
+              type="submit"
               disabled={saving}
               className="flex items-center justify-center rounded-lg bg-surface-container-high px-2 text-on-surface-variant hover:bg-surface-container-highest disabled:opacity-60"
             >
               <CheckIcon className="h-3.5 w-3.5" />
               <span className="sr-only">Guardar cantidad</span>
             </button>
-          </div>
+          </form>
         )
       ) : (
         <div>

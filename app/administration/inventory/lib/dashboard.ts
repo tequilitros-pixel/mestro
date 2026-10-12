@@ -225,8 +225,9 @@ export async function getInventoryDashboardData(
       difference: formatCommercialQuantity(declared - expected, product),
       unit: declaration.unit,
       createdAt: declaration.createdAt.toISOString(),
+      differenceValue: declared - expected,
     };
-  });
+  }).filter((difference) => difference.differenceValue !== 0);
 
   return {
     analytics,

@@ -13,7 +13,19 @@ export default function CloseCountButton({ countId, operationId }: { countId: st
   const [confirming, setConfirming] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  function hasUnsavedChanges() {
+    const dirtyRow = document.querySelector<HTMLElement>('[data-count-dirty="true"]');
+    if (!dirtyRow) return false;
+    setResult({
+      success: false,
+      error: "Guarda las cantidades modificadas antes de cerrar el conteo.",
+    });
+    dirtyRow.querySelector<HTMLInputElement>("input")?.focus();
+    return true;
+  }
+
   async function handleClose() {
+    if (hasUnsavedChanges()) return;
     setSaving(true);
     const response = await closeInventoryCountAction(countId, operationId);
     setResult(response);
@@ -60,7 +72,11 @@ export default function CloseCountButton({ countId, operationId }: { countId: st
 
       {!confirming ? (
         <button
-          onClick={() => setConfirming(true)}
+          onClick={() => {
+            if (hasUnsavedChanges()) return;
+            setResult(null);
+            setConfirming(true);
+          }}
           className="rounded-xl bg-tertiary-fixed-dim px-5 py-3 font-semibold text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
         >
           Cerrar conteo y calcular consumo
