@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { applyEventInventoryMovement } from "@/lib/inventory/eventMovements";
+import { recordEventAdditionalMovement } from "@/lib/inventory/eventAdditionalMovements";
 import { generateOperationId } from "@/lib/pos2/operationId";
 import { prisma } from "@/lib/prisma";
 import { type Prisma, ServiceEventStatus } from "@prisma/client";
@@ -286,15 +287,57 @@ export async function confirmEventCheckoutAction(eventId: string): Promise<Actio
 }
 
 export async function confirmEventReturnAction(eventId: string): Promise<ActionResult> {
-  const user = await getEventActor(); if (!user) return { success: false, error: "No tienes permiso para administrar eventos." };
-  try { await prisma.$transaction(async (tx) => { await lockEvent(tx, eventId); const event = await tx.serviceEvent.findUniqueOrThrow({ where: { id: eventId }, include: { items: true } }); if (event.returnConfirmedAt) return; if (!event.checkoutConfirmedAt || !event.items.length || event.items.some((item) => !item.checkedIn)) throw new Error("Registra y revisa todos los productos antes de confirmar."); if (event.stockDeductedAt) {
-      const cut = await tx.cashCut.findFirst({ where: { eventId }, orderBy: { createdAt: "asc" } });
-      if (!cut) throw new Error("No se encontró la sucursal de salida del evento.");
-      if (user.role !== "ADMIN" && !await tx.userBranch.findFirst({ where: { userId: user.id, branchId: cut.branchId } })) throw new Error("No tienes acceso a la sucursal de regreso.");
+  const user = await getEventActor();
+  if (!user) return { success: false, error: "No tienes permiso para administrar eventos." };
+  try {
+    await prisma.$transaction(async (tx) => {
+      await lockEvent(tx, eventId);
+      const event = await tx.serviceEvent.findUniqueOrThrow({
+        where: { id: eventId },
+        include: {
+          items: true,
+          addedProducts: { where: { status: "ACTIVO", sourceType: "ENVIO_SUCURSAL" }, include: { product: true } },
+        },
+      });
+      if (event.returnConfirmedAt) return;
+      if (!event.checkoutConfirmedAt || !event.items.length || event.items.some((item) => !item.checkedIn)) {
+        throw new Error("Registra y revisa todos los productos antes de confirmar.");
+      }
+      if (event.addedProducts.some((addition) => !addition.returnBranchId)) {
+        throw new Error("Captura el regreso de todas las cargas adicionales, incluso si regresaron 0.");
+      }
       const operationId = generateOperationId();
-      for (const item of [...event.items].sort((a, b) => a.productId.localeCompare(b.productId))) await applyEventInventoryMovement(tx, { item, branchId: cut.branchId, actorId: user.id, operationId, eventId, returning: true });
-    }
-    await tx.serviceEvent.update({ where: { id: eventId }, data: { returnConfirmedAt: new Date(), returnConfirmedById: user.id, status: "COMPLETED" } }); }); revalidatePath(`/administration/inventory/events/${eventId}`); return { success: true, message: "Regreso confirmado." }; } catch (error) { return { success: false, error: error instanceof Error ? error.message : "No fue posible confirmar el regreso." }; }
+      if (event.stockDeductedAt) {
+        const cut = await tx.cashCut.findFirst({ where: { eventId }, orderBy: { createdAt: "asc" } });
+        if (!cut) throw new Error("No se encontró la sucursal de salida del evento.");
+        if (user.role !== "ADMIN" && !await tx.userBranch.findFirst({ where: { userId: user.id, branchId: cut.branchId } })) {
+          throw new Error("No tienes acceso a la sucursal de regreso.");
+        }
+        for (const item of [...event.items].sort((a, b) => a.productId.localeCompare(b.productId))) {
+          await applyEventInventoryMovement(tx, { item, branchId: cut.branchId, actorId: user.id, operationId, eventId, returning: true });
+        }
+      }
+      for (const addition of [...event.addedProducts].sort((a, b) => (a.productId ?? "").localeCompare(b.productId ?? ""))) {
+        if (!addition.product || !addition.returnBranchId) throw new Error("Falta el producto o la sucursal de regreso de una carga adicional.");
+        if (user.role !== "ADMIN" && !await tx.userBranch.findFirst({ where: { userId: user.id, branchId: addition.returnBranchId } })) {
+          throw new Error("No tienes acceso a la sucursal de regreso de una carga adicional.");
+        }
+        const movementId = await recordEventAdditionalMovement(tx, {
+          addition, product: addition.product, branchId: addition.returnBranchId,
+          actorId: user.id, operationId, returning: true,
+        });
+        await tx.eventAddedProduct.update({ where: { id: addition.id }, data: { returnMovementId: movementId } });
+      }
+      await tx.serviceEvent.update({
+        where: { id: eventId },
+        data: { returnConfirmedAt: new Date(), returnConfirmedById: user.id, status: "COMPLETED" },
+      });
+    });
+    revalidatePath(`/administration/inventory/events/${eventId}`);
+    return { success: true, message: "Regreso confirmado." };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible confirmar el regreso." };
+  }
 }
 
 export async function addCustomEventItemAction(

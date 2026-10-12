@@ -15,12 +15,14 @@ export default function EventChecklistTable({
   items,
   confirmed,
   isAdmin,
+  additionalPendingReturns = 0,
 }: {
   eventId: string;
   phase: "salida" | "regreso";
   items: Item[];
   confirmed: boolean;
   isAdmin: boolean;
+  additionalPendingReturns?: number;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -218,7 +220,7 @@ export default function EventChecklistTable({
         </>
       )}
 
-      <EventPhaseConfirm eventId={eventId} phase={phase} disabled={reviewedCount !== items.length || confirmed} />
+      <EventPhaseConfirm eventId={eventId} phase={phase} disabled={reviewedCount !== items.length || additionalPendingReturns > 0 || confirmed} />
     </section>
   );
 }
