@@ -4,7 +4,7 @@ import styles from "./tequilitros.module.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://maestro-destiladora.space";
 const whatsappUrl =
-  "https://wa.me/523342072444?text=" +
+  "https://wa.me/525662989202?text=" +
   encodeURIComponent("Hola, quiero información de Tequilitros para mi evento.");
 
 const cocktailMenu = [
@@ -49,9 +49,9 @@ function jsonLd() {
         url: `${siteUrl}/tequilitros`,
         logo: `${siteUrl}/icon-192.png`,
         email: "tequilitros@gmail.com",
-        telephone: "+52 33 4207 2444",
+        telephone: "+52 56 6298 9202",
         areaServed: ["Jalisco", "Zacatecas", "Colotlán"],
-        sameAs: ["https://wa.me/523342072444"],
+        sameAs: ["https://wa.me/525662989202"],
       },
       {
         "@type": "LocalBusiness",
@@ -59,7 +59,7 @@ function jsonLd() {
         name: "Tequilitros",
         description: "Bebidas, licores y barra móvil para eventos.",
         url: `${siteUrl}/tequilitros`,
-        telephone: "+52 33 4207 2444",
+        telephone: "+52 56 6298 9202",
         email: "tequilitros@gmail.com",
         address: { "@type": "PostalAddress", addressLocality: "Colotlán", addressRegion: "Jalisco", addressCountry: "MX" },
         areaServed: ["Colotlán", "Norte de Jalisco", "Zacatecas"],
@@ -92,17 +92,17 @@ export default function TequilitrosPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd()).replace(/</g, "\\u003c") }} />
       <div className={styles.topbar}><span>COLOTLÁN · JALISCO</span><span>TEQUILITROS · DESTILADORA DEL NORTE · BARRA MÓVIL</span></div>
       <header className={styles.header}>
-        <Link href="#inicio" className={styles.logo} aria-label="Tequilitros, inicio"><span>✳</span> TEQUILITROS</Link>
+        <Link href="#inicio" className={styles.logo} aria-label="Tequilitros, inicio"><span aria-hidden="true">✳</span> TEQUILITROS</Link>
         <nav className={styles.nav} aria-label="Navegación pública de Tequilitros">
-          <Link href="#nosotros">Quiénes somos</Link><Link href="#bebidas">Bebidas</Link><Link href="#menu">Menú</Link><Link href="#cobertura">Cobertura</Link>
+          <Link href="#nosotros">La experiencia</Link><Link href="#bebidas">Bebidas</Link><Link href="#menu">Catálogo</Link><Link href="#cobertura">Cobertura</Link><Link href="#contacto">Contacto</Link>
         </nav>
-        <a className={styles.headerButton} href={whatsappUrl} target="_blank" rel="noopener noreferrer">Cotizar por WhatsApp <span>↗</span></a>
+        <a className={styles.headerButton} href={whatsappUrl} target="_blank" rel="noopener noreferrer">Cotiza tu evento <span>↗</span></a>
       </header>
 
       <main>
         <section className={styles.hero} id="inicio">
-          <div className={styles.heroCopy}><p className={styles.kicker}>BARRA MÓVIL · BEBIDAS · LICORES</p><h1>Tu celebración merece <em>otro sabor.</em></h1><p className={styles.lead}>Bebidas con identidad para eventos en Colotlán, Jalisco, Zacatecas y la región. Conoce nuestra carta y cuéntanos dónde será tu celebración.</p><div className={styles.heroActions}><a className={styles.button} href={whatsappUrl} target="_blank" rel="noopener noreferrer">Solicitar cotización <span>↗</span></a><Link className={styles.underLink} href="#bebidas">Explorar bebidas ↓</Link></div><p className={styles.heroFoot}>ATENCIÓN PARA EVENTOS · DISPONIBILIDAD POR FECHA Y LOCALIDAD</p></div>
-          <div className={styles.heroImage}><Image src="/tequilitros/cantarito.jpg" alt="Cantarito Tequilitros frente a una barrica" fill priority sizes="(max-width: 760px) 100vw, 46vw" /></div>
+          <div className={styles.heroCopy}><p className={styles.kicker}>TEQUILITROS PARA EVENTOS · COLOTLÁN, JALISCO</p><h1>La fiesta empieza con <em>un Tequilitro.</em></h1><p className={styles.lead}>Llevamos nuestros sabores, nuestra barra y una experiencia memorable a tu celebración. Descubre lo que podemos preparar para tu evento.</p><div className={styles.heroActions}><a className={styles.button} href={whatsappUrl} target="_blank" rel="noopener noreferrer">Cotiza tu evento <span>↗</span></a><Link className={styles.underLink} href="#bebidas">Descubre nuestras bebidas ↓</Link></div><p className={styles.heroFoot}>BARRA MÓVIL · BEBIDAS PREPARADAS · EVENTOS ESPECIALES</p></div>
+          <div className={styles.heroImage}><Image src="/tequilitros/cantarito.jpg" alt="Tequilitro original escarchado, presentado frente a una barrica" fill priority sizes="100vw" /><div className={styles.heroImageLabel}><span>EL SABOR DE NUESTRAS FIESTAS</span><strong>01 / TEQUILITROS</strong></div></div>
         </section>
 
         <div className={styles.ribbon}><span>HECHO PARA CELEBRAR</span><b>✳</b><span>HECHO PARA COMPARTIR</span><b>✳</b><span>HECHO EN EL NORTE</span></div>
@@ -121,7 +121,7 @@ export default function TequilitrosPage() {
 
         <section className={styles.faq} id="preguntas"><div className={styles.sectionHeader}><div><p className={styles.sectionNo}>06 / PREGUNTAS FRECUENTES</p><h2>Lo que conviene <em>saber.</em></h2></div><p>Información clara para empezar a planear.</p></div><div className={styles.faqGrid}>{faq.map(([question, answer]) => <details key={question}><summary>{question}<span>+</span></summary><p>{answer}</p></details>)}</div></section>
 
-        <section className={styles.contact} id="contacto"><div><p className={styles.sectionNo}>07 / HABLEMOS DE TU EVENTO</p><h2>¿Ya tienes <em>fecha?</em></h2><p>Escríbenos con fecha y lugar. Te confirmamos cobertura y opciones disponibles.</p></div><div className={styles.contactCard}><p>CONTACTO DIRECTO</p><a href={whatsappUrl} target="_blank" rel="noopener noreferrer">WhatsApp <span>↗</span></a><a href="tel:+523342072444">33 4207 2444</a><a href="mailto:tequilitros@gmail.com">tequilitros@gmail.com</a><small>Contenido dirigido a personas mayores de edad. Consume con moderación.</small></div></section>
+        <section className={styles.contact} id="contacto"><div><p className={styles.sectionNo}>07 / HABLEMOS DE TU EVENTO</p><h2>¿Ya tienes <em>fecha?</em></h2><p>Escríbenos con fecha y lugar. Te confirmamos cobertura y opciones disponibles.</p></div><div className={styles.contactCard}><p>CONTACTO DIRECTO</p><a href={whatsappUrl} target="_blank" rel="noopener noreferrer">WhatsApp <span>↗</span></a><a href="tel:+525662989202">56 6298 9202</a><a href="mailto:tequilitros@gmail.com">tequilitros@gmail.com</a><small>Contenido dirigido a personas mayores de edad. Consume con moderación.</small></div></section>
       </main>
 
       <footer className={styles.footer}><div className={styles.footerTop}><Link href="#inicio" className={styles.logo}><span>✳</span> TEQUILITROS</Link><div><a href="https://www.instagram.com/tequilitros/" target="_blank" rel="noopener noreferrer">Instagram ↗</a><a href={whatsappUrl} target="_blank" rel="noopener noreferrer">WhatsApp ↗</a></div></div><div className={styles.footerBottom}><span>COLOTLÁN · JALISCO · MÉXICO</span><span>© {new Date().getFullYear()} TEQUILITROS · DESTILADORA DEL NORTE</span><Link href="/privacy-policy">Privacidad</Link></div></footer>
