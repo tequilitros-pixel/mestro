@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { computeStockMatrix, totalStockByProduct } from "../lib/stock";
-import InventoryTrendChart from "../InventoryTrendChart";
 import {
   InventoryFlowChart,
+  InventoryBranchComparisonChart,
   InventoryRankingChart,
   InventoryShareChart,
 } from "../InventoryCharts";
@@ -20,11 +20,7 @@ import {
 import PageTabs from "@/components/ui/PageTabs";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import {
-  addBusinessDays,
-  businessDayStart,
   formatBusinessDate,
-  formatBusinessDateOnly,
-  formatCivilDate,
 } from "@/lib/dateTime";
 
 const formatDate = (value: Date) =>
@@ -66,11 +62,9 @@ export default async function SucursalesInventoryPage() {
   const visibleQuickActions = quickActions.filter(
     (action) => user?.role === "ADMIN" || permissionKeys.has(action.permissionKey),
   );
-  const today = formatBusinessDateOnly(new Date());
-  const fourteenDaysAgo = businessDayStart(addBusinessDays(today, -14));
   const branchFilter = allowedBranchIds === null ? {} : { branchId: { in: allowedBranchIds } };
 
-  const [products, recentEntries, entriesForTrend, dashboard] = await Promise.all([
+  const [products, recentEntries, dashboard] = await Promise.all([
     prisma.inventoryProduct.findMany({
       where: { isActive: true, archivedAt: null, trackStock: true },
       select: { id: true, name: true, unit: true, minimumStock: true },
@@ -80,10 +74,6 @@ export default async function SucursalesInventoryPage() {
       orderBy: { entryDate: "desc" },
       take: 12,
       include: { product: true, branch: true },
-    }),
-    prisma.inventoryEntry.findMany({
-      where: { entryDate: { gte: fourteenDaysAgo }, ...branchFilter },
-      select: { entryDate: true },
     }),
     getInventoryDashboardData(allowedBranchIds),
   ]);
@@ -102,22 +92,25 @@ export default async function SucursalesInventoryPage() {
     )
     .sort((a, b) => a.stock - b.stock);
 
-  const trendMap = new Map<string, number>();
-  for (let i = 13; i >= 0; i--) {
-    trendMap.set(addBusinessDays(today, -i), 0);
-  }
-  for (const entry of entriesForTrend) {
-    const key = formatBusinessDateOnly(entry.entryDate);
-    if (trendMap.has(key)) trendMap.set(key, (trendMap.get(key) ?? 0) + 1);
-  }
-  const trendData = Array.from(trendMap.entries()).map(([key, count]) => ({
-    date: formatCivilDate(`${key}T00:00:00.000Z`, { day: "2-digit", month: "short" }),
-    label: formatCivilDate(`${key}T00:00:00.000Z`, { day: "2-digit" }),
-    movimientos: count,
-  }));
   const control = dashboard.analytics;
   const mostConsumedProduct = control.topProducts[0] ?? null;
-  const mostActiveBranch = control.branches[0] ?? null;
+  const mostActiveBranch = [...control.branches].sort((a, b) => b.consumed - a.consumed)[0] ?? null;
+  const mostWastefulBranch = [...control.branches].sort((a, b) => b.waste - a.waste)[0] ?? null;
+  const mostMismatchedBranch = [...control.branches].sort((a, b) => b.mismatchUnits - a.mismatchUnits)[0] ?? null;
+  const mismatchProducts = [...control.topProducts]
+    .filter((product) => product.mismatches > 0)
+    .sort((a, b) => b.mismatchUnits - a.mismatchUnits)
+    .slice(0, 12);
+  const branchComparison = [...control.branches]
+    .filter((branch) => branch.consumed > 0 || branch.waste > 0 || branch.mismatchUnits > 0)
+    .sort((a, b) => Math.max(b.consumed, b.waste, b.mismatchUnits) - Math.max(a.consumed, a.waste, a.mismatchUnits))
+    .slice(0, 10)
+    .map((branch) => ({
+      name: branch.name,
+      consumed: Math.round(branch.consumed * 10) / 10,
+      waste: Math.round(branch.waste * 10) / 10,
+      mismatchUnits: Math.round(branch.mismatchUnits * 10) / 10,
+    }));
   const negativeRows = dashboard.negativeLegacy.slice(0, 20);
   const negativeByBranch = Array.from(
     dashboard.negativeLegacy.reduce((map, row) => {
@@ -178,19 +171,26 @@ export default async function SucursalesInventoryPage() {
                     </p>
                   </div>
 
-                  <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
                     <Card>
-                      <CardLabel>Salidas consumidas</CardLabel>
+                      <CardLabel>Consumo neto</CardLabel>
                       <CardValue>{control.totals.consumedUnits.toFixed(1)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        unidades · costo {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.consumedCost)}
+                        unidades · {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.consumedCost)}
                       </p>
                     </Card>
                     <Card>
-                      <CardLabel>Entradas recibidas</CardLabel>
-                      <CardValue>{control.totals.receivedUnits.toFixed(1)}</CardValue>
+                      <CardLabel>Mermas</CardLabel>
+                      <CardValue>{control.totals.wasteUnits.toFixed(1)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {control.totals.movements} movimientos registrados
+                        costo {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.wasteCost)}
+                      </p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Diferencias</CardLabel>
+                      <CardValue>{control.totals.mismatchCount}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">
+                        {control.totals.mismatchUnits.toFixed(1)} unidades · faltantes {control.totals.shortageUnits.toFixed(1)}
                       </p>
                     </Card>
                     <Card>
@@ -203,12 +203,19 @@ export default async function SucursalesInventoryPage() {
                       </p>
                     </Card>
                     <Card>
-                      <CardLabel>Sucursal con más consumo</CardLabel>
+                      <CardLabel>Más consumo</CardLabel>
                       <p className="mt-1 truncate text-lg font-bold text-on-surface">
                         {mostActiveBranch?.name ?? "Sin datos"}
                       </p>
                       <p className="mt-1 text-xs text-on-surface-variant">
                         {mostActiveBranch ? `${mostActiveBranch.consumed.toFixed(1)} unidades` : "Todavía no hay salidas"}
+                      </p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Entradas del periodo</CardLabel>
+                      <CardValue>{control.totals.receivedUnits.toFixed(1)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">
+                        {control.totals.movements} movimientos registrados
                       </p>
                     </Card>
                   </section>
@@ -232,7 +239,15 @@ export default async function SucursalesInventoryPage() {
 
                   <section className="grid gap-4 lg:grid-cols-2">
                     <Card>
-                      <CardLabel>Productos que más se mueven</CardLabel>
+                      <CardLabel>Consumo, merma y diferencias por sucursal</CardLabel>
+                      {branchComparison.length > 0 ? (
+                        <InventoryBranchComparisonChart data={branchComparison} />
+                      ) : (
+                        <p className="py-12 text-center text-sm text-on-surface-variant">Sin datos de sucursales en el periodo.</p>
+                      )}
+                    </Card>
+                    <Card>
+                      <CardLabel>Productos con más consumo</CardLabel>
                       {control.topProducts.length > 0 ? (
                         <InventoryRankingChart
                           data={control.topProducts.slice(0, 8).map((item) => ({ name: item.name, value: Math.round(item.consumed * 10) / 10 }))}
@@ -242,32 +257,54 @@ export default async function SucursalesInventoryPage() {
                         <p className="py-12 text-center text-sm text-on-surface-variant">Sin consumo registrado.</p>
                       )}
                     </Card>
+                  </section>
+
+                  <section className="grid gap-4 lg:grid-cols-3">
                     <Card>
-                      <CardLabel>Consumo por sucursal</CardLabel>
-                      {control.branches.length > 0 ? (
-                        <InventoryRankingChart
-                          data={control.branches.map((item) => ({ name: item.name, value: Math.round(item.consumed * 10) / 10 }))}
-                          valueLabel="Unidades consumidas"
-                        />
-                      ) : (
-                        <p className="py-12 text-center text-sm text-on-surface-variant">Sin consumo registrado.</p>
-                      )}
+                      <CardLabel>Sucursal con más merma</CardLabel>
+                      <p className="mt-3 text-lg font-bold text-on-surface">{mostWastefulBranch?.name ?? "Sin datos"}</p>
+                      <p className="mt-1 text-sm text-on-surface-variant">
+                        {mostWastefulBranch ? `${mostWastefulBranch.waste.toFixed(1)} unidades · ${new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(mostWastefulBranch.wasteCost)}` : "Sin mermas registradas"}
+                      </p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Sucursal con más diferencias</CardLabel>
+                      <p className="mt-3 text-lg font-bold text-on-surface">{mostMismatchedBranch?.name ?? "Sin datos"}</p>
+                      <p className="mt-1 text-sm text-on-surface-variant">
+                        {mostMismatchedBranch ? `${mostMismatchedBranch.mismatches} productos · ${mostMismatchedBranch.shortageUnits.toFixed(1)} unidades faltantes` : "Sin diferencias registradas"}
+                      </p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Inventario valorizado por sucursal</CardLabel>
+                      <div className="mt-3 space-y-2 text-sm">
+                        {control.branches.slice(0, 5).map((branch) => (
+                          <div key={branch.id} className="flex items-center justify-between gap-3">
+                            <span className="truncate text-on-surface">{branch.name}</span>
+                            <span className="shrink-0 font-semibold text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.currentStockValue)}</span>
+                          </div>
+                        ))}
+                      </div>
                     </Card>
                   </section>
 
                   <section className="grid gap-4 lg:grid-cols-2">
                     <Card>
-                      <CardLabel>Ranking de sucursales</CardLabel>
+                      <CardLabel>Detalle por sucursal · últimos {control.days} días</CardLabel>
                       {control.branches.length === 0 ? (
-                        <p className="mt-3 text-sm text-on-surface-variant">No hay movimientos en el periodo.</p>
+                        <p className="mt-3 text-sm text-on-surface-variant">No hay sucursales visibles.</p>
                       ) : (
                         <div className="mt-2 overflow-x-auto">
-                          <table className="w-full min-w-[520px] text-sm">
+                          <table className="w-full min-w-[860px] text-sm">
                             <thead>
                               <tr className="border-b border-outline-variant text-left text-xs text-outline">
                                 <th className="pb-2 font-medium">Sucursal</th>
-                                <th className="pb-2 text-right font-medium">Salidas</th>
+                                <th className="pb-2 text-right font-medium">Consumido</th>
                                 <th className="pb-2 text-right font-medium">Costo</th>
+                                <th className="pb-2 text-right font-medium">Merma</th>
+                                <th className="pb-2 text-right font-medium">Diferencias</th>
+                                <th className="pb-2 text-right font-medium">Bajo mínimo</th>
+                                <th className="pb-2 text-right font-medium">Negativos</th>
+                                <th className="pb-2 text-right font-medium">Stock $</th>
                                 <th className="pb-2 text-right font-medium">Movimientos</th>
                               </tr>
                             </thead>
@@ -278,7 +315,12 @@ export default async function SucursalesInventoryPage() {
                                     <span className="mr-2 text-xs text-outline">#{index + 1}</span>{branch.name}
                                   </td>
                                   <td className="py-3 text-right text-on-surface-variant">{branch.consumed.toFixed(1)}</td>
-                                  <td className="py-3 text-right text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.cost)}</td>
+                                  <td className="py-3 text-right text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.consumedCost)}</td>
+                                  <td className="py-3 text-right text-error">{branch.waste.toFixed(1)}</td>
+                                  <td className="py-3 text-right text-secondary">{branch.mismatches} · {branch.mismatchUnits.toFixed(1)}</td>
+                                  <td className="py-3 text-right text-on-surface-variant">{branch.lowStockCount}</td>
+                                  <td className="py-3 text-right text-error">{branch.negativeProductCount}</td>
+                                  <td className="py-3 text-right text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.currentStockValue)}</td>
                                   <td className="py-3 text-right text-on-surface-variant">{branch.movements}</td>
                                 </tr>
                               ))}
@@ -370,6 +412,34 @@ export default async function SucursalesInventoryPage() {
                     </Card>
                   )}
 
+                  {mismatchProducts.length > 0 && (
+                    <Card>
+                      <CardLabel>Productos que no coinciden en los conteos del periodo</CardLabel>
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="w-full min-w-[560px] text-sm">
+                          <thead>
+                            <tr className="border-b border-outline-variant text-left text-xs text-outline">
+                              <th className="pb-2 font-medium">Producto</th>
+                              <th className="pb-2 text-right font-medium">Conteos con diferencia</th>
+                              <th className="pb-2 text-right font-medium">Unidades</th>
+                              <th className="pb-2 text-right font-medium">Consumo del mes</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-outline-variant">
+                            {mismatchProducts.map((product) => (
+                              <tr key={product.id}>
+                                <td className="py-3 font-semibold text-on-surface">{product.name}</td>
+                                <td className="py-3 text-right text-secondary">{product.mismatches}</td>
+                                <td className="py-3 text-right text-secondary">{product.mismatchUnits.toFixed(1)} {product.unit}</td>
+                                <td className="py-3 text-right text-on-surface-variant">{product.consumed.toFixed(1)} {product.unit}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </Card>
+                  )}
+
                   <div className="flex flex-wrap gap-3">
                     <Link href="/administration/inventory/sucursales/stock" className="inline-flex items-center gap-2 rounded-xl border border-outline-variant bg-surface-container px-4 py-2.5 text-sm font-semibold text-on-surface transition hover:border-primary/40">
                       <StoreIcon className="h-4 w-4" /> Ver stock por sucursal
@@ -390,9 +460,9 @@ export default async function SucursalesInventoryPage() {
                   <section className="grid gap-5 lg:grid-cols-3">
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5 lg:col-span-2">
                       <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
-                        Movimientos de inventario (últimos 14 días)
+                        Evolución del inventario (últimos {control.days} días)
                       </h2>
-                      <InventoryTrendChart data={trendData} />
+                      <InventoryFlowChart data={control.daily} />
                     </div>
 
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
