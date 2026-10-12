@@ -5,7 +5,8 @@ import { generateOperationId } from "@/lib/pos2/operationId";
 import { applyInventoryBatchInTransaction } from "@/lib/pos2/inventory/applyMovements";
 import { groupInventoryDeltas } from "@/lib/pos2/inventory/domain";
 import { appendAuditEvent } from "@/lib/pos2/audit";
-import { getNormalizedContentPerUnit } from "@/lib/inventory/units";
+import { getNormalizedContentPerUnit, type InventoryCaptureUnit } from "@/lib/inventory/units";
+import { normalizeInventoryCountCapture } from "@/lib/inventory/countCapture";
 
 export function normalizeManualInventoryQuantity(product: InventoryProduct, quantity: number) {
   const label = product.unit.trim().toLocaleLowerCase("es-MX");
@@ -74,6 +75,147 @@ export async function recordManualInventoryMovement(input: {
       }
       await appendAuditEvent(tx, { actorId: input.actorId, branchId: input.branchId, operationId, action: "MANUAL_INVENTORY_MOVEMENT", entityType: "InventoryEntry", entityId: entries[0], metadata: { productId: product.id, toBranchId: input.toBranchId ?? null, entries } });
       return { type: "InventoryEntry", id: entries[0], entries };
+    },
+  });
+}
+
+export type WeeklyInventoryReceiptItem = {
+  productId: string;
+  quantity: string;
+  loosePieces?: string;
+  captureUnit: InventoryCaptureUnit;
+};
+
+/**
+ * Records a weekly replenishment as one idempotent operation. Products that
+ * already have an authoritative V2 balance are written to the immutable V2
+ * ledger; products that still use the legacy ledger receive the same
+ * InventoryEntry shape as the individual-entry flow.
+ */
+export async function recordWeeklyInventoryReceiptBatch(input: {
+  actorId: string;
+  operationId: string;
+  branchId: string;
+  items: WeeklyInventoryReceiptItem[];
+  notes: string | null;
+}) {
+  const normalizedItems = input.items.map((item) => ({
+    productId: item.productId,
+    quantity: item.quantity.trim(),
+    loosePieces: item.loosePieces?.trim() || undefined,
+    captureUnit: item.captureUnit,
+  }));
+
+  return executeIdempotent({
+    operationId: input.operationId,
+    command: "RecordWeeklyInventoryReceiptBatch",
+    payload: { branchId: input.branchId, items: normalizedItems, notes: input.notes },
+    receiptContext: { actorId: input.actorId, branchId: input.branchId },
+    execute: async (tx) => {
+      const productIds = [...new Set(normalizedItems.map((item) => item.productId))].sort();
+      if (productIds.length === 0) throw new Error("WEEKLY_RECEIPT_EMPTY");
+      if (productIds.length !== normalizedItems.length) throw new Error("WEEKLY_RECEIPT_DUPLICATE_PRODUCT");
+
+      await tx.$queryRaw`SELECT "id" FROM "InventoryProduct" WHERE "id" IN (${Prisma.join(productIds)}) FOR UPDATE`;
+      const products = await tx.inventoryProduct.findMany({
+        where: { id: { in: productIds }, isActive: true, archivedAt: null, trackStock: true, countFrequency: "WEEKLY" },
+      });
+      if (products.length !== productIds.length) throw new Error("WEEKLY_RECEIPT_PRODUCT_NOT_AVAILABLE");
+
+      for (const productId of productIds) {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.branchId}:${productId}`},0))::text`;
+      }
+
+      const productMap = new Map(products.map((product) => [product.id, product]));
+      const balances = await tx.inventoryBalance.findMany({
+        where: { branchId: input.branchId, inventoryProductId: { in: productIds } },
+        select: { inventoryProductId: true, unit: true },
+      });
+      const balanceMap = new Map(balances.map((balance) => [balance.inventoryProductId, balance]));
+      const prepared = normalizedItems.map((item) => {
+        const product = productMap.get(item.productId)!;
+        if (!product.inventoryBaseUnit) throw new Error("WEEKLY_RECEIPT_UNIT_NOT_CONFIGURED");
+        const normalized = normalizeInventoryCountCapture({
+          quantity: item.quantity,
+          loosePieces: item.loosePieces,
+          captureUnit: item.captureUnit,
+          product,
+        });
+        const isV2 = balanceMap.has(item.productId);
+        const balance = balanceMap.get(item.productId);
+        if (balance && balance.unit !== product.inventoryBaseUnit) {
+          throw new Error("WEEKLY_RECEIPT_UNIT_MISMATCH");
+        }
+        return { item, product, normalized, isV2 };
+      }).filter((row) => row.normalized.baseQuantity.gt(0));
+      if (prepared.length === 0) throw new Error("WEEKLY_RECEIPT_EMPTY");
+
+      const v2Rows = prepared.filter((row) => row.isV2);
+      if (v2Rows.length > 0) {
+        await applyInventoryBatchInTransaction(tx, {
+          branchId: input.branchId,
+          actorId: input.actorId,
+          operationId: input.operationId,
+          movements: groupInventoryDeltas(v2Rows.map(({ item, product, normalized }) => ({
+            inventoryProductId: product.id,
+            quantityDelta: normalized.baseQuantity.toString(),
+            unit: product.inventoryBaseUnit!,
+            movementType: "RECEIPT" as const,
+            sourceType: "RECEIPT" as const,
+            sourceId: input.operationId,
+            sourceLineId: product.id,
+            reasonCode: input.notes ?? "COMPRA_SEMANAL",
+            metadata: {
+              capturedQuantity: normalized.capturedQuantity.toString(),
+              capturedUnit: product.handlingUnit ?? product.unit,
+              loosePieces: normalized.captureUnit === "PRESENTATION" ? (item.loosePieces ?? null) : null,
+            },
+          }))),
+        });
+      }
+
+      const entryIds: string[] = [];
+      for (const { item, product, normalized } of prepared) {
+        const hasLoosePieces = item.loosePieces !== undefined;
+        const legacyQuantity = hasLoosePieces
+          ? normalized.baseQuantity
+          : normalized.capturedQuantity;
+        const entry = await tx.inventoryEntry.create({
+          data: {
+            branchId: input.branchId,
+            productId: product.id,
+            type: "COMPRA",
+            quantity: legacyQuantity,
+            unitCost: null,
+            originalQuantity: normalized.capturedQuantity,
+            originalUnit: product.handlingUnit ?? product.unit,
+            handlingUnit: hasLoosePieces ? null : product.handlingUnit,
+            contentPerUnit: hasLoosePieces ? new Prisma.Decimal(1) : (item.captureUnit === "PRESENTATION" ? product.contentPerUnit : null),
+            contentUnit: hasLoosePieces ? (product.inventoryBaseUnit === "ML" ? "ML" : product.inventoryBaseUnit === "G" ? "G" : "PIEZAS") : (item.captureUnit === "PRESENTATION" ? product.contentUnit : null),
+            notes: input.notes ?? "Entrada semanal",
+          },
+          select: { id: true },
+        });
+        entryIds.push(entry.id);
+      }
+
+      await appendAuditEvent(tx, {
+        actorId: input.actorId,
+        branchId: input.branchId,
+        operationId: input.operationId,
+        action: "WEEKLY_INVENTORY_RECEIPT_BATCH",
+        entityType: "InventoryEntryBatch",
+        entityId: input.operationId,
+        metadata: { productCount: prepared.length, entryIds, notes: input.notes },
+      });
+
+      return {
+        type: "WeeklyInventoryReceiptBatch",
+        id: input.operationId,
+        branchId: input.branchId,
+        productCount: prepared.length,
+        entryIds,
+      } as Prisma.InputJsonObject;
     },
   });
 }

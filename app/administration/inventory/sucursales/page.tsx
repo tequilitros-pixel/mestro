@@ -34,6 +34,7 @@ const entryTypeLabels: Record<string, string> = {
 
 const quickActions = [
   { label: "Nueva entrada", href: "/administration/inventory/branch-entries", permissionKey: "/administration/inventory/branch-entries" },
+  { label: "Entrada semanal", href: "/administration/inventory/branch-entries/weekly", permissionKey: "/administration/inventory/branch-entries" },
   {
     label: "Nuevo traspaso",
     href: "/administration/inventory/sucursales/traspasos",

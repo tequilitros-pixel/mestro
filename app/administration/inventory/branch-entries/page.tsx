@@ -61,10 +61,20 @@ export default async function BranchEntriesPage() {
           >
             ← Inventario de sucursales
           </a>
-          <h1 className="text-3xl font-bold">Entradas de inventario</h1>
-          <p className="mt-3 text-on-surface-variant">
-            Compras y ajustes (mermas, pérdidas, correcciones) por sucursal.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold">Entradas de inventario</h1>
+              <p className="mt-3 text-on-surface-variant">
+                Compras y ajustes (mermas, pérdidas, correcciones) por sucursal.
+              </p>
+            </div>
+            <a
+              href="/administration/inventory/branch-entries/weekly"
+              className="inline-flex items-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary transition hover:opacity-90"
+            >
+              Entrada semanal en lote
+            </a>
+          </div>
         </div>
 
         {branches.length > 0 ? (
