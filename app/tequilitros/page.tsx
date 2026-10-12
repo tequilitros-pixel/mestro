@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import styles from "./tequilitros.module.css";
+import EventQuote from "./EventQuote";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://maestro-destiladora.space";
 const whatsappUrl =
@@ -94,7 +95,7 @@ export default function TequilitrosPage() {
       <header className={styles.header}>
         <Link href="#inicio" className={styles.logo} aria-label="Tequilitros, inicio"><span aria-hidden="true">✳</span> TEQUILITROS</Link>
         <nav className={styles.nav} aria-label="Navegación pública de Tequilitros">
-          <Link href="#nosotros">La experiencia</Link><Link href="#bebidas">Bebidas</Link><Link href="#menu">Catálogo</Link><Link href="#cobertura">Cobertura</Link><Link href="#contacto">Contacto</Link>
+          <Link href="#nosotros">La experiencia</Link><Link href="#bebidas">Bebidas</Link><Link href="#menu">Catálogo</Link><Link href="#cobertura">Cobertura</Link><Link href="#cotizar">Cotizador</Link>
         </nav>
         <a className={styles.headerButton} href={whatsappUrl} target="_blank" rel="noopener noreferrer">Cotiza tu evento <span>↗</span></a>
       </header>
@@ -121,6 +122,7 @@ export default function TequilitrosPage() {
 
         <section className={styles.faq} id="preguntas"><div className={styles.sectionHeader}><div><p className={styles.sectionNo}>06 / PREGUNTAS FRECUENTES</p><h2>Lo que conviene <em>saber.</em></h2></div><p>Información clara para empezar a planear.</p></div><div className={styles.faqGrid}>{faq.map(([question, answer]) => <details key={question}><summary>{question}<span>+</span></summary><p>{answer}</p></details>)}</div></section>
 
+        <EventQuote />
         <section className={styles.contact} id="contacto"><div><p className={styles.sectionNo}>07 / HABLEMOS DE TU EVENTO</p><h2>¿Ya tienes <em>fecha?</em></h2><p>Escríbenos con fecha y lugar. Te confirmamos cobertura y opciones disponibles.</p></div><div className={styles.contactCard}><p>CONTACTO DIRECTO</p><a href={whatsappUrl} target="_blank" rel="noopener noreferrer">WhatsApp <span>↗</span></a><a href="tel:+525662989202">56 6298 9202</a><a href="mailto:tequilitros@gmail.com">tequilitros@gmail.com</a><small>Contenido dirigido a personas mayores de edad. Consume con moderación.</small></div></section>
       </main>
 
