@@ -98,7 +98,7 @@ export default function TequilitrosPage() {
       <header className={styles.header}>
         <Link href="#inicio" className={styles.logo} aria-label="Tequilitros, inicio"><span aria-hidden="true">✳</span> TEQUILITROS</Link>
         <nav className={styles.nav} aria-label="Navegación pública de Tequilitros">
-          <Link href="#nosotros">La experiencia</Link><Link href="#bebidas">Bebidas</Link><Link href="#menu">Catálogo</Link><Link href="#cobertura">Cobertura</Link><Link href="#cotizar">Cotizador</Link>
+          <Link href="#nosotros">La experiencia</Link><Link href="#bebidas">Bebidas</Link><Link href="#menu">Catálogo</Link><Link href="#cobertura">Cobertura</Link><Link href="#cotizar">Cotizador</Link><Link href="#redes">Redes</Link>
         </nav>
         <a className={styles.headerButton} href={whatsappUrl} target="_blank" rel="noopener noreferrer">Cotiza tu evento <span>↗</span></a>
       </header>
@@ -135,6 +135,21 @@ export default function TequilitrosPage() {
         <section className={styles.faq} id="preguntas"><div className={styles.sectionHeader}><div><p className={styles.sectionNo}>06 / PREGUNTAS FRECUENTES</p><h2>Lo que conviene <em>saber.</em></h2></div><p>Información clara para empezar a planear.</p></div><div className={styles.faqGrid}>{faq.map(([question, answer]) => <details key={question}><summary>{question}<span>+</span></summary><p>{answer}</p></details>)}</div></section>
 
         <EventQuote />
+        <section className={styles.socialSection} id="redes" aria-labelledby="social-title">
+          <div className={styles.socialIntro}>
+            <div><p className={styles.sectionNo}>SÍGUENOS · LA FIESTA CONTINÚA</p><h2 id="social-title">Momentos que se <em>comparten.</em></h2></div>
+            <p>Descubre nuestras bebidas y lo que preparamos para cada celebración. Síguenos en nuestras cuentas oficiales para conocer más de Tequilitros para Eventos.</p>
+          </div>
+          <div className={styles.socialGallery}>
+            <div className={styles.socialPhoto}><Image src="/tequilitros/vampiro.jpg" alt="Vampiro preparado por Tequilitros" fill sizes="(max-width: 700px) 90vw, 40vw" /></div>
+            <div className={styles.socialPhoto}><Image src="/tequilitros/paloma.jpg" alt="Paloma preparada por Tequilitros" fill sizes="(max-width: 700px) 45vw, 24vw" /></div>
+            <div className={styles.socialPhoto}><Image src="/tequilitros/cantarito.jpg" alt="Cantarito de Tequilitros" fill sizes="(max-width: 700px) 45vw, 24vw" /></div>
+          </div>
+          <div className={styles.socialActions}>
+            <a href={facebookUrl} target="_blank" rel="noopener noreferrer" aria-label="Visitar Facebook de Tequilitros para Eventos"><span>Facebook</span><strong>Conoce nuestros eventos ↗</strong></a>
+            <a href={instagramUrl} target="_blank" rel="noopener noreferrer" aria-label="Visitar Instagram de Tequilitros para Eventos"><span>Instagram</span><strong>@tequilitros_eventos ↗</strong></a>
+          </div>
+        </section>
         <section className={styles.contact} id="contacto"><div><p className={styles.sectionNo}>07 / HABLEMOS DE TU EVENTO</p><h2>¿Ya tienes <em>fecha?</em></h2><p>Escríbenos con fecha y lugar. Te confirmamos cobertura y opciones disponibles.</p></div><div className={styles.contactCard}><p>CONTACTO DIRECTO</p><a href={whatsappUrl} target="_blank" rel="noopener noreferrer">WhatsApp <span>↗</span></a><a href="tel:+525662989202">56 6298 9202</a><a href="mailto:tequilitros@gmail.com">tequilitros@gmail.com</a><small>Contenido dirigido a personas mayores de edad. Consume con moderación.</small></div></section>
       </main>
 
