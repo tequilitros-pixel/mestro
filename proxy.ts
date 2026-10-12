@@ -12,7 +12,17 @@ import type { NextRequest } from "next/server";
  * Server Component normal y puede usar Prisma sin problema.
  */
 
-const PUBLIC_PATHS = ["/login", "/q", "/forgot-password", "/reset-password"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/q",
+  "/forgot-password",
+  "/reset-password",
+  "/tequilitros",
+  "/privacy-policy",
+  "/terms-of-service",
+  "/robots.txt",
+  "/sitemap.xml",
+];
 
 function matchesPath(pathname: string, path: string) {
   return pathname === path || pathname.startsWith(`${path}/`);
