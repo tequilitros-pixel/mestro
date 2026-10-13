@@ -912,6 +912,14 @@ function EmployeeDetailModal({
                     {approving ? "Aprobando..." : `Aprobar solo a ${detail.employee.name}`}
                   </button>
                 )}
+                {(detail.approval.status === "APROBADA" || detail.approval.status === "PAGADA") && (
+                  <a
+                    href={`/api/timeclock/payroll/statement?userId=${encodeURIComponent(detail.employee.id)}&weekStart=${encodeURIComponent(detail.weekStart)}&download=1`}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-primary/40 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10"
+                  >
+                    Descargar resumen PDF
+                  </a>
+                )}
                 {(detail.approval.history?.length ?? 0) > 0 && (
                   <div className="w-full border-t border-outline-variant pt-2 text-xs text-on-surface-variant">
                     <p className="font-semibold">Aprobaciones anteriores</p>
