@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Prisma } from "@prisma/client";
-import { formatPaymentMoney, parsePaymentAmount, periodRange, validDateOnly } from "../lib/accounting";
+import { formatPaymentMoney, parsePaymentAmount, periodRange, shiftPeriodAnchor, validDateOnly } from "../lib/accounting";
 import { getModuleKeyForPath } from "../lib/permission-modules";
 import { MAIN_MODULES, SUBMENUS, isMainModuleVisible } from "../components/layout/navigation";
 
@@ -11,6 +11,13 @@ test("periodos contables respetan fechas civiles, lunes y años bisiestos", () =
   assert.deepEqual(periodRange("month", "2024-02-20"), { from: "2024-02-01", to: "2024-02-29" });
   assert.deepEqual(periodRange("year", "2026-10-12"), { from: "2026-01-01", to: "2026-12-31" });
   assert.equal(validDateOnly("2026-02-30"), false);
+});
+
+test("la navegación contable cambia al periodo anterior y siguiente", () => {
+  assert.equal(shiftPeriodAnchor("day", "2026-10-13", -1), "2026-10-12");
+  assert.equal(shiftPeriodAnchor("week", "2026-10-13", 1), "2026-10-19");
+  assert.equal(shiftPeriodAnchor("month", "2026-10-13", -1), "2026-09-01");
+  assert.equal(shiftPeriodAnchor("year", "2026-10-13", 1), "2027-01-01");
 });
 
 test("importe de pago acepta centavos y rechaza valores inválidos", () => {

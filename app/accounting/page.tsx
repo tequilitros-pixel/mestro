@@ -9,6 +9,7 @@ import {
   methodLabel,
   formatPaymentMoney,
   periodRange,
+  shiftPeriodAnchor,
   validDateOnly,
   type AccountingPeriod,
 } from "@/lib/accounting";
@@ -120,6 +121,15 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     params.set("page", String(pageNumber));
     return `/accounting?${params}`;
   };
+  const periodHref = (nextAnchor: string) => {
+    const params = new URLSearchParams(queryBase);
+    params.set("date", nextAnchor);
+    params.delete("page");
+    return `/accounting?${params}`;
+  };
+  const previousPeriodHref = periodHref(shiftPeriodAnchor(period, anchor, -1));
+  const nextPeriodHref = periodHref(shiftPeriodAnchor(period, anchor, 1));
+  const todayPeriodHref = periodHref(todayDateOnly());
 
   return <main className="page-frame mx-auto max-w-7xl space-y-6 text-on-surface">
     <header className="space-y-1">
@@ -170,7 +180,14 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       <div className="flex items-end"><button type="submit" className="w-full rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary">Consultar</button></div>
     </form>
 
-    <p className="text-sm text-on-surface-variant">Periodo consultado: <strong>{from}</strong> al <strong>{to}</strong>. Los totales excluyen pagos anulados.</p>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <p className="text-sm text-on-surface-variant">Periodo consultado: <strong>{from}</strong> al <strong>{to}</strong>. Los totales excluyen pagos anulados.</p>
+      <nav aria-label="Navegación de periodos" className="flex items-center gap-1 rounded-xl border border-outline-variant bg-surface-container/60 p-1 text-sm">
+        <Link href={previousPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">← Anterior</Link>
+        <Link href={todayPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Hoy</Link>
+        <Link href={nextPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Siguiente →</Link>
+      </nav>
+    </div>
     {weeklySummary && selectedBranch && <section aria-label={`Resultado semanal de ${selectedBranch.name}`} className="space-y-3">
       <div>
         <h2 className="text-xl font-bold">Resultado semanal · {selectedBranch.name}</h2>

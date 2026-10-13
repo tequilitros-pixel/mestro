@@ -37,6 +37,21 @@ export function periodRange(period: AccountingPeriod, anchor: string) {
   return { from: `${anchor.slice(0, 4)}-01-01`, to: `${anchor.slice(0, 4)}-12-31` };
 }
 
+/** Mueve el ancla al periodo anterior o siguiente sin depender del huso horario. */
+export function shiftPeriodAnchor(period: AccountingPeriod, anchor: string, direction: -1 | 1): string {
+  if (!validDateOnly(anchor)) throw new Error("Fecha inválida");
+  if (period === "day") return addDaysToDateOnly(anchor, direction);
+  if (period === "week") return addDaysToDateOnly(mondayOfWeek(anchor), direction * 7);
+  if (period === "month") {
+    const date = parseDateOnly(firstDayOfMonth(anchor));
+    date.setUTCMonth(date.getUTCMonth() + direction);
+    return formatDateOnly(date);
+  }
+  const date = parseDateOnly(`${anchor.slice(0, 4)}-01-01`);
+  date.setUTCFullYear(date.getUTCFullYear() + direction);
+  return formatDateOnly(date);
+}
+
 export function methodLabel(code: string): string {
   return PAYMENT_METHODS.find(([key]) => key === code)?.[1] ?? code;
 }
