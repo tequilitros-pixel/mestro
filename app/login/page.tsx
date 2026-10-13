@@ -6,18 +6,8 @@ import SessionAlert from "@/app/components/SessionAlert";
 
 const TIME_ZONE = "America/Mexico_City";
 
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{
-    error?: string;
-    reset?: string;
-    expired?: string;
-  }>;
-}) {
-  const params = await searchParams;
+export default function LoginPage() {
   const now = new Date();
-
 
   const hour = Number(
     new Intl.DateTimeFormat("es-MX", {
@@ -48,14 +38,8 @@ export default async function LoginPage({
     timeZone: TIME_ZONE,
   }).format(now);
 
-  const hasError = params?.error === "1";
-  const isLocked = params?.error === "locked";
-  const justReset = params?.reset === "1";
-  const sessionExpired = params?.expired === "1";
-
-
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8 text-on-surface sm:px-6">
+    <main className="relative flex min-h-[100svh] flex-col items-center justify-start overflow-y-auto px-3 py-4 text-on-surface sm:justify-center sm:px-6 sm:py-8">
       {/* Fondo: campo de agave al atardecer */}
       <div className="absolute inset-0 -z-10 bg-surface">
         <AgaveBackdrop className="h-full w-full" />
@@ -63,74 +47,48 @@ export default async function LoginPage({
         <div className="absolute inset-0 bg-gradient-to-t from-secondary-container/30 via-transparent to-transparent" />
       </div>
 
-      <div className="w-full max-w-md">
+      <div className="relative z-10 w-full max-w-[30rem]">
         <SessionAlert />
       </div>
 
-      <section className="w-full max-w-md overflow-hidden rounded-xl border border-outline-variant bg-surface-dim/50 shadow-2xl backdrop-blur-xl">
-        <div className="border-b border-outline-variant p-6 text-center sm:p-8">
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.45em] text-on-surface-variant">
+      <section className="relative z-10 w-full max-w-[30rem] overflow-hidden rounded-2xl border border-outline-variant bg-surface-dim/65 shadow-2xl backdrop-blur-xl">
+        <div className="border-b border-outline-variant p-5 text-center sm:p-7">
+          <p className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.32em] text-on-surface-variant sm:text-xs sm:tracking-[0.4em]">
             Sistema Operativo
           </p>
 
-          <h1 className="mt-4 text-3xl font-black text-primary">
+          <h1 className="mt-2 text-2xl font-black text-primary sm:text-3xl">
             Destiladora del Norte
           </h1>
 
-          <div className="mt-8">
-            <h2 className="text-2xl font-bold text-primary sm:text-3xl">
+          <div className="mt-4 sm:mt-6">
+            <h2 className="text-xl font-bold text-primary sm:text-2xl">
               {greeting}
             </h2>
 
-            <p className="mt-3 capitalize text-on-surface-variant">
+            <p className="mt-1.5 text-sm capitalize text-on-surface-variant sm:mt-2">
               {currentDate}
             </p>
 
-            <p className="mt-1 font-mono text-sm text-on-surface-variant">
+            <p className="mt-0.5 font-mono text-xs text-on-surface-variant sm:text-sm">
               {currentTime}
             </p>
           </div>
 
-          <div className="mt-7 rounded-xl border border-outline-variant bg-surface-container-high/60 p-4">
-            <p className="text-sm leading-6 text-on-surface">
+          <div className="mt-4 rounded-lg border border-outline-variant bg-surface-container-high/60 p-3 sm:mt-5 sm:p-3.5">
+            <p className="text-xs leading-5 text-on-surface sm:text-sm sm:leading-6">
               Gracias por seguir construyendo la historia de
               Destiladora del Norte.
             </p>
           </div>
         </div>
 
-        <div className="p-6 sm:p-8">
-          <div>
-          {hasError && (
-            <div className="mb-5 rounded-xl border border-error/30 bg-error/10 p-3 text-sm text-error">
-              Teléfono, correo o contraseña incorrectos.
-            </div>
-          )}
-
-          {isLocked && (
-            <div className="mb-5 rounded-xl border border-error/30 bg-error/10 p-3 text-sm text-error">
-              Demasiados intentos fallidos. Por seguridad, esta cuenta se
-              bloqueó temporalmente — intenta de nuevo en 15 minutos.
-            </div>
-          )}
-
-          {justReset && (
-            <div className="mb-5 rounded-xl border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 p-3 text-sm text-tertiary-fixed-dim">
-              Contraseña actualizada. Ya puedes iniciar sesión.
-            </div>
-          )}
-
-          {sessionExpired && (
-            <div className="mb-5 rounded-xl border border-secondary/30 bg-secondary/10 p-3 text-sm text-secondary">
-              Tu sesión anterior ya no era válida. Inicia sesión nuevamente.
-            </div>
-          )}
-
-          <form action={loginAction} className="space-y-5">
+        <div className="p-5 sm:p-7">
+          <form action={loginAction} className="space-y-4">
             <div>
               <label
                 htmlFor="identifier"
-                className="mb-2 block text-sm font-semibold text-on-surface-variant"
+                className="mb-1.5 block text-sm font-semibold text-on-surface-variant"
               >
                 Número de teléfono o correo
               </label>
@@ -142,11 +100,11 @@ export default async function LoginPage({
                 autoComplete="username"
                 required
                 placeholder="494 123 4567 o tu@correo.com"
-                className="w-full rounded-xl border border-outline-variant bg-surface-dim/60 px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+                className="w-full rounded-lg border border-outline-variant bg-surface-dim/60 px-3.5 py-2.5 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
               />
             </div>
 
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-outline-variant bg-surface-container-high/40 p-3">
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-outline-variant bg-surface-container-high/40 p-2.5">
               <input
                 name="rememberDevice"
                 type="checkbox"
@@ -155,12 +113,12 @@ export default async function LoginPage({
               />
               <span>
                 <span className="block text-sm font-semibold text-on-surface">Recordar este dispositivo por 30 días</span>
-                <span className="mt-1 block text-xs text-on-surface-variant">No tendrás que volver a iniciar sesión mientras no pulses “Cerrar sesión”.</span>
+                <span className="mt-0.5 block text-[0.7rem] leading-4 text-on-surface-variant">No tendrás que volver a iniciar sesión mientras no pulses “Cerrar sesión”.</span>
               </span>
             </label>
 
             <div>
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-1.5 flex items-center justify-between gap-3">
                 <label
                   htmlFor="password"
                   className="text-sm font-semibold text-on-surface-variant"
@@ -183,29 +141,28 @@ export default async function LoginPage({
                 autoComplete="current-password"
                 required
                 placeholder="••••••••"
-                className="w-full rounded-xl border border-outline-variant bg-surface-dim/60 px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+                className="w-full rounded-lg border border-outline-variant bg-surface-dim/60 px-3.5 py-2.5 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full rounded-xl bg-primary py-3 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
+              className="w-full rounded-lg bg-primary py-2.5 font-bold text-on-primary transition duration-150 ease-out hover:opacity-90 active:scale-[0.98]"
             >
               Ingresar
             </button>
           </form>
-          </div>
 
-          <details className="mt-6 border-t border-outline-variant pt-5">
+          <details className="mt-4 border-t border-outline-variant pt-4">
             <summary className="cursor-pointer text-center text-sm font-semibold text-on-surface-variant hover:text-primary">
               Ingresar con código por SMS
             </summary>
-            <div className="mt-5">
+            <div className="mt-4">
               <SmsLoginForm />
             </div>
           </details>
 
-          <div className="mt-8 border-t border-outline-variant pt-6 text-center space-y-4">
+          <div className="mt-5 space-y-3 border-t border-outline-variant pt-4 text-center">
             <p className="flex flex-wrap items-center justify-center gap-x-1 text-xs leading-5 text-outline">
               <span>Hecho con</span>
               <CoffeeIcon className="h-3.5 w-3.5" />
