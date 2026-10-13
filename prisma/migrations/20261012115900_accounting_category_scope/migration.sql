@@ -1,0 +1,1 @@
+ALTER TYPE "FinancialMovementScope" ADD VALUE IF NOT EXISTS 'ACCOUNTING';

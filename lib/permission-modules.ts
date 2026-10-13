@@ -109,6 +109,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    group: "Contabilidad",
+    modules: [{ key: "/accounting", label: "Contabilidad" }],
+  },
+  {
     group: "Punto de Venta",
     modules: [
       { key: "/pos", label: "Vender" },

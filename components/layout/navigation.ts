@@ -53,6 +53,7 @@ export type AppModule =
   | "production"
   | "liquors"
   | "cash-cuts"
+  | "accounting"
   | "pos"
   | "administration"
   | "timeclock"
@@ -131,6 +132,14 @@ export const MAIN_MODULES: MainModule[] = [
     module: "cash-cuts",
   },
   {
+    href: "/accounting",
+    label: "Contabilidad",
+    shortLabel: "Contabilidad",
+    icon: ReceiptIcon,
+    iconVariant: "amber",
+    module: "accounting",
+  },
+  {
     href: "/administration",
     label: "Inventario",
     shortLabel: "Inventario",
@@ -165,6 +174,9 @@ export const MAIN_MODULES: MainModule[] = [
 ];
 
 export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
+  accounting: [
+    { href: "/accounting", label: "Contabilidad", icon: ReceiptIcon, iconVariant: "amber" },
+  ],
   production: [
     {
       href: "/plant",
@@ -570,6 +582,9 @@ export function matchesRoute(pathname: string, href: string) {
 }
 
 export function getCurrentModule(pathname: string): AppModule {
+  if (matchesRoute(pathname, "/accounting")) {
+    return "accounting";
+  }
   if (matchesRoute(pathname, "/liquors")) {
     return "liquors";
   }

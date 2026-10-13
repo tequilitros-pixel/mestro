@@ -16,7 +16,7 @@ export async function requireFinancialMovementCategory(
   if (!category) throw new DomainError("VALIDATION_ERROR", { field: "categoryId", reason: "NOT_FOUND" });
   if (!category.isActive) throw new DomainError("VALIDATION_ERROR", { field: "categoryId", reason: "INACTIVE" });
   if (category.direction !== input.direction) throw new DomainError("VALIDATION_ERROR", { field: "categoryId", reason: "WRONG_DIRECTION" });
-  if (category.scope !== input.scope && category.scope !== "BOTH") throw new DomainError("VALIDATION_ERROR", { field: "categoryId", reason: "WRONG_SCOPE" });
+  if (category.scope !== input.scope && !(input.scope !== "ACCOUNTING" && category.scope === "BOTH")) throw new DomainError("VALIDATION_ERROR", { field: "categoryId", reason: "WRONG_SCOPE" });
   return category;
 }
 
