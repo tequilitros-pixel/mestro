@@ -353,7 +353,7 @@ export async function getInventoryAnalytics(
     const unitCost = entry.unitCost !== null ? Number(entry.unitCost) : Number(product.unitCost ?? 0);
     const amount = Math.abs(quantity);
     const productValue = productAccumulator(entry.productId);
-    const branchValue = branchAccumulator(entry.branchId, entry.branch.name);
+    const branchValue = branchAccumulator(entry.branchId, entry.branch?.name);
     const day = dailyAcc.get(formatBusinessDateOnly(entry.entryDate));
 
     productValue.movements += 1;

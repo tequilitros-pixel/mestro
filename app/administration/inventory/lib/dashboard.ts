@@ -203,16 +203,16 @@ export async function getInventoryDashboardData(
   const recentDifferences = declarations.map((declaration) => {
     const product = productById.get(declaration.inventoryProductId) ?? {
       id: declaration.inventoryProductId,
-      name: declaration.inventoryProduct.name,
+      name: declaration.inventoryProduct?.name ?? "Producto no disponible",
       code: "",
       category: "",
-      unit: declaration.inventoryProduct.unit,
+      unit: declaration.inventoryProduct?.unit ?? declaration.unit,
       minimumStock: 0,
-      inventoryBaseUnit: declaration.inventoryProduct.inventoryBaseUnit,
-      handlingUnit: declaration.inventoryProduct.handlingUnit,
-      contentPerUnit: declaration.inventoryProduct.contentPerUnit,
-      contentUnit: declaration.inventoryProduct.contentUnit,
-      normalizedContentPerUnit: declaration.inventoryProduct.normalizedContentPerUnit,
+      inventoryBaseUnit: declaration.inventoryProduct?.inventoryBaseUnit ?? declaration.unit,
+      handlingUnit: declaration.inventoryProduct?.handlingUnit ?? null,
+      contentPerUnit: declaration.inventoryProduct?.contentPerUnit ?? null,
+      contentUnit: declaration.inventoryProduct?.contentUnit ?? null,
+      normalizedContentPerUnit: declaration.inventoryProduct?.normalizedContentPerUnit ?? null,
     };
     const expected = Number(declaration.expectedQuantity);
     const declared = Number(declaration.declaredQuantity);
@@ -220,7 +220,7 @@ export async function getInventoryDashboardData(
       id: declaration.id,
       countId: declaration.countId,
       countCode: declaration.count?.code ?? null,
-      branchName: declaration.branch.name,
+      branchName: declaration.branch?.name ?? "Sucursal no disponible",
       productName: product.name,
       expected: formatCommercialQuantity(expected, product),
       declared: formatCommercialQuantity(declared, product),
@@ -237,11 +237,11 @@ export async function getInventoryDashboardData(
     branches,
     pendingCounts: counts
       .filter((count) => count.status === "BORRADOR")
-      .map((count) => ({ id: count.id, code: count.code, branchName: count.branch.name, countDate: count.countDate.toISOString(), countType: count.countType })),
+      .map((count) => ({ id: count.id, code: count.code, branchName: count.branch?.name ?? "Sucursal no disponible", countDate: count.countDate.toISOString(), countType: count.countType })),
     counts: counts.map((count) => ({
       id: count.id,
       code: count.code,
-      branchName: count.branch.name,
+      branchName: count.branch?.name ?? "Sucursal no disponible",
       countDate: count.countDate.toISOString(),
       countType: count.countType,
       countTypeLabel: inventoryCountTypeLabel(count.countType),
