@@ -47,7 +47,10 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
 
   const [branches, categories] = await Promise.all([
     prisma.branch.findMany({
-      where: accessibleBranchIds === null ? {} : { id: { in: accessibleBranchIds } },
+      where: {
+        active: true,
+        ...(accessibleBranchIds === null ? {} : { id: { in: accessibleBranchIds } }),
+      },
       select: { id: true, name: true, active: true },
       orderBy: { name: "asc" },
     }),
