@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { addDaysToDateOnly, businessDayStart, parseDateOnly } from "@/lib/dateOnly";
 import { prisma } from "@/lib/prisma";
+import { allocatePayrollEntries } from "./payrollAllocation";
 
 export type WeeklyBranchSummary = {
   sales: number;
@@ -16,25 +17,6 @@ export type WeeklyBranchSummary = {
   totalExpenses: number;
   netResult: number;
 };
-
-type SnapshotEntry = {
-  branchId?: unknown;
-  pay?: unknown;
-};
-
-type SnapshotDay = {
-  entries?: unknown;
-};
-
-function numberValue(value: unknown) {
-  const result = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(result) ? result : 0;
-}
-
-function snapshotEntries(value: unknown): SnapshotEntry[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is SnapshotEntry => Boolean(entry) && typeof entry === "object");
-}
 
 /**
  * Resume una semana de una sucursal usando los registros que ya existen.
@@ -96,40 +78,10 @@ export async function getWeeklyBranchSummary(input: {
     }),
   ]);
 
-  let payrollPaid = 0;
-  let payrollUnallocated = 0;
-
   const paidEntries = payrollPeriod?.status === "PAGADA" ? payrollPeriod.entries : [];
-
-  for (const entry of paidEntries) {
-    const totalPay = numberValue(entry.totalPay);
-    const basePay = numberValue(entry.basePay) + numberValue(entry.overtimePay);
-    const byBranch = new Map<string, number>();
-    let hasAnyBranchPay = false;
-
-    for (const day of Array.isArray(entry.daysSnapshot) ? entry.daysSnapshot as SnapshotDay[] : []) {
-      for (const item of snapshotEntries(day?.entries)) {
-        const amount = numberValue(item.pay);
-        if (item.branchId && amount > 0) hasAnyBranchPay = true;
-        if (item.branchId !== input.branchId) continue;
-        byBranch.set(input.branchId, (byBranch.get(input.branchId) ?? 0) + amount);
-      }
-    }
-
-    const branchBase = byBranch.get(input.branchId) ?? 0;
-    if (branchBase <= 0) {
-      // Un empleado que trabajó otra sucursal no es un importe pendiente
-      // de Canoas. Solo marcamos como no asignable lo que no trae sucursal.
-      if (!hasAnyBranchPay) payrollUnallocated += totalPay;
-      continue;
-    }
-
-    // Ajustes de la persona (bonos/deducciones) se asignan a la sucursal
-    // según la proporción de horas pagadas que aparece en el snapshot.
-    const adjustment = totalPay - basePay;
-    const allocation = branchBase + (basePay > 0 ? adjustment * (branchBase / basePay) : 0);
-    payrollPaid += Math.max(0, allocation);
-  }
+  const payrollAllocation = allocatePayrollEntries(paidEntries, input.branchId);
+  const payrollPaid = payrollAllocation.amount;
+  const payrollUnallocated = payrollAllocation.unallocated;
 
   const salesTotal = sales._sum.totalSales ?? 0;
   const cashOutflowTotal = cashOutflows._sum.amount ?? 0;

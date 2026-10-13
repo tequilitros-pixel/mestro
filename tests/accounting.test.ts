@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Prisma } from "@prisma/client";
 import { formatPaymentMoney, parsePaymentAmount, periodRange, shiftPeriodAnchor, validDateOnly } from "../lib/accounting";
+import { allocatePayrollEntries } from "../lib/accounting/payrollAllocation";
 import { getModuleKeyForPath } from "../lib/permission-modules";
 import { MAIN_MODULES, SUBMENUS, isMainModuleVisible } from "../components/layout/navigation";
 
@@ -18,6 +19,18 @@ test("la navegación contable cambia al periodo anterior y siguiente", () => {
   assert.equal(shiftPeriodAnchor("week", "2026-10-13", 1), "2026-10-19");
   assert.equal(shiftPeriodAnchor("month", "2026-10-13", -1), "2026-09-01");
   assert.equal(shiftPeriodAnchor("year", "2026-10-13", 1), "2027-01-01");
+});
+
+test("la nómina histórica se asigna a la sucursal desde el snapshot del turno", () => {
+  const result = allocatePayrollEntries([{
+    totalPay: "1100.00",
+    basePay: "1000.00",
+    overtimePay: "0.00",
+    daysSnapshot: [{ entries: [{ branchId: "canoas", pay: 500 }, { branchId: "otra", pay: 500 }] }],
+  }], "canoas");
+  assert.equal(result.amount, 550);
+  assert.equal(result.entriesWithBranchPay, 1);
+  assert.equal(result.unallocated, 0);
 });
 
 test("importe de pago acepta centavos y rechaza valores inválidos", () => {

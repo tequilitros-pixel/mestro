@@ -14,6 +14,7 @@ import {
   type AccountingPeriod,
 } from "@/lib/accounting";
 import { getWeeklyBranchSummary } from "@/lib/accounting/weeklyBranchSummary";
+import { getBranchAccountingHistory } from "@/lib/accounting/branchHistory";
 import { PaymentForm, VoidPaymentForm } from "./PaymentForm";
 
 export const dynamic = "force-dynamic";
@@ -95,9 +96,10 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     }),
     prisma.accountingPayment.count({ where: listWhere }),
   ]);
-  const weeklySummary = period === "week" && selectedBranch
-    ? await getWeeklyBranchSummary({ branchId: selectedBranch.id, from, to })
-    : null;
+  const [weeklySummary, branchHistory] = await Promise.all([
+    period === "week" && selectedBranch ? getWeeklyBranchSummary({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
+    selectedBranch ? getBranchAccountingHistory({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
+  ]);
 
   const branchNames = new Map(branches.map((branch) => [branch.id, branch.name]));
   const branchTotals = byBranch.map((item) => ({ id: item.branchId, name: branchNames.get(item.branchId) ?? "Sucursal anterior", amount: item._sum.amount ?? new Prisma.Decimal(0), count: item._count._all })).sort((a, b) => b.amount.comparedTo(a.amount));
@@ -188,6 +190,37 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         <Link href={nextPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Siguiente →</Link>
       </nav>
     </div>
+    {branchHistory && selectedBranch && <section aria-label={`Historial integrado de ${selectedBranch.name}`} className="space-y-3">
+      <div>
+        <h2 className="text-xl font-bold">Historial integrado · {selectedBranch.name}</h2>
+        <p className="text-sm text-on-surface-variant">Registros históricos vinculados a esta sucursal. Se muestran como fuentes existentes y no crean pagos contables duplicados.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Card><CardLabel>Nómina pagada</CardLabel><CardValue>{branchHistory.payroll.length}</CardValue><p className="mt-1 text-xs text-on-surface-variant">semana(s) con pago</p></Card>
+        <Card><CardLabel>Cortes de caja</CardLabel><CardValue>{branchHistory.cashCuts.length}</CardValue><p className="mt-1 text-xs text-on-surface-variant">turno(s) cerrado(s)</p></Card>
+        <Card><CardLabel>Salidas de caja</CardLabel><CardValue>{branchHistory.cashOutflows.length}</CardValue><p className="mt-1 text-xs text-on-surface-variant">gasto(s) registrado(s)</p></Card>
+        <Card><CardLabel>Sobres</CardLabel><CardValue>{branchHistory.envelopes.length}</CardValue><p className="mt-1 text-xs text-on-surface-variant">sobre(s) vinculados</p></Card>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card>
+          <h3 className="mb-3 font-bold">Nómina por semana</h3>
+          {branchHistory.payroll.length ? <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">{branchHistory.payroll.map((row) => <li key={row.weekStart} className="border-b border-outline-variant pb-2 text-sm"><div className="flex justify-between gap-3"><span>Semana del {row.weekStart}</span><strong>{money(row.amount)}</strong></div><p className="text-xs text-on-surface-variant">{row.employeeCount} empleado(s) con pago asignado a {selectedBranch.name}{row.unallocated > 0 ? ` · ${money(row.unallocated)} sin sucursal en el snapshot` : ""}</p></li>)}</ul> : <p className="text-sm text-on-surface-variant">No hay nómina marcada como pagada en este periodo.</p>}
+        </Card>
+        <Card>
+          <h3 className="mb-3 font-bold">Cortes y caja</h3>
+          {branchHistory.cashCuts.length ? <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">{branchHistory.cashCuts.map((row) => <li key={row.id} className="border-b border-outline-variant pb-2 text-sm"><div className="flex justify-between gap-3"><span>{row.date} · {row.code}</span><strong>{money(row.sales)} ventas</strong></div><p className="text-xs text-on-surface-variant">Salidas: {money(row.outflows)}{row.netProfit == null ? "" : ` · Utilidad: ${money(row.netProfit)}`}{row.envelopeAmount == null ? "" : ` · Sobre: ${money(row.envelopeAmount)}`}</p></li>)}</ul> : <p className="text-sm text-on-surface-variant">No hay cortes cerrados en este periodo.</p>}
+          {branchHistory.cashOutflows.length > 0 && <p className="mt-3 text-xs text-on-surface-variant">Las salidas detalladas se muestran en el historial de caja y no se convierten en un pago contable nuevo.</p>}
+        </Card>
+        <Card>
+          <h3 className="mb-3 font-bold">Sobres de caja fuerte</h3>
+          {branchHistory.envelopes.length ? <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">{branchHistory.envelopes.map((row) => <li key={row.id} className="border-b border-outline-variant pb-2 text-sm"><div className="flex justify-between gap-3"><span>{row.date} · {row.envelopeNumber ?? row.code}</span><strong>{money(row.originalAmount)}</strong></div><p className="text-xs text-on-surface-variant">Saldo actual: {money(row.currentBalance)} · {row.status.replaceAll("_", " ")}{row.cashCutCode ? ` · Corte ${row.cashCutCode}` : ""}</p></li>)}</ul> : <p className="text-sm text-on-surface-variant">No hay sobres registrados en este periodo.</p>}
+        </Card>
+      </div>
+      {branchHistory.cashOutflows.length > 0 && <Card>
+        <h3 className="mb-3 font-bold">Salidas de caja de {selectedBranch.name}</h3>
+        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{branchHistory.cashOutflows.map((row) => <li key={row.id} className="rounded-lg bg-surface-container-high p-3 text-sm"><div className="flex justify-between gap-3"><span>{row.date} · {row.category}</span><strong>{money(row.amount)}</strong></div><p className="text-xs text-on-surface-variant">{row.concept} · Corte {row.cashCutCode}</p></li>)}</ul>
+      </Card>}
+    </section>}
     {weeklySummary && selectedBranch && <section aria-label={`Resultado semanal de ${selectedBranch.name}`} className="space-y-3">
       <div>
         <h2 className="text-xl font-bold">Resultado semanal · {selectedBranch.name}</h2>
