@@ -25,6 +25,13 @@ import {
 const ANALYTICS_DAYS = 30;
 const STALE_DAYS = 60;
 
+export type InventoryAnalyticsRange = {
+  /** Fecha civil incluida, en formato YYYY-MM-DD. */
+  from: string;
+  /** Fecha civil incluida, en formato YYYY-MM-DD. */
+  to: string;
+};
+
 const ENTRY_TYPE_LABELS: Record<string, string> = {
   COMPRA: "Compras",
   TRASPASO: "Traspasos",
@@ -292,12 +299,23 @@ function addWaste(acc: ProductAccumulator | BranchAccumulator, quantity: number,
 }
 
 export async function getInventoryAnalytics(
-  days = ANALYTICS_DAYS,
+  daysOrRange: number | InventoryAnalyticsRange = ANALYTICS_DAYS,
   allowedBranchIds: string[] | null = null,
 ): Promise<InventoryAnalytics> {
   const today = formatBusinessDateOnly(new Date());
-  const since = businessDayStart(addBusinessDays(today, -(days - 1)));
-  const staleSince = businessDayStart(addBusinessDays(today, -STALE_DAYS));
+  const range = typeof daysOrRange === "number"
+    ? {
+        from: addBusinessDays(today, -(Math.max(1, daysOrRange) - 1)),
+        to: today,
+      }
+    : daysOrRange;
+  const days = Math.max(
+    1,
+    Math.round((Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / 86_400_000) + 1,
+  );
+  const since = businessDayStart(range.from);
+  const until = businessDayStart(addBusinessDays(range.to, 1));
+  const staleSince = businessDayStart(addBusinessDays(range.to, -STALE_DAYS));
   const branchWhere = {
     active: true,
     ...(allowedBranchIds === null ? {} : { id: { in: allowedBranchIds } }),
@@ -326,16 +344,16 @@ export async function getInventoryAnalytics(
     }),
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.inventoryEntry.findMany({
-      where: { entryDate: { gte: since }, ...branchFilter },
+      where: { entryDate: { gte: since, lt: until }, ...branchFilter },
       select: { productId: true, branchId: true, type: true, quantity: true, unitCost: true, entryDate: true, branch: { select: { id: true, name: true } } },
     }),
     prisma.inventoryMovement.findMany({
-      where: { createdAt: { gte: since }, ...branchFilter },
+      where: { createdAt: { gte: since, lt: until }, ...branchFilter },
       select: { inventoryProductId: true, branchId: true, movementType: true, quantityDelta: true, createdAt: true },
     }),
     prisma.inventoryBalance.findMany({ where: branchFilter, select: { branchId: true, inventoryProductId: true } }),
     prisma.inventoryCountDeclaration.findMany({
-      where: { createdAt: { gte: since }, ...branchFilter },
+      where: { createdAt: { gte: since, lt: until }, ...branchFilter },
       select: { branchId: true, inventoryProductId: true, expectedQuantity: true, declaredQuantity: true },
     }),
     prisma.branchInventoryMinimum.findMany({ where: branchFilter, select: { branchId: true, inventoryProductId: true, minimumQuantity: true } }),
@@ -380,7 +398,7 @@ export async function getInventoryAnalytics(
 
   for (const branch of branches) branchAcc.set(branch.id, emptyBranchAccumulator(branch.id, branch.name));
   for (let index = days - 1; index >= 0; index -= 1) {
-    const date = addBusinessDays(today, -index);
+    const date = addBusinessDays(range.to, -index);
     dailyAcc.set(date, {
       consumedOut: 0,
       consumedReversal: 0,
