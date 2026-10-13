@@ -78,7 +78,15 @@ export async function consumeAuthAttempt(options: {
         });
 
         return blockedUntil === null;
-      }, { isolationLevel: "Serializable" });
+      }, {
+        isolationLevel: "Serializable",
+        // Neon/PrismaPg puede necesitar más de los 2 s predeterminados
+        // para obtener una conexión cuando una función serverless despierta.
+        // Mantener el límite explícito evita que el acceso falle antes de
+        // validar las credenciales con P2028.
+        maxWait: 10_000,
+        timeout: 15_000,
+      });
     } catch (error) {
       if (!isWriteConflict(error) || attempt === MAX_THROTTLE_ATTEMPTS - 1) {
         throw error;
