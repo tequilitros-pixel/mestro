@@ -9,7 +9,7 @@ const control = "mt-1 w-full rounded-xl border border-outline-variant bg-backgro
 
 type Category = { id: string; name: string; requiresReason: boolean; requiresReceipt: boolean };
 
-export function PaymentForm({ branches, categories, today, initialRequestId }: { branches: { id: string; name: string }[]; categories: Category[]; today: string; initialRequestId: string }) {
+export function PaymentForm({ branches, categories, today, initialRequestId, initialBranchId, initialBranchName }: { branches: { id: string; name: string }[]; categories: Category[]; today: string; initialRequestId: string; initialBranchId?: string; initialBranchName?: string }) {
   const router = useRouter();
   const [requestId, setRequestId] = useState(initialRequestId);
   const [result, setResult] = useState<PaymentActionResult | null>(null);
@@ -44,12 +44,17 @@ export function PaymentForm({ branches, categories, today, initialRequestId }: {
       </div>
       <input type="hidden" name="requestId" value={requestId} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <label className="text-sm font-medium text-on-surface-variant">Sucursal *
+        {initialBranchId ? <div className="text-sm font-medium text-on-surface-variant">
+          <span>Sucursal *</span>
+          <input type="hidden" name="branchId" value={initialBranchId} />
+          <p className={`${control} text-on-surface`}>{initialBranchName}</p>
+          <p className="mt-1 text-xs font-normal text-on-surface-variant">La captura se guardará en esta pestaña.</p>
+        </div> : <label className="text-sm font-medium text-on-surface-variant">Sucursal *
           <select name="branchId" required defaultValue="" className={control}>
             <option value="" disabled>Selecciona una sucursal</option>
             {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
           </select>
-        </label>
+        </label>}
         <label className="text-sm font-medium text-on-surface-variant">Fecha del pago *
           <input name="paymentDate" type="date" required max={today} defaultValue={today} className={control} />
         </label>

@@ -56,6 +56,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
   ]);
+  const selectedBranch = branches.find((branch) => branch.id === branchId);
   const requestedCategory = single(query.category);
   const category = categories.some((item) => item.id === requestedCategory) ? requestedCategory : "";
   const scopedBranchIds = branches.map((branch) => branch.id);
@@ -97,6 +98,13 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     trend.set(key, (trend.get(key) ?? new Prisma.Decimal(0)).plus(item._sum.amount ?? 0));
   }
   const queryBase = new URLSearchParams({ period, date: anchor, ...(branchId ? { branch: branchId } : {}), ...(category ? { category } : {}), ...(status === "voided" ? { status } : {}) });
+  const tabHref = (nextBranchId: string) => {
+    const params = new URLSearchParams(queryBase);
+    params.delete("page");
+    if (nextBranchId) params.set("branch", nextBranchId);
+    else params.delete("branch");
+    return `/accounting?${params}`;
+  };
   const pageHref = (pageNumber: number) => {
     const params = new URLSearchParams(queryBase);
     params.set("page", String(pageNumber));
@@ -106,10 +114,22 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
   return <main className="page-frame mx-auto max-w-7xl space-y-6 text-on-surface">
     <header className="space-y-1">
       <p className="text-xs font-semibold uppercase tracking-widest text-primary">Control de gastos</p>
-      <h1 className="text-3xl font-bold">Contabilidad</h1>
-      <p className="text-sm text-on-surface-variant">Pagos registrados por sucursal: cuánto se pagó, en qué y a quién.</p>
+      <h1 className="text-3xl font-bold">{selectedBranch ? `Contabilidad · ${selectedBranch.name}` : "Contabilidad"}</h1>
+      <p className="text-sm text-on-surface-variant">{selectedBranch ? `Resumen, pagos y entradas de ${selectedBranch.name}.` : "Pagos registrados por sucursal: cuánto se pagó, en qué y a quién."}</p>
       {user.role === "ADMIN" && <Link href="/administration/financial-categories" className="inline-block text-sm font-semibold text-primary underline">Administrar tipos de gasto</Link>}
     </header>
+
+    <nav aria-label="Contabilidad por sucursal" className="overflow-x-auto rounded-xl border border-outline-variant bg-surface-container/60 p-2">
+      <div className="flex min-w-max gap-2">
+        <Link href={tabHref("")} aria-current={!branchId ? "page" : undefined} className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${!branchId ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"}`}>Todas</Link>
+        {branches.map((branch) => {
+          const active = branch.id === branchId;
+          return <Link key={branch.id} href={tabHref(branch.id)} aria-current={active ? "page" : undefined} className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${active ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"}`}>
+            {branch.name}{!branch.active && <span className="ml-1 text-xs opacity-70">(inactiva)</span>}
+          </Link>;
+        })}
+      </div>
+    </nav>
 
     <form method="get" className="grid gap-3 rounded-xl border border-outline-variant bg-surface-container/60 p-4 sm:grid-cols-2 lg:grid-cols-5">
       <label className="text-xs font-semibold text-on-surface-variant">Periodo
@@ -149,7 +169,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
 
     {trend.size > 1 && <Card><h2 className="mb-3 font-bold">Evolución {period === "year" ? "mensual" : "diaria"}</h2><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{[...trend].sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => <div key={key} className="rounded-lg bg-surface-container-high p-3"><p className="text-xs text-on-surface-variant">{key}</p><p className="font-semibold">{money(value)}</p></div>)}</div></Card>}
 
-    <PaymentForm branches={branches.filter((branch) => branch.active)} categories={categories.filter((item) => item.isActive)} today={todayDateOnly()} initialRequestId={randomUUID()} />
+    <PaymentForm branches={branches.filter((branch) => branch.active)} categories={categories.filter((item) => item.isActive)} today={todayDateOnly()} initialRequestId={randomUUID()} initialBranchId={selectedBranch?.active ? selectedBranch.id : ""} initialBranchName={selectedBranch?.active ? selectedBranch.name : ""} />
 
     <section className="space-y-3" aria-label="Historial de pagos">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-xl font-bold">Historial</h2><p className="text-sm text-on-surface-variant">{paymentCount} {status === "voided" ? "pagos anulados" : "pagos vigentes"} en el periodo.</p></div><div className="flex gap-2 text-sm"><Link href={`/accounting?${new URLSearchParams({ period, date: anchor, ...(branchId ? { branch: branchId } : {}), ...(category ? { category } : {}) })}`} className={status === "active" ? "font-bold text-primary" : "text-on-surface-variant underline"}>Vigentes</Link><Link href={`/accounting?${new URLSearchParams({ period, date: anchor, ...(branchId ? { branch: branchId } : {}), ...(category ? { category } : {}), status: "voided" })}`} className={status === "voided" ? "font-bold text-primary" : "text-on-surface-variant underline"}>Anulados</Link></div></div>
