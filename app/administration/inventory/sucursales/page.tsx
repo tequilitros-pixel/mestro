@@ -732,6 +732,9 @@ export default async function SucursalesInventoryPage() {
                           )}
                           {recentEntries.map((entry) => {
                             const quantity = Number(entry.quantity);
+                            const productName = entry.product?.name ?? "Producto no disponible";
+                            const productUnit = entry.product?.unit ?? "";
+                            const branchName = entry.branch?.name ?? "Sucursal no disponible";
                             return (
                               <tr
                                 key={entry.id}
@@ -744,10 +747,10 @@ export default async function SucursalesInventoryPage() {
                                   {entryTypeLabels[entry.type] ?? entry.type}
                                 </td>
                                 <td className="px-2 py-3">
-                                  {entry.product.name}
+                                  {productName}
                                 </td>
                                 <td className="px-2 py-3">
-                                  {entry.branch.name}
+                                  {branchName}
                                 </td>
                                 <td
                                   className={`px-2 py-3 text-right ${
@@ -757,7 +760,7 @@ export default async function SucursalesInventoryPage() {
                                   }`}
                                 >
                                   {quantity > 0 ? "+" : ""}
-                                  {quantity} {entry.product.unit}
+                                  {quantity} {productUnit}
                                 </td>
                               </tr>
                             );
