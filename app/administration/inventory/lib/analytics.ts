@@ -517,11 +517,12 @@ export async function getInventoryAnalytics(
   const coverageOf = (stock: number, consumed: number) => consumed > 0 ? stock / (consumed / days) : null;
 
   const topProducts = Array.from(productAcc.entries())
-    .map(([id, acc]) => {
-      const product = productById.get(id)!;
+    .flatMap(([id, acc]) => {
+      const product = productById.get(id);
+      if (!product) return [];
       const consumed = netConsumed(acc);
       const stock = totalStockByProduct(stockMatrix, id);
-      return {
+      return [{
         id,
         name: product.name,
         code: product.code,
@@ -538,7 +539,7 @@ export async function getInventoryAnalytics(
         stock,
         minimumStock: Number(product.minimumStock),
         daysOfCover: coverageOf(stock, consumed),
-      };
+      }];
     })
     .sort((a, b) => b.consumed - a.consumed);
 
