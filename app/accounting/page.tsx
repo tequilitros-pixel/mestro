@@ -12,6 +12,7 @@ import {
   validDateOnly,
   type AccountingPeriod,
 } from "@/lib/accounting";
+import { getWeeklyBranchSummary } from "@/lib/accounting/weeklyBranchSummary";
 import { PaymentForm, VoidPaymentForm } from "./PaymentForm";
 
 export const dynamic = "force-dynamic";
@@ -87,6 +88,9 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     }),
     prisma.accountingPayment.count({ where: listWhere }),
   ]);
+  const weeklySummary = period === "week" && selectedBranch
+    ? await getWeeklyBranchSummary({ branchId: selectedBranch.id, from, to })
+    : null;
 
   const branchNames = new Map(branches.map((branch) => [branch.id, branch.name]));
   const branchTotals = byBranch.map((item) => ({ id: item.branchId, name: branchNames.get(item.branchId) ?? "Sucursal anterior", amount: item._sum.amount ?? new Prisma.Decimal(0), count: item._count._all })).sort((a, b) => b.amount.comparedTo(a.amount));
@@ -156,6 +160,22 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     </form>
 
     <p className="text-sm text-on-surface-variant">Periodo consultado: <strong>{from}</strong> al <strong>{to}</strong>. Los totales excluyen pagos anulados.</p>
+    {weeklySummary && selectedBranch && <section aria-label={`Resultado semanal de ${selectedBranch.name}`} className="space-y-3">
+      <div>
+        <h2 className="text-xl font-bold">Resultado semanal · {selectedBranch.name}</h2>
+        <p className="text-sm text-on-surface-variant">Ventas cerradas menos nómina pagada y gastos registrados en la semana.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Card highlight><CardLabel>Ventas de la semana</CardLabel><CardValue>{money(weeklySummary.sales)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">{weeklySummary.salesCutCount} corte(s) cerrado(s)</p></Card>
+        <Card><CardLabel>Nómina pagada</CardLabel><CardValue>{money(weeklySummary.payrollPaid)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">{weeklySummary.payrollStatus === "PAGADA" ? `${weeklySummary.payrollEntries} empleado(s) pagado(s)` : "No hay nómina marcada como pagada"}</p></Card>
+        <Card><CardLabel>Salidas de caja</CardLabel><CardValue>{money(weeklySummary.cashOutflows)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">{weeklySummary.cashOutflowCount} salida(s) registrada(s)</p></Card>
+        <Card><CardLabel>Pagos contables</CardLabel><CardValue>{money(weeklySummary.accountingPayments)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">{weeklySummary.accountingPaymentCount} pago(s) vigente(s)</p></Card>
+        <Card><CardLabel>Gastos totales</CardLabel><CardValue>{money(weeklySummary.totalExpenses)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Nómina + salidas + pagos contables</p></Card>
+        <Card className={weeklySummary.netResult < 0 ? "border-error/40 bg-error/5" : "border-primary/30 bg-primary/5"}><CardLabel>Resultado de la semana</CardLabel><CardValue>{money(weeklySummary.netResult)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Ventas menos gastos</p></Card>
+      </div>
+      {(weeklySummary.payrollStatus !== "PAGADA" || weeklySummary.payrollUnallocated > 0) && <p className="text-xs text-on-surface-variant">{weeklySummary.payrollStatus !== "PAGADA" ? "La nómina solo se integra cuando el periodo semanal está marcado como PAGADA." : "Hay importe de nómina pagada sin sucursal identificable en el snapshot y no se sumó a Canoas."}</p>}
+      <p className="text-xs text-on-surface-variant">Las salidas de caja y los pagos contables se conservan como fuentes separadas para evitar ocultar o mezclar registros.</p>
+    </section>}
     <section aria-label="Resumen de pagos" className="grid gap-3 sm:grid-cols-3">
       <Card highlight><CardLabel>Total pagado</CardLabel><CardValue>{money(summary._sum.amount ?? 0)}</CardValue></Card>
       <Card><CardLabel>Pagos</CardLabel><CardValue>{summary._count._all}</CardValue></Card>
