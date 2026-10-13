@@ -92,8 +92,10 @@ export function InventoryRankingChart({
 /** Entradas vs salidas por día. */
 export function InventoryFlowChart({
   data,
+  money = false,
 }: {
   data: Array<{ label: string; consumed: number; received: number; waste?: number }>;
+  money?: boolean;
 }) {
   return (
     <div className="h-72">
@@ -101,10 +103,10 @@ export function InventoryFlowChart({
         <BarChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" />
           <XAxis dataKey="label" stroke="var(--color-outline)" fontSize={11} />
-          <YAxis stroke="var(--color-outline)" fontSize={12} />
+          <YAxis stroke="var(--color-outline)" fontSize={12} tickFormatter={(value) => money ? currency(Number(value)) : units(Number(value))} />
           <Tooltip
             contentStyle={tooltipStyle}
-            formatter={(value, name) => [units(Number(value)), name]}
+            formatter={(value, name) => [money ? currency(Number(value)) : units(Number(value)), name]}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <Bar
@@ -135,7 +137,7 @@ export function InventoryFlowChart({
 export function InventoryBranchComparisonChart({
   data,
 }: {
-  data: Array<{ name: string; consumed: number; waste: number; mismatchUnits: number }>;
+  data: Array<{ name: string; consumed: number; waste: number; mismatches: number }>;
 }) {
   return (
     <div style={{ height: Math.max(260, data.length * 48) }}>
@@ -146,16 +148,16 @@ export function InventoryBranchComparisonChart({
           margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" horizontal={false} />
-          <XAxis type="number" stroke="var(--color-outline)" fontSize={12} tickFormatter={(value) => units(Number(value))} />
+          <XAxis type="number" stroke="var(--color-outline)" fontSize={12} tickFormatter={(value) => currency(Number(value))} />
           <YAxis type="category" dataKey="name" stroke="var(--color-outline)" fontSize={12} width={130} />
           <Tooltip
             contentStyle={tooltipStyle}
-            formatter={(value, name) => [units(Number(value)), name]}
+            formatter={(value, name) => [name === "Diferencias" ? units(Number(value)) : currency(Number(value)), name]}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <Bar dataKey="consumed" name="Consumido" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
           <Bar dataKey="waste" name="Merma" fill="var(--color-error)" radius={[0, 6, 6, 0]} />
-          <Bar dataKey="mismatchUnits" name="Diferencia" fill="var(--color-secondary)" radius={[0, 6, 6, 0]} />
+          <Bar dataKey="mismatches" name="Diferencias" fill="var(--color-secondary)" radius={[0, 6, 6, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -166,9 +168,11 @@ export function InventoryBranchComparisonChart({
 export function InventoryPeriodComparisonChart({
   data,
   height = 300,
+  money = false,
 }: {
   data: Array<{ name: string; weekly: number; monthly: number }>;
   height?: number;
+  money?: boolean;
 }) {
   return (
     <div style={{ height: Math.max(height, data.length * 42) }}>
@@ -179,9 +183,9 @@ export function InventoryPeriodComparisonChart({
           margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" horizontal={false} />
-          <XAxis type="number" stroke="var(--color-outline)" fontSize={12} tickFormatter={(value) => units(Number(value))} />
+          <XAxis type="number" stroke="var(--color-outline)" fontSize={12} tickFormatter={(value) => money ? currency(Number(value)) : units(Number(value))} />
           <YAxis type="category" dataKey="name" stroke="var(--color-outline)" fontSize={12} width={150} />
-          <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [units(Number(value)), name]} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [money ? currency(Number(value)) : units(Number(value)), name]} />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <Bar dataKey="weekly" name="Últimos 7 días" fill="var(--color-secondary)" radius={[0, 6, 6, 0]} />
           <Bar dataKey="monthly" name="Últimos 30 días" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />

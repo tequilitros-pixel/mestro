@@ -98,30 +98,30 @@ export default async function SucursalesInventoryPage() {
   const weekly = dashboard.weeklyAnalytics;
   const mostConsumedProduct = control.topProducts[0] ?? null;
   const mostConsumedProductWeekly = weekly.topProducts[0] ?? null;
-  const mostActiveBranch = [...control.branches].sort((a, b) => b.consumed - a.consumed)[0] ?? null;
-  const mostActiveBranchWeekly = [...weekly.branches].sort((a, b) => b.consumed - a.consumed)[0] ?? null;
-  const mostWastefulBranch = [...control.branches].sort((a, b) => b.waste - a.waste)[0] ?? null;
-  const mostMismatchedBranch = [...control.branches].sort((a, b) => b.mismatchUnits - a.mismatchUnits)[0] ?? null;
+  const mostActiveBranch = [...control.branches].sort((a, b) => b.consumedCost - a.consumedCost)[0] ?? null;
+  const mostActiveBranchWeekly = [...weekly.branches].sort((a, b) => b.consumedCost - a.consumedCost)[0] ?? null;
+  const mostWastefulBranch = [...control.branches].sort((a, b) => b.wasteCost - a.wasteCost)[0] ?? null;
+  const mostMismatchedBranch = [...control.branches].sort((a, b) => b.mismatches - a.mismatches)[0] ?? null;
   const mismatchProducts = [...control.topProducts]
     .filter((product) => product.mismatches > 0)
     .sort((a, b) => b.mismatchUnits - a.mismatchUnits)
     .slice(0, 12);
   const branchComparison = [...control.branches]
-    .filter((branch) => branch.consumed > 0 || branch.waste > 0 || branch.mismatchUnits > 0)
-    .sort((a, b) => Math.max(b.consumed, b.waste, b.mismatchUnits) - Math.max(a.consumed, a.waste, a.mismatchUnits))
+    .filter((branch) => branch.consumedCost > 0 || branch.wasteCost > 0 || branch.mismatches > 0)
+    .sort((a, b) => (b.consumedCost + b.wasteCost) - (a.consumedCost + a.wasteCost) || b.mismatches - a.mismatches)
     .slice(0, 10)
     .map((branch) => ({
       name: branch.name,
-      consumed: Math.round(branch.consumed * 10) / 10,
-      waste: Math.round(branch.waste * 10) / 10,
-      mismatchUnits: Math.round(branch.mismatchUnits * 10) / 10,
+      consumed: Math.round(branch.consumedCost * 10) / 10,
+      waste: Math.round(branch.wasteCost * 10) / 10,
+      mismatches: branch.mismatches,
     }));
   const weeklyBranchById = new Map(weekly.branches.map((branch) => [branch.id, branch]));
   const branchPeriodComparison = control.branches
     .map((branch) => ({
       name: branch.name,
-      weekly: Math.round((weeklyBranchById.get(branch.id)?.consumed ?? 0) * 10) / 10,
-      monthly: Math.round(branch.consumed * 10) / 10,
+      weekly: Math.round((weeklyBranchById.get(branch.id)?.consumedCost ?? 0) * 10) / 10,
+      monthly: Math.round(branch.consumedCost * 10) / 10,
     }))
     .filter((branch) => branch.weekly > 0 || branch.monthly > 0)
     .sort((a, b) => b.monthly - a.monthly)
@@ -177,7 +177,7 @@ export default async function SucursalesInventoryPage() {
               Inventario de sucursales
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-on-surface-variant sm:text-base">
-              Stock por sucursal, movimientos y conteos semanales.
+              Stock por sucursal, movimientos y conteos semanales. Las comparativas entre sucursales usan valor estimado; los productos se muestran en su presentación configurada.
             </p>
           </div>
 
@@ -214,24 +214,24 @@ export default async function SucursalesInventoryPage() {
 
                   <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
                     <Card>
-                      <CardLabel>Consumo neto</CardLabel>
-                      <CardValue>{control.totals.consumedUnits.toFixed(1)}</CardValue>
+                      <CardLabel>Valor consumido</CardLabel>
+                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.consumedCost)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        unidades · {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.consumedCost)}
+                        costo estimado · {control.totals.movements} movimientos
                       </p>
                     </Card>
                     <Card>
-                      <CardLabel>Mermas</CardLabel>
-                      <CardValue>{control.totals.wasteUnits.toFixed(1)}</CardValue>
+                      <CardLabel>Costo de mermas</CardLabel>
+                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.wasteCost)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        costo {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.wasteCost)}
+                        valor estimado de pérdidas
                       </p>
                     </Card>
                     <Card>
                       <CardLabel>Diferencias</CardLabel>
                       <CardValue>{control.totals.mismatchCount}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {control.totals.mismatchUnits.toFixed(1)} unidades · faltantes {control.totals.shortageUnits.toFixed(1)}
+                        registros con diferencia contra el conteo esperado
                       </p>
                     </Card>
                     <Card>
@@ -249,12 +249,12 @@ export default async function SucursalesInventoryPage() {
                         {mostActiveBranch?.name ?? "Sin datos"}
                       </p>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {mostActiveBranch ? `${mostActiveBranch.consumed.toFixed(1)} unidades` : "Todavía no hay salidas"}
+                        {mostActiveBranch ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(mostActiveBranch.consumedCost) : "Todavía no hay salidas"}
                       </p>
                     </Card>
                     <Card>
-                      <CardLabel>Entradas del periodo</CardLabel>
-                      <CardValue>{control.totals.receivedUnits.toFixed(1)}</CardValue>
+                      <CardLabel>Valor recibido</CardLabel>
+                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.receivedCost)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
                         {control.totals.movements} movimientos registrados
                       </p>
@@ -263,26 +263,26 @@ export default async function SucursalesInventoryPage() {
 
                   <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
                     <Card>
-                      <CardLabel>Consumo · 7 días</CardLabel>
-                      <CardValue>{weekly.totals.consumedUnits.toFixed(1)}</CardValue>
+                      <CardLabel>Valor consumido · 7 días</CardLabel>
+                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(weekly.totals.consumedCost)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
                         {weekly.totals.movements} movimientos
                       </p>
                     </Card>
                     <Card>
-                      <CardLabel>Entradas · 7 días</CardLabel>
-                      <CardValue>{weekly.totals.receivedUnits.toFixed(1)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">unidades recibidas</p>
+                      <CardLabel>Valor recibido · 7 días</CardLabel>
+                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(weekly.totals.receivedCost)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">costo estimado</p>
                     </Card>
                     <Card>
-                      <CardLabel>Mermas · 7 días</CardLabel>
-                      <CardValue>{weekly.totals.wasteUnits.toFixed(1)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">pérdidas registradas</p>
+                      <CardLabel>Costo de mermas · 7 días</CardLabel>
+                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(weekly.totals.wasteCost)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">valor estimado</p>
                     </Card>
                     <Card>
                       <CardLabel>Diferencias · 7 días</CardLabel>
                       <CardValue>{weekly.totals.mismatchCount}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">{weekly.totals.mismatchUnits.toFixed(1)} unidades</p>
+                      <p className="mt-1 text-xs text-on-surface-variant">registros con diferencia</p>
                     </Card>
                     <Card>
                       <CardLabel>Producto líder · 7 días</CardLabel>
@@ -299,7 +299,7 @@ export default async function SucursalesInventoryPage() {
                         {mostActiveBranchWeekly?.name ?? "Sin datos"}
                       </p>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {mostActiveBranchWeekly ? `${mostActiveBranchWeekly.consumed.toFixed(1)} unidades` : "Sin salidas"}
+                        {mostActiveBranchWeekly ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(mostActiveBranchWeekly.consumedCost) : "Sin salidas"}
                       </p>
                     </Card>
                   </section>
@@ -308,7 +308,7 @@ export default async function SucursalesInventoryPage() {
                     <Card>
                       <CardLabel>Consumo por sucursal · semanal vs mensual</CardLabel>
                       {branchPeriodComparison.length > 0 ? (
-                        <InventoryPeriodComparisonChart data={branchPeriodComparison} />
+                        <InventoryPeriodComparisonChart data={branchPeriodComparison} money />
                       ) : (
                         <p className="py-12 text-center text-sm text-on-surface-variant">Sin consumo registrado.</p>
                       )}
@@ -356,11 +356,11 @@ export default async function SucursalesInventoryPage() {
                   <section className="grid gap-4 lg:grid-cols-3">
                     <Card>
                       <CardLabel>Evolución · últimos 30 días</CardLabel>
-                      <InventoryFlowChart data={control.daily} />
+                      <InventoryFlowChart data={control.daily.map((day) => ({ label: day.label, consumed: day.consumedCost, received: day.receivedCost, waste: day.wasteCost }))} money />
                     </Card>
                     <Card>
                       <CardLabel>Evolución · últimos 7 días</CardLabel>
-                      <InventoryFlowChart data={weekly.daily} />
+                      <InventoryFlowChart data={weekly.daily.map((day) => ({ label: day.label, consumed: day.consumedCost, received: day.receivedCost, waste: day.wasteCost }))} money />
                     </Card>
                     <Card>
                       <CardLabel>Tipos de movimiento</CardLabel>
@@ -401,14 +401,14 @@ export default async function SucursalesInventoryPage() {
                       <CardLabel>Sucursal con más merma</CardLabel>
                       <p className="mt-3 text-lg font-bold text-on-surface">{mostWastefulBranch?.name ?? "Sin datos"}</p>
                       <p className="mt-1 text-sm text-on-surface-variant">
-                        {mostWastefulBranch ? `${mostWastefulBranch.waste.toFixed(1)} unidades · ${new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(mostWastefulBranch.wasteCost)}` : "Sin mermas registradas"}
+                        {mostWastefulBranch ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(mostWastefulBranch.wasteCost) : "Sin mermas registradas"}
                       </p>
                     </Card>
                     <Card>
                       <CardLabel>Sucursal con más diferencias</CardLabel>
                       <p className="mt-3 text-lg font-bold text-on-surface">{mostMismatchedBranch?.name ?? "Sin datos"}</p>
                       <p className="mt-1 text-sm text-on-surface-variant">
-                        {mostMismatchedBranch ? `${mostMismatchedBranch.mismatches} productos · ${mostMismatchedBranch.shortageUnits.toFixed(1)} unidades faltantes` : "Sin diferencias registradas"}
+                        {mostMismatchedBranch ? `${mostMismatchedBranch.mismatches} registros con diferencia` : "Sin diferencias registradas"}
                       </p>
                     </Card>
                     <Card>
@@ -435,10 +435,9 @@ export default async function SucursalesInventoryPage() {
                             <thead>
                               <tr className="border-b border-outline-variant text-left text-xs text-outline">
                                 <th className="pb-2 font-medium">Sucursal</th>
-                                <th className="pb-2 text-right font-medium">7 días</th>
-                                <th className="pb-2 text-right font-medium">30 días</th>
-                                <th className="pb-2 text-right font-medium">Costo</th>
-                                <th className="pb-2 text-right font-medium">Merma</th>
+                                <th className="pb-2 text-right font-medium">Consumo · 7 días</th>
+                                <th className="pb-2 text-right font-medium">Consumo · 30 días</th>
+                                <th className="pb-2 text-right font-medium">Costo merma</th>
                                 <th className="pb-2 text-right font-medium">Diferencias</th>
                                 <th className="pb-2 text-right font-medium">Bajo mínimo</th>
                                 <th className="pb-2 text-right font-medium">Negativos</th>
@@ -452,11 +451,10 @@ export default async function SucursalesInventoryPage() {
                                   <td className="py-3 font-semibold text-on-surface">
                                     <span className="mr-2 text-xs text-outline">#{index + 1}</span>{branch.name}
                                   </td>
-                                  <td className="py-3 text-right text-secondary">{(weeklyBranchById.get(branch.id)?.consumed ?? 0).toFixed(1)}</td>
-                                  <td className="py-3 text-right text-on-surface-variant">{branch.consumed.toFixed(1)}</td>
-                                  <td className="py-3 text-right text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.consumedCost)}</td>
-                                  <td className="py-3 text-right text-error">{branch.waste.toFixed(1)}</td>
-                                  <td className="py-3 text-right text-secondary">{branch.mismatches} · {branch.mismatchUnits.toFixed(1)}</td>
+                                <td className="py-3 text-right text-secondary">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(weeklyBranchById.get(branch.id)?.consumedCost ?? 0)}</td>
+                                <td className="py-3 text-right text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.consumedCost)}</td>
+                                <td className="py-3 text-right text-error">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.wasteCost)}</td>
+                                <td className="py-3 text-right text-secondary">{branch.mismatches}</td>
                                   <td className="py-3 text-right text-on-surface-variant">{branch.lowStockCount}</td>
                                   <td className="py-3 text-right text-error">{branch.negativeProductCount}</td>
                                   <td className="py-3 text-right text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.currentStockValue)}</td>
@@ -601,14 +599,14 @@ export default async function SucursalesInventoryPage() {
                       <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
                         Evolución del inventario · últimos 30 días
                       </h2>
-                      <InventoryFlowChart data={control.daily} />
+                      <InventoryFlowChart data={control.daily.map((day) => ({ label: day.label, consumed: day.consumedCost, received: day.receivedCost, waste: day.wasteCost }))} money />
                     </div>
 
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
                       <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
                         Evolución del inventario · últimos 7 días
                       </h2>
-                      <InventoryFlowChart data={weekly.daily} />
+                      <InventoryFlowChart data={weekly.daily.map((day) => ({ label: day.label, consumed: day.consumedCost, received: day.receivedCost, waste: day.wasteCost }))} money />
                     </div>
                   </section>
 
@@ -617,7 +615,7 @@ export default async function SucursalesInventoryPage() {
                       <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
                         Consumo por sucursal · semanal vs mensual
                       </h2>
-                      <InventoryPeriodComparisonChart data={branchPeriodComparison} />
+                      <InventoryPeriodComparisonChart data={branchPeriodComparison} money />
                     </div>
 
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
@@ -630,19 +628,19 @@ export default async function SucursalesInventoryPage() {
 
                   <section className="mt-5 grid gap-4 grid-cols-2 lg:grid-cols-4">
                     <Card>
-                      <CardLabel>Consumo semanal</CardLabel>
-                      <CardValue>{weekly.totals.consumedUnits.toFixed(1)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">unidades en 7 días</p>
+                      <CardLabel>Valor consumido semanal</CardLabel>
+                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(weekly.totals.consumedCost)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">costo estimado en 7 días</p>
                     </Card>
                     <Card>
-                      <CardLabel>Consumo mensual</CardLabel>
-                      <CardValue>{control.totals.consumedUnits.toFixed(1)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">unidades en 30 días</p>
+                      <CardLabel>Valor consumido mensual</CardLabel>
+                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.consumedCost)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">costo estimado en 30 días</p>
                     </Card>
                     <Card>
-                      <CardLabel>Merma semanal</CardLabel>
-                      <CardValue>{weekly.totals.wasteUnits.toFixed(1)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">unidades registradas</p>
+                      <CardLabel>Costo de merma semanal</CardLabel>
+                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(weekly.totals.wasteCost)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">valor estimado</p>
                     </Card>
                     <Card>
                       <CardLabel>Diferencias mensuales</CardLabel>
