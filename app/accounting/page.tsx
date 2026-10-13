@@ -40,7 +40,6 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
   const anchor = validDateOnly(dateInput) ? dateInput : todayDateOnly();
   const { from, to } = periodRange(period, anchor);
   const requestedBranch = single(query.branch);
-  const branchId = requestedBranch && (accessibleBranchIds === null || accessibleBranchIds.includes(requestedBranch)) ? requestedBranch : "";
   const status = single(query.status) === "voided" ? "voided" : "active";
   const pageInput = Number(single(query.page));
   const currentPage = Number.isInteger(pageInput) && pageInput > 0 ? Math.min(pageInput, 10000) : 1;
@@ -60,6 +59,10 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
   ]);
+  // A branch tab is authoritative only when it belongs to the active branches
+  // available to this user. This also prevents stale or inactive branch ids
+  // from widening a branch-scoped page into an ambiguous view.
+  const branchId = requestedBranch && branches.some((branch) => branch.id === requestedBranch) ? requestedBranch : "";
   const selectedBranch = branches.find((branch) => branch.id === branchId);
   const requestedCategory = single(query.category);
   const category = categories.some((item) => item.id === requestedCategory) ? requestedCategory : "";
@@ -147,12 +150,17 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       <label className="text-xs font-semibold text-on-surface-variant">Fecha de referencia
         <input name="date" type="date" defaultValue={anchor} className={control} />
       </label>
-      <label className="text-xs font-semibold text-on-surface-variant">Sucursal
-        <select name="branch" defaultValue={branchId} className={control}>
+      {selectedBranch ? <div className="text-xs font-semibold text-on-surface-variant">
+        <span>Sucursal</span>
+        <input type="hidden" name="branch" value={selectedBranch.id} />
+        <div className={`${control} font-semibold text-on-surface`}>{selectedBranch.name}</div>
+        <p className="mt-1 text-xs font-normal text-on-surface-variant">Esta pestaña solo muestra y registra datos de {selectedBranch.name}.</p>
+      </div> : <label className="text-xs font-semibold text-on-surface-variant">Sucursal
+        <select name="branch" defaultValue="" className={control}>
           <option value="">Todas las sucursales</option>
           {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
         </select>
-      </label>
+      </label>}
       <label className="text-xs font-semibold text-on-surface-variant">Tipo de gasto
         <select name="category" defaultValue={category} className={control}>
           <option value="">Todos los tipos</option>
