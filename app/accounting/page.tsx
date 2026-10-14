@@ -16,6 +16,8 @@ import {
 import { getWeeklyBranchSummary } from "@/lib/accounting/weeklyBranchSummary";
 import { getBranchAccountingHistory } from "@/lib/accounting/branchHistory";
 import { getBranchPayrollOverview } from "@/lib/accounting/payrollOverview";
+import { getBranchSalesOverview } from "@/lib/accounting/branchSalesOverview";
+import { DailyBranchChart, DistributionPieChart, RankingBarChart } from "@/components/pos/SalesCharts";
 import { PaymentForm, VoidPaymentForm } from "./PaymentForm";
 
 export const dynamic = "force-dynamic";
@@ -156,10 +158,11 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     }),
     prisma.accountingPayment.count({ where: listWhere }),
   ]);
-  const [weeklySummary, branchHistory, payrollOverview] = await Promise.all([
+  const [weeklySummary, branchHistory, payrollOverview, salesOverview] = await Promise.all([
     period === "week" && selectedBranch && view === "summary" ? getWeeklyBranchSummary({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
     selectedBranch && view === "payroll" ? getBranchAccountingHistory({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
     selectedBranch && view === "payroll" ? getBranchPayrollOverview({ branchId: selectedBranch.id, anchor, period }) : Promise.resolve(null),
+    selectedBranch && view === "sales" ? getBranchSalesOverview({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
   ]);
 
   const branchNames = new Map(branches.map((branch) => [branch.id, branch.name]));
@@ -349,7 +352,30 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-bold">Quién ha trabajado más</h2><p className="text-sm text-on-surface-variant">Ranking de turnos y monto asignado dentro del periodo seleccionado.</p></div><span className="text-xs text-on-surface-variant">{workerRanking.length} trabajador(es)</span></div>
         {workerRanking.length ? <ol className="mt-4 space-y-3">{workerRanking.map(([name, worker], index) => <li key={name} className="flex flex-wrap items-center gap-3 rounded-lg bg-surface-container-high p-3 text-sm"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-on-primary">{index + 1}</span><span className="min-w-36 flex-1 font-semibold">{name}</span><span className="text-on-surface-variant">{worker.shifts} turno(s)</span><strong>{money(worker.amount)}</strong></li>)}</ol> : <p className="mt-4 text-sm text-on-surface-variant">No hay pagos de nómina en el periodo seleccionado. El presupuesto se calcula con los turnos publicados y las tarifas vigentes.</p>}
       </Card>
-    </section> : view === "sales" && selectedBranch ? <Card><h2 className="text-xl font-bold">Ventas · {selectedBranch.name}</h2><p className="mt-2 text-sm text-on-surface-variant">Esta pestaña queda separada para integrar el historial de ventas de la sucursal en el siguiente paso.</p></Card> : view === "inventory" && selectedBranch ? <Card><h2 className="text-xl font-bold">Inventario · {selectedBranch.name}</h2><p className="mt-2 text-sm text-on-surface-variant">Esta pestaña queda separada para integrar el consumo y registro de inventario de la sucursal en el siguiente paso.</p></Card> : <>
+    </section> : view === "sales" && selectedBranch && salesOverview ? <section aria-label={`Ventas de ${selectedBranch.name}`} className="space-y-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary">Ventas</p>
+        <h2 className="text-2xl font-bold">Resumen de ventas · {selectedBranch.name}</h2>
+        <p className="text-sm text-on-surface-variant">Ventas completadas entre {from} y {to}, con el mismo criterio del resumen del punto de venta.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Card highlight><CardLabel>Total vendido</CardLabel><CardValue>{money(salesOverview.total)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">{salesOverview.saleCount} venta(s) completada(s).</p></Card>
+        <Card><CardLabel>Ticket promedio</CardLabel><CardValue>{money(salesOverview.averageTicket)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Promedio por venta del periodo.</p></Card>
+        <Card><CardLabel>Unidades vendidas</CardLabel><CardValue>{salesOverview.units}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Productos de catálogo; no incluye cobros personalizados.</p></Card>
+        <Card><CardLabel>Productos diferentes</CardLabel><CardValue>{salesOverview.productCount}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Productos con al menos una unidad vendida.</p></Card>
+      </div>
+      {salesOverview.saleCount ? <>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card><h3 className="font-bold">Ventas por día</h3><p className="mt-1 text-sm text-on-surface-variant">Evolución de ventas completadas en {selectedBranch.name}.</p><div className="mt-3"><DailyBranchChart data={salesOverview.daily.map((point) => ({ label: point.label, [selectedBranch.name]: point.total }))} branchNames={[selectedBranch.name]} /></div></Card>
+          <Card><h3 className="font-bold">Tipos de pago</h3><p className="mt-1 text-sm text-on-surface-variant">Importe cobrado por método de pago.</p><div className="mt-3"><DistributionPieChart data={salesOverview.payments.map((payment) => ({ name: payment.label, value: payment.amount }))} /></div></Card>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card><h3 className="font-bold">Productos más vendidos</h3><p className="mt-1 text-sm text-on-surface-variant">Los primeros diez productos por unidades vendidas.</p><div className="mt-3"><RankingBarChart data={salesOverview.products.slice(0, 10).map((product) => ({ name: product.name, value: product.units }))} valueLabel="Unidades" valueFormat="units" /></div></Card>
+          <Card><h3 className="font-bold">Desglose por tipo de pago</h3><div className="mt-3 divide-y divide-outline-variant">{salesOverview.payments.map((payment) => <div key={payment.method} className="flex items-center justify-between gap-3 py-3 text-sm"><span>{payment.label}</span><strong>{money(payment.amount)}</strong></div>)}</div></Card>
+        </div>
+        <Card><h3 className="font-bold">Productos vendidos</h3><div className="mt-3 divide-y divide-outline-variant">{salesOverview.products.map((product) => <div key={product.key} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><div><p className="font-semibold">{product.name}</p><p className="text-xs text-on-surface-variant">{product.units} unidad(es)</p></div><strong>{money(product.total)}</strong></div>)}</div></Card>
+      </> : <Card><p className="text-sm text-on-surface-variant">No hay ventas completadas en {selectedBranch.name} durante este periodo.</p></Card>}
+    </section> : view === "inventory" && selectedBranch ? <Card><h2 className="text-xl font-bold">Inventario · {selectedBranch.name}</h2><p className="mt-2 text-sm text-on-surface-variant">Esta pestaña queda separada para integrar el consumo y registro de inventario de la sucursal en el siguiente paso.</p></Card> : <>
     {weeklySummary && selectedBranch && <section aria-label={`Resultado semanal de ${selectedBranch.name}`} className="space-y-3">
       <div>
         <h2 className="text-xl font-bold">Resultado semanal · {selectedBranch.name}</h2>
