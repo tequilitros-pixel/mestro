@@ -25,8 +25,11 @@ type Query = {
   branch?: string | string[];
   category?: string | string[];
   status?: string | string[];
+  view?: string | string[];
   page?: string | string[];
 };
+
+type AccountingView = "summary" | "payroll" | "sales" | "inventory";
 
 const money = formatPaymentMoney;
 const single = (value: string | string[] | undefined) => typeof value === "string" ? value : "";
@@ -66,6 +69,8 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
   // from widening a branch-scoped page into an ambiguous view.
   const branchId = requestedBranch && branches.some((branch) => branch.id === requestedBranch) ? requestedBranch : "";
   const selectedBranch = branches.find((branch) => branch.id === branchId);
+  const requestedView = single(query.view);
+  const view: AccountingView = selectedBranch && (requestedView === "payroll" || requestedView === "sales" || requestedView === "inventory") ? requestedView : "summary";
   const requestedCategory = single(query.category);
   const category = categories.some((item) => item.id === requestedCategory) ? requestedCategory : "";
   const scopedBranchIds = branches.map((branch) => branch.id);
@@ -97,8 +102,8 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     prisma.accountingPayment.count({ where: listWhere }),
   ]);
   const [weeklySummary, branchHistory] = await Promise.all([
-    period === "week" && selectedBranch ? getWeeklyBranchSummary({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
-    selectedBranch ? getBranchAccountingHistory({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
+    period === "week" && selectedBranch && view === "summary" ? getWeeklyBranchSummary({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
+    selectedBranch && view === "payroll" ? getBranchAccountingHistory({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
   ]);
 
   const branchNames = new Map(branches.map((branch) => [branch.id, branch.name]));
@@ -110,12 +115,22 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     const key = period === "year" ? day.slice(0, 7) : day;
     trend.set(key, (trend.get(key) ?? new Prisma.Decimal(0)).plus(item._sum.amount ?? 0));
   }
-  const queryBase = new URLSearchParams({ period, date: anchor, ...(branchId ? { branch: branchId } : {}), ...(category ? { category } : {}), ...(status === "voided" ? { status } : {}) });
+  const queryBase = new URLSearchParams({ period, date: anchor, ...(branchId ? { branch: branchId } : {}), ...(category ? { category } : {}), ...(status === "voided" ? { status } : {}), ...(view !== "summary" ? { view } : {}) });
   const tabHref = (nextBranchId: string) => {
     const params = new URLSearchParams(queryBase);
     params.delete("page");
     if (nextBranchId) params.set("branch", nextBranchId);
-    else params.delete("branch");
+    else {
+      params.delete("branch");
+      params.delete("view");
+    }
+    return `/accounting?${params}`;
+  };
+  const sectionHref = (nextView: AccountingView) => {
+    const params = new URLSearchParams(queryBase);
+    if (nextView === "summary") params.delete("view");
+    else params.set("view", nextView);
+    params.delete("page");
     return `/accounting?${params}`;
   };
   const pageHref = (pageNumber: number) => {
@@ -152,8 +167,22 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         })}
       </div>
     </nav>
+    {selectedBranch && <nav aria-label={`Secciones de ${selectedBranch.name}`} className="overflow-x-auto rounded-xl border border-outline-variant bg-surface-container/40 p-2">
+      <div className="flex min-w-max gap-2">
+        {([[
+          "summary", "Resumen contable",
+        ], [
+          "payroll", "Pago en nómina",
+        ], [
+          "sales", "Ventas",
+        ], [
+          "inventory", "Inventario",
+        ]] as const).map(([key, label]) => <Link key={key} href={sectionHref(key)} aria-current={view === key ? "page" : undefined} className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${view === key ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"}`}>{label}</Link>)}
+      </div>
+    </nav>}
 
     <form method="get" className="grid gap-3 rounded-xl border border-outline-variant bg-surface-container/60 p-4 sm:grid-cols-2 lg:grid-cols-5">
+      {view !== "summary" && <input type="hidden" name="view" value={view} />}
       <label className="text-xs font-semibold text-on-surface-variant">Periodo
         <select name="period" defaultValue={period} className={control}>
           <option value="day">Día</option><option value="week">Semana</option><option value="month">Mes</option><option value="year">Año</option>
@@ -173,12 +202,12 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
           {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
         </select>
       </label>}
-      <label className="text-xs font-semibold text-on-surface-variant">Tipo de gasto
+      {view === "summary" && <label className="text-xs font-semibold text-on-surface-variant">Tipo de gasto
         <select name="category" defaultValue={category} className={control}>
           <option value="">Todos los tipos</option>
           {categories.map((item) => <option key={item.id} value={item.id}>{item.name}{item.isActive ? "" : " (inactiva)"}</option>)}
         </select>
-      </label>
+      </label>}
       <div className="flex items-end"><button type="submit" className="w-full rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary">Consultar</button></div>
     </form>
 
@@ -190,37 +219,23 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         <Link href={nextPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Siguiente →</Link>
       </nav>
     </div>
-    {branchHistory && selectedBranch && <section aria-label={`Historial integrado de ${selectedBranch.name}`} className="space-y-3">
+    {view === "payroll" && selectedBranch && branchHistory ? <section aria-label={`Pago en nómina de ${selectedBranch.name}`} className="space-y-4">
       <div>
-        <h2 className="text-xl font-bold">Historial integrado · {selectedBranch.name}</h2>
-        <p className="text-sm text-on-surface-variant">Registros históricos vinculados a esta sucursal. Se muestran como fuentes existentes y no crean pagos contables duplicados.</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary">Pago en nómina</p>
+        <h2 className="text-2xl font-bold">Nómina pagada · {selectedBranch.name}</h2>
+        <p className="text-sm text-on-surface-variant">Semanas pagadas, personas, turnos asignados y monto correspondiente únicamente a {selectedBranch.name}.</p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card><CardLabel>Nómina pagada</CardLabel><CardValue>{branchHistory.payroll.length}</CardValue><p className="mt-1 text-xs text-on-surface-variant">semana(s) con pago</p></Card>
-        <Card><CardLabel>Cortes de caja</CardLabel><CardValue>{branchHistory.cashCuts.length}</CardValue><p className="mt-1 text-xs text-on-surface-variant">turno(s) cerrado(s)</p></Card>
-        <Card><CardLabel>Salidas de caja</CardLabel><CardValue>{branchHistory.cashOutflows.length}</CardValue><p className="mt-1 text-xs text-on-surface-variant">gasto(s) registrado(s)</p></Card>
-        <Card><CardLabel>Sobres</CardLabel><CardValue>{branchHistory.envelopes.length}</CardValue><p className="mt-1 text-xs text-on-surface-variant">sobre(s) vinculados</p></Card>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card highlight><CardLabel>Total de nómina</CardLabel><CardValue>{money(branchHistory.payroll.reduce((sum, row) => sum + row.amount, 0))}</CardValue></Card>
+        <Card><CardLabel>Semanas pagadas</CardLabel><CardValue>{branchHistory.payroll.length}</CardValue></Card>
+        <Card><CardLabel>Personas pagadas</CardLabel><CardValue>{branchHistory.payroll.reduce((sum, row) => sum + row.employeeCount, 0)}</CardValue></Card>
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card>
-          <h3 className="mb-3 font-bold">Nómina por semana</h3>
-          {branchHistory.payroll.length ? <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">{branchHistory.payroll.map((row) => <li key={row.weekStart} className="border-b border-outline-variant pb-2 text-sm"><div className="flex justify-between gap-3"><span>Semana del {row.weekStart}</span><strong>{money(row.amount)}</strong></div><p className="text-xs text-on-surface-variant">{row.employeeCount} empleado(s) con pago asignado a {selectedBranch.name}{row.unallocated > 0 ? ` · ${money(row.unallocated)} sin sucursal en el snapshot` : ""}</p></li>)}</ul> : <p className="text-sm text-on-surface-variant">No hay nómina marcada como pagada en este periodo.</p>}
-        </Card>
-        <Card>
-          <h3 className="mb-3 font-bold">Cortes y caja</h3>
-          {branchHistory.cashCuts.length ? <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">{branchHistory.cashCuts.map((row) => <li key={row.id} className="border-b border-outline-variant pb-2 text-sm"><div className="flex justify-between gap-3"><span>{row.date} · {row.code}</span><strong>{money(row.sales)} ventas</strong></div><p className="text-xs text-on-surface-variant">Salidas: {money(row.outflows)}{row.netProfit == null ? "" : ` · Utilidad: ${money(row.netProfit)}`}{row.envelopeAmount == null ? "" : ` · Sobre: ${money(row.envelopeAmount)}`}</p></li>)}</ul> : <p className="text-sm text-on-surface-variant">No hay cortes cerrados en este periodo.</p>}
-          {branchHistory.cashOutflows.length > 0 && <p className="mt-3 text-xs text-on-surface-variant">Las salidas detalladas se muestran en el historial de caja y no se convierten en un pago contable nuevo.</p>}
-        </Card>
-        <Card>
-          <h3 className="mb-3 font-bold">Sobres de caja fuerte</h3>
-          {branchHistory.envelopes.length ? <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">{branchHistory.envelopes.map((row) => <li key={row.id} className="border-b border-outline-variant pb-2 text-sm"><div className="flex justify-between gap-3"><span>{row.date} · {row.envelopeNumber ?? row.code}</span><strong>{money(row.originalAmount)}</strong></div><p className="text-xs text-on-surface-variant">Saldo actual: {money(row.currentBalance)} · {row.status.replaceAll("_", " ")}{row.cashCutCode ? ` · Corte ${row.cashCutCode}` : ""}</p></li>)}</ul> : <p className="text-sm text-on-surface-variant">No hay sobres registrados en este periodo.</p>}
-        </Card>
-      </div>
-      {branchHistory.cashOutflows.length > 0 && <Card>
-        <h3 className="mb-3 font-bold">Salidas de caja de {selectedBranch.name}</h3>
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{branchHistory.cashOutflows.map((row) => <li key={row.id} className="rounded-lg bg-surface-container-high p-3 text-sm"><div className="flex justify-between gap-3"><span>{row.date} · {row.category}</span><strong>{money(row.amount)}</strong></div><p className="text-xs text-on-surface-variant">{row.concept} · Corte {row.cashCutCode}</p></li>)}</ul>
-      </Card>}
-    </section>}
+      {branchHistory.payroll.length ? <div className="space-y-4">{branchHistory.payroll.map((row) => <Card key={row.weekStart} className="space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold">Semana del {row.weekStart}</h3><p className="text-xs text-on-surface-variant">{row.employeeCount} persona(s) con pago asignado a {selectedBranch.name}</p></div><strong className="text-xl">{money(row.amount)}</strong></div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{row.employees.map((employee) => <div key={`${row.weekStart}-${employee.name}`} className="rounded-lg bg-surface-container-high p-3 text-sm"><div className="flex justify-between gap-3"><strong>{employee.name}</strong><strong>{money(employee.amount)}</strong></div><p className="mt-1 text-xs text-on-surface-variant">{employee.days.reduce((sum, day) => sum + day.shiftCount, 0)} turno(s)</p><div className="mt-2 space-y-1 text-xs text-on-surface-variant">{employee.days.map((day) => <p key={`${row.weekStart}-${employee.name}-${day.date}`}>{day.date || "Día registrado"}: {day.shiftCount} turno(s) · {money(day.amount)}</p>)}</div></div>)}</div>
+        {row.unallocated > 0 && <p className="text-xs text-on-surface-variant">{money(row.unallocated)} del periodo no trae sucursal identificable en el snapshot y no se asignó a {selectedBranch.name}.</p>}
+      </Card>)}</div> : <Card><p className="text-sm text-on-surface-variant">No hay semanas de nómina marcadas como pagadas en este periodo.</p></Card>}
+    </section> : view === "sales" && selectedBranch ? <Card><h2 className="text-xl font-bold">Ventas · {selectedBranch.name}</h2><p className="mt-2 text-sm text-on-surface-variant">Esta pestaña queda separada para integrar el historial de ventas de la sucursal en el siguiente paso.</p></Card> : view === "inventory" && selectedBranch ? <Card><h2 className="text-xl font-bold">Inventario · {selectedBranch.name}</h2><p className="mt-2 text-sm text-on-surface-variant">Esta pestaña queda separada para integrar el consumo y registro de inventario de la sucursal en el siguiente paso.</p></Card> : <>
     {weeklySummary && selectedBranch && <section aria-label={`Resultado semanal de ${selectedBranch.name}`} className="space-y-3">
       <div>
         <h2 className="text-xl font-bold">Resultado semanal · {selectedBranch.name}</h2>
@@ -263,5 +278,6 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       </Card>) : <Card><p className="text-sm text-on-surface-variant">No hay pagos {status === "voided" ? "anulados" : "vigentes"} con estos filtros.</p></Card>}
       {(currentPage > 1 || currentPage * 50 < paymentCount) && <nav aria-label="Páginas del historial" className="flex justify-between text-sm">{currentPage > 1 ? <Link href={pageHref(currentPage - 1)} className="underline">Anterior</Link> : <span />}{currentPage * 50 < paymentCount ? <Link href={pageHref(currentPage + 1)} className="underline">Siguiente</Link> : <span />}</nav>}
     </section>
+    </>}
   </main>;
 }

@@ -1,6 +1,6 @@
 import { addDaysToDateOnly, businessDayStart, formatBusinessDateOnly, formatDateOnly, parseDateOnly } from "@/lib/dateOnly";
 import { prisma } from "@/lib/prisma";
-import { allocatePayrollEntries } from "./payrollAllocation";
+import { allocatePayrollEntries, allocatePayrollEntry } from "./payrollAllocation";
 
 export async function getBranchAccountingHistory(input: { branchId: string; from: string; to: string }) {
   const fromDate = parseDateOnly(input.from);
@@ -15,7 +15,7 @@ export async function getBranchAccountingHistory(input: { branchId: string; from
         weekStart: true,
         entries: {
           where: { status: "PAGADA" },
-          select: { totalPay: true, basePay: true, overtimePay: true, daysSnapshot: true },
+          select: { totalPay: true, basePay: true, overtimePay: true, daysSnapshot: true, user: { select: { name: true } } },
         },
       },
       orderBy: { weekStart: "desc" },
@@ -47,11 +47,16 @@ export async function getBranchAccountingHistory(input: { branchId: string; from
 
   const payroll = payrollPeriods.map((period) => {
     const allocation = allocatePayrollEntries(period.entries, input.branchId);
+    const employees = period.entries.map((entry) => {
+      const detail = allocatePayrollEntry(entry, input.branchId);
+      return { name: entry.user.name, amount: detail.amount, days: detail.days };
+    }).filter((entry) => entry.amount > 0);
     return {
       weekStart: formatDateOnly(period.weekStart),
       amount: allocation.amount,
       employeeCount: allocation.entriesWithBranchPay,
       unallocated: allocation.unallocated,
+      employees,
     };
   });
 
