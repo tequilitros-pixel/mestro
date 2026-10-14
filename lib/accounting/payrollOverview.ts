@@ -17,6 +17,7 @@ export type BranchPayrollOverview = {
   week: number;
   month: number;
   year: number;
+  weekTrend: Array<{ key: string; label: string; amount: number }>;
   monthTrend: Array<{ key: string; label: string; amount: number }>;
 };
 
@@ -69,6 +70,7 @@ export async function getBranchPayrollOverview(input: { branchId: string; anchor
     week: sumRange(weekRange),
     month: sumRange(monthRange),
     year: sumRange(yearRange),
+    weekTrend: rows.map((row) => ({ key: row.weekStart, label: row.weekStart.slice(5), amount: row.amount })),
     monthTrend: [...monthAmounts].map(([key, amount]) => ({ key, label: monthLabel(key), amount })),
   };
 }

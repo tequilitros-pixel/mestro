@@ -36,6 +36,46 @@ const money = formatPaymentMoney;
 const single = (value: string | string[] | undefined) => typeof value === "string" ? value : "";
 const control = "mt-1 w-full rounded-xl border border-outline-variant bg-background px-3 py-2 text-sm text-on-surface";
 
+function PayrollBarChart({
+  title,
+  description,
+  branchName,
+  items,
+  total,
+  minWidth,
+}: {
+  title: string;
+  description: string;
+  branchName: string;
+  items: Array<{ key: string; label: string; amount: number }>;
+  total: number;
+  minWidth: string;
+}) {
+  const maximum = Math.max(...items.map((item) => item.amount), 0);
+  const hasData = items.some((item) => item.amount > 0);
+  return <Card>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h2 className="font-bold">{title}</h2><p className="text-sm text-on-surface-variant">{description}</p></div>
+      <span className="text-xs text-on-surface-variant">Total anual: {money(total)}</span>
+    </div>
+    <div className="mt-5 overflow-x-auto pb-1">
+      <div className={`flex ${minWidth} items-end gap-2`} role="img" aria-label={`${title} de nómina de ${branchName}`}>
+        {items.map((item) => {
+          const height = maximum > 0 && item.amount > 0 ? Math.max(8, (item.amount / maximum) * 100) : 0;
+          return <div key={item.key} className="flex min-w-10 flex-1 flex-col items-center gap-2">
+            <span className="min-h-4 text-center text-[10px] font-semibold text-on-surface-variant">{item.amount > 0 ? money(item.amount) : "—"}</span>
+            <div className="flex h-44 w-full items-end rounded-md bg-surface-container-high px-1 pt-1">
+              <div className="w-full rounded-t-md bg-primary transition-[height]" style={{ height: `${height}%` }} title={`${item.label}: ${money(item.amount)}`} />
+            </div>
+            <span className="text-xs font-semibold text-on-surface-variant">{item.label}</span>
+          </div>;
+        })}
+      </div>
+    </div>
+    {!hasData && <p className="mt-3 text-sm text-on-surface-variant">No hay nómina pagada registrada en este año.</p>}
+  </Card>;
+}
+
 export default async function AccountingPage({ searchParams }: { searchParams: Promise<Query> }) {
   const user = await requireModuleAccess("/accounting");
   const accessibleBranchIds = await getAccessibleBranchIds();
@@ -185,11 +225,11 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
 
     <form method="get" className="grid gap-3 rounded-xl border border-outline-variant bg-surface-container/60 p-4 sm:grid-cols-2 lg:grid-cols-5">
       {view !== "summary" && <input type="hidden" name="view" value={view} />}
-      <label className="text-xs font-semibold text-on-surface-variant">Periodo
+      {view !== "payroll" && <label className="text-xs font-semibold text-on-surface-variant">Periodo
         <select name="period" defaultValue={period} className={control}>
           <option value="day">Día</option><option value="week">Semana</option><option value="month">Mes</option><option value="year">Año</option>
         </select>
-      </label>
+      </label>}
       <label className="text-xs font-semibold text-on-surface-variant">Fecha de referencia
         <input name="date" type="date" defaultValue={anchor} className={control} />
       </label>
@@ -232,30 +272,8 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         <Card><CardLabel>Este mes</CardLabel><CardValue>{money(payrollOverview.month)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Nómina pagada durante el mes de {anchor.slice(0, 7)}.</p></Card>
         <Card><CardLabel>Este año</CardLabel><CardValue>{money(payrollOverview.year)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Nómina pagada durante {anchor.slice(0, 4)}.</p></Card>
       </div>
-      <Card>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><h2 className="font-bold">Evolución mensual de nómina</h2><p className="text-sm text-on-surface-variant">Cada barra representa lo pagado en {anchor.slice(0, 4)} en {selectedBranch.name}.</p></div>
-          <span className="text-xs text-on-surface-variant">Total anual: {money(payrollOverview.year)}</span>
-        </div>
-        <div className="mt-5 overflow-x-auto pb-1">
-          <div className="flex min-w-[42rem] items-end gap-2" role="img" aria-label={`Gráfica de barras de evolución mensual de nómina de ${selectedBranch.name}`}>
-            {(() => {
-              const maximum = Math.max(...payrollOverview.monthTrend.map((item) => item.amount), 0);
-              return payrollOverview.monthTrend.map((item) => {
-                const height = maximum > 0 && item.amount > 0 ? Math.max(8, (item.amount / maximum) * 100) : 0;
-                return <div key={item.key} className="flex min-w-10 flex-1 flex-col items-center gap-2">
-                  <span className="min-h-4 text-center text-[10px] font-semibold text-on-surface-variant">{item.amount > 0 ? money(item.amount) : "—"}</span>
-                  <div className="flex h-44 w-full items-end rounded-md bg-surface-container-high px-1 pt-1">
-                    <div className="w-full rounded-t-md bg-primary transition-[height]" style={{ height: `${height}%` }} title={`${item.label}: ${money(item.amount)}`} />
-                  </div>
-                  <span className="text-xs font-semibold text-on-surface-variant">{item.label}</span>
-                </div>;
-              });
-            })()}
-          </div>
-        </div>
-        {!payrollOverview.year && <p className="mt-3 text-sm text-on-surface-variant">No hay nómina pagada registrada en este año.</p>}
-      </Card>
+      <PayrollBarChart title="Evolución semanal de nómina" description={`Cada barra representa una semana pagada de ${anchor.slice(0, 4)} en ${selectedBranch.name}.`} branchName={selectedBranch.name} items={payrollOverview.weekTrend} total={payrollOverview.year} minWidth="min-w-[78rem]" />
+      <PayrollBarChart title="Evolución mensual de nómina" description={`Cada barra representa lo pagado por mes en ${anchor.slice(0, 4)} en ${selectedBranch.name}.`} branchName={selectedBranch.name} items={payrollOverview.monthTrend} total={payrollOverview.year} minWidth="min-w-[42rem]" />
       <div>
         <h2 className="text-xl font-bold">Detalle semanal</h2>
         <p className="text-sm text-on-surface-variant">Personas y turnos pagados dentro del periodo consultado.</p>
