@@ -363,7 +363,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         <Card><CardLabel>Gastos totales</CardLabel><CardValue>{money(weeklySummary.totalExpenses)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Nómina + salidas + pagos contables</p></Card>
         <Card className={weeklySummary.netResult < 0 ? "border-error/40 bg-error/5" : "border-primary/30 bg-primary/5"}><CardLabel>Resultado de la semana</CardLabel><CardValue>{money(weeklySummary.netResult)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Ventas menos gastos</p></Card>
       </div>
-      {(weeklySummary.payrollStatus !== "PAGADA" || weeklySummary.payrollUnallocated > 0) && <p className="text-xs text-on-surface-variant">{weeklySummary.payrollStatus !== "PAGADA" ? "La nómina solo se integra cuando el periodo semanal está marcado como PAGADA." : "Hay importe de nómina pagada sin sucursal identificable en el snapshot y no se sumó a Canoas."}</p>}
+      {(weeklySummary.payrollStatus !== "PAGADA" || weeklySummary.payrollUnallocated > 0) && <p className="text-xs text-on-surface-variant">{weeklySummary.payrollStatus !== "PAGADA" ? "La nómina solo se integra cuando el periodo semanal está marcado como PAGADA." : `Hay importe de nómina pagada sin sucursal identificable en el snapshot y no se sumó a ${selectedBranch.name}.`}</p>}
       <p className="text-xs text-on-surface-variant">Las salidas de caja y los pagos contables se conservan como fuentes separadas para evitar ocultar o mezclar registros.</p>
     </section>}
     <section aria-label="Resumen de pagos" className="grid gap-3 sm:grid-cols-3">
