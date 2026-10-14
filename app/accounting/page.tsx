@@ -15,6 +15,7 @@ import {
 } from "@/lib/accounting";
 import { getWeeklyBranchSummary } from "@/lib/accounting/weeklyBranchSummary";
 import { getBranchAccountingHistory } from "@/lib/accounting/branchHistory";
+import { getBranchPayrollOverview } from "@/lib/accounting/payrollOverview";
 import { PaymentForm, VoidPaymentForm } from "./PaymentForm";
 
 export const dynamic = "force-dynamic";
@@ -101,9 +102,10 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     }),
     prisma.accountingPayment.count({ where: listWhere }),
   ]);
-  const [weeklySummary, branchHistory] = await Promise.all([
+  const [weeklySummary, branchHistory, payrollOverview] = await Promise.all([
     period === "week" && selectedBranch && view === "summary" ? getWeeklyBranchSummary({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
     selectedBranch && view === "payroll" ? getBranchAccountingHistory({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
+    selectedBranch && view === "payroll" ? getBranchPayrollOverview({ branchId: selectedBranch.id, anchor }) : Promise.resolve(null),
   ]);
 
   const branchNames = new Map(branches.map((branch) => [branch.id, branch.name]));
@@ -219,16 +221,44 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         <Link href={nextPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Siguiente →</Link>
       </nav>
     </div>
-    {view === "payroll" && selectedBranch && branchHistory ? <section aria-label={`Pago en nómina de ${selectedBranch.name}`} className="space-y-4">
+    {view === "payroll" && selectedBranch && branchHistory && payrollOverview ? <section aria-label={`Pago en nómina de ${selectedBranch.name}`} className="space-y-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-widest text-primary">Pago en nómina</p>
         <h2 className="text-2xl font-bold">Nómina pagada · {selectedBranch.name}</h2>
-        <p className="text-sm text-on-surface-variant">Semanas pagadas, personas, turnos asignados y monto correspondiente únicamente a {selectedBranch.name}.</p>
+        <p className="text-sm text-on-surface-variant">Resumen de nómina pagada correspondiente únicamente a {selectedBranch.name}, tomando como referencia {anchor}.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card highlight><CardLabel>Total de nómina</CardLabel><CardValue>{money(branchHistory.payroll.reduce((sum, row) => sum + row.amount, 0))}</CardValue></Card>
-        <Card><CardLabel>Semanas pagadas</CardLabel><CardValue>{branchHistory.payroll.length}</CardValue></Card>
-        <Card><CardLabel>Personas pagadas</CardLabel><CardValue>{branchHistory.payroll.reduce((sum, row) => sum + row.employeeCount, 0)}</CardValue></Card>
+        <Card highlight><CardLabel>Esta semana</CardLabel><CardValue>{money(payrollOverview.week)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Nómina pagada de la semana de {anchor}.</p></Card>
+        <Card><CardLabel>Este mes</CardLabel><CardValue>{money(payrollOverview.month)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Nómina pagada durante el mes de {anchor.slice(0, 7)}.</p></Card>
+        <Card><CardLabel>Este año</CardLabel><CardValue>{money(payrollOverview.year)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Nómina pagada durante {anchor.slice(0, 4)}.</p></Card>
+      </div>
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div><h2 className="font-bold">Evolución mensual de nómina</h2><p className="text-sm text-on-surface-variant">Cada barra representa lo pagado en {anchor.slice(0, 4)} en {selectedBranch.name}.</p></div>
+          <span className="text-xs text-on-surface-variant">Total anual: {money(payrollOverview.year)}</span>
+        </div>
+        <div className="mt-5 overflow-x-auto pb-1">
+          <div className="flex min-w-[42rem] items-end gap-2" role="img" aria-label={`Gráfica de barras de evolución mensual de nómina de ${selectedBranch.name}`}>
+            {(() => {
+              const maximum = Math.max(...payrollOverview.monthTrend.map((item) => item.amount), 0);
+              return payrollOverview.monthTrend.map((item) => {
+                const height = maximum > 0 && item.amount > 0 ? Math.max(8, (item.amount / maximum) * 100) : 0;
+                return <div key={item.key} className="flex min-w-10 flex-1 flex-col items-center gap-2">
+                  <span className="min-h-4 text-center text-[10px] font-semibold text-on-surface-variant">{item.amount > 0 ? money(item.amount) : "—"}</span>
+                  <div className="flex h-44 w-full items-end rounded-md bg-surface-container-high px-1 pt-1">
+                    <div className="w-full rounded-t-md bg-primary transition-[height]" style={{ height: `${height}%` }} title={`${item.label}: ${money(item.amount)}`} />
+                  </div>
+                  <span className="text-xs font-semibold text-on-surface-variant">{item.label}</span>
+                </div>;
+              });
+            })()}
+          </div>
+        </div>
+        {!payrollOverview.year && <p className="mt-3 text-sm text-on-surface-variant">No hay nómina pagada registrada en este año.</p>}
+      </Card>
+      <div>
+        <h2 className="text-xl font-bold">Detalle semanal</h2>
+        <p className="text-sm text-on-surface-variant">Personas y turnos pagados dentro del periodo consultado.</p>
       </div>
       {branchHistory.payroll.length ? <div className="space-y-4">{branchHistory.payroll.map((row) => <Card key={row.weekStart} className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold">Semana del {row.weekStart}</h3><p className="text-xs text-on-surface-variant">{row.employeeCount} persona(s) con pago asignado a {selectedBranch.name}</p></div><strong className="text-xl">{money(row.amount)}</strong></div>
