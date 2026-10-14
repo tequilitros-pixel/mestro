@@ -159,7 +159,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
   const [weeklySummary, branchHistory, payrollOverview] = await Promise.all([
     period === "week" && selectedBranch && view === "summary" ? getWeeklyBranchSummary({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
     selectedBranch && view === "payroll" ? getBranchAccountingHistory({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
-    selectedBranch && view === "payroll" ? getBranchPayrollOverview({ branchId: selectedBranch.id, anchor }) : Promise.resolve(null),
+    selectedBranch && view === "payroll" ? getBranchPayrollOverview({ branchId: selectedBranch.id, anchor, period }) : Promise.resolve(null),
   ]);
 
   const branchNames = new Map(branches.map((branch) => [branch.id, branch.name]));
@@ -211,6 +211,14 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     return `/accounting?${params}`;
   };
   const periodLabel = period === "day" ? "Día" : period === "week" ? "Semana" : period === "month" ? "Mes" : "Año";
+  const payrollAnchorHref = (nextAnchor: string) => periodHref(nextAnchor);
+  const monthOptions = Array.from({ length: 12 }, (_, index) => {
+    const month = String(index + 1).padStart(2, "0");
+    const key = `${anchor.slice(0, 4)}-${month}-01`;
+    const label = new Intl.DateTimeFormat("es-MX", { month: "long", timeZone: "UTC" }).format(parseDateOnly(key));
+    return { value: key, label: label.charAt(0).toUpperCase() + label.slice(1) };
+  });
+  const selectedMonthValue = `${anchor.slice(0, 7)}-01`;
   const workerTotals = new Map<string, { amount: number; shifts: number; byWeek: Map<string, number> }>();
   for (const row of branchHistory?.payroll ?? []) {
     for (const employee of row.employees) {
@@ -228,8 +236,8 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     points: [...worker.byWeek].sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => ({ key, label: key.slice(5), value })),
   }));
   const weeklySeries = [
-    { name: "Presupuestado", color: "#f59e0b", points: payrollOverview?.weekTrend.map((point) => ({ key: point.key, label: point.label, value: point.budget })) ?? [] },
-    { name: "Pagado", color: "#38bdf8", points: payrollOverview?.weekTrend.map((point) => ({ key: point.key, label: point.label, value: point.paid })) ?? [] },
+    { name: "Presupuestado", color: "#f59e0b", points: payrollOverview?.periodTrend.map((point) => ({ key: point.key, label: point.label, value: point.budget })) ?? [] },
+    { name: "Pagado", color: "#38bdf8", points: payrollOverview?.periodTrend.map((point) => ({ key: point.key, label: point.label, value: point.paid })) ?? [] },
   ];
   const monthlySeries = [
     { name: "Presupuestado", color: "#f59e0b", points: payrollOverview?.monthTrend.map((point) => ({ key: point.key, label: point.label, value: point.budget })) ?? [] },
@@ -299,10 +307,23 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       <div className="flex items-end"><button type="submit" className="w-full rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary">Consultar</button></div>
     </form>}
 
-    {view === "payroll" ? <nav aria-label="Periodo de nómina" className="flex flex-wrap items-center gap-2 rounded-xl border border-outline-variant bg-surface-container/60 p-2 text-sm">
-      <span className="px-2 font-semibold text-on-surface-variant">Ver por:</span>
-      {([ ["day", "Día"], ["week", "Semana"], ["month", "Mes"], ["year", "Año"] ] as const).map(([key, label]) => <Link key={key} href={payrollPeriodHref(key)} aria-current={period === key ? "page" : undefined} className={`rounded-lg px-4 py-2 font-semibold ${period === key ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"}`}>{label}</Link>)}
-    </nav> : <div className="flex flex-wrap items-center justify-between gap-3">
+    {view === "payroll" ? <div className="space-y-2">
+      <nav aria-label="Periodo de nómina" className="flex flex-wrap items-center gap-2 rounded-xl border border-outline-variant bg-surface-container/60 p-2 text-sm">
+        <span className="px-2 font-semibold text-on-surface-variant">Ver por:</span>
+        {([ ["day", "Día"], ["week", "Semana"], ["month", "Mes"], ["year", "Año"] ] as const).map(([key, label]) => <Link key={key} href={payrollPeriodHref(key)} aria-current={period === key ? "page" : undefined} className={`rounded-lg px-4 py-2 font-semibold ${period === key ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"}`}>{label}</Link>)}
+      </nav>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-outline-variant bg-surface-container/40 p-2 text-sm">
+        <Link href={payrollAnchorHref(shiftPeriodAnchor(period, anchor, -1))} aria-label={`${periodLabel} anterior`} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">←</Link>
+        <form method="get" className="flex flex-wrap items-center gap-2">
+          <input type="hidden" name="view" value="payroll" /><input type="hidden" name="branch" value={branchId} /><input type="hidden" name="period" value={period} />
+          <label className="font-semibold text-on-surface-variant" htmlFor="payroll-month">Mes a consultar</label>
+          <select id="payroll-month" name="date" defaultValue={selectedMonthValue} className="rounded-lg border border-outline-variant bg-background px-3 py-2 text-sm text-on-surface">
+            {monthOptions.map((option) => <option key={option.value} value={option.value}>{option.label} {anchor.slice(0, 4)}</option>)}
+          </select><button type="submit" className="rounded-lg bg-primary px-3 py-2 font-semibold text-on-primary">Aplicar</button>
+        </form>
+        <Link href={payrollAnchorHref(shiftPeriodAnchor(period, anchor, 1))} aria-label={`${periodLabel} siguiente`} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">→</Link>
+      </div>
+    </div> : <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-sm text-on-surface-variant">Periodo consultado: <strong>{from}</strong> al <strong>{to}</strong>. Los totales excluyen pagos anulados.</p>
       <nav aria-label="Navegación de periodos" className="flex items-center gap-1 rounded-xl border border-outline-variant bg-surface-container/60 p-1 text-sm">
         <Link href={previousPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">← Anterior</Link>
@@ -321,8 +342,8 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         <Card><CardLabel>Presupuesto del mes</CardLabel><CardValue>{money(payrollOverview.budgetMonth)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Pagado: {money(payrollOverview.month)} · mes de referencia.</p></Card>
         <Card><CardLabel>Presupuesto del año</CardLabel><CardValue>{money(payrollOverview.budgetYear)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Pagado: {money(payrollOverview.year)} · año de referencia.</p></Card>
       </div>
-      <PayrollLineChart title="Evolución semanal de nómina" description={`Presupuesto contra pago real por semana en ${selectedBranch.name}.`} branchName={selectedBranch.name} series={weeklySeries} total={payrollOverview.year} />
-      <PayrollLineChart title="Evolución mensual de nómina" description={`Presupuesto contra pago real por mes en ${selectedBranch.name}.`} branchName={selectedBranch.name} series={monthlySeries} total={payrollOverview.year} />
+      <PayrollLineChart title={`Evolución de nómina · ${periodLabel}`} description={`Presupuesto contra pago real agrupado por ${periodLabel.toLowerCase()} en ${selectedBranch.name}.`} branchName={selectedBranch.name} series={weeklySeries} total={payrollOverview.year} />
+      <PayrollLineChart title="Comparativo mensual de nómina" description={`Meses disponibles para ${anchor.slice(0, 4)} en ${selectedBranch.name}; el filtro mensual muestra el mes consultado.`} branchName={selectedBranch.name} series={monthlySeries} total={payrollOverview.year} />
       <PayrollLineChart title="Pago por trabajador" description={`Los trabajadores con más turnos aparecen en las líneas con mayor continuidad. Filtro actual: ${periodLabel.toLowerCase()}.`} branchName={selectedBranch.name} series={workerSeries} total={payrollOverview.year} />
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-bold">Quién ha trabajado más</h2><p className="text-sm text-on-surface-variant">Ranking de turnos y monto asignado dentro del periodo seleccionado.</p></div><span className="text-xs text-on-surface-variant">{workerRanking.length} trabajador(es)</span></div>

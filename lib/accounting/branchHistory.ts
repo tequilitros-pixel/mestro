@@ -10,7 +10,10 @@ export async function getBranchAccountingHistory(input: { branchId: string; from
 
   const [payrollPeriods, cashCuts, cashOutflows, envelopes] = await Promise.all([
     prisma.payrollPeriod.findMany({
-      where: { status: "PAGADA", weekStart: { gte: fromDate, lte: toDate } },
+      // A day or month can intersect a payroll week whose Monday falls
+      // before the selected range, so include the six preceding calendar days
+      // and trim each snapshot below to the requested civil dates.
+      where: { status: "PAGADA", weekStart: { gte: parseDateOnly(addDaysToDateOnly(input.from, -6)), lte: toDate } },
       select: {
         weekStart: true,
         entries: {
@@ -49,11 +52,12 @@ export async function getBranchAccountingHistory(input: { branchId: string; from
     const allocation = allocatePayrollEntries(period.entries, input.branchId);
     const employees = period.entries.map((entry) => {
       const detail = allocatePayrollEntry(entry, input.branchId);
-      return { name: entry.user.name, amount: detail.amount, days: detail.days };
+      const days = detail.days.filter((day) => day.date >= input.from && day.date <= input.to);
+      return { name: entry.user.name, amount: days.reduce((sum, day) => sum + day.amount, 0), days };
     }).filter((entry) => entry.amount > 0);
     return {
       weekStart: formatDateOnly(period.weekStart),
-      amount: allocation.amount,
+      amount: employees.reduce((sum, employee) => sum + employee.amount, 0),
       employeeCount: allocation.entriesWithBranchPay,
       unallocated: allocation.unallocated,
       employees,

@@ -1,9 +1,9 @@
-import { periodRange } from "@/lib/accounting";
+import { periodRange, type AccountingPeriod } from "@/lib/accounting";
 import { addDaysToDateOnly, businessDayStart, formatDateOnly, parseDateOnly } from "@/lib/dateOnly";
 import { computeHourlyPay } from "@/lib/payroll/legacyRules";
 import { resolveBranchHourlyRate, type HourlyRateRow } from "@/lib/payroll/branchRates";
 import { prisma } from "@/lib/prisma";
-import { allocatePayrollEntries } from "./payrollAllocation";
+import { allocatePayrollEntry } from "./payrollAllocation";
 
 type PayrollOverviewPeriod = {
   weekStart: Date;
@@ -14,6 +14,8 @@ type PayrollOverviewPeriod = {
     daysSnapshot: unknown;
   }>;
 };
+
+type TrendGranularity = "day" | "week" | "month";
 
 export type PayrollTrendPoint = {
   key: string;
@@ -29,6 +31,7 @@ export type BranchPayrollOverview = {
   budgetWeek: number;
   budgetMonth: number;
   budgetYear: number;
+  periodTrend: PayrollTrendPoint[];
   weekTrend: PayrollTrendPoint[];
   monthTrend: PayrollTrendPoint[];
 };
@@ -54,11 +57,54 @@ function addAmount(map: Map<string, number>, key: string, amount: number) {
   map.set(key, (map.get(key) ?? 0) + amount);
 }
 
+function datesInRange(from: string, to: string) {
+  const dates: string[] = [];
+  for (let date = from; date <= to; date = addDaysToDateOnly(date, 1)) dates.push(date);
+  return dates;
+}
+
+function trendKey(date: string, granularity: TrendGranularity) {
+  if (granularity === "day") return date;
+  if (granularity === "month") return date.slice(0, 7);
+  return periodRange("week", date).from;
+}
+
+function trendLabel(key: string, granularity: TrendGranularity) {
+  if (granularity === "month") return monthLabel(key);
+  return key.slice(5);
+}
+
+function selectedGranularity(period: AccountingPeriod): TrendGranularity {
+  if (period === "year") return "month";
+  if (period === "month") return "week";
+  return "day";
+}
+
+function buildTrend(input: {
+  range: { from: string; to: string };
+  period: AccountingPeriod;
+  paidByDay: Map<string, number>;
+  budgetByDay: Map<string, number>;
+}): PayrollTrendPoint[] {
+  const granularity = selectedGranularity(input.period);
+  const paid = new Map<string, number>();
+  const budget = new Map<string, number>();
+  const keys = new Set<string>();
+  for (const date of datesInRange(input.range.from, input.range.to)) {
+    const key = trendKey(date, granularity);
+    keys.add(key);
+    addAmount(paid, key, input.paidByDay.get(date) ?? 0);
+    addAmount(budget, key, input.budgetByDay.get(date) ?? 0);
+  }
+  return [...keys].sort().map((key) => ({ key, label: trendLabel(key, granularity), paid: paid.get(key) ?? 0, budget: budget.get(key) ?? 0 }));
+}
+
 /** Resume la nómina pagada y el costo teórico publicado del calendario de una sucursal. */
-export async function getBranchPayrollOverview(input: { branchId: string; anchor: string }): Promise<BranchPayrollOverview> {
+export async function getBranchPayrollOverview(input: { branchId: string; anchor: string; period: AccountingPeriod }): Promise<BranchPayrollOverview> {
   const weekRange = periodRange("week", input.anchor);
   const monthRange = periodRange("month", input.anchor);
   const yearRange = periodRange("year", input.anchor);
+  const selectedRange = periodRange(input.period, input.anchor);
   const yearStart = parseDateOnly(yearRange.from);
   const yearEndExclusive = businessDayStart(addDaysToDateOnly(yearRange.to, 1));
 
@@ -92,10 +138,14 @@ export async function getBranchPayrollOverview(input: { branchId: string; anchor
     }),
   ]);
 
-  const paidRows = periods.map((period) => ({
-    weekStart: formatDateOnly(period.weekStart),
-    amount: allocatePayrollEntries(period.entries, input.branchId).amount,
-  }));
+  const paidByDay = new Map<string, number>();
+  for (const period of periods) {
+    const daily = new Map<string, number>();
+    for (const entry of period.entries) {
+      for (const day of allocatePayrollEntry(entry, input.branchId).days) addAmount(daily, day.date, day.amount);
+    }
+    for (const [date, amount] of daily) addAmount(paidByDay, date, amount);
+  }
 
   const userIds = [...new Set(scheduledShifts.map((shift) => shift.userId))];
   const salaryRates = userIds.length ? await prisma.salaryRate.findMany({
@@ -110,48 +160,27 @@ export async function getBranchPayrollOverview(input: { branchId: string; anchor
     ratesByUser.set(rate.userId, rows);
   }
 
-  const budgetRows = scheduledShifts.map((shift) => {
+  const budgetByDay = new Map<string, number>();
+  for (const shift of scheduledShifts) {
     const date = formatDateOnly(shift.date);
     const rates = ratesByUser.get(shift.userId) ?? [];
     const generalRate = rates.find((rate) => rate.branchId === null && rate.effectiveFrom <= shift.date && (rate.effectiveTo === null || rate.effectiveTo > shift.date));
     const fallbackRate = shift.user.hourlyRate === null ? null : Number(shift.user.hourlyRate);
     const hourlyRate = resolveBranchHourlyRate(rates, input.branchId, shift.date, generalRate?.amount ?? fallbackRate);
-    const amount = computeHourlyPay(shiftHours(shift.startTime, shift.endTime), hourlyRate);
-    return { date, weekStart: periodRange("week", date).from, amount };
-  });
-
-  const sumPaid = (range: { from: string; to: string }) => paidRows
-    .filter((row) => row.weekStart >= range.from && row.weekStart <= range.to)
-    .reduce((sum, row) => sum + row.amount, 0);
-  const sumBudget = (range: { from: string; to: string }) => budgetRows
-    .filter((row) => row.date >= range.from && row.date <= range.to)
-    .reduce((sum, row) => sum + row.amount, 0);
-
-  const paidWeeks = new Map<string, number>();
-  const budgetWeeks = new Map<string, number>();
-  for (const row of paidRows) addAmount(paidWeeks, row.weekStart, row.amount);
-  for (const row of budgetRows) addAmount(budgetWeeks, row.weekStart, row.amount);
-  const weekKeys = [...new Set([...paidWeeks.keys(), ...budgetWeeks.keys()])].sort();
-  const weekTrend = weekKeys.map((key) => ({
-    key,
-    label: key.slice(5),
-    paid: paidWeeks.get(key) ?? 0,
-    budget: budgetWeeks.get(key) ?? 0,
-  }));
-
-  const monthAmounts = new Map<string, { paid: number; budget: number }>();
-  for (let month = 1; month <= 12; month += 1) {
-    const key = `${yearRange.from.slice(0, 4)}-${String(month).padStart(2, "0")}`;
-    monthAmounts.set(key, { paid: 0, budget: 0 });
+    addAmount(budgetByDay, date, computeHourlyPay(shiftHours(shift.startTime, shift.endTime), hourlyRate));
   }
-  for (const row of paidRows) {
-    const item = monthAmounts.get(row.weekStart.slice(0, 7));
-    if (item) item.paid += row.amount;
-  }
-  for (const row of budgetRows) {
-    const item = monthAmounts.get(row.date.slice(0, 7));
-    if (item) item.budget += row.amount;
-  }
+
+  const sumPaid = (range: { from: string; to: string }) => [...paidByDay]
+    .filter(([date]) => date >= range.from && date <= range.to)
+    .reduce((sum, [, amount]) => sum + amount, 0);
+  const sumBudget = (range: { from: string; to: string }) => [...budgetByDay]
+    .filter(([date]) => date >= range.from && date <= range.to)
+    .reduce((sum, [, amount]) => sum + amount, 0);
+
+  const periodTrend = buildTrend({ range: selectedRange, period: input.period, paidByDay, budgetByDay });
+  const yearTrend = buildTrend({ range: yearRange, period: "year", paidByDay, budgetByDay });
+  const monthKeys = input.period === "year" ? yearTrend.map((point) => point.key) : [input.anchor.slice(0, 7)];
+  const monthTrend = yearTrend.filter((point) => monthKeys.includes(point.key));
 
   return {
     week: sumPaid(weekRange),
@@ -160,7 +189,8 @@ export async function getBranchPayrollOverview(input: { branchId: string; anchor
     budgetWeek: sumBudget(weekRange),
     budgetMonth: sumBudget(monthRange),
     budgetYear: sumBudget(yearRange),
-    weekTrend,
-    monthTrend: [...monthAmounts].map(([key, amount]) => ({ key, label: monthLabel(key), ...amount })),
+    periodTrend,
+    weekTrend: periodTrend,
+    monthTrend,
   };
 }
