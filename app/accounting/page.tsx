@@ -17,6 +17,7 @@ import { getWeeklyBranchSummary } from "@/lib/accounting/weeklyBranchSummary";
 import { getBranchAccountingHistory } from "@/lib/accounting/branchHistory";
 import { getBranchPayrollOverview } from "@/lib/accounting/payrollOverview";
 import { getBranchSalesOverview } from "@/lib/accounting/branchSalesOverview";
+import { getBranchInventoryOverview } from "@/lib/accounting/branchInventoryOverview";
 import { DailyBranchChart, DistributionPieChart, RankingBarChart } from "@/components/pos/SalesCharts";
 import { PaymentForm, VoidPaymentForm } from "./PaymentForm";
 
@@ -158,11 +159,12 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     }),
     prisma.accountingPayment.count({ where: listWhere }),
   ]);
-  const [weeklySummary, branchHistory, payrollOverview, salesOverview] = await Promise.all([
+  const [weeklySummary, branchHistory, payrollOverview, salesOverview, inventoryOverview] = await Promise.all([
     period === "week" && selectedBranch && view === "summary" ? getWeeklyBranchSummary({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
     selectedBranch && view === "payroll" ? getBranchAccountingHistory({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
     selectedBranch && view === "payroll" ? getBranchPayrollOverview({ branchId: selectedBranch.id, anchor, period }) : Promise.resolve(null),
     selectedBranch && view === "sales" ? getBranchSalesOverview({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
+    selectedBranch && view === "inventory" ? getBranchInventoryOverview({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
   ]);
 
   const branchNames = new Map(branches.map((branch) => [branch.id, branch.name]));
@@ -375,7 +377,26 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         </div>
         <Card><h3 className="font-bold">Productos vendidos</h3><div className="mt-3 divide-y divide-outline-variant">{salesOverview.products.map((product) => <div key={product.key} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><div><p className="font-semibold">{product.name}</p><p className="text-xs text-on-surface-variant">{product.units} unidad(es)</p></div><strong>{money(product.total)}</strong></div>)}</div></Card>
       </> : <Card><p className="text-sm text-on-surface-variant">No hay ventas completadas en {selectedBranch.name} durante este periodo.</p></Card>}
-    </section> : view === "inventory" && selectedBranch ? <Card><h2 className="text-xl font-bold">Inventario · {selectedBranch.name}</h2><p className="mt-2 text-sm text-on-surface-variant">Esta pestaña queda separada para integrar el consumo y registro de inventario de la sucursal en el siguiente paso.</p></Card> : <>
+    </section> : view === "inventory" && selectedBranch && inventoryOverview ? <section aria-label={`Inventario de ${selectedBranch.name}`} className="space-y-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary">Inventario</p>
+        <h2 className="text-2xl font-bold">Consumo de inventario · {selectedBranch.name}</h2>
+        <p className="text-sm text-on-surface-variant">Comparativo entre el consumo registrado y el consumo teórico de las recetas vendidas, de {from} a {to}.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Card highlight><CardLabel>Costo de consumo registrado</CardLabel><CardValue>{money(inventoryOverview.actual.cost)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">{inventoryOverview.actual.products} insumo(s) · {inventoryOverview.actual.movements} movimiento(s){inventoryOverview.actual.costKnown ? "" : " · hay costos pendientes"}.</p></Card>
+        <Card><CardLabel>Costo teórico por ventas</CardLabel><CardValue>{money(inventoryOverview.theoretical.cost)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">{inventoryOverview.theoretical.sales} venta(s) completada(s){inventoryOverview.theoretical.costKnown ? "" : " · hay costos pendientes"}.</p></Card>
+        <Card><CardLabel>Insumos consumidos</CardLabel><CardValue>{inventoryOverview.products.filter((product) => product.actualQuantity > 0).length}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Con consumo registrado por el punto de venta.</p></Card>
+        <Card><CardLabel>Insumos en recetas vendidas</CardLabel><CardValue>{inventoryOverview.products.filter((product) => product.theoreticalQuantity > 0).length}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Calculados con las recetas actuales de los productos vendidos.</p></Card>
+      </div>
+      {inventoryOverview.products.length ? <>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card><h3 className="font-bold">Insumos con mayor costo teórico</h3><p className="mt-1 text-sm text-on-surface-variant">Recetas de las ventas completadas del periodo.</p><div className="mt-3"><RankingBarChart data={inventoryOverview.products.filter((product) => product.theoreticalCost > 0).slice(0, 10).map((product) => ({ name: product.name, value: product.theoreticalCost }))} valueLabel="Costo teórico" /></div></Card>
+          <Card><h3 className="font-bold">Cómo leer el consumo</h3><div className="mt-3 space-y-3 text-sm text-on-surface-variant"><p><strong className="text-on-surface">Registrado:</strong> salidas y devoluciones que ya están en el libro de inventario.</p><p><strong className="text-on-surface">Teórico:</strong> cantidad que debería consumirse según las recetas actuales y las ventas completadas.</p><p>Los importes usan el costo unitario vigente de cada insumo y no modifican existencias.</p></div></Card>
+        </div>
+        <Card><h3 className="font-bold">Detalle de inventario consumido</h3><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr className="border-b border-outline-variant text-left text-xs text-on-surface-variant"><th className="pb-2 font-medium">Insumo</th><th className="pb-2 text-right font-medium">Registrado</th><th className="pb-2 text-right font-medium">Teórico</th><th className="pb-2 text-right font-medium">Costo registrado</th><th className="pb-2 text-right font-medium">Costo teórico</th></tr></thead><tbody className="divide-y divide-outline-variant">{inventoryOverview.products.map((product) => <tr key={product.id}><td className="py-3"><p className="font-semibold">{product.name}</p><p className="text-xs text-on-surface-variant">{product.category} · {product.code}</p></td><td className="py-3 text-right">{product.actualQuantity.toLocaleString("es-MX", { maximumFractionDigits: 3 })} {product.unit}</td><td className="py-3 text-right">{product.theoreticalQuantity.toLocaleString("es-MX", { maximumFractionDigits: 3 })} {product.unit}</td><td className="py-3 text-right font-semibold">{money(product.actualCost)}{product.actualCostKnown ? "" : "*"}</td><td className="py-3 text-right font-semibold">{money(product.theoreticalCost)}{product.theoreticalCostKnown ? "" : "*"}</td></tr>)}</tbody></table></div>{(!inventoryOverview.actual.costKnown || !inventoryOverview.theoretical.costKnown) && <p className="mt-3 text-xs text-on-surface-variant">* El importe es parcial porque uno o más insumos no tienen costo unitario configurado.</p>}</Card>
+      </> : <Card><p className="text-sm text-on-surface-variant">No hay consumo de inventario ni recetas vendidas en {selectedBranch.name} durante este periodo.</p></Card>}
+    </section> : <>
     {weeklySummary && selectedBranch && <section aria-label={`Resultado semanal de ${selectedBranch.name}`} className="space-y-3">
       <div>
         <h2 className="text-xl font-bold">Resultado semanal · {selectedBranch.name}</h2>
