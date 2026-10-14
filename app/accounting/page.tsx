@@ -36,43 +36,57 @@ const money = formatPaymentMoney;
 const single = (value: string | string[] | undefined) => typeof value === "string" ? value : "";
 const control = "mt-1 w-full rounded-xl border border-outline-variant bg-background px-3 py-2 text-sm text-on-surface";
 
-function PayrollBarChart({
+function PayrollLineChart({
   title,
   description,
   branchName,
-  items,
+  series,
   total,
-  minWidth,
 }: {
   title: string;
   description: string;
   branchName: string;
-  items: Array<{ key: string; label: string; amount: number }>;
+  series: Array<{ name: string; color: string; points: Array<{ key: string; label: string; value: number }> }>;
   total: number;
-  minWidth: string;
 }) {
-  const maximum = Math.max(...items.map((item) => item.amount), 0);
-  const hasData = items.some((item) => item.amount > 0);
+  const keys = [...new Set(series.flatMap((item) => item.points.map((point) => point.key)))].sort();
+  const labels = new Map(series.flatMap((item) => item.points.map((point) => [point.key, point.label] as const)));
+  const values = series.flatMap((item) => item.points.map((point) => point.value));
+  const maximum = Math.max(...values, 0);
+  const hasData = values.some((value) => value > 0);
+  const width = 760;
+  const height = 280;
+  const left = 56;
+  const right = 18;
+  const top = 20;
+  const bottom = 44;
+  const chartWidth = width - left - right;
+  const chartHeight = height - top - bottom;
+  const xFor = (index: number) => keys.length <= 1 ? left + chartWidth / 2 : left + (index / (keys.length - 1)) * chartWidth;
+  const yFor = (value: number) => top + chartHeight - (maximum > 0 ? (value / maximum) * chartHeight : 0);
+  const pointFor = (point: { key: string; value: number }) => `${xFor(keys.indexOf(point.key))},${yFor(point.value)}`;
   return <Card>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="font-bold">{title}</h2><p className="text-sm text-on-surface-variant">{description}</p></div>
-      <span className="text-xs text-on-surface-variant">Total anual: {money(total)}</span>
+      <span className="text-xs text-on-surface-variant">Total pagado: {money(total)}</span>
     </div>
-    <div className="mt-5 overflow-x-auto pb-1">
-      <div className={`flex ${minWidth} items-end gap-2`} role="img" aria-label={`${title} de nómina de ${branchName}`}>
-        {items.map((item) => {
-          const height = maximum > 0 && item.amount > 0 ? Math.max(8, (item.amount / maximum) * 100) : 0;
-          return <div key={item.key} className="flex min-w-10 flex-1 flex-col items-center gap-2">
-            <span className="min-h-4 text-center text-[10px] font-semibold text-on-surface-variant">{item.amount > 0 ? money(item.amount) : "—"}</span>
-            <div className="flex h-44 w-full items-end rounded-md bg-surface-container-high px-1 pt-1">
-              <div className="w-full rounded-t-md bg-primary transition-[height]" style={{ height: `${height}%` }} title={`${item.label}: ${money(item.amount)}`} />
-            </div>
-            <span className="text-xs font-semibold text-on-surface-variant">{item.label}</span>
-          </div>;
+    <div className="mt-4 overflow-x-auto pb-1">
+      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[42rem]" role="img" aria-label={`${title} de nómina de ${branchName}`}>
+        {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+          const y = top + chartHeight - ratio * chartHeight;
+          return <g key={ratio}><line x1={left} x2={width - right} y1={y} y2={y} stroke="currentColor" className="text-outline-variant" strokeOpacity="0.45" /><text x={left - 8} y={y + 4} textAnchor="end" fontSize="10" fill="currentColor" className="text-on-surface-variant">{money(maximum * ratio)}</text></g>;
         })}
-      </div>
+        <line x1={left} x2={left} y1={top} y2={top + chartHeight} stroke="currentColor" className="text-outline-variant" />
+        <line x1={left} x2={width - right} y1={top + chartHeight} y2={top + chartHeight} stroke="currentColor" className="text-outline-variant" />
+        {keys.map((key, index) => <text key={key} x={xFor(index)} y={height - 16} textAnchor="middle" fontSize="10" fill="currentColor" className="text-on-surface-variant">{labels.get(key)}</text>)}
+        {series.map((item) => <g key={item.name}>
+          {item.points.length > 1 && <polyline points={item.points.map(pointFor).join(" ")} fill="none" stroke={item.color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />}
+          {item.points.map((point) => <circle key={`${item.name}-${point.key}`} cx={xFor(keys.indexOf(point.key))} cy={yFor(point.value)} r="4" fill={item.color}><title>{`${item.name} · ${point.label}: ${money(point.value)}`}</title></circle>)}
+        </g>)}
+      </svg>
+      <div className="mt-2 flex flex-wrap gap-4 text-xs text-on-surface-variant">{series.map((item) => <span key={item.name} className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />{item.name}</span>)}</div>
     </div>
-    {!hasData && <p className="mt-3 text-sm text-on-surface-variant">No hay nómina pagada registrada en este año.</p>}
+    {!hasData && <p className="mt-3 text-sm text-on-surface-variant">No hay datos pagados ni presupuesto publicado para mostrar en esta gráfica.</p>}
   </Card>;
 }
 
@@ -189,6 +203,38 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
   const previousPeriodHref = periodHref(shiftPeriodAnchor(period, anchor, -1));
   const nextPeriodHref = periodHref(shiftPeriodAnchor(period, anchor, 1));
   const todayPeriodHref = periodHref(todayDateOnly());
+  const payrollPeriodHref = (nextPeriod: AccountingPeriod) => {
+    const params = new URLSearchParams(queryBase);
+    params.set("period", nextPeriod);
+    params.set("date", anchor);
+    params.delete("page");
+    return `/accounting?${params}`;
+  };
+  const periodLabel = period === "day" ? "Día" : period === "week" ? "Semana" : period === "month" ? "Mes" : "Año";
+  const workerTotals = new Map<string, { amount: number; shifts: number; byWeek: Map<string, number> }>();
+  for (const row of branchHistory?.payroll ?? []) {
+    for (const employee of row.employees) {
+      const existing = workerTotals.get(employee.name) ?? { amount: 0, shifts: 0, byWeek: new Map<string, number>() };
+      existing.amount += employee.amount;
+      existing.shifts += employee.days.reduce((sum, day) => sum + day.shiftCount, 0);
+      existing.byWeek.set(row.weekStart, (existing.byWeek.get(row.weekStart) ?? 0) + employee.amount);
+      workerTotals.set(employee.name, existing);
+    }
+  }
+  const workerRanking = [...workerTotals].sort(([, a], [, b]) => b.shifts - a.shifts || b.amount - a.amount);
+  const workerSeries = workerRanking.slice(0, 6).map(([name, worker], index) => ({
+    name,
+    color: ["#38bdf8", "#a78bfa", "#f59e0b", "#34d399", "#fb7185", "#facc15"][index] ?? "#38bdf8",
+    points: [...worker.byWeek].sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => ({ key, label: key.slice(5), value })),
+  }));
+  const weeklySeries = [
+    { name: "Presupuestado", color: "#f59e0b", points: payrollOverview?.weekTrend.map((point) => ({ key: point.key, label: point.label, value: point.budget })) ?? [] },
+    { name: "Pagado", color: "#38bdf8", points: payrollOverview?.weekTrend.map((point) => ({ key: point.key, label: point.label, value: point.paid })) ?? [] },
+  ];
+  const monthlySeries = [
+    { name: "Presupuestado", color: "#f59e0b", points: payrollOverview?.monthTrend.map((point) => ({ key: point.key, label: point.label, value: point.budget })) ?? [] },
+    { name: "Pagado", color: "#38bdf8", points: payrollOverview?.monthTrend.map((point) => ({ key: point.key, label: point.label, value: point.paid })) ?? [] },
+  ];
 
   return <main className="page-frame mx-auto max-w-7xl space-y-6 text-on-surface">
     <header className="space-y-1">
@@ -223,13 +269,13 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       </div>
     </nav>}
 
-    <form method="get" className="grid gap-3 rounded-xl border border-outline-variant bg-surface-container/60 p-4 sm:grid-cols-2 lg:grid-cols-5">
+    {view !== "payroll" && <form method="get" className="grid gap-3 rounded-xl border border-outline-variant bg-surface-container/60 p-4 sm:grid-cols-2 lg:grid-cols-5">
       {view !== "summary" && <input type="hidden" name="view" value={view} />}
-      {view !== "payroll" && <label className="text-xs font-semibold text-on-surface-variant">Periodo
+      <label className="text-xs font-semibold text-on-surface-variant">Periodo
         <select name="period" defaultValue={period} className={control}>
           <option value="day">Día</option><option value="week">Semana</option><option value="month">Mes</option><option value="year">Año</option>
         </select>
-      </label>}
+      </label>
       <label className="text-xs font-semibold text-on-surface-variant">Fecha de referencia
         <input name="date" type="date" defaultValue={anchor} className={control} />
       </label>
@@ -251,38 +297,37 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         </select>
       </label>}
       <div className="flex items-end"><button type="submit" className="w-full rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary">Consultar</button></div>
-    </form>
+    </form>}
 
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    {view === "payroll" ? <nav aria-label="Periodo de nómina" className="flex flex-wrap items-center gap-2 rounded-xl border border-outline-variant bg-surface-container/60 p-2 text-sm">
+      <span className="px-2 font-semibold text-on-surface-variant">Ver por:</span>
+      {([ ["day", "Día"], ["week", "Semana"], ["month", "Mes"], ["year", "Año"] ] as const).map(([key, label]) => <Link key={key} href={payrollPeriodHref(key)} aria-current={period === key ? "page" : undefined} className={`rounded-lg px-4 py-2 font-semibold ${period === key ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"}`}>{label}</Link>)}
+    </nav> : <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-sm text-on-surface-variant">Periodo consultado: <strong>{from}</strong> al <strong>{to}</strong>. Los totales excluyen pagos anulados.</p>
       <nav aria-label="Navegación de periodos" className="flex items-center gap-1 rounded-xl border border-outline-variant bg-surface-container/60 p-1 text-sm">
         <Link href={previousPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">← Anterior</Link>
         <Link href={todayPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Hoy</Link>
         <Link href={nextPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Siguiente →</Link>
       </nav>
-    </div>
+    </div>}
     {view === "payroll" && selectedBranch && branchHistory && payrollOverview ? <section aria-label={`Pago en nómina de ${selectedBranch.name}`} className="space-y-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-widest text-primary">Pago en nómina</p>
-        <h2 className="text-2xl font-bold">Nómina pagada · {selectedBranch.name}</h2>
-        <p className="text-sm text-on-surface-variant">Resumen de nómina pagada correspondiente únicamente a {selectedBranch.name}, tomando como referencia {anchor}.</p>
+        <h2 className="text-2xl font-bold">Nómina · {selectedBranch.name}</h2>
+        <p className="text-sm text-on-surface-variant">Vista de {periodLabel.toLowerCase()} con el presupuesto publicado del calendario y lo que ya se ha pagado.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card highlight><CardLabel>Esta semana</CardLabel><CardValue>{money(payrollOverview.week)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Nómina pagada de la semana de {anchor}.</p></Card>
-        <Card><CardLabel>Este mes</CardLabel><CardValue>{money(payrollOverview.month)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Nómina pagada durante el mes de {anchor.slice(0, 7)}.</p></Card>
-        <Card><CardLabel>Este año</CardLabel><CardValue>{money(payrollOverview.year)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Nómina pagada durante {anchor.slice(0, 4)}.</p></Card>
+        <Card highlight><CardLabel>Presupuesto de la semana</CardLabel><CardValue>{money(payrollOverview.budgetWeek)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Pagado: {money(payrollOverview.week)} · turnos publicados.</p></Card>
+        <Card><CardLabel>Presupuesto del mes</CardLabel><CardValue>{money(payrollOverview.budgetMonth)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Pagado: {money(payrollOverview.month)} · mes de referencia.</p></Card>
+        <Card><CardLabel>Presupuesto del año</CardLabel><CardValue>{money(payrollOverview.budgetYear)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Pagado: {money(payrollOverview.year)} · año de referencia.</p></Card>
       </div>
-      <PayrollBarChart title="Evolución semanal de nómina" description={`Cada barra representa una semana pagada de ${anchor.slice(0, 4)} en ${selectedBranch.name}.`} branchName={selectedBranch.name} items={payrollOverview.weekTrend} total={payrollOverview.year} minWidth="min-w-[78rem]" />
-      <PayrollBarChart title="Evolución mensual de nómina" description={`Cada barra representa lo pagado por mes en ${anchor.slice(0, 4)} en ${selectedBranch.name}.`} branchName={selectedBranch.name} items={payrollOverview.monthTrend} total={payrollOverview.year} minWidth="min-w-[42rem]" />
-      <div>
-        <h2 className="text-xl font-bold">Detalle semanal</h2>
-        <p className="text-sm text-on-surface-variant">Personas y turnos pagados dentro del periodo consultado.</p>
-      </div>
-      {branchHistory.payroll.length ? <div className="space-y-4">{branchHistory.payroll.map((row) => <Card key={row.weekStart} className="space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold">Semana del {row.weekStart}</h3><p className="text-xs text-on-surface-variant">{row.employeeCount} persona(s) con pago asignado a {selectedBranch.name}</p></div><strong className="text-xl">{money(row.amount)}</strong></div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{row.employees.map((employee) => <div key={`${row.weekStart}-${employee.name}`} className="rounded-lg bg-surface-container-high p-3 text-sm"><div className="flex justify-between gap-3"><strong>{employee.name}</strong><strong>{money(employee.amount)}</strong></div><p className="mt-1 text-xs text-on-surface-variant">{employee.days.reduce((sum, day) => sum + day.shiftCount, 0)} turno(s)</p><div className="mt-2 space-y-1 text-xs text-on-surface-variant">{employee.days.map((day) => <p key={`${row.weekStart}-${employee.name}-${day.date}`}>{day.date || "Día registrado"}: {day.shiftCount} turno(s) · {money(day.amount)}</p>)}</div></div>)}</div>
-        {row.unallocated > 0 && <p className="text-xs text-on-surface-variant">{money(row.unallocated)} del periodo no trae sucursal identificable en el snapshot y no se asignó a {selectedBranch.name}.</p>}
-      </Card>)}</div> : <Card><p className="text-sm text-on-surface-variant">No hay semanas de nómina marcadas como pagadas en este periodo.</p></Card>}
+      <PayrollLineChart title="Evolución semanal de nómina" description={`Presupuesto contra pago real por semana en ${selectedBranch.name}.`} branchName={selectedBranch.name} series={weeklySeries} total={payrollOverview.year} />
+      <PayrollLineChart title="Evolución mensual de nómina" description={`Presupuesto contra pago real por mes en ${selectedBranch.name}.`} branchName={selectedBranch.name} series={monthlySeries} total={payrollOverview.year} />
+      <PayrollLineChart title="Pago por trabajador" description={`Los trabajadores con más turnos aparecen en las líneas con mayor continuidad. Filtro actual: ${periodLabel.toLowerCase()}.`} branchName={selectedBranch.name} series={workerSeries} total={payrollOverview.year} />
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-bold">Quién ha trabajado más</h2><p className="text-sm text-on-surface-variant">Ranking de turnos y monto asignado dentro del periodo seleccionado.</p></div><span className="text-xs text-on-surface-variant">{workerRanking.length} trabajador(es)</span></div>
+        {workerRanking.length ? <ol className="mt-4 space-y-3">{workerRanking.map(([name, worker], index) => <li key={name} className="flex flex-wrap items-center gap-3 rounded-lg bg-surface-container-high p-3 text-sm"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-on-primary">{index + 1}</span><span className="min-w-36 flex-1 font-semibold">{name}</span><span className="text-on-surface-variant">{worker.shifts} turno(s)</span><strong>{money(worker.amount)}</strong></li>)}</ol> : <p className="mt-4 text-sm text-on-surface-variant">No hay pagos de nómina en el periodo seleccionado. El presupuesto se calcula con los turnos publicados y las tarifas vigentes.</p>}
+      </Card>
     </section> : view === "sales" && selectedBranch ? <Card><h2 className="text-xl font-bold">Ventas · {selectedBranch.name}</h2><p className="mt-2 text-sm text-on-surface-variant">Esta pestaña queda separada para integrar el historial de ventas de la sucursal en el siguiente paso.</p></Card> : view === "inventory" && selectedBranch ? <Card><h2 className="text-xl font-bold">Inventario · {selectedBranch.name}</h2><p className="mt-2 text-sm text-on-surface-variant">Esta pestaña queda separada para integrar el consumo y registro de inventario de la sucursal en el siguiente paso.</p></Card> : <>
     {weeklySummary && selectedBranch && <section aria-label={`Resultado semanal de ${selectedBranch.name}`} className="space-y-3">
       <div>
