@@ -10,7 +10,8 @@ import { generateOperationId } from "@/lib/pos2/operationId";
 import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresentation";
 import { formatBusinessDateTime } from "@/lib/dateTime";
 import { inventoryCountTypeLabel, isProductIncludedInInventoryCount } from "@/lib/inventory/countScope";
-import { formatCommercialQuantity } from "@/lib/inventory/units";
+import { formatCommercialQuantity, getNormalizedContentPerUnit } from "@/lib/inventory/units";
+import { summarizeCountConsumption } from "@/lib/inventory/countConsumption";
 
 export default async function CountDetailPage({
   params,
@@ -57,10 +58,72 @@ export default async function CountDetailPage({
   const pendingItems = editable
     ? count.items.filter((item) => item.quantityCounted === null || item.countedAt === null)
     : [];
-  const totalCost = count.items.reduce(
-    (sum, item) => sum + (item.costTotal !== null ? Number(item.costTotal) : 0),
-    0,
-  );
+  const previousClosedCount = count.status === "CERRADO" && count.closedAt
+    ? await prisma.inventoryCount.findFirst({
+        where: {
+          branchId: count.branchId,
+          countType: count.countType,
+          status: "CERRADO",
+          closedAt: { lt: count.closedAt },
+        },
+        orderBy: { closedAt: "desc" },
+        select: { closedAt: true },
+      })
+    : null;
+  const periodStart = previousClosedCount?.closedAt ?? null;
+  const productIds = count.items.map((item) => item.productId);
+  const [recordedMovements, legacyEntries, balances] = periodStart && count.closedAt && productIds.length > 0
+    ? await Promise.all([
+        prisma.inventoryMovement.findMany({
+          where: {
+            branchId: count.branchId,
+            inventoryProductId: { in: productIds },
+            createdAt: { gt: periodStart, lte: count.closedAt },
+            movementType: { in: ["SALE_CONSUMPTION", "SALE_REVERSAL", "EVENT_LOAD", "EVENT_RETURN"] },
+          },
+          select: { inventoryProductId: true, movementType: true, quantityDelta: true },
+        }),
+        prisma.inventoryEntry.findMany({
+          where: {
+            branchId: count.branchId,
+            productId: { in: productIds },
+            entryDate: { gt: periodStart, lte: count.closedAt },
+            type: { in: ["VENTA_POS", "DEVOLUCION_POS", "SALIDA_EVENTO", "REGRESO_EVENTO"] },
+          },
+          select: { productId: true, entryDate: true },
+        }),
+        prisma.inventoryBalance.findMany({
+          where: { branchId: count.branchId, inventoryProductId: { in: productIds } },
+          select: { inventoryProductId: true, createdAt: true },
+        }),
+      ])
+    : [[], [], []] as const;
+  const balanceStartByProduct = new Map(balances.map((balance) => [balance.inventoryProductId, balance.createdAt]));
+  const legacyProductIds = new Set(legacyEntries
+    .filter((entry) => {
+      const balanceStart = balanceStartByProduct.get(entry.productId);
+      return !balanceStart || entry.entryDate < balanceStart;
+    })
+    .map((entry) => entry.productId));
+  const consumption = periodStart
+    ? summarizeCountConsumption(
+        count.items.map((item) => ({
+          ...item.product,
+          unitCostAtTime: item.unitCostAtTime === null ? null : Number(item.unitCostAtTime),
+        })),
+        recordedMovements.map((movement) => ({
+          productId: movement.inventoryProductId,
+          quantity: Number(movement.quantityDelta),
+          type: movement.movementType,
+        })),
+      )
+    : null;
+  const missingCostProductIds = new Set(legacyProductIds);
+  for (const [productId, row] of consumption?.rows ?? []) {
+    if (row.missingCost) missingCostProductIds.add(productId);
+  }
+  const missingCostProducts = missingCostProductIds.size;
+  const costComplete = consumption !== null && missingCostProducts === 0;
   const negativeItems = isAdmin
     ? count.items
         .filter((item) => item.quantityCounted !== null && item.countedAt !== null)
@@ -72,6 +135,16 @@ export default async function CountDetailPage({
         .filter((entry) => entry.difference < 0)
         .sort((a, b) => a.difference - b.difference)
     : [];
+  const shortageValuation = negativeItems.reduce((result, { item, difference }) => {
+    const unitCost = item.unitCostAtTime === null ? null : Number(item.unitCostAtTime);
+    const factor = getNormalizedContentPerUnit(item.product);
+    if (unitCost === null || (item.product.handlingUnit && factor === null)) {
+      result.unpriced += 1;
+    } else {
+      result.known += -difference * unitCost / (factor ?? 1);
+    }
+    return result;
+  }, { known: 0, unpriced: 0 });
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
@@ -103,12 +176,25 @@ export default async function CountDetailPage({
           </p>
         )}
 
-        {count.status === "CERRADO" && (
+        {count.status === "CERRADO" && isAdmin && (
           <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-            <p className="text-xs text-on-surface-variant">Costo total consumido esta semana</p>
+            <p className="text-xs text-on-surface-variant">Costo estimado del consumo registrado entre conteos</p>
             <p className="mt-1 text-2xl font-bold text-tertiary-fixed-dim">
-              ${totalCost.toFixed(2)}
+              {costComplete ? `$${consumption?.knownCost.toFixed(2)}` : "Costo pendiente de completar"}
             </p>
+            {periodStart && count.closedAt ? (
+              <p className="mt-1 text-xs text-on-surface-variant">
+                Del {formatBusinessDateTime(periodStart)} al {formatBusinessDateTime(count.closedAt)}. Incluye ventas y salidas a eventos registradas, menos devoluciones. Usa el costo guardado al cerrar el conteo.
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-on-surface-variant">Falta un conteo anterior cerrado para delimitar el periodo.</p>
+            )}
+            {consumption && missingCostProducts > 0 && (
+              <p className="mt-2 text-sm text-error">
+                Hay {missingCostProducts} productos con consumo sin costo o con movimientos históricos que no se pueden valorar con seguridad.
+                {consumption.knownCost !== 0 ? ` Subtotal con costo configurado: $${consumption.knownCost.toFixed(2)}.` : ""}
+              </p>
+            )}
           </div>
         )}
 
@@ -124,6 +210,13 @@ export default async function CountDetailPage({
               <div className="shrink-0 text-left sm:text-right">
                 <p className="text-xs text-on-surface-variant">Productos con diferencia</p>
                 <p className="text-2xl font-bold text-error">{negativeItems.length}</p>
+                {count.status === "CERRADO" && negativeItems.length > 0 && (
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    Valor de diferencia negativa: {shortageValuation.unpriced === 0
+                      ? `$${shortageValuation.known.toFixed(2)}`
+                      : `${shortageValuation.unpriced} sin costo configurado`}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -182,17 +275,23 @@ export default async function CountDetailPage({
 
         <div className="rounded-2xl border border-outline-variant bg-surface-container">
           {count.items.length === 0 && <p className="p-6 text-sm text-on-surface-variant">Este conteo no tiene partidas registradas.</p>}
-          {count.items.map((item) => (
-            <CountItemRow
+          {count.items.map((item) => {
+            const view = buildInventoryCountItemClientView(item, {
+              status: count.status,
+              canViewHistory: isAdmin,
+            });
+            const recorded = consumption?.rows.get(item.productId);
+            return <CountItemRow
               key={item.id}
               countId={count.id}
               editable={editable}
-              item={buildInventoryCountItemClientView(item, {
-                status: count.status,
-                canViewHistory: isAdmin,
-              })}
-            />
-          ))}
+              item={isAdmin && count.status === "CERRADO" ? {
+                ...view,
+                quantityConsumed: legacyProductIds.has(item.productId) ? null : recorded?.quantity ?? null,
+                costTotal: legacyProductIds.has(item.productId) ? null : recorded?.cost ?? null,
+              } : view}
+            />;
+          })}
         </div>
 
         {editable && missingProducts.length > 0 && (

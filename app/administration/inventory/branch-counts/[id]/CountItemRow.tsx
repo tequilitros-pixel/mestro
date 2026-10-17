@@ -241,21 +241,10 @@ export default function CountItemRow({
 
       {historyVisible && (
         <div>
-          <span className="block text-xs text-on-surface-variant">Entradas</span>
-          <p className="text-sm text-on-surface-variant">
-            {item.entriesQuantity !== undefined && item.entriesQuantity !== null
-              ? item.entriesQuantity
-              : "—"}
-          </p>
-        </div>
-      )}
-
-      {historyVisible && (
-        <div>
-          <span className="block text-xs text-on-surface-variant">Consumido</span>
+          <span className="block text-xs text-on-surface-variant">Consumo registrado</span>
           <p className="text-sm font-semibold text-on-surface">
             {item.quantityConsumed !== undefined && item.quantityConsumed !== null
-              ? item.quantityConsumed
+              ? formatCountQuantity(item.quantityConsumed, item)
               : "—"}
           </p>
         </div>
@@ -263,7 +252,7 @@ export default function CountItemRow({
 
       {historyVisible && (
         <div>
-          <span className="block text-xs text-on-surface-variant">Costo</span>
+          <span className="block text-xs text-on-surface-variant">Costo estimado</span>
           <p className="text-sm text-tertiary-fixed-dim">
             {item.costTotal !== undefined && item.costTotal !== null
               ? `$${item.costTotal.toFixed(2)}`

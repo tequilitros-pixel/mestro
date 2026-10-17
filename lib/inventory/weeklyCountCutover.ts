@@ -134,9 +134,9 @@ export async function reconcileWeeklyCountCutover(
       data: {
         previousQuantity: balance.quantity,
         entriesQuantity: 0,
-        quantityConsumed: 0,
+        quantityConsumed: null,
         unitCostAtTime: product.unitCost,
-        costTotal: 0,
+        costTotal: null,
       },
     });
 
