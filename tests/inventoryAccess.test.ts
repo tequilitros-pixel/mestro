@@ -31,4 +31,5 @@ test("UNIT multipack se presenta como piezas y conserva su contenido", () => {
   assert.equal(formatCommercialQuantity(47, vaso), "47 vasos (1 paquete + 22 vasos)");
   assert.equal(formatCommercialQuantity(1, { ...vaso, productName: "Vaso mediano" }), "1 vaso (0 paquetes + 1 vaso)");
   assert.equal(formatCommercialQuantity(1, { ...vaso, productName: undefined }), "1 pieza (0 paquetes + 1 pieza)");
+  assert.equal(formatCommercialQuantity(-11, vaso), "-11 vasos");
 });
