@@ -29,6 +29,7 @@ export const LEGACY_OPERATOR_PERMISSION_KEYS = [
 
 /** Secciones protegidas por rol ADMIN y que no deben ofrecerse como permisos. */
 export const ADMIN_ONLY_PATH_PREFIXES = [
+  "/accounting",
   "/administration/personnel",
   "/administration/schedule",
   "/administration/workforce/employees",
@@ -109,10 +110,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
-    group: "Contabilidad",
-    modules: [{ key: "/accounting", label: "Contabilidad" }],
-  },
-  {
     group: "Punto de Venta",
     modules: [
       { key: "/pos", label: "Vender" },
@@ -191,6 +188,10 @@ export function canAccessModule(
 }
 
 export function getModuleKeyForPath(pathname: string): string | null {
+  if (pathname === "/accounting" || pathname.startsWith("/accounting/")) {
+    return "/accounting";
+  }
+
   // Resource-oriented URLs still belong to their operational workflow.
   if (/^\/liquors\/products\/[^/]+\/new\/?$/.test(pathname)) {
     return "/liquors/production";

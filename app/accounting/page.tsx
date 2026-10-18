@@ -2,7 +2,7 @@ import Link from "next/link";
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
-import { getAccessibleBranchIds, requireModuleAccess } from "@/lib/auth";
+import { getAccessibleBranchIds, requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatDateOnly, parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
 import {
@@ -94,7 +94,7 @@ function PayrollLineChart({
 }
 
 export default async function AccountingPage({ searchParams }: { searchParams: Promise<Query> }) {
-  const user = await requireModuleAccess("/accounting");
+  const user = await requireAdmin();
   const accessibleBranchIds = await getAccessibleBranchIds();
   const query = await searchParams;
   const periodInput = single(query.period);

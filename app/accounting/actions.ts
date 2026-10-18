@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { AccountingPaymentMethod, Prisma } from "@prisma/client";
-import { getAccessibleBranchIds, requireModuleAccess } from "@/lib/auth";
-import { isBranchAllowed } from "@/lib/branches/access";
+import { requireAdminAction } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parsePaymentAmount, validDateOnly } from "@/lib/accounting";
 import { parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
@@ -17,8 +16,7 @@ function field(data: FormData, name: string): string {
 }
 
 export async function createPaymentAction(data: FormData): Promise<PaymentActionResult> {
-  const user = await requireModuleAccess("/accounting");
-  const allowedBranches = await getAccessibleBranchIds();
+  const user = await requireAdminAction();
   const requestId = field(data, "requestId");
   const branchId = field(data, "branchId");
   const paymentDate = field(data, "paymentDate");
@@ -32,7 +30,7 @@ export async function createPaymentAction(data: FormData): Promise<PaymentAction
   const notes = field(data, "notes");
 
   if (!/^[0-9a-f-]{36}$/i.test(requestId)) return { success: false, error: "Vuelve a abrir el formulario e inténtalo de nuevo." };
-  if (!branchId || !isBranchAllowed(allowedBranches, branchId)) return { success: false, error: "Selecciona una sucursal autorizada." };
+  if (!branchId) return { success: false, error: "Selecciona una sucursal válida." };
   if (!validDateOnly(paymentDate) || paymentDate > todayDateOnly()) return { success: false, error: "Selecciona una fecha de pago válida, no futura." };
   if (!categoryId) return { success: false, error: "Selecciona un tipo de gasto válido." };
   if (!concept || concept.length > 180) return { success: false, error: "El concepto debe tener entre 1 y 180 caracteres." };
@@ -93,8 +91,7 @@ export async function createPaymentAction(data: FormData): Promise<PaymentAction
 }
 
 export async function voidPaymentAction(data: FormData): Promise<PaymentActionResult> {
-  const user = await requireModuleAccess("/accounting");
-  if (user.role !== "ADMIN") return { success: false, error: "Solo un administrador puede anular pagos." };
+  const user = await requireAdminAction();
 
   const id = field(data, "id");
   const reason = field(data, "reason");
