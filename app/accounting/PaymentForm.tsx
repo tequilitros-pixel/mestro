@@ -9,12 +9,13 @@ const control = "mt-1 w-full rounded-xl border border-outline-variant bg-backgro
 
 type Category = { id: string; name: string; requiresReason: boolean; requiresReceipt: boolean };
 
-export function PaymentForm({ branches, categories, today, initialRequestId, initialBranchId, initialBranchName }: { branches: { id: string; name: string }[]; categories: Category[]; today: string; initialRequestId: string; initialBranchId?: string; initialBranchName?: string }) {
+export function PaymentForm({ branches, categories, today, initialRequestId, initialBranchId, initialBranchName, collapsible = false }: { branches: { id: string; name: string }[]; categories: Category[]; today: string; initialRequestId: string; initialBranchId?: string; initialBranchName?: string; collapsible?: boolean }) {
   const router = useRouter();
   const [requestId, setRequestId] = useState(initialRequestId);
   const [result, setResult] = useState<PaymentActionResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [categoryId, setCategoryId] = useState("");
+  const [open, setOpen] = useState(!collapsible);
   const selectedCategory = categories.find((category) => category.id === categoryId);
 
   async function submit(data: FormData) {
@@ -36,11 +37,20 @@ export function PaymentForm({ branches, categories, today, initialRequestId, ini
     }
   }
 
+  if (collapsible && !open) {
+    return <section aria-label={`Registrar gasto${initialBranchName ? ` en ${initialBranchName}` : ""}`} className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-outline-variant bg-surface-container/60 p-4 sm:p-5">
+      <div><h2 className="text-lg font-bold text-on-surface">Gastos de {initialBranchName}</h2><p className="text-sm text-on-surface-variant">Registra un gasto sin salir del resumen de esta sucursal.</p></div>
+      <button type="button" onClick={() => setOpen(true)} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary">Registrar gasto</button>
+    </section>;
+  }
+
   return (
     <form id="accounting-payment-form" action={submit} className="space-y-4 rounded-xl border border-outline-variant bg-surface-container/60 p-4 sm:p-5">
-      <div>
-        <h2 className="text-lg font-bold text-on-surface">Registrar pago</h2>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><h2 className="text-lg font-bold text-on-surface">Registrar gasto{initialBranchName ? ` · ${initialBranchName}` : ""}</h2>
         <p className="text-sm text-on-surface-variant">Captura un pago realizado por una sucursal. El registro se conserva para consulta.</p>
+        </div>
+        {collapsible && <button type="button" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2 text-sm font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Cancelar</button>}
       </div>
       <input type="hidden" name="requestId" value={requestId} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -91,7 +101,7 @@ export function PaymentForm({ branches, categories, today, initialRequestId, ini
       </div>
       {result && <p role="status" className={`rounded-lg p-3 text-sm ${result.success ? "bg-green-500/10 text-green-700" : "bg-error/10 text-error"}`}>{result.success ? result.message : result.error}</p>}
       <button type="submit" disabled={saving || branches.length === 0 || categories.length === 0} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary disabled:opacity-50">
-        {saving ? "Guardando…" : "Guardar pago"}
+        {saving ? "Guardando…" : "Guardar gasto"}
       </button>
     </form>
   );
