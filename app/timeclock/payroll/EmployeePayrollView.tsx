@@ -8,7 +8,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
-  DollarIcon,
 } from "@/components/ui/icons";
 import type { ApprovedPayrollHistoryItem } from "@/app/actions/employeePayrollHistory";
 
@@ -17,9 +16,6 @@ export type EmployeePayrollSummary = {
   hasOpenShift: boolean;
   todayHours: number;
   weekHours: number;
-  totalHours: number;
-  totalPay: number | null;
-  closedShifts: number;
   todayPay: number | null;
   weekPay: number | null;
 };
@@ -85,7 +81,7 @@ export default function EmployeePayrollView({
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">Trabajador</p>
           <h1 className="mt-1 text-3xl font-bold">Mi nómina</h1>
-          <p className="mt-1 text-sm text-on-surface-variant">{userName} · horas y pago acumulado</p>
+          <p className="mt-1 text-sm text-on-surface-variant">{userName} · horas y pago de la semana</p>
         </div>
 
         <div className="inline-flex w-full rounded-2xl border border-outline-variant bg-surface-container p-1 sm:w-auto">
@@ -121,30 +117,8 @@ export default function EmployeePayrollView({
               <p className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">{summary.error}</p>
             ) : (
               <>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Card highlight>
-                    <CardLabel>
-                      <span className="inline-flex items-center gap-1.5">
-                        <DollarIcon className="h-3.5 w-3.5" /> Pago acumulado
-                      </span>
-                    </CardLabel>
-                    <CardValue>{summary.totalPay === null ? "—" : formatCurrency(summary.totalPay)}</CardValue>
-                    <p className="mt-1 text-xs text-on-surface-variant">Estimado con tu tarifa actual</p>
-                  </Card>
-
-                  <Card>
-                    <CardLabel>
-                      <span className="inline-flex items-center gap-1.5">
-                        <ClockIcon className="h-3.5 w-3.5" /> Horas acumuladas
-                      </span>
-                    </CardLabel>
-                    <CardValue>{formatHours(summary.totalHours)}</CardValue>
-                    <p className="mt-1 text-xs text-on-surface-variant">{summary.closedShifts} turnos cerrados</p>
-                  </Card>
-                </div>
-
                 <div className="grid grid-cols-2 gap-3">
-                  <Card>
+                  <Card highlight>
                     <CardLabel>Hoy</CardLabel>
                     <CardValue>{formatHours(summary.todayHours)}</CardValue>
                     <p className="mt-1 text-xs text-on-surface-variant">
@@ -178,7 +152,7 @@ export default function EmployeePayrollView({
                 <p className="text-xs text-on-surface-variant">
                   {summary.hasOpenShift
                     ? "Tienes un turno abierto; el tiempo actual ya está incluido en el estimado."
-                    : "El acumulado se calcula con tus entradas y salidas registradas."}
+                    : "La semana se calcula con tus entradas y salidas registradas."}
                   {summary.hourlyRate === null && " Falta configurar tu tarifa para calcular el pago."}
                 </p>
               </>
