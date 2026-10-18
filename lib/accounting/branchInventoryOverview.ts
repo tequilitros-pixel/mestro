@@ -1,5 +1,6 @@
 import { addDaysToDateOnly, businessDayStart } from "@/lib/dateOnly";
 import { prisma } from "@/lib/prisma";
+import { costPerInventoryBaseUnit, inventoryBaseUnitLabel } from "./inventoryCost";
 import { summarizeBranchInventory, type BranchInventoryOverview, type InventoryConsumptionRow, type InventoryTheoreticalRow } from "./branchInventorySummary";
 
 export type { BranchInventoryOverview } from "./branchInventorySummary";
@@ -36,7 +37,7 @@ export async function getBranchInventoryOverview(input: {
         inventoryProductId: true,
         movementType: true,
         quantityDelta: true,
-        inventoryProduct: { select: { code: true, name: true, category: true, unit: true, unitCost: true } },
+        inventoryProduct: { select: { code: true, name: true, category: true, unit: true, unitCost: true, inventoryBaseUnit: true, normalizedContentPerUnit: true } },
       },
     }),
     prisma.inventoryBalance.findMany({
@@ -59,7 +60,9 @@ export async function getBranchInventoryOverview(input: {
                 ingredients: {
                   select: {
                     quantity: true,
-                    inventoryProduct: { select: { id: true, code: true, name: true, category: true, unit: true, unitCost: true } },
+                    unit: true,
+                    unitStatus: true,
+                    inventoryProduct: { select: { id: true, code: true, name: true, category: true, unit: true, unitCost: true, inventoryBaseUnit: true, normalizedContentPerUnit: true } },
                   },
                 },
               },
@@ -89,22 +92,25 @@ export async function getBranchInventoryOverview(input: {
       code: movement.inventoryProduct.code,
       name: movement.inventoryProduct.name,
       category: movement.inventoryProduct.category,
-      unit: movement.inventoryProduct.unit,
+      unit: inventoryBaseUnitLabel(movement.inventoryProduct.inventoryBaseUnit, movement.inventoryProduct.unit),
       quantity: Number(movement.quantityDelta),
-      unitCost: movement.inventoryProduct.unitCost === null ? null : Number(movement.inventoryProduct.unitCost),
+      unitCost: costPerInventoryBaseUnit(movement.inventoryProduct),
       direction: movement.movementType === "SALE_REVERSAL" || Number(movement.quantityDelta) > 0 ? "reversal" as const : "consumption" as const,
     })),
   ];
   const theoreticalRows: InventoryTheoreticalRow[] = sales.flatMap((sale) => sale.items.flatMap((item) =>
-    item.variant?.ingredients.map((ingredient) => ({
-      productId: ingredient.inventoryProduct.id,
-      code: ingredient.inventoryProduct.code,
-      name: ingredient.inventoryProduct.name,
-      category: ingredient.inventoryProduct.category,
-      unit: ingredient.inventoryProduct.unit,
-      quantity: Number(ingredient.quantity) * item.quantity,
-      unitCost: ingredient.inventoryProduct.unitCost === null ? null : Number(ingredient.inventoryProduct.unitCost),
-    })) ?? [],
+    item.variant?.ingredients.map((ingredient) => {
+      const isBaseUnitRecipe = ingredient.unitStatus === "RESOLVED" && ingredient.unit === ingredient.inventoryProduct.inventoryBaseUnit;
+      return {
+        productId: ingredient.inventoryProduct.id,
+        code: ingredient.inventoryProduct.code,
+        name: ingredient.inventoryProduct.name,
+        category: ingredient.inventoryProduct.category,
+        unit: isBaseUnitRecipe ? inventoryBaseUnitLabel(ingredient.inventoryProduct.inventoryBaseUnit, ingredient.inventoryProduct.unit) : ingredient.inventoryProduct.unit,
+        quantity: Number(ingredient.quantity) * item.quantity,
+        unitCost: isBaseUnitRecipe ? costPerInventoryBaseUnit(ingredient.inventoryProduct) : (ingredient.inventoryProduct.unitCost === null ? null : Number(ingredient.inventoryProduct.unitCost)),
+      };
+    }) ?? [],
   ));
 
   return summarizeBranchInventory({ actualRows, theoreticalRows, saleCount: sales.length });
