@@ -545,9 +545,10 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
     },
     {
       href: "/timeclock/payroll",
-      label: "Nómina semanal",
+      label: "Pagos",
       icon: DollarIcon,
       iconVariant: "green",
+      operatorAllowed: true,
     },
     {
       href: "/timeclock/geofences",

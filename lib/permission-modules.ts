@@ -14,6 +14,7 @@ export const ALWAYS_AVAILABLE_PATHS = [
   "/timeclock/calendar",
   "/timeclock/availability",
   "/timeclock/hours",
+  "/timeclock/payroll",
   "/timeclock/history",
   "/timeclock/requests",
 ] as const;
@@ -34,7 +35,6 @@ export const ADMIN_ONLY_PATH_PREFIXES = [
   "/administration/schedule",
   "/administration/workforce/employees",
   "/administration/workforce/branches",
-  "/timeclock/payroll",
   "/timeclock/geofences",
   "/pos/categories",
   "/pos/products",
