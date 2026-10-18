@@ -217,13 +217,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
   };
   const periodLabel = period === "day" ? "Día" : period === "week" ? "Semana" : period === "month" ? "Mes" : "Año";
   const payrollAnchorHref = (nextAnchor: string) => periodHref(nextAnchor);
-  const monthOptions = Array.from({ length: 12 }, (_, index) => {
-    const month = String(index + 1).padStart(2, "0");
-    const key = `${anchor.slice(0, 4)}-${month}-01`;
-    const label = new Intl.DateTimeFormat("es-MX", { month: "long", timeZone: "UTC" }).format(parseDateOnly(key));
-    return { value: key, label: label.charAt(0).toUpperCase() + label.slice(1) };
-  });
-  const selectedMonthValue = `${anchor.slice(0, 7)}-01`;
+  const periodDescription = period === "day" ? `Día ${from}` : period === "week" ? `Semana del ${from} al ${to}` : period === "month" ? new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric", timeZone: "UTC" }).format(parseDateOnly(`${anchor.slice(0, 7)}-01`)) : `Año ${anchor.slice(0, 4)}`;
   const workerTotals = new Map<string, { amount: number; shifts: number; byWeek: Map<string, number> }>();
   for (const row of branchHistory?.payroll ?? []) {
     for (const employee of row.employees) {
@@ -282,33 +276,20 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       </div>
     </nav>}
 
-    {view !== "payroll" && <form method="get" className="grid gap-3 rounded-xl border border-outline-variant bg-surface-container/60 p-4 sm:grid-cols-2 lg:grid-cols-5">
-      {view !== "summary" && <input type="hidden" name="view" value={view} />}
-      <label className="text-xs font-semibold text-on-surface-variant">Periodo
-        <select name="period" defaultValue={period} className={control}>
-          <option value="day">Día</option><option value="week">Semana</option><option value="month">Mes</option><option value="year">Año</option>
-        </select>
-      </label>
-      <label className="text-xs font-semibold text-on-surface-variant">Fecha de referencia
-        <input name="date" type="date" defaultValue={anchor} className={control} />
-      </label>
-      {selectedBranch ? <div className="text-xs font-semibold text-on-surface-variant">
-        <span>Sucursal</span>
-        <input type="hidden" name="branch" value={selectedBranch.id} />
-        <div className={`${control} font-semibold text-on-surface`}>{selectedBranch.name}</div>
-        <p className="mt-1 text-xs font-normal text-on-surface-variant">Esta pestaña solo muestra y registra datos de {selectedBranch.name}.</p>
-      </div> : <label className="text-xs font-semibold text-on-surface-variant">Sucursal
+    {view === "summary" && <form method="get" className="grid gap-3 rounded-xl border border-outline-variant bg-surface-container/60 p-4 sm:grid-cols-2 lg:grid-cols-3">
+      <input type="hidden" name="period" value={period} /><input type="hidden" name="date" value={anchor} />
+      {selectedBranch ? <input type="hidden" name="branch" value={selectedBranch.id} /> : <label className="text-xs font-semibold text-on-surface-variant">Sucursal
         <select name="branch" defaultValue="" className={control}>
           <option value="">Todas las sucursales</option>
           {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
         </select>
       </label>}
-      {view === "summary" && <label className="text-xs font-semibold text-on-surface-variant">Tipo de gasto
+      <label className="text-xs font-semibold text-on-surface-variant">Tipo de gasto
         <select name="category" defaultValue={category} className={control}>
           <option value="">Todos los tipos</option>
           {categories.map((item) => <option key={item.id} value={item.id}>{item.name}{item.isActive ? "" : " (inactiva)"}</option>)}
         </select>
-      </label>}
+      </label>
       <div className="flex items-end"><button type="submit" className="w-full rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary">Consultar</button></div>
     </form>}
 
@@ -318,23 +299,24 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         {([ ["day", "Día"], ["week", "Semana"], ["month", "Mes"], ["year", "Año"] ] as const).map(([key, label]) => <Link key={key} href={payrollPeriodHref(key)} aria-current={period === key ? "page" : undefined} className={`rounded-lg px-4 py-2 font-semibold ${period === key ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"}`}>{label}</Link>)}
       </nav>
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-outline-variant bg-surface-container/40 p-2 text-sm">
-        <Link href={payrollAnchorHref(shiftPeriodAnchor(period, anchor, -1))} aria-label={`${periodLabel} anterior`} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">←</Link>
+        <Link href={payrollAnchorHref(shiftPeriodAnchor(period, anchor, -1))} aria-label={`${periodLabel} anterior`} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">← Anterior</Link>
         <form method="get" className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="view" value="payroll" /><input type="hidden" name="branch" value={branchId} /><input type="hidden" name="period" value={period} />
-          <label className="font-semibold text-on-surface-variant" htmlFor="payroll-month">Mes a consultar</label>
-          <select id="payroll-month" name="date" defaultValue={selectedMonthValue} className="rounded-lg border border-outline-variant bg-background px-3 py-2 text-sm text-on-surface">
-            {monthOptions.map((option) => <option key={option.value} value={option.value}>{option.label} {anchor.slice(0, 4)}</option>)}
-          </select><button type="submit" className="rounded-lg bg-primary px-3 py-2 font-semibold text-on-primary">Aplicar</button>
+          <label className="font-semibold text-on-surface-variant" htmlFor="payroll-date">Ir a fecha</label>
+          <input id="payroll-date" name="date" type="date" defaultValue={anchor} className="rounded-lg border border-outline-variant bg-background px-3 py-2 text-sm text-on-surface" /><button type="submit" className="rounded-lg bg-primary px-3 py-2 font-semibold text-on-primary">Ir</button>
         </form>
-        <Link href={payrollAnchorHref(shiftPeriodAnchor(period, anchor, 1))} aria-label={`${periodLabel} siguiente`} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">→</Link>
-      </div>
-    </div> : <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="text-sm text-on-surface-variant">Periodo consultado: <strong>{from}</strong> al <strong>{to}</strong>. Los totales excluyen pagos anulados.</p>
-      <nav aria-label="Navegación de periodos" className="flex items-center gap-1 rounded-xl border border-outline-variant bg-surface-container/60 p-1 text-sm">
-        <Link href={previousPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">← Anterior</Link>
         <Link href={todayPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Hoy</Link>
-        <Link href={nextPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Siguiente →</Link>
+        <Link href={payrollAnchorHref(shiftPeriodAnchor(period, anchor, 1))} aria-label={`${periodLabel} siguiente`} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Siguiente →</Link>
+      </div>
+    </div> : <div className="space-y-2">
+      <nav aria-label="Periodo a consultar" className="flex flex-wrap items-center gap-2 rounded-xl border border-outline-variant bg-surface-container/60 p-2 text-sm">
+        <span className="px-2 font-semibold text-on-surface-variant">Ver por:</span>
+        {([ ["day", "Día"], ["week", "Semana"], ["month", "Mes"], ["year", "Año"] ] as const).map(([key, label]) => <Link key={key} href={payrollPeriodHref(key)} aria-current={period === key ? "page" : undefined} className={`rounded-lg px-4 py-2 font-semibold ${period === key ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"}`}>{label}</Link>)}
       </nav>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant bg-surface-container/40 p-2 text-sm">
+        <div><p className="font-semibold text-on-surface">{periodDescription}</p><p className="text-xs text-on-surface-variant">Del {from} al {to}. Los totales excluyen pagos anulados.</p></div>
+        <div className="flex flex-wrap items-center gap-2"><Link href={previousPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">← Anterior</Link><form method="get" className="flex items-center gap-2"><input type="hidden" name="period" value={period} /><input type="hidden" name="view" value={view === "summary" ? "" : view} />{branchId && <input type="hidden" name="branch" value={branchId} />}{category && <input type="hidden" name="category" value={category} />}{status === "voided" && <input type="hidden" name="status" value={status} />}<label className="sr-only" htmlFor="accounting-date">Ir a fecha</label><input id="accounting-date" name="date" type="date" defaultValue={anchor} className="rounded-lg border border-outline-variant bg-background px-3 py-2 text-sm text-on-surface" /><button type="submit" className="rounded-lg bg-primary px-3 py-2 font-semibold text-on-primary">Ir</button></form><Link href={todayPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Hoy</Link><Link href={nextPeriodHref} className="rounded-lg px-3 py-2 font-semibold text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">Siguiente →</Link></div>
+      </div>
     </div>}
     {view === "payroll" && selectedBranch && branchHistory && payrollOverview ? <section aria-label={`Pago en nómina de ${selectedBranch.name}`} className="space-y-4">
       <div>
