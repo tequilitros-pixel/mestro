@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { getMyTimeClockSummary } from "@/app/actions/timeclock";
+import { getMyApprovedPayrollHistory } from "@/app/actions/employeePayrollHistory";
+import EmployeePayrollView from "./EmployeePayrollView";
 import PayrollDashboard from "./PayrollDashboard";
 
 export default async function PayrollPage() {
@@ -10,7 +13,12 @@ export default async function PayrollPage() {
   }
 
   if (user.role !== "ADMIN") {
-    redirect("/timeclock");
+    const [summary, historyResult] = await Promise.all([
+      getMyTimeClockSummary(),
+      getMyApprovedPayrollHistory(),
+    ]);
+    const history = "error" in historyResult ? historyResult : historyResult.data;
+    return <EmployeePayrollView userName={user.name} summary={summary} history={history} />;
   }
 
   return (
