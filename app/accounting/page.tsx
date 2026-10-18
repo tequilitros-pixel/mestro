@@ -324,6 +324,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
         <h2 className="text-2xl font-bold">Nómina · {selectedBranch.name}</h2>
         <p className="text-sm text-on-surface-variant">Vista de {periodLabel.toLowerCase()} con el presupuesto publicado del calendario y lo que ya se ha pagado.</p>
       </div>
+      {payrollOverview.estimatedPaidEntries > 0 && <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-on-surface-variant">{payrollOverview.estimatedPaidEntries} pago(s) histórico(s) no incluyen importe por turno. Su total pagado se distribuye entre las sucursales según las horas registradas en el snapshot; no se modifica la nómina original.</p>}
       <div className="grid gap-3 sm:grid-cols-3">
         <Card highlight><CardLabel>Presupuesto de la semana</CardLabel><CardValue>{money(payrollOverview.budgetWeek)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Pagado: {money(payrollOverview.week)} · turnos publicados.</p></Card>
         <Card><CardLabel>Presupuesto del mes</CardLabel><CardValue>{money(payrollOverview.budgetMonth)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Pagado: {money(payrollOverview.month)} · mes de referencia.</p></Card>

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Prisma } from "@prisma/client";
 import { formatPaymentMoney, parsePaymentAmount, periodRange, shiftPeriodAnchor, validDateOnly } from "../lib/accounting";
-import { allocatePayrollEntries } from "../lib/accounting/payrollAllocation";
+import { allocatePayrollEntries, allocatePayrollEntry } from "../lib/accounting/payrollAllocation";
 import { getModuleKeyForPath, isAdminOnlyPath, isConfigurablePermissionKey } from "../lib/permission-modules";
 import { MAIN_MODULES, SUBMENUS, isMainModuleVisible } from "../components/layout/navigation";
 
@@ -31,6 +31,23 @@ test("la nómina histórica se asigna a la sucursal desde el snapshot del turno"
   assert.equal(result.amount, 550);
   assert.equal(result.entriesWithBranchPay, 1);
   assert.equal(result.unallocated, 0);
+});
+
+test("la nómina histórica sin importe por turno se distribuye por horas de cada sucursal", () => {
+  const allocation = allocatePayrollEntry({
+    totalPay: "800.00",
+    basePay: "800.00",
+    overtimePay: "0.00",
+    daysSnapshot: [
+      { date: "2026-09-14", entries: [
+        { branchId: "canoas", clockIn: "2026-09-14T10:00:00.000Z", clockOut: "2026-09-14T16:00:00.000Z" },
+        { branchId: "barra", clockIn: "2026-09-14T10:00:00.000Z", clockOut: "2026-09-14T12:00:00.000Z" },
+      ] },
+    ],
+  }, "canoas");
+  assert.equal(allocation.estimated, true);
+  assert.equal(allocation.amount, 600);
+  assert.deepEqual(allocation.days, [{ date: "2026-09-14", shiftCount: 1, amount: 600 }]);
 });
 
 test("importe de pago acepta centavos y rechaza valores inválidos", () => {

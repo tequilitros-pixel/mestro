@@ -31,6 +31,7 @@ export type BranchPayrollOverview = {
   budgetWeek: number;
   budgetMonth: number;
   budgetYear: number;
+  estimatedPaidEntries: number;
   periodTrend: PayrollTrendPoint[];
   weekTrend: PayrollTrendPoint[];
   monthTrend: PayrollTrendPoint[];
@@ -139,10 +140,13 @@ export async function getBranchPayrollOverview(input: { branchId: string; anchor
   ]);
 
   const paidByDay = new Map<string, number>();
+  let estimatedPaidEntries = 0;
   for (const period of periods) {
     const daily = new Map<string, number>();
     for (const entry of period.entries) {
-      for (const day of allocatePayrollEntry(entry, input.branchId).days) addAmount(daily, day.date, day.amount);
+      const allocation = allocatePayrollEntry(entry, input.branchId);
+      if (allocation.estimated && allocation.amount > 0) estimatedPaidEntries += 1;
+      for (const day of allocation.days) addAmount(daily, day.date, day.amount);
     }
     for (const [date, amount] of daily) addAmount(paidByDay, date, amount);
   }
@@ -189,6 +193,7 @@ export async function getBranchPayrollOverview(input: { branchId: string; anchor
     budgetWeek: sumBudget(weekRange),
     budgetMonth: sumBudget(monthRange),
     budgetYear: sumBudget(yearRange),
+    estimatedPaidEntries,
     periodTrend,
     weekTrend: periodTrend,
     monthTrend,
