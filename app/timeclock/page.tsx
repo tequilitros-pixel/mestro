@@ -25,8 +25,14 @@ export default function TimeClockPage() {
           <TimeclockLink
             href="/timeclock/hours"
             icon={<ClockIcon className="h-5 w-5" />}
-            title="Ver horas y pagos"
-            description="Consulta tus horas semanales y pago estimado."
+            title="Horas de esta semana"
+            description="Consulta tus horas y pago estimado actuales."
+          />
+          <TimeclockLink
+            href="/timeclock/payroll"
+            icon={<ReceiptIcon className="h-5 w-5" />}
+            title="Mi nómina y pagos"
+            description="Revisa tus semanas aprobadas y pagadas."
           />
           <TimeclockLink
             href="/timeclock/history"
