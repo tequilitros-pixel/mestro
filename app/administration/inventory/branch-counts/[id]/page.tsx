@@ -4,7 +4,7 @@ import CountItemRow from "./CountItemRow";
 import CloseCountButton from "./CloseCountButton";
 import AddCountProduct from "./AddCountProduct";
 import { formatDateOnly } from "@/lib/dateOnly";
-import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { getAccessibleBranchIds, requireInventoryCountCaptureAccess } from "@/lib/auth";
 import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility";
 import { generateOperationId } from "@/lib/pos2/operationId";
 import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresentation";
@@ -17,8 +17,8 @@ export default async function CountDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const user = await requireInventoryCountCaptureAccess();
   const allowedBranchIds = await getAccessibleBranchIds();
-  const user = await getCurrentUser();
   const isAdmin = canViewInventoryCountSystemData(user?.role ?? "");
   const scope = await prisma.inventoryCount.findUnique({ where: { id }, select: { branchId: true } });
   if (!scope) notFound();
@@ -36,6 +36,10 @@ export default async function CountDetailPage({
   });
 
   if (!count) {
+    notFound();
+  }
+
+  if (user.role !== "ADMIN" && count.status !== "BORRADOR") {
     notFound();
   }
 
@@ -139,7 +143,7 @@ export default async function CountDetailPage({
           <AddCountProduct key={missingProducts.map(({ id }) => id).join(",")} countId={count.id} products={missingProducts.map(({ id, name }) => ({ id, name }))} />
         )}
 
-        {editable && <CloseCountButton countId={count.id} operationId={generateOperationId()} />}
+        {editable && user.role === "ADMIN" && <CloseCountButton countId={count.id} operationId={generateOperationId()} />}
       </div>
     </main>
   );

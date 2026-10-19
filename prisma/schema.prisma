@@ -160,6 +160,7 @@ model User {
   workforcePayrollAdjustmentsApproved   WorkforcePayrollAdjustment[]     @relation("WorkforcePayrollAdjustmentApprovedBy")
 
   inventoryCountsClosed InventoryCount[] @relation("InventoryCountClosedBy")
+  inventoryCountsCreated InventoryCount[] @relation("InventoryCountCreatedBy")
 
   registersCreated             Register[]               @relation("RegisterCreatedBy")
   terminalsCreated             Terminal[]               @relation("TerminalCreatedBy")
@@ -2610,11 +2611,13 @@ model InventoryCount {
   notes     String?
   closedAt   DateTime?
   closedById String?
+  createdById String?
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
 
   branch       Branch                      @relation(fields: [branchId], references: [id])
   closedBy     User?                       @relation("InventoryCountClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  createdBy    User?                       @relation("InventoryCountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   items        InventoryCountItem[]
   declarations InventoryCountDeclaration[]
 
@@ -2622,6 +2625,7 @@ model InventoryCount {
   @@index([countDate])
   @@index([countType])
   @@index([closedById])
+  @@index([createdById])
 }
 
 enum InventoryCountType {

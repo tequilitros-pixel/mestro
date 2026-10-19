@@ -6,6 +6,7 @@ import {
   isInventoryManagerReadPath,
   isAdminOnlyPath,
   isAlwaysAvailablePath,
+  isInventoryCountCaptureRole,
 } from "@/lib/permission-modules";
 import {
   type IconProps,
@@ -492,6 +493,11 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
           label: "Conteos semanales",
           icon: ListChecksIcon,
         },
+        {
+          href: "/administration/inventory/branch-counts/statistics",
+          label: "Resumen de conteos",
+          icon: ChartLineIcon,
+        },
       ],
     },
   ],
@@ -675,6 +681,10 @@ export function isSubmenuItemVisible(
   item: SubMenuItem,
 ): boolean {
   if (role === "ADMIN") return true;
+
+  if (item.href === "/administration/inventory/branch-counts") {
+    return isInventoryCountCaptureRole(role);
+  }
 
   // Compatibilidad con operadores antiguos: si todavía no tienen permisos
   // configurados conservan su acceso fijo de producción. En cuanto el admin

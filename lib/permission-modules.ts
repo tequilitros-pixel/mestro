@@ -40,6 +40,7 @@ export const ADMIN_ONLY_PATH_PREFIXES = [
   "/pos/products",
   "/pos/settings",
   "/cash-cuts/history",
+  "/administration/inventory/branch-counts/statistics",
 ] as const;
 
 /** Pantallas administrativas exactas de Workforce; horario se delega aparte. */
@@ -175,6 +176,10 @@ export function canAccessModule(
 ): boolean {
   if (role === "ADMIN") return true;
 
+  if (moduleKey === "/administration/inventory/branch-counts") {
+    return isInventoryCountCaptureRole(role);
+  }
+
   const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);
   if (
     role === "OPERATOR" &&
@@ -235,15 +240,19 @@ export function getModuleKeyForPath(pathname: string): string | null {
 
 /** Read-only inventory surfaces available to a manager with branch scope. */
 export function isInventoryManagerReadPath(pathname: string): boolean {
-  return pathname === "/administration/inventory" ||
+  return (
+    pathname === "/administration/inventory" ||
     pathname === "/administration/inventory/products" ||
     pathname.startsWith("/administration/inventory/products/") ||
     pathname === "/administration/inventory/sucursales" ||
     pathname === "/administration/inventory/sucursales/stock" ||
-    pathname === "/administration/inventory/sucursales/legacy-report" ||
-    pathname === "/administration/inventory/branch-counts" ||
-    (pathname.startsWith("/administration/inventory/branch-counts/") &&
-      !pathname.startsWith("/administration/inventory/branch-counts/new"));
+    pathname === "/administration/inventory/sucursales/legacy-report"
+  );
+}
+
+/** Roles allowed to capture quantities for an assigned branch. */
+export function isInventoryCountCaptureRole(role: string): boolean {
+  return role === "ADMIN" || role === "GERENTE" || role === "OPERATOR";
 }
 
 /** Primera pantalla útil después de iniciar sesión, según los permisos asignados. */

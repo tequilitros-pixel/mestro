@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getAccessibleBranchIds, getCurrentUser, requireModuleActionAccess } from "@/lib/auth";
+import { getAccessibleBranchIds, requireAdminAction, requireInventoryCountCaptureActionAccess } from "@/lib/auth";
 import { isBranchAllowed } from "@/lib/branches/access";
 import { parseDateOnly } from "@/lib/dateOnly";
 import { executeIdempotent } from "@/lib/pos2/idempotency";
@@ -17,12 +17,11 @@ import {
   inventoryCountTypeLabel,
 } from "@/lib/inventory/countScope";
 
-const INVENTORY_COUNTS_PERMISSION = "/administration/inventory/branch-counts";
-
 async function authorizeCountBranch(branchId: string) {
-  await requireModuleActionAccess(INVENTORY_COUNTS_PERMISSION);
+  const user = await requireInventoryCountCaptureActionAccess();
   const allowedBranchIds = await getAccessibleBranchIds();
   if (!isBranchAllowed(allowedBranchIds, branchId)) throw new Error("PERMISSION_DENIED");
+  return user;
 }
 
 export type ActionResult =
@@ -49,7 +48,7 @@ export async function createInventoryCountAction(
     if (!isInventoryCountType(countTypeRaw)) {
       return { success: false, error: "Selecciona un tipo de conteo válido." };
     }
-    await authorizeCountBranch(branchId);
+    const currentUser = await authorizeCountBranch(branchId);
 
     if (!countDateRaw) {
       return { success: false, error: "La fecha del conteo es obligatoria." };
@@ -96,7 +95,7 @@ export async function createInventoryCountAction(
 
     const count = await prisma.$transaction(async (tx) => {
       const created = await tx.inventoryCount.create({
-        data: { code, branchId, countDate, countType: countTypeRaw, status: "BORRADOR" },
+        data: { code, branchId, countDate, countType: countTypeRaw, status: "BORRADOR", createdById: currentUser.id },
         select: { id: true },
       });
 
@@ -294,11 +293,9 @@ export async function closeInventoryCountAction(
   operationId: string,
 ): Promise<ActionResult> {
   try {
+    const actor = await requireAdminAction();
     const scopedCount = await prisma.inventoryCount.findUnique({ where: { id: countId }, select: { branchId: true } });
     if (!scopedCount) return { success: false, error: "Conteo no encontrado." };
-    await authorizeCountBranch(scopedCount.branchId);
-    const actor = await getCurrentUser();
-    if (!actor) return { success: false, error: "Sesión no válida." };
     await executeIdempotent({
       operationId,
       command: "CloseInventoryCountV2",

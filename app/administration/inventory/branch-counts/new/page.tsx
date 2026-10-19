@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import NewCountForm from "./NewCountForm";
-import { getAccessibleBranchIds } from "@/lib/auth";
+import { getAccessibleBranchIds, requireInventoryCountCaptureAccess } from "@/lib/auth";
 import { inventoryCountTypeLabel } from "@/lib/inventory/countScope";
 
 export default async function NewCountPage({
@@ -8,6 +8,7 @@ export default async function NewCountPage({
 }: {
   searchParams: Promise<{ type?: string }>;
 }) {
+  await requireInventoryCountCaptureAccess();
   const requestedType = (await searchParams).type;
   const countType = requestedType === "MONTHLY" ? "MONTHLY" : "WEEKLY";
   const allowedBranchIds = await getAccessibleBranchIds();

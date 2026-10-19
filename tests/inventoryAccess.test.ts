@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { isBranchAllowed } from "@/lib/branches/access";
-import { isInventoryManagerReadPath } from "@/lib/permission-modules";
+import { isInventoryCountCaptureRole, isInventoryManagerReadPath } from "@/lib/permission-modules";
 import { formatCommercialPresentation, formatCommercialQuantity } from "@/lib/inventory/units";
 import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility";
 
@@ -14,9 +14,12 @@ test("ADMIN tiene alcance global y el gerente respeta UserBranch", () => {
 test("las lecturas permitidas no habilitan formularios nuevos", () => {
   assert.equal(isInventoryManagerReadPath("/administration/inventory/products"), true);
   assert.equal(isInventoryManagerReadPath("/administration/inventory/sucursales/stock"), true);
-  assert.equal(isInventoryManagerReadPath("/administration/inventory/branch-counts/known-id"), true);
+  assert.equal(isInventoryManagerReadPath("/administration/inventory/branch-counts/known-id"), false);
   assert.equal(isInventoryManagerReadPath("/administration/inventory/branch-counts/new"), false);
   assert.equal(isInventoryManagerReadPath("/administration/inventory/branch-entries"), false);
+  assert.equal(isInventoryCountCaptureRole("GERENTE"), true);
+  assert.equal(isInventoryCountCaptureRole("OPERATOR"), true);
+  assert.equal(isInventoryCountCaptureRole("CONSULTA"), false);
 });
 
 test("el conteo ciego oculta expected/system al gerente", () => {

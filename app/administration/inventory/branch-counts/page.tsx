@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PlusIcon } from "@/components/ui/icons";
 import { formatDateOnly } from "@/lib/dateOnly";
-import { getAccessibleBranchIds } from "@/lib/auth";
+import { getAccessibleBranchIds, requireInventoryCountCaptureAccess } from "@/lib/auth";
 import { inventoryCountTypeLabel } from "@/lib/inventory/countScope";
 
 export default async function BranchCountsPage({
@@ -10,6 +11,10 @@ export default async function BranchCountsPage({
 }: {
   searchParams: Promise<{ type?: string }>;
 }) {
+  const user = await requireInventoryCountCaptureAccess();
+  if (user.role !== "ADMIN") {
+    redirect("/administration/inventory/branch-counts/new?type=WEEKLY");
+  }
   const requestedType = (await searchParams).type;
   const countType = requestedType === "MONTHLY" ? "MONTHLY" : "WEEKLY";
   const allowedBranchIds = await getAccessibleBranchIds();
@@ -37,6 +42,12 @@ export default async function BranchCountsPage({
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <Link
+              href="/administration/inventory/branch-counts/statistics"
+              className="flex items-center gap-2 rounded-xl border border-outline-variant bg-surface-container px-4 py-3 text-sm font-semibold text-on-surface transition duration-150 ease-out hover:border-primary/40"
+            >
+              Resumen de conteos
+            </Link>
             <Link
               href="/administration/inventory/branch-counts/new?type=WEEKLY"
               className="flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"

@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { getCurrentUser, requireModuleAccess } from "@/lib/auth";
+import { getCurrentUser, requireInventoryCountCaptureAccess, requireModuleAccess } from "@/lib/auth";
 import { getModuleKeyForPath, isInventoryManagerReadPath } from "@/lib/permission-modules";
 
 export default async function InventoryLayout({
@@ -14,8 +14,15 @@ export default async function InventoryLayout({
     getModuleKeyForPath(pathname) ?? "/administration/inventory/products";
 
   const user = await getCurrentUser();
-  const managerRead = user?.role === "GERENTE" && isInventoryManagerReadPath(pathname);
-  if (!managerRead) await requireModuleAccess(moduleKey);
+  const isCountRoute =
+    pathname === "/administration/inventory/branch-counts" ||
+    pathname.startsWith("/administration/inventory/branch-counts/");
+  if (isCountRoute) {
+    await requireInventoryCountCaptureAccess();
+  } else {
+    const managerRead = user?.role === "GERENTE" && isInventoryManagerReadPath(pathname);
+    if (!managerRead) await requireModuleAccess(moduleKey);
+  }
 
   return <>{children}</>;
 }

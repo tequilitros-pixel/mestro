@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/icons";
 import PageTabs from "@/components/ui/PageTabs";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { isInventoryCountCaptureRole } from "@/lib/permission-modules";
 import {
   formatBusinessDate,
 } from "@/lib/dateTime";
@@ -45,11 +46,13 @@ const quickActions = [
     label: "Nuevo conteo semanal",
     href: "/administration/inventory/branch-counts/new?type=WEEKLY",
     permissionKey: "/administration/inventory/branch-counts",
+    captureRoleOnly: true,
   },
   {
     label: "Nuevo conteo mensual",
     href: "/administration/inventory/branch-counts/new?type=MONTHLY",
     permissionKey: "/administration/inventory/branch-counts",
+    captureRoleOnly: true,
   },
 ];
 
@@ -62,7 +65,9 @@ export default async function SucursalesInventoryPage() {
   });
   const permissionKeys = new Set(permissionRows.map((permission) => permission.moduleKey));
   const visibleQuickActions = quickActions.filter(
-    (action) => user?.role === "ADMIN" || permissionKeys.has(action.permissionKey),
+    (action) => action.captureRoleOnly
+      ? Boolean(user && isInventoryCountCaptureRole(user.role))
+      : user?.role === "ADMIN" || permissionKeys.has(action.permissionKey),
   );
   const branchFilter = allowedBranchIds === null ? {} : { branchId: { in: allowedBranchIds } };
 
