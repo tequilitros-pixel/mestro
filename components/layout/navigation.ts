@@ -435,6 +435,12 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       iconVariant: "orange",
     },
     {
+      href: "/administration/inventory/branch-counts/statistics",
+      label: "Dashboard de conteos semanales",
+      icon: ChartLineIcon,
+      iconVariant: "blueDeep",
+    },
+    {
       href: "/administration/inventory/eventos",
       label: "Eventos",
       icon: PartyIcon,

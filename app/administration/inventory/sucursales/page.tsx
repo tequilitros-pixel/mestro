@@ -35,6 +35,12 @@ const entryTypeLabels: Record<string, string> = {
 };
 
 const quickActions = [
+  {
+    label: "Dashboard de conteos semanales",
+    href: "/administration/inventory/branch-counts/statistics",
+    permissionKey: "/administration/inventory/branch-counts/statistics",
+    adminOnly: true,
+  },
   { label: "Nueva entrada", href: "/administration/inventory/branch-entries", permissionKey: "/administration/inventory/branch-entries" },
   { label: "Entrada semanal", href: "/administration/inventory/branch-entries/weekly", permissionKey: "/administration/inventory/branch-entries" },
   {
@@ -65,9 +71,11 @@ export default async function SucursalesInventoryPage() {
   });
   const permissionKeys = new Set(permissionRows.map((permission) => permission.moduleKey));
   const visibleQuickActions = quickActions.filter(
-    (action) => action.captureRoleOnly
-      ? Boolean(user && isInventoryCountCaptureRole(user.role))
-      : user?.role === "ADMIN" || permissionKeys.has(action.permissionKey),
+    (action) => action.adminOnly
+      ? user?.role === "ADMIN"
+      : action.captureRoleOnly
+        ? Boolean(user && isInventoryCountCaptureRole(user.role))
+        : user?.role === "ADMIN" || permissionKeys.has(action.permissionKey),
   );
   const branchFilter = allowedBranchIds === null ? {} : { branchId: { in: allowedBranchIds } };
 
