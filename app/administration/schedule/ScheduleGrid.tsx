@@ -24,7 +24,10 @@ import {
   ClipboardIcon,
   BookIcon,
   PartyIcon,
-  MapPinIcon,
+  SearchIcon,
+  MaximizeIcon,
+  MinimizeIcon,
+  CheckIcon,
 } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/Toast";
 import { fallbackBranchColor } from "@/lib/branchColors";
@@ -61,7 +64,15 @@ type GridData = {
   branches: BranchLite[];
   templates: Template[];
   shifts: Shift[];
-  availability: Record<string, { type: "AVAILABLE_ALL_DAY" | "AVAILABLE_PARTIAL" | "UNAVAILABLE" | "PREFER_OFF"; startTime: string | null; endTime: string | null; source: "EXCEPTION" | "RECURRING" }>;
+  availability: Record<
+    string,
+    {
+      type: "AVAILABLE_ALL_DAY" | "AVAILABLE_PARTIAL" | "UNAVAILABLE" | "PREFER_OFF";
+      startTime: string | null;
+      endTime: string | null;
+      source: "EXCEPTION" | "RECURRING";
+    }
+  >;
 };
 
 type Alert =
@@ -111,6 +122,15 @@ function formatTime12(time: string) {
   return `${hour12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
+/** Formato compacto estilo Connecteam: 9:00a, 1:30p */
+function formatTime12Compact(time: string) {
+  const [h, m] = time.split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return time;
+  const period = h >= 12 ? "p" : "a";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, "0")}${period}`;
+}
+
 function formatHours(hours: number) {
   const totalMinutes = Math.max(0, Math.round(hours * 60));
   const h = Math.floor(totalMinutes / 60);
@@ -143,6 +163,7 @@ function getMostRecentMonday() {
   return mondayOfWeek(todayDateOnly());
 }
 
+/** Tarjeta compacta de turno / descanso estilo Connecteam */
 function ShiftBlock({
   shift,
   onClick,
@@ -151,76 +172,91 @@ function ShiftBlock({
   onClick: () => void;
 }) {
   const published = shift.publicationStatus === "PUBLISHED";
-  const publicationLabel = published ? "Publicado" : "Borrador";
-  const statusSurface = published
-    ? "bg-emerald-200 hover:bg-emerald-300 dark:bg-emerald-950 dark:hover:bg-emerald-900"
-    : "bg-amber-200 hover:bg-amber-300 dark:bg-amber-950 dark:hover:bg-amber-900";
-  const statusBorder = published
-    ? "border-emerald-600 dark:border-emerald-400"
-    : "border-amber-600 dark:border-amber-400";
-  const statusBadge = published
-    ? "bg-emerald-700 text-white dark:bg-emerald-400 dark:text-emerald-950"
-    : "bg-amber-700 text-white dark:bg-amber-400 dark:text-amber-950";
+
   if (shift.type === "DESCANSO") {
     return (
       <button
         onClick={onClick}
-        aria-label={`Descanso · ${publicationLabel}`}
-        data-publication-status={shift.publicationStatus}
-        className={`group/shift w-full rounded-md border-2 px-2 py-2 text-left transition ${statusSurface} ${statusBorder}`}
+        aria-label="Descanso programado"
+        className={`group/shift flex w-full items-center justify-between rounded-md border px-2 py-1 text-left transition hover:border-outline ${
+          published
+            ? "border-outline-variant/80 bg-surface-container-high/60"
+            : "border-dashed border-outline-variant bg-surface-container-high/40"
+        }`}
       >
-        <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Descanso</p>
-        <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${statusBadge}`}>
-          {publicationLabel}
+        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+          <span>☕</span>
+          <span>Descanso</span>
+        </span>
+        <span className="text-[10px] text-on-surface-variant opacity-0 transition group-hover/shift:opacity-100">
+          •••
         </span>
       </button>
     );
   }
 
   const color =
-    shift.branch?.color || fallbackBranchColor(shift.branch?.name ?? shift.event?.id ?? shift.branchId ?? shift.id);
+    shift.branch?.color || fallbackBranchColor(shift.event?.id ?? shift.branchId ?? shift.id);
+  const branchTint = `color-mix(in srgb, ${color} ${published ? "15%" : "8%"}, var(--surface-container-high, #202020))`;
 
   return (
     <button
       onClick={onClick}
       aria-label={`${shift.event?.name ?? shift.branch?.name ?? "Turno"} · ${
-        publicationLabel
+        published ? "Publicado" : "Borrador"
       }`}
-      data-publication-status={shift.publicationStatus}
-      className={`group/shift relative w-full rounded-md border-[3px] px-2 py-1.5 text-left transition ${statusSurface}`}
+      className={`group/shift relative flex w-full flex-col rounded-md border px-2 py-1 text-left transition-all hover:shadow-sm ${
+        published
+          ? "border-outline-variant/70 hover:border-outline"
+          : "border-dashed border-secondary/50 bg-secondary/[0.04] hover:border-secondary"
+      }`}
       style={{
-        borderColor: color,
+        backgroundColor: branchTint,
+        borderLeftColor: color,
+        borderLeftWidth: 3.5,
       }}
+      title={`${shift.event?.name ?? shift.branch?.name ?? "Sin sucursal"}\n${
+        shift.startTime ? formatTime12(shift.startTime) : ""
+      } – ${shift.endTime ? formatTime12(shift.endTime) : ""}${
+        shift.position ? `\nPuesto: ${shift.position}` : ""
+      }${shift.notes ? `\nNota: ${shift.notes}` : ""}`}
     >
-      <span className="absolute right-1.5 top-1 text-[10px] tracking-wider text-on-surface-variant opacity-0 transition group-hover/shift:opacity-100">
-        •••
-      </span>
-      <p className="flex min-w-0 items-center gap-1 pr-5 text-[10px] font-bold leading-tight text-on-surface">
-        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
-        <span className="truncate">{shift.event?.name ?? shift.branch?.name ?? "Sin sucursal"}</span>
-      </p>
-      <span className={`mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${statusBadge}`}>
-        {publicationLabel}
-      </span>
-      <p className="mt-1 break-words font-mono text-[10px] font-semibold leading-tight tracking-tight text-on-surface">
-        {shift.startTime ? formatTime12(shift.startTime) : "—"}
-        {" – "}
-        {shift.endTime ? formatTime12(shift.endTime) : "—"}
-      </p>
-      {shift.startTime && shift.endTime && (
-        <p className="mt-1 text-[10px] font-medium text-on-surface-variant">
-          {formatHours(shiftHours(shift.startTime, shift.endTime))}
-        </p>
-      )}
-      {shift.event?.location && (
-        <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-on-surface-variant">
-          <MapPinIcon className="h-2.5 w-2.5 shrink-0" />
-          {shift.event.location}
-        </p>
-      )}
-      {shift.position && (
-        <p className="mt-1 truncate text-[10px] leading-tight text-on-surface-variant">{shift.position}</p>
-      )}
+      <div className="flex w-full items-center justify-between gap-1 leading-tight">
+        <span className="font-mono text-[11px] font-bold tracking-tight text-on-surface">
+          {shift.startTime ? formatTime12Compact(shift.startTime) : "—"}
+          {" – "}
+          {shift.endTime ? formatTime12Compact(shift.endTime) : "—"}
+        </span>
+        {shift.startTime && shift.endTime && (
+          <span className="shrink-0 rounded bg-surface-container-highest/80 px-1 py-0.2 text-[9px] font-bold text-on-surface-variant">
+            {formatHours(shiftHours(shift.startTime, shift.endTime))}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-0.5 flex w-full items-center gap-1 truncate text-[10px] leading-tight">
+        <span
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: color }}
+          aria-hidden="true"
+        />
+        <span className="truncate font-semibold text-on-surface">
+          {shift.event?.name ?? shift.branch?.name ?? "Sin sucursal"}
+        </span>
+        {shift.position && (
+          <span className="truncate text-on-surface-variant font-normal opacity-85">
+            · {shift.position}
+          </span>
+        )}
+        {shift.notes && (
+          <span className="shrink-0 text-[10px] opacity-70" title={shift.notes}>
+            📝
+          </span>
+        )}
+        {!published && (
+          <span className="ml-auto shrink-0 h-1.5 w-1.5 rounded-full bg-secondary" title="Borrador" />
+        )}
+      </div>
     </button>
   );
 }
@@ -235,25 +271,27 @@ function formatAlertDate(dateStr: string) {
 }
 
 function AlertsPanel({ alerts }: { alerts: Alert[] }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-error/40 bg-error/5">
+    <div className="overflow-hidden rounded-xl border border-error/40 bg-error/5 text-xs">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left"
+        className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
       >
-        <span className="flex items-center gap-2 text-sm font-bold text-error">
+        <span className="flex items-center gap-2 font-bold text-error">
           <AlertIcon className="h-4 w-4" />
-          {alerts.length} alerta{alerts.length === 1 ? "" : "s"} esta semana
+          {alerts.length} alerta{alerts.length === 1 ? "" : "s"} detectada{alerts.length === 1 ? "" : "s"} en esta semana
         </span>
-        <span className="text-xs text-error/70">{open ? "Ocultar" : "Ver detalle"}</span>
+        <span className="text-xs font-semibold text-error/80 hover:underline">
+          {open ? "Ocultar" : "Ver detalle"}
+        </span>
       </button>
 
       {open && (
-        <div className="space-y-2 border-t border-error/20 px-5 py-4">
+        <div className="space-y-1.5 border-t border-error/20 px-4 py-2.5">
           {alerts.map((a, i) => (
-            <p key={i} className="text-sm text-error">
+            <p key={i} className="text-xs text-error">
               {a.kind === "overlap" && (
                 <>
                   <strong>{a.employeeName}</strong> tiene turnos traslapados el{" "}
@@ -269,7 +307,7 @@ function AlertsPanel({ alerts }: { alerts: Alert[] }) {
               {a.kind === "overtime" && (
                 <>
                   <strong>{a.employeeName}</strong> tiene {formatHours(a.hours)} programadas esta
-                  semana (arriba de las {a.threshold}h).
+                  semana (supera el umbral de {a.threshold}h).
                 </>
               )}
             </p>
@@ -281,10 +319,7 @@ function AlertsPanel({ alerts }: { alerts: Alert[] }) {
 }
 
 /**
- * Vista para pantallas chicas: en vez de comprimir los 7 días en el
- * ancho de un celular, se navega un día a la vez con chips arriba
- * (mismo patrón que el calendario del empleado) y se listan todos
- * los empleados con su turno de ese día.
+ * Vista para pantallas chicas: navegación un día a la vez.
  */
 function MobileDayView({
   days,
@@ -326,7 +361,7 @@ function MobileDayView({
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         {days.map((day, i) => {
           const dStr = formatDateOnly(day);
           const isSelected = i === dayIndex;
@@ -337,9 +372,9 @@ function MobileDayView({
             <button
               key={i}
               onClick={() => onSelectDay(i)}
-              className={`relative flex shrink-0 flex-col items-center gap-1 rounded-xl px-3.5 py-3 transition ${
+              className={`relative flex shrink-0 flex-col items-center gap-1 rounded-xl px-3.5 py-2.5 transition ${
                 isSelected
-                  ? "bg-primary text-on-primary"
+                  ? "bg-primary text-on-primary shadow-sm"
                   : isToday
                     ? "border border-primary/40 bg-surface-container-high text-on-surface"
                     : "border border-outline-variant bg-surface-container text-on-surface-variant"
@@ -372,46 +407,52 @@ function MobileDayView({
           return (
             <div
               key={employee.id}
-              className={`rounded-2xl border bg-surface-container p-4 ${
+              className={`rounded-xl border bg-surface-container p-3 ${
                 hasAlert ? "border-error/40 bg-error/5" : "border-outline-variant"
               }`}
             >
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-black text-primary ring-1 ring-primary/30">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-black text-primary ring-1 ring-primary/30">
                   {getInitials(employee.name)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-on-surface">{employee.name}</p>
+                  <p className="truncate text-xs font-bold text-on-surface">{employee.name}</p>
                   <p
-                    className={`flex items-center gap-1 text-xs ${
-                      overtimeEmployeeIds.has(employee.id) ? "font-semibold text-secondary" : "text-on-surface-variant"
+                    className={`flex items-center gap-1 text-[11px] ${
+                      overtimeEmployeeIds.has(employee.id)
+                        ? "font-semibold text-secondary"
+                        : "text-on-surface-variant"
                     }`}
                   >
                     {overtimeEmployeeIds.has(employee.id) && <AlertIcon className="h-3 w-3" />}
-                    {formatHours(totals.hours)} esta semana
+                    {formatHours(totals.hours)} esta semana · {totals.turnos} turnos
                   </p>
-                  {(() => {
-                    const publication = employeePublication.get(employee.id) ?? { published: false, hasShifts: false };
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => onPublishEmployee(employee.id)}
-                        disabled={publication.published || !publication.hasShifts || publishingEmployeeId === employee.id}
-                        className={`mt-1 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide transition disabled:cursor-default disabled:opacity-60 ${
-                          publication.published
-                            ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
-                            : "bg-primary/10 text-primary hover:bg-primary/20"
-                        }`}
-                      >
-                        {publishingEmployeeId === employee.id
-                          ? "Publicando..."
-                          : publication.published
-                            ? "Publicado"
-                            : "Publicar turnos"}
-                      </button>
-                    );
-                  })()}
                 </div>
+                {(() => {
+                  const publication = employeePublication.get(employee.id) ?? {
+                    published: false,
+                    hasShifts: false,
+                  };
+                  if (!publication.hasShifts) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => onPublishEmployee(employee.id)}
+                      disabled={publication.published || publishingEmployeeId === employee.id}
+                      className={`rounded px-2 py-1 text-[9px] font-bold uppercase tracking-wide transition disabled:cursor-default ${
+                        publication.published
+                          ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
+                          : "bg-primary/15 text-primary hover:bg-primary/25"
+                      }`}
+                    >
+                      {publishingEmployeeId === employee.id
+                        ? "..."
+                        : publication.published
+                          ? "Publicado"
+                          : "Publicar"}
+                    </button>
+                  );
+                })()}
               </div>
 
               {hasAlert && (
@@ -420,20 +461,32 @@ function MobileDayView({
                   Traslape ese día
                 </p>
               )}
-              {showAvailability && employeeAvailability && (
-                <p className={`mt-2 text-xs font-semibold ${employeeAvailability.type === "UNAVAILABLE" ? "text-error" : employeeAvailability.type === "AVAILABLE_PARTIAL" ? "text-secondary" : "text-on-surface-variant"}`}>
-                  {employeeAvailability.type === "AVAILABLE_ALL_DAY" ? "● Disponible" : employeeAvailability.type === "UNAVAILABLE" ? "● No disponible" : employeeAvailability.type === "PREFER_OFF" ? "○ Prefiere descanso" : `● Disponible ${employeeAvailability.startTime}–${employeeAvailability.endTime}`}
+              {showAvailability && employeeAvailability && employeeAvailability.type !== "AVAILABLE_ALL_DAY" && (
+                <p
+                  className={`mt-1.5 text-[10px] font-semibold ${
+                    employeeAvailability.type === "UNAVAILABLE"
+                      ? "text-error"
+                      : employeeAvailability.type === "PREFER_OFF"
+                        ? "text-secondary"
+                        : "text-on-surface-variant"
+                  }`}
+                >
+                  {employeeAvailability.type === "UNAVAILABLE"
+                    ? "● No disponible"
+                    : employeeAvailability.type === "PREFER_OFF"
+                      ? "○ Prefiere descanso"
+                      : `● Disp. ${employeeAvailability.startTime}–${employeeAvailability.endTime}`}
                 </p>
               )}
 
-              <div className="mt-3 space-y-1.5">
+              <div className="mt-2 space-y-1.5">
                 {cellShifts.map((s) => (
                   <ShiftBlock key={s.id} shift={s} onClick={() => onShiftClick(s)} />
                 ))}
 
                 <button
                   onClick={() => onAddClick(employee.id, dateStr)}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-outline-variant py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-primary"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-outline-variant py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-primary"
                 >
                   <PlusIcon className="h-3.5 w-3.5" />
                   {cellShifts.length === 0 ? "Agregar turno" : "Agregar otro"}
@@ -465,6 +518,10 @@ export default function ScheduleGrid() {
   const [copying, setCopying] = useState(false);
   const [branchFilter, setBranchFilter] = useState("all");
   const [employeeFilter, setEmployeeFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [hoveredEmployeeId, setHoveredEmployeeId] = useState<string | null>(null);
+
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [showUseTemplate, setShowUseTemplate] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState<{
@@ -490,7 +547,7 @@ export default function ScheduleGrid() {
     const result = await getScheduleGridForWeek(weekStart);
 
     if ("error" in result) {
-      setError(result.error ?? "Error");
+      setError(result.error ?? "Error al cargar horarios");
       setData(null);
     } else {
       setData(result as unknown as GridData);
@@ -505,8 +562,7 @@ export default function ScheduleGrid() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekStart]);
 
-  // En móvil, al cambiar de semana selecciona hoy si cae dentro de ella;
-  // si no, el lunes.
+  // En móvil, al cambiar de semana selecciona hoy si cae dentro de ella
   useEffect(() => {
     const idx = Array.from({ length: 7 }, (_, i) => addDaysToDateOnly(weekStart, i)).indexOf(
       todayDateOnly(),
@@ -514,6 +570,21 @@ export default function ScheduleGrid() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMobileDayIndex(idx >= 0 ? idx : 0);
   }, [weekStart]);
+
+  // Listener para salir de pantalla completa con Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen]);
+
+  const toggleFullscreen = () => {
+    setIsFullscreen((prev) => !prev);
+  };
 
   async function handleCopyPrevious() {
     setCopying(true);
@@ -582,10 +653,18 @@ export default function ScheduleGrid() {
 
   const visibleEmployees = useMemo(() => {
     if (!data) return [];
-    return employeeFilter === "all"
-      ? data.employees
-      : data.employees.filter((employee) => employee.id === employeeFilter);
-  }, [data, employeeFilter]);
+    let list =
+      employeeFilter === "all"
+        ? data.employees
+        : data.employees.filter((employee) => employee.id === employeeFilter);
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((employee) => employee.name.toLowerCase().includes(q));
+    }
+
+    return list;
+  }, [data, employeeFilter, searchQuery]);
 
   const visibleShifts = useMemo(() => {
     if (!data) return [];
@@ -604,7 +683,9 @@ export default function ScheduleGrid() {
       const employeeShifts = data.shifts.filter((shift) => shift.userId === employee.id);
       map.set(employee.id, {
         hasShifts: employeeShifts.length > 0,
-        published: employeeShifts.length > 0 && employeeShifts.every((shift) => shift.publicationStatus === "PUBLISHED"),
+        published:
+          employeeShifts.length > 0 &&
+          employeeShifts.every((shift) => shift.publicationStatus === "PUBLISHED"),
       });
     }
 
@@ -640,6 +721,30 @@ export default function ScheduleGrid() {
     return map;
   }, [data, visibleShifts]);
 
+  /** Totales diarios para métricas de encabezado y pie de tabla estilo Connecteam */
+  const dayTotals = useMemo(() => {
+    const map = new Map<string, { shifts: number; hours: number; workers: Set<string> }>();
+    if (!data) return map;
+
+    for (const day of days) {
+      const dStr = formatDateOnly(day);
+      map.set(dStr, { shifts: 0, hours: 0, workers: new Set() });
+    }
+
+    for (const s of visibleShifts) {
+      if (s.type !== "TURNO" || !s.startTime || !s.endTime) continue;
+      const dStr = formatDateOnly(new Date(s.date));
+      const entry = map.get(dStr);
+      if (entry) {
+        entry.shifts += 1;
+        entry.hours += shiftHours(s.startTime, s.endTime);
+        entry.workers.add(s.userId);
+      }
+    }
+
+    return map;
+  }, [data, days, visibleShifts]);
+
   const summary = useMemo(() => {
     if (!data) return null;
 
@@ -664,12 +769,6 @@ export default function ScheduleGrid() {
     return { totalHours, totalShifts, peopleCount: peopleSet.size, totalCost };
   }, [data, visibleEmployees, visibleShifts]);
 
-  /**
-   * Traslapes y "dos sucursales a la vez" se revisan por empleado y por
-   * día calendario (los turnos que cruzan medianoche se comparan dentro
-   * de ese mismo día; no se checa contra el día siguiente). Exceso de
-   * horas se checa contra el umbral semanal configurado en Nómina.
-   */
   const alerts = useMemo(() => {
     const list: Alert[] = [];
     if (!data) return list;
@@ -741,166 +840,295 @@ export default function ScheduleGrid() {
   }, [alerts]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-lg border border-outline-variant bg-surface-container p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setWeekStart((prev) => addDaysToDateOnly(prev, -7))}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-outline-variant text-on-surface-variant transition hover:border-outline hover:text-on-surface"
-            aria-label="Semana anterior"
-          >
-            <ChevronLeftIcon className="h-4 w-4" />
-          </button>
+    <div
+      className={
+        isFullscreen
+          ? "fixed inset-0 z-50 flex flex-col bg-background p-2 sm:p-4 overflow-hidden"
+          : "space-y-3"
+      }
+    >
+      {/* Barra de Controles y Filtros Superior (Connecteam Style) */}
+      <div className="flex flex-col gap-2.5 rounded-xl border border-outline-variant bg-surface-container p-2.5 sm:p-3 shadow-sm">
+        {/* Fila 1: Navegación de semana, Búsqueda rápida, Filtros y Pantalla Completa */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Navegación de Semana */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setWeekStart((prev) => addDaysToDateOnly(prev, -7))}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant transition hover:border-outline hover:text-on-surface"
+              aria-label="Semana anterior"
+              title="Semana anterior"
+            >
+              <ChevronLeftIcon className="h-4 w-4" />
+            </button>
 
-          <div className="min-w-[190px] px-1 text-center">
-            <p className="text-sm font-semibold text-on-surface">{formatWeekRange(weekStart)}</p>
+            <div className="min-w-[170px] text-center">
+              <p className="text-xs font-bold text-on-surface sm:text-sm">{formatWeekRange(weekStart)}</p>
+            </div>
+
+            <button
+              onClick={() => setWeekStart((prev) => addDaysToDateOnly(prev, 7))}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant transition hover:border-outline hover:text-on-surface"
+              aria-label="Semana siguiente"
+              title="Semana siguiente"
+            >
+              <ChevronRightIcon className="h-4 w-4" />
+            </button>
+
+            <button
+              onClick={() => setWeekStart(getMostRecentMonday())}
+              disabled={weekStart === getMostRecentMonday()}
+              className="rounded-lg border border-outline-variant px-2.5 py-1 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-40"
+            >
+              Hoy
+            </button>
           </div>
 
-          <button
-            onClick={() => setWeekStart((prev) => addDaysToDateOnly(prev, 7))}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-outline-variant text-on-surface-variant transition hover:border-outline hover:text-on-surface"
-            aria-label="Semana siguiente"
-          >
-            <ChevronRightIcon className="h-4 w-4" />
-          </button>
+          {/* Búsqueda rápida de trabajador */}
+          <div className="relative flex-1 min-w-[160px] max-w-[260px]">
+            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-on-surface-variant" />
+            <input
+              type="text"
+              placeholder="Buscar trabajador..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 w-full rounded-lg border border-outline-variant bg-background pl-8 pr-7 text-xs font-medium text-on-surface placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant hover:text-on-surface"
+                aria-label="Limpiar búsqueda"
+              >
+                ×
+              </button>
+            )}
+          </div>
 
-          <button
-            onClick={() => setWeekStart(getMostRecentMonday())}
-            disabled={weekStart === getMostRecentMonday()}
-            className="rounded-md border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-40"
-          >
-            Hoy
-          </button>
-
+          {/* Selector de Sucursal y Empleado */}
           {data && (
-            <>
-            <div className="mx-1 hidden h-6 w-px bg-outline-variant lg:block" />
-            <label className="sr-only" htmlFor="branch-filter">Filtrar por sucursal</label>
-            <select
-              id="branch-filter"
-              value={branchFilter}
-              onChange={(event) => setBranchFilter(event.target.value)}
-              className="h-8 min-w-[180px] rounded-md border border-outline-variant bg-background px-2.5 text-xs font-semibold text-on-surface outline-none"
-            >
-              <option value="all">Todas las sucursales</option>
-              {data.branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>{branch.name}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <label className="sr-only" htmlFor="branch-filter">
+                Filtrar por sucursal
+              </label>
+              <select
+                id="branch-filter"
+                value={branchFilter}
+                onChange={(event) => setBranchFilter(event.target.value)}
+                className="h-8 rounded-lg border border-outline-variant bg-background px-2.5 text-xs font-semibold text-on-surface outline-none"
+              >
+                <option value="all">Todas las sucursales</option>
+                {data.branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
 
-            <label className="sr-only" htmlFor="employee-filter">Filtrar por empleado</label>
-            <select
-              id="employee-filter"
-              value={employeeFilter}
-              onChange={(event) => setEmployeeFilter(event.target.value)}
-              className="h-8 min-w-[170px] rounded-md border border-outline-variant bg-background px-2.5 text-xs font-semibold text-on-surface outline-none"
-            >
-              <option value="all">Todos los empleados</option>
-              {data.employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>{employee.name}</option>
-              ))}
-            </select>
-
-            <span
-              className={`ml-auto w-fit rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
-                data.status === "PUBLISHED"
-                  ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
-                  : "bg-secondary/15 text-secondary"
-              }`}
-            >
-              {data.status === "PUBLISHED" ? "Todos publicados" : "Hay borradores"}
-            </span>
-
-            </>
+              <label className="sr-only" htmlFor="employee-filter">
+                Filtrar por empleado
+              </label>
+              <select
+                id="employee-filter"
+                value={employeeFilter}
+                onChange={(event) => setEmployeeFilter(event.target.value)}
+                className="h-8 rounded-lg border border-outline-variant bg-background px-2.5 text-xs font-semibold text-on-surface outline-none"
+              >
+                <option value="all">Todos los empleados</option>
+                {data.employees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
+
+          {/* Acciones principales a la derecha: Pantalla Completa & Publicar */}
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
+                isFullscreen
+                  ? "border-primary bg-primary/10 text-primary hover:bg-primary/20"
+                  : "border-outline-variant text-on-surface-variant hover:border-outline hover:text-on-surface"
+              }`}
+              title={isFullscreen ? "Salir de pantalla completa (Esc)" : "Ver en pantalla completa"}
+            >
+              {isFullscreen ? (
+                <>
+                  <MinimizeIcon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Salir</span>
+                  <span className="hidden text-[10px] opacity-70 lg:inline">(Esc)</span>
+                </>
+              ) : (
+                <>
+                  <MaximizeIcon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Pantalla completa</span>
+                </>
+              )}
+            </button>
+
+            {data && (
+              <button
+                onClick={handlePublishToggle}
+                disabled={publishing || data.shifts.length === 0}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition disabled:opacity-60 ${
+                  data.status === "PUBLISHED"
+                    ? "border border-outline-variant text-on-surface-variant hover:border-secondary/40 hover:text-secondary"
+                    : "bg-primary text-on-primary hover:opacity-90 shadow-sm"
+                }`}
+              >
+                {publishing
+                  ? "Guardando..."
+                  : data.status === "PUBLISHED"
+                    ? "Despublicar todos"
+                    : "Publicar todos"}
+              </button>
+            )}
+          </div>
         </div>
 
+        {/* Fila 2: Leyenda de Sucursales + Acciones secundarias */}
         {data && (
-          <div className="flex flex-wrap items-center gap-2 border-t border-outline-variant pt-3">
-            <label className="mr-auto flex items-center gap-2 text-xs font-medium text-on-surface-variant"><input type="checkbox" checked={showAvailability} onChange={(e) => setShowAvailability(e.target.checked)} /> Disponibilidad</label>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-outline-variant/60 pt-2 text-xs">
+            {/* Leyenda y Filtro Rápido de Sucursales (Connecteam style) */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                Sucursales:
+              </span>
+              <button
+                type="button"
+                onClick={() => setBranchFilter("all")}
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold transition ${
+                  branchFilter === "all"
+                    ? "bg-primary text-on-primary shadow-xs"
+                    : "bg-surface-container-high text-on-surface-variant hover:text-on-surface"
+                }`}
+              >
+                Todas
+              </button>
+              {data.branches.map((b) => {
+                const bColor = b.color || fallbackBranchColor(b.id);
+                const isSelected = branchFilter === b.id;
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setBranchFilter(isSelected ? "all" : b.id)}
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                      isSelected
+                        ? "bg-surface-container-highest text-on-surface ring-1 ring-primary"
+                        : "bg-surface-container-high text-on-surface-variant hover:text-on-surface"
+                    }`}
+                  >
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: bColor }} />
+                    <span>{b.name}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-            <button
-              onClick={handleCopyPrevious}
-              disabled={copying}
-              className="inline-flex items-center gap-1.5 rounded-md border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-60"
-            >
-              <ClipboardIcon className="h-4 w-4" />
-              {copying ? "Copiando..." : "Copiar semana anterior"}
-            </button>
+            {/* Opciones adicionales: Disponibilidad, Plantillas, Copiar */}
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showAvailability}
+                  onChange={(e) => setShowAvailability(e.target.checked)}
+                  className="rounded border-outline-variant accent-primary"
+                />
+                <span>Disponibilidad</span>
+              </label>
 
-            <button
-              onClick={() => setShowSaveTemplate(true)}
-              disabled={data.shifts.length === 0}
-              className="inline-flex items-center gap-1.5 rounded-md border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-40"
-            >
-              <BookIcon className="h-4 w-4" />
-              Guardar como plantilla
-            </button>
+              <button
+                onClick={handleCopyPrevious}
+                disabled={copying}
+                className="inline-flex items-center gap-1 rounded-lg border border-outline-variant px-2.5 py-1 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-60"
+                title="Copiar turnos de la semana anterior"
+              >
+                <ClipboardIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{copying ? "Copiando..." : "Copiar anterior"}</span>
+              </button>
 
-            <button
-              onClick={() => setEventModal({ mode: "create", date: todayStr })}
-              className="inline-flex items-center gap-1.5 rounded-md border border-outline-variant px-3 py-1.5 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface"
-            >
-              <PartyIcon className="h-4 w-4" />
-              Nuevo evento
-            </button>
+              <button
+                onClick={() => setShowSaveTemplate(true)}
+                disabled={data.shifts.length === 0}
+                className="inline-flex items-center gap-1 rounded-lg border border-outline-variant px-2.5 py-1 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface disabled:opacity-40"
+              >
+                <BookIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Guardar plantilla</span>
+              </button>
 
-            <button
-              onClick={handlePublishToggle}
-              disabled={publishing || data.shifts.length === 0}
-              className={`rounded-md px-3 py-1.5 text-xs font-bold transition disabled:opacity-60 ${
-                data.status === "PUBLISHED"
-                  ? "border border-outline-variant text-on-surface-variant hover:border-secondary/40 hover:text-secondary"
-                  : "bg-primary text-on-primary hover:opacity-90"
-              }`}
-            >
-              {publishing
-                ? "Guardando..."
-                : data.status === "PUBLISHED"
-                  ? "Despublicar todos"
-                  : "Publicar todos"}
-            </button>
+              <button
+                onClick={() => setEventModal({ mode: "create", date: todayStr })}
+                className="inline-flex items-center gap-1 rounded-lg border border-outline-variant px-2.5 py-1 text-xs font-semibold text-on-surface-variant transition hover:border-outline hover:text-on-surface"
+              >
+                <PartyIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Nuevo evento</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
 
       {error && (
-        <div className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">
+        <div className="rounded-xl border border-error/40 bg-error/10 p-3 text-xs text-error">
           {error}
         </div>
       )}
 
       {alerts.length > 0 && <AlertsPanel alerts={alerts} />}
 
+      {/* Barra resumen de métricas */}
       {summary && (
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-outline-variant px-1 py-2 text-xs text-on-surface-variant">
-          <span><strong className="font-semibold text-on-surface">{visibleEmployees.length}</strong> empleados</span>
-          <span><strong className="font-semibold text-on-surface">{formatHours(summary.totalHours)}</strong> programadas</span>
-          <span><strong className="font-semibold text-on-surface">{summary.totalShifts}</strong> turnos</span>
-          {alerts.length > 0 && <span className="text-error"><strong>{alerts.length}</strong> conflictos</span>}
-          <span className="ml-auto hidden sm:inline">Costo estimado: <strong className="font-semibold text-on-surface">{formatCurrency(summary.totalCost)}</strong></span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-outline-variant/60 bg-surface-container/50 px-3 py-1.5 text-xs text-on-surface-variant">
+          <span>
+            <strong className="font-bold text-on-surface">{visibleEmployees.length}</strong> trabajadores
+          </span>
+          <span>•</span>
+          <span>
+            <strong className="font-bold text-on-surface">{summary.totalShifts}</strong> turnos
+          </span>
+          <span>•</span>
+          <span>
+            <strong className="font-bold text-on-surface">{formatHours(summary.totalHours)}</strong> totales
+          </span>
+          {alerts.length > 0 && (
+            <>
+              <span>•</span>
+              <span className="font-bold text-error">
+                {alerts.length} conflicto{alerts.length === 1 ? "" : "s"}
+              </span>
+            </>
+          )}
+          <span className="ml-auto hidden font-medium sm:inline">
+            Costo proyectado: <strong className="font-bold text-on-surface">{formatCurrency(summary.totalCost)}</strong>
+          </span>
         </div>
       )}
 
+      {/* Estado vacío si no hay turnos */}
       {!loading && data && data.shifts.length === 0 && (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-outline-variant bg-surface-container p-8 text-center">
-          <p className="font-semibold text-on-surface">Esta semana todavía no tiene turnos.</p>
-          <p className="text-sm text-on-surface-variant">
-            Empieza desde cero con el botón &quot;+&quot; de cada celda, copia la semana anterior, o
-            usa una plantilla guardada.
+          <p className="font-semibold text-on-surface">Esta semana todavía no tiene turnos programados.</p>
+          <p className="max-w-md text-xs text-on-surface-variant">
+            Haz clic en cualquier celda para agregar un turno, copia la semana anterior, o aplica una plantilla guardada.
           </p>
-          <div className="flex flex-wrap justify-center gap-2 pt-2">
+          <div className="flex flex-wrap justify-center gap-2 pt-1">
             <button
               onClick={handleCopyPrevious}
               disabled={copying}
-              className="inline-flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-primary disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3.5 py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary/40 hover:text-primary disabled:opacity-60"
             >
               <ClipboardIcon className="h-4 w-4" />
               {copying ? "Copiando..." : "Copiar semana anterior"}
             </button>
             <button
               onClick={() => setShowUseTemplate(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-on-primary transition hover:opacity-90"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-on-primary transition hover:opacity-90 shadow-sm"
             >
               <BookIcon className="h-4 w-4" />
               Usar plantilla
@@ -910,9 +1138,12 @@ export default function ScheduleGrid() {
       )}
 
       {loading ? (
-        <p className="text-center text-on-surface-variant">Cargando...</p>
+        <div className="flex h-64 items-center justify-center">
+          <p className="text-sm text-on-surface-variant">Cargando horario...</p>
+        </div>
       ) : data ? (
         <>
+          {/* Vista móvil */}
           <div className="md:hidden">
             <MobileDayView
               days={days}
@@ -934,95 +1165,160 @@ export default function ScheduleGrid() {
             />
           </div>
 
-          <div className="hidden max-h-[calc(100vh-220px)] overflow-auto rounded-lg border border-outline-variant bg-surface-container md:block">
+          {/* Cuadrícula Desktop Completa estilo Connecteam */}
+          <div
+            className={`hidden md:block overflow-auto rounded-xl border border-outline-variant bg-surface-container shadow-sm ${
+              isFullscreen ? "flex-1 min-h-0" : "max-h-[calc(100vh-230px)]"
+            }`}
+          >
             <div
-              className="grid min-w-[1260px]"
-              style={{ gridTemplateColumns: "220px repeat(7, minmax(135px, 1fr)) 90px" }}
+              className="grid min-w-[1280px]"
+              style={{ gridTemplateColumns: "230px repeat(7, minmax(135px, 1fr)) 95px" }}
             >
-              <div className="sticky left-0 top-0 z-30 border-b border-r border-outline-variant bg-surface-container-high px-3 py-2.5">
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
-                  Empleado
-                </p>
+              {/* Encabezado Fijo: Columna de Trabajadores */}
+              <div className="sticky left-0 top-0 z-30 flex items-center justify-between border-b-2 border-r border-outline-variant bg-surface-container-high px-3 py-2.5 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.06)]">
+                <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant">
+                  Trabajador
+                </span>
+                <span className="rounded bg-surface-container-highest px-1.5 py-0.5 text-[9px] font-bold text-on-surface-variant">
+                  {visibleEmployees.length}
+                </span>
               </div>
 
+              {/* Encabezados Fijos: Días de la semana con Totales Diarios (Connecteam) */}
               {days.map((day, i) => {
-                const isToday = formatDateOnly(day) === todayStr;
+                const dStr = formatDateOnly(day);
+                const isToday = dStr === todayStr;
+                const dayTot = dayTotals.get(dStr) ?? { shifts: 0, hours: 0, workers: new Set() };
+
                 return (
                   <div
                     key={i}
-                    className={`sticky top-0 z-20 border-b border-r border-outline-variant px-3 py-2 text-center ${
-                      isToday ? "bg-primary/[0.06]" : "bg-surface-container-high"
+                    className={`sticky top-0 z-20 border-b-2 border-r border-outline-variant px-2 py-2 text-center transition-colors ${
+                      isToday
+                        ? "border-b-primary bg-primary/[0.08]"
+                        : "border-b-outline-variant bg-surface-container-high"
                     }`}
                   >
-                    <p
-                      className={`text-[10px] font-black uppercase tracking-widest ${
-                        isToday ? "text-primary" : "text-on-surface-variant"
-                      }`}
-                    >
-                      {DAY_LABELS[i]}
-                    </p>
-                    <p className="text-sm font-bold text-on-surface">{day.getUTCDate()}</p>
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span
+                        className={`text-[10px] font-black uppercase tracking-wider ${
+                          isToday ? "text-primary" : "text-on-surface-variant"
+                        }`}
+                      >
+                        {DAY_LABELS[i]}
+                      </span>
+                      <span
+                        className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-black ${
+                          isToday
+                            ? "bg-primary text-on-primary shadow-xs"
+                            : "text-on-surface font-semibold"
+                        }`}
+                      >
+                        {day.getUTCDate()}
+                      </span>
+                    </div>
+
+                    {/* Resumen diario de personal estilo Connecteam */}
+                    <div className="mt-1 flex items-center justify-center gap-1 text-[10px] font-medium text-on-surface-variant">
+                      <span className="font-semibold text-on-surface">{dayTot.shifts} t.</span>
+                      <span>·</span>
+                      <span className="font-mono text-[10px]">{formatHours(dayTot.hours)}</span>
+                    </div>
                   </div>
                 );
               })}
 
-              <div className="sticky right-0 top-0 z-30 border-b border-l border-outline-variant bg-surface-container-high px-3 py-2.5 text-center">
-                <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Total</p>
+              {/* Encabezado Fijo: Total por Empleado */}
+              <div className="sticky right-0 top-0 z-30 flex items-center justify-center border-b-2 border-l border-outline-variant bg-surface-container-high px-2 py-2.5 text-center shadow-[-2px_0_6px_-2px_rgba(0,0,0,0.06)]">
+                <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant">
+                  Total Sem
+                </span>
               </div>
 
+              {/* Mensaje si no hay trabajadores tras filtrar */}
               {visibleEmployees.length === 0 && (
                 <div className="col-span-9 p-8 text-center text-sm text-on-surface-variant">
-                  No hay personal activo para programar.
+                  {searchQuery
+                    ? `No se encontraron trabajadores que coincidan con "${searchQuery}".`
+                    : "No hay personal activo para programar."}
                 </div>
               )}
 
+              {/* Filas de Empleados */}
               {visibleEmployees.map((employee) => {
                 const totals = employeeTotals.get(employee.id) ?? { hours: 0, turnos: 0 };
+                const isRowHovered = hoveredEmployeeId === employee.id;
 
                 return (
                   <Fragment key={employee.id}>
-                    <div className="sticky left-0 z-10 flex min-h-[74px] items-center gap-2.5 border-b border-r border-outline-variant bg-surface-container px-3 py-2">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary ring-1 ring-primary/20">
+                    {/* Columna Izquierda Fija: Información del Trabajador */}
+                    <div
+                      onMouseEnter={() => setHoveredEmployeeId(employee.id)}
+                      onMouseLeave={() => setHoveredEmployeeId(null)}
+                      className={`sticky left-0 z-20 flex min-h-[50px] items-center gap-2.5 border-b border-r border-outline-variant px-3 py-1.5 transition-colors shadow-[2px_0_6px_-2px_rgba(0,0,0,0.06)] ${
+                        isRowHovered ? "bg-surface-container-high" : "bg-surface-container"
+                      }`}
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary ring-1 ring-primary/20">
                         {getInitials(employee.name)}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-on-surface">
+                        <p className="truncate text-xs font-bold text-on-surface" title={employee.name}>
                           {employee.name}
                         </p>
-                        <p
-                          className={`mt-0.5 flex items-center gap-1 text-[10px] ${
-                            overtimeEmployeeIds.has(employee.id)
-                              ? "font-semibold text-secondary"
-                              : "text-on-surface-variant"
-                          }`}
-                        >
-                          {overtimeEmployeeIds.has(employee.id) && <AlertIcon className="h-3 w-3" />}
-                          {totals.turnos} turno{totals.turnos === 1 ? "" : "s"}
-                        </p>
+                        <div className="mt-0.5 flex items-center gap-1.5 text-[10px]">
+                          <span
+                            className={`font-mono font-bold ${
+                              overtimeEmployeeIds.has(employee.id)
+                                ? "text-secondary font-black"
+                                : "text-on-surface-variant"
+                            }`}
+                          >
+                            {overtimeEmployeeIds.has(employee.id) && "⚠️ "}
+                            {formatHours(totals.hours)}
+                          </span>
+                          <span className="text-on-surface-variant/40">·</span>
+                          <span className="text-on-surface-variant">
+                            {totals.turnos} t.
+                          </span>
+                        </div>
                         {(() => {
-                          const publication = employeePublication.get(employee.id) ?? { published: false, hasShifts: false };
+                          const publication = employeePublication.get(employee.id) ?? {
+                            published: false,
+                            hasShifts: false,
+                          };
+                          if (!publication.hasShifts) return null;
                           return (
                             <button
                               type="button"
                               onClick={() => handlePublishEmployee(employee.id)}
-                              disabled={publication.published || !publication.hasShifts || publishingEmployeeId === employee.id}
-                              className={`mt-1 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide transition disabled:cursor-default disabled:opacity-60 ${
+                              disabled={
+                                publication.published || publishingEmployeeId === employee.id
+                              }
+                              className={`mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider transition disabled:cursor-default ${
                                 publication.published
-                                  ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
-                                  : "bg-primary/10 text-primary hover:bg-primary/20"
+                                  ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim opacity-90"
+                                  : "bg-primary/15 text-primary hover:bg-primary/25"
                               }`}
                             >
-                              {publishingEmployeeId === employee.id
-                                ? "Publicando..."
-                                : publication.published
-                                  ? "Publicado"
-                                  : "Publicar turnos"}
+                              {publishingEmployeeId === employee.id ? (
+                                "..."
+                              ) : publication.published ? (
+                                <>
+                                  <CheckIcon className="h-2.5 w-2.5" />
+                                  <span>Publicado</span>
+                                </>
+                              ) : (
+                                "Publicar"
+                              )}
                             </button>
                           );
                         })()}
                       </div>
                     </div>
 
+                    {/* 7 Celdas de Días */}
                     {days.map((day, i) => {
                       const dateStr = formatDateOnly(day);
                       const key = `${employee.id}|${dateStr}`;
@@ -1033,55 +1329,168 @@ export default function ScheduleGrid() {
                       return (
                         <div
                           key={i}
-                          className={`group min-h-[74px] space-y-1.5 border-b border-r px-1.5 py-1.5 ${
+                          onMouseEnter={() => setHoveredEmployeeId(employee.id)}
+                          onMouseLeave={() => setHoveredEmployeeId(null)}
+                          className={`group relative min-h-[50px] p-1 border-b border-r border-outline-variant transition-colors ${
+                            isRowHovered ? "bg-primary/[0.03]" : ""
+                          } ${
                             hasAlert
-                              ? "border-outline-variant bg-error/[0.06] ring-1 ring-inset ring-error/40"
-                              : "border-outline-variant"
+                              ? "bg-error/[0.06] ring-1 ring-inset ring-error/40"
+                              : ""
                           }`}
                         >
-                          {showAvailability && availability && (
-                            <p className={`text-[10px] font-bold ${availability.type === "UNAVAILABLE" ? "text-error" : availability.type === "AVAILABLE_PARTIAL" ? "text-secondary" : "text-on-surface-variant"}`}>
-                              {availability.type === "AVAILABLE_ALL_DAY" ? "● Disponible" : availability.type === "UNAVAILABLE" ? "● No disponible" : availability.type === "PREFER_OFF" ? "○ Prefiere descanso" : `● ${availability.startTime}–${availability.endTime}`}
-                            </p>
-                          )}
+                          {/* Alerta de Traslape */}
                           {hasAlert && (
-                            <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-error">
-                              <AlertIcon className="h-3 w-3" />
-                              Traslape
-                            </p>
+                            <div className="mb-1 flex items-center gap-1 rounded bg-error/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-error">
+                              <AlertIcon className="h-2.5 w-2.5 shrink-0" />
+                              <span>Traslape</span>
+                            </div>
                           )}
-                          {cellShifts.map((s) => (
-                            <ShiftBlock
-                              key={s.id}
-                              shift={s}
-                              onClick={() => handleShiftClick(s)}
-                            />
-                          ))}
 
-                          <button
-                            onClick={() => setModal({ mode: "create", userId: employee.id, date: dateStr })}
-                            className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-outline-variant/60 py-1.5 text-[10px] font-medium text-on-surface-variant opacity-40 transition hover:border-primary/40 hover:text-primary group-hover:opacity-100 focus:opacity-100"
-                            aria-label="Agregar turno"
-                          >
-                            <PlusIcon className="h-3.5 w-3.5" />
-                            <span>{cellShifts.length === 0 ? "Agregar turno" : "Agregar otro"}</span>
-                          </button>
+                          {/* Indicador de Disponibilidad no intrusivo (Connecteam) */}
+                          {showAvailability && availability && availability.type !== "AVAILABLE_ALL_DAY" && (
+                            <>
+                              {availability.type === "UNAVAILABLE" && (
+                                <div className="mb-1 flex items-center gap-1 rounded bg-error/10 px-1 py-0.5 text-[9px] font-bold text-error">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-error" />
+                                  <span className="truncate">No disp.</span>
+                                </div>
+                              )}
+                              {availability.type === "PREFER_OFF" && (
+                                <div className="mb-1 flex items-center gap-1 rounded bg-secondary/10 px-1 py-0.5 text-[9px] font-semibold text-secondary">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-secondary" />
+                                  <span className="truncate">Pref. descanso</span>
+                                </div>
+                              )}
+                              {availability.type === "AVAILABLE_PARTIAL" && (
+                                <div className="mb-1 flex items-center gap-1 rounded bg-surface-container-highest px-1 py-0.5 text-[9px] font-medium text-on-surface-variant">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                                  <span className="truncate">
+                                    {availability.startTime}–{availability.endTime}
+                                  </span>
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {/* Turnos en la Celda */}
+                          {cellShifts.length === 0 ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setModal({ mode: "create", userId: employee.id, date: dateStr })
+                              }
+                              className="flex h-full min-h-[42px] w-full items-center justify-center rounded-md border border-dashed border-transparent transition group-hover:border-primary/40 group-hover:bg-primary/[0.04]"
+                              aria-label={`Agregar turno a ${employee.name} el ${formatAlertDate(dateStr)}`}
+                            >
+                              <span className="flex items-center gap-1 text-[11px] font-semibold text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                                <PlusIcon className="h-3 w-3" />
+                                <span>Turno</span>
+                              </span>
+                            </button>
+                          ) : (
+                            <div className="space-y-1">
+                              {cellShifts.map((s) => (
+                                <ShiftBlock
+                                  key={s.id}
+                                  shift={s}
+                                  onClick={() => handleShiftClick(s)}
+                                />
+                              ))}
+
+                              {/* Botón sutil para agregar otro turno en el mismo día */}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setModal({ mode: "create", userId: employee.id, date: dateStr })
+                                }
+                                className="flex w-full items-center justify-center gap-1 rounded py-0.5 text-[9px] font-semibold text-primary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-primary/[0.08]"
+                                aria-label="Agregar otro turno"
+                              >
+                                <PlusIcon className="h-2.5 w-2.5" />
+                                <span>Otro</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
 
-                    <div className={`sticky right-0 z-10 flex min-h-[74px] items-center justify-center border-b border-l border-outline-variant bg-surface-container px-2 text-sm font-bold ${overtimeEmployeeIds.has(employee.id) ? "text-secondary" : "text-on-surface"}`}>
-                      {formatHours(totals.hours)}
+                    {/* Columna Derecha Fija: Total Semanal del Empleado */}
+                    <div
+                      onMouseEnter={() => setHoveredEmployeeId(employee.id)}
+                      onMouseLeave={() => setHoveredEmployeeId(null)}
+                      className={`sticky right-0 z-20 flex min-h-[50px] flex-col items-center justify-center border-b border-l border-outline-variant px-2 text-center transition-colors shadow-[-2px_0_6px_-2px_rgba(0,0,0,0.06)] ${
+                        isRowHovered ? "bg-surface-container-high" : "bg-surface-container"
+                      }`}
+                    >
+                      <span
+                        className={`font-mono text-xs font-extrabold ${
+                          overtimeEmployeeIds.has(employee.id)
+                            ? "text-secondary font-black"
+                            : "text-on-surface"
+                        }`}
+                      >
+                        {formatHours(totals.hours)}
+                      </span>
+                      <span className="text-[9px] text-on-surface-variant">
+                        {totals.turnos} t.
+                      </span>
                     </div>
                   </Fragment>
                 );
               })}
+
+              {/* Fila Fija Inferior: Totales Diarios de la Semana (Connecteam style) */}
+              {visibleEmployees.length > 0 && (
+                <div className="contents">
+                  <div className="sticky bottom-0 left-0 z-20 flex min-h-[44px] items-center border-t-2 border-r border-outline-variant bg-surface-container-high px-3 py-1.5 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.08)]">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-on-surface">
+                        Totales del día
+                      </p>
+                      <p className="text-[9px] text-on-surface-variant">
+                        {summary ? `${summary.peopleCount} activos` : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  {days.map((day, i) => {
+                    const dStr = formatDateOnly(day);
+                    const isToday = dStr === todayStr;
+                    const dayTot = dayTotals.get(dStr) ?? { shifts: 0, hours: 0, workers: new Set() };
+
+                    return (
+                      <div
+                        key={i}
+                        className={`sticky bottom-0 z-10 flex min-h-[44px] flex-col items-center justify-center border-t-2 border-r border-outline-variant px-2 py-1 text-center ${
+                          isToday ? "bg-primary/[0.08]" : "bg-surface-container-high"
+                        }`}
+                      >
+                        <span className="font-mono text-xs font-black text-on-surface">
+                          {formatHours(dayTot.hours)}
+                        </span>
+                        <span className="text-[9px] font-medium text-on-surface-variant">
+                          {dayTot.shifts} t. · {dayTot.workers.size} pers.
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  <div className="sticky bottom-0 right-0 z-20 flex min-h-[44px] flex-col items-center justify-center border-t-2 border-l border-outline-variant bg-surface-container-high px-2 py-1 text-center shadow-[-2px_0_6px_-2px_rgba(0,0,0,0.08)]">
+                    <span className="font-mono text-xs font-black text-primary">
+                      {summary ? formatHours(summary.totalHours) : "0h"}
+                    </span>
+                    <span className="text-[9px] font-bold text-on-surface-variant">Gran total</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-
         </>
       ) : null}
 
+      {/* Modales */}
       {modal && data && (
         <ShiftModal
           employees={data.employees}

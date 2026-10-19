@@ -14,8 +14,8 @@ export default async function SchedulePage() {
   }
 
   return (
-    <main className="min-h-screen bg-background px-3 py-4 text-on-surface sm:px-5 lg:px-6">
-      <div className="mx-auto max-w-[1800px] space-y-4">
+    <main className="min-h-screen bg-background px-2 py-3 text-on-surface sm:px-4 lg:px-6">
+      <div className="w-full space-y-3">
         <ScheduleTabs />
       </div>
     </main>
