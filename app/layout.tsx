@@ -18,6 +18,8 @@ const OPERATOR_ALLOWED_PATHS = [
   "/timeclock",
 ];
 
+const PUBLIC_MARKETING_PATHS = ["/tequilitros"];
+
 function matchesPath(pathname: string, path: string) {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
@@ -37,6 +39,21 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const isPublicMarketingPath = PUBLIC_MARKETING_PATHS.some((path) =>
+    matchesPath(pathname, path),
+  );
+
+  // La web pública de Tequilitros comparte el despliegue con MAESTRO,
+  // pero no forma parte de la aplicación operativa ni necesita sesión.
+  if (isPublicMarketingPath) {
+    return (
+      <html lang="es" className="h-full antialiased">
+        <body className="min-h-screen bg-background text-on-surface">{children}</body>
+      </html>
+    );
+  }
+
   /*
    * El proxy (proxy.ts) solo confirma que exista la cookie de sesión
    * y no toca la base de datos (ver comentario en ese archivo). La
@@ -56,7 +73,6 @@ export default async function RootLayout({
       redirect("/api/session/clear");
     }
 
-    const pathname = (await headers()).get("x-pathname") ?? "";
     const isAllowedForOperator = OPERATOR_ALLOWED_PATHS.some((path) =>
       matchesPath(pathname, path),
     );

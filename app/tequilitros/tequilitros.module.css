@@ -1,0 +1,774 @@
+/* ==========================================================================
+   TEQUILITROS PARA EVENTOS — SISTEMA DE DISEÑO NOCTURNO EDITORIAL
+   Elegancia Mexicana Contemporánea · Destiladora del Norte · Colotlán, Jalisco
+   ========================================================================== */
+
+.site {
+  --bg-dark: #080B0E;
+  --bg-card: #0E1318;
+  --bg-elevated: #141B22;
+  --border-subtle: #242E37;
+  --border-glow: rgba(226, 135, 53, 0.35);
+  --copper: #E28735;
+  --copper-light: #F0A050;
+  --gold: #D4AF37;
+  --text-primary: #F5F2EB;
+  --text-muted: #9AA5AC;
+  --text-dim: #5D6B75;
+
+  min-height: 100vh;
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", "SF Pro Text", "Segoe UI", sans-serif;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+.site * {
+  box-sizing: border-box;
+}
+
+.site a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.site:focus-within {
+  scroll-behavior: smooth;
+}
+
+/* ==========================================================================
+   HERO CINEMATOGRÁFICO
+   ========================================================================== */
+
+.hero {
+  position: relative;
+  display: flex;
+  min-height: calc(100vh - 80px);
+  align-items: center;
+  justify-content: space-between;
+  padding: clamp(60px, 8vw, 120px) 7vw;
+  background: var(--bg-dark);
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.heroBackground {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+}
+
+.heroBackgroundImage {
+  object-fit: cover;
+  object-position: 75% center;
+  filter: brightness(0.65) contrast(1.1);
+  transform: scale(1.02);
+}
+
+.heroBackdropGradient {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 70% 40%, rgba(226, 135, 53, 0.08) 0%, transparent 60%),
+              linear-gradient(90deg, rgba(8, 11, 14, 0.98) 0%, rgba(8, 11, 14, 0.88) 45%, rgba(8, 11, 14, 0.4) 100%),
+              linear-gradient(0deg, rgba(8, 11, 14, 1) 0%, transparent 25%);
+  z-index: -1;
+}
+
+.heroContent {
+  position: relative;
+  z-index: 2;
+  max-width: 720px;
+}
+
+.kickerBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-glow);
+  background: rgba(226, 135, 53, 0.1);
+  color: var(--copper);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+  backdrop-filter: blur(8px);
+}
+
+.kickerBadgeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background-color: var(--copper);
+  animation: pulseDot 2s infinite ease-in-out;
+}
+
+.heroTitle {
+  font-family: "Cinzel", "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(48px, 6.5vw, 92px);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+  margin: 0 0 24px;
+  text-wrap: balance;
+}
+
+.heroTitle em {
+  font-family: Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--copper);
+  text-shadow: 0 0 35px rgba(226, 135, 53, 0.25);
+}
+
+.heroLead {
+  font-size: clamp(16px, 1.4vw, 19px);
+  line-height: 1.7;
+  color: var(--text-muted);
+  max-width: 540px;
+  margin: 0 0 36px;
+}
+
+.heroActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 48px;
+}
+
+.btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 28px;
+  border-radius: 12px;
+  background: var(--copper);
+  color: var(--bg-dark);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: all 0.25s ease-out;
+  box-shadow: 0 10px 25px rgba(226, 135, 53, 0.25);
+}
+
+.btnPrimary:hover {
+  background: var(--copper-light);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(226, 135, 53, 0.4);
+}
+
+.btnSecondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 24px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(20, 27, 34, 0.7);
+  color: var(--text-primary);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+  transition: all 0.25s ease-out;
+}
+
+.btnSecondary:hover {
+  border-color: var(--copper);
+  color: var(--copper);
+  background: rgba(226, 135, 53, 0.1);
+}
+
+.heroBadges {
+  display: flex;
+  gap: 24px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 24px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.heroBadges span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.heroBadges span strong {
+  color: var(--gold);
+}
+
+/* ==========================================================================
+   CINTILLO DE IDENTIDAD
+   ========================================================================== */
+
+.tickerRibbon {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 4vw;
+  background: #10151B;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.tickerRibbon b {
+  color: var(--copper);
+  font-size: 16px;
+}
+
+/* ==========================================================================
+   SECCIONES COMUNES
+   ========================================================================== */
+
+.section {
+  padding: clamp(80px, 9vw, 130px) 7vw;
+  border-bottom: 1px solid var(--border-subtle);
+  scroll-margin-top: 40px;
+}
+
+.sectionHeader {
+  max-width: 800px;
+  margin-bottom: 48px;
+}
+
+.sectionNo {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--copper);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.sectionTitle {
+  font-family: "Cinzel", "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(40px, 5vw, 68px);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  margin: 0 0 20px;
+}
+
+.sectionTitle em {
+  font-family: Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--gold);
+}
+
+.sectionSubtitle {
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  max-width: 620px;
+}
+
+/* ==========================================================================
+   HISTORIA / DESTILADORA DEL NORTE
+   ========================================================================== */
+
+.aboutGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8vw;
+  align-items: center;
+}
+
+.aboutCopy p {
+  font-size: 16px;
+  line-height: 1.8;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+
+.aboutHighlights {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 32px;
+}
+
+.highlightCard {
+  padding: 20px;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.highlightCard h4 {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--copper);
+  text-transform: uppercase;
+  margin: 0 0 6px;
+}
+
+.highlightCard p {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+   MODALIDADES DE SERVICIO
+   ========================================================================== */
+
+.servicesGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.serviceCard {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 32px;
+  border-radius: 20px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  transition: all 0.3s ease-out;
+}
+
+.serviceCard:hover {
+  border-color: var(--border-glow);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+}
+
+.serviceCardHeader span {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--copper);
+  text-transform: uppercase;
+}
+
+.serviceCardHeader h3 {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 10px 0 14px;
+}
+
+.serviceCardHeader p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.serviceFeatures {
+  list-style: none;
+  padding: 0;
+  margin: 28px 0;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 20px 0;
+}
+
+.serviceFeatures li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.serviceFeatures li:last-child {
+  margin-bottom: 0;
+}
+
+.serviceFeatures li span {
+  color: var(--copper);
+  font-weight: bold;
+}
+
+/* ==========================================================================
+   COBERTURA Y VIÁTICOS
+   ========================================================================== */
+
+.logisticsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6vw;
+  align-items: start;
+}
+
+.coverageList {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
+}
+
+.coverageList li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.coverageList li span {
+  color: var(--copper);
+}
+
+.travelCards {
+  display: grid;
+  gap: 16px;
+}
+
+.travelCard {
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.travelCardNumber {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--copper);
+  margin-bottom: 8px;
+}
+
+.travelCard h3 {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 20px;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+}
+
+.travelCard p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ==========================================================================
+   GALERÍA SOCIAL Y PRUEBA ORGÁNICA
+   ========================================================================== */
+
+.socialGallery {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.socialPhoto {
+  position: relative;
+  min-height: 380px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.socialPhoto:first-child {
+  min-height: 480px;
+}
+
+.socialPhoto img {
+  object-fit: cover;
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.socialPhoto:hover img {
+  transform: scale(1.04);
+}
+
+.socialActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.socialButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  transition: all 0.25s;
+}
+
+.socialButton:hover {
+  border-color: var(--copper);
+  background: var(--bg-elevated);
+}
+
+.socialButton span {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--copper);
+  text-transform: uppercase;
+}
+
+.socialButton strong {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: block;
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   PREGUNTAS FRECUENTES (FAQ)
+   ========================================================================== */
+
+.faqGrid {
+  display: grid;
+  gap: 12px;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.faqItem {
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.faqItem:hover {
+  border-color: #3A4652;
+}
+
+.faqItem summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 24px;
+  cursor: pointer;
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  list-style: none;
+}
+
+.faqItem summary::-webkit-details-marker {
+  display: none;
+}
+
+.faqItem summary span {
+  font-size: 20px;
+  color: var(--copper);
+  transition: transform 0.2s;
+}
+
+.faqItem[open] summary span {
+  transform: rotate(45deg);
+}
+
+.faqItem p {
+  padding: 0 24px 22px;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   CONTACTO DIRECTO Y FOOTER
+   ========================================================================== */
+
+.contactSection {
+  background: #06090C;
+  border-top: 1px solid var(--border-subtle);
+  padding: clamp(80px, 9vw, 120px) 7vw;
+}
+
+.contactGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6vw;
+  align-items: center;
+}
+
+.contactCard {
+  padding: clamp(28px, 4vw, 44px);
+  border-radius: 20px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.contactCardHeader {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--copper);
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+.contactLinks {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.contactLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  transition: color 0.2s;
+}
+
+.contactLink:hover {
+  color: var(--copper);
+}
+
+.contactLink span {
+  color: var(--copper);
+}
+
+.legalNotice {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 24px;
+  line-height: 1.6;
+}
+
+.footer {
+  padding: 40px 7vw;
+  background: #040608;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.footerLogo {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footerLogo span {
+  color: var(--copper);
+}
+
+.footerLinks {
+  display: flex;
+  gap: 20px;
+}
+
+.footerLinks a:hover {
+  color: var(--copper);
+}
+
+/* ==========================================================================
+   RESPONSIVIDAD Y ADAPTACIÓN MÓVIL
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  .hero {
+    flex-direction: column;
+    min-height: auto;
+    padding-top: 80px;
+  }
+  .aboutGrid,
+  .logisticsGrid,
+  .contactGrid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  .servicesGrid {
+    grid-template-columns: 1fr;
+  }
+  .socialGallery {
+    grid-template-columns: 1fr;
+  }
+  .socialPhoto,
+  .socialPhoto:first-child {
+    min-height: 300px;
+  }
+}
+
+@media (max-width: 640px) {
+  .heroActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .btnPrimary,
+  .btnSecondary {
+    justify-content: center;
+    width: 100%;
+  }
+  .socialActions {
+    grid-template-columns: 1fr;
+  }
+  .footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

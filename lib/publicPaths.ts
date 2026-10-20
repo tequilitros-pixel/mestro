@@ -6,6 +6,9 @@ export const PUBLIC_PATHS = [
   "/privacy-policy",
   "/terms-of-service",
   "/support",
+  "/tequilitros",
+  "/robots.txt",
+  "/sitemap.xml",
 ] as const;
 
 export function isPublicPath(pathname: string): boolean {
