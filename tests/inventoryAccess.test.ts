@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { isBranchAllowed } from "@/lib/branches/access";
 import { isInventoryCountCaptureRole, isInventoryManagerReadPath } from "@/lib/permission-modules";
-import { formatCommercialPresentation, formatCommercialQuantity } from "@/lib/inventory/units";
+import { formatCommercialPresentation, formatCommercialQuantity, formatInventoryDashboardQuantity } from "@/lib/inventory/units";
 import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility";
 
 test("ADMIN tiene alcance global y el gerente respeta UserBranch", () => {
@@ -34,4 +34,10 @@ test("UNIT multipack se presenta como piezas y conserva su contenido", () => {
   assert.equal(formatCommercialQuantity(47, vaso), "47 vasos (1 paquete + 22 vasos)");
   assert.equal(formatCommercialQuantity(1, { ...vaso, productName: "Vaso mediano" }), "1 vaso (0 paquetes + 1 vaso)");
   assert.equal(formatCommercialQuantity(1, { ...vaso, productName: undefined }), "1 pieza (0 paquetes + 1 pieza)");
+});
+
+test("el dashboard expresa faltantes de hielo en bolsas y kilogramos sin cambiar su base en gramos", () => {
+  const hielo = { productName: "Hielo", inventoryBaseUnit: "G", handlingUnit: "BOLSA", contentPerUnit: 5, contentUnit: "KG", normalizedContentPerUnit: 5000 };
+  assert.equal(formatInventoryDashboardQuantity(-70_000, hielo), "−14 bolsas (70 kg)");
+  assert.equal(formatInventoryDashboardQuantity(2_500, hielo), "0.5 bolsa (2.5 kg)");
 });

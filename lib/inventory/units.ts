@@ -244,6 +244,36 @@ export function formatCommercialQuantity(
   return `${formatNumber(commercialQuantity)} ${formatUnitLabel(commercialQuantity, handling)}`;
 }
 
+/**
+ * Formato para lectura administrativa: conserva la presentación comercial y,
+ * cuando aplica, agrega la magnitud física equivalente. No convierte ni
+ * modifica el valor almacenado en la unidad base.
+ */
+export function formatInventoryDashboardQuantity(
+  baseQuantity: number | string,
+  config: InventoryProductUnitConfig,
+): string {
+  const quantity = Number(baseQuantity);
+  if (!Number.isFinite(quantity)) return "—";
+
+  const magnitude = Math.abs(quantity);
+  const sign = quantity < 0 ? "−" : "";
+  const commercial = formatCommercialQuantity(magnitude, config);
+  const base = config.inventoryBaseUnit?.trim().toUpperCase();
+  const contentUnit = config.contentUnit?.trim().toUpperCase();
+  const handling = config.handlingUnit?.trim().toUpperCase();
+
+  if (base === "G" && contentUnit === "KG" && handling !== "KILOGRAMO") {
+    return `${sign}${commercial} (${formatNumber(magnitude / 1000)} kg)`;
+  }
+
+  if (base === "ML" && contentUnit === "L" && handling !== "LITRO") {
+    return `${sign}${commercial} (${formatNumber(magnitude / 1000)} L)`;
+  }
+
+  return `${sign}${commercial}`;
+}
+
 export function normalizeCommercialQuantity(input: {
   closedUnits: number | string;
   openFraction?: number | string;
