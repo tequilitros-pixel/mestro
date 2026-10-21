@@ -82,6 +82,80 @@
   max-width: 720px;
 }
 
+.heroVisual {
+  position: absolute;
+  z-index: 1;
+  right: clamp(2rem, 6vw, 7rem);
+  bottom: clamp(1rem, 4vw, 4rem);
+  width: min(47vw, 690px);
+  height: min(72vh, 720px);
+  pointer-events: none;
+}
+
+.heroHalo {
+  position: absolute;
+  inset: 12% 5% 8%;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(255, 183, 65, 0.32), transparent 34%),
+    radial-gradient(circle at 50% 60%, rgba(226, 135, 53, 0.18), transparent 55%);
+  box-shadow: 0 0 100px rgba(226, 135, 53, 0.22), inset 0 0 72px rgba(226, 135, 53, 0.08);
+}
+
+.heroProductPrimary,
+.heroProductAccentOne,
+.heroProductAccentTwo {
+  position: absolute;
+}
+
+.heroProductPrimary {
+  z-index: 3;
+  right: 5%;
+  bottom: -4%;
+  width: 77%;
+  height: 100%;
+}
+
+.heroProductAccentOne {
+  z-index: 2;
+  left: -3%;
+  bottom: 5%;
+  width: 42%;
+  height: 60%;
+  opacity: 0.86;
+  transform: rotate(-11deg);
+}
+
+.heroProductAccentTwo {
+  z-index: 1;
+  right: -9%;
+  top: -1%;
+  width: 38%;
+  height: 52%;
+  opacity: 0.75;
+  transform: rotate(12deg);
+}
+
+.cutoutImage {
+  object-fit: contain;
+  filter: drop-shadow(0 26px 20px rgba(0, 0, 0, 0.48));
+}
+
+.heroVisualCaption {
+  position: absolute;
+  z-index: 4;
+  right: 1%;
+  bottom: 2%;
+  color: rgba(245, 242, 235, 0.72);
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+}
+
 .kickerBadge {
   display: inline-flex;
   align-items: center;
@@ -510,6 +584,28 @@
   transform: scale(1.04);
 }
 
+.socialProduct {
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(226, 135, 53, 0.28), transparent 44%),
+    linear-gradient(145deg, #1b242c 0%, #0b1014 55%, #17100d 100%);
+}
+
+.socialProduct::before {
+  position: absolute;
+  z-index: -1;
+  inset: 12% 10%;
+  border: 1px solid rgba(212, 175, 55, 0.24);
+  border-radius: 50%;
+  content: "";
+}
+
+.socialProduct img {
+  object-fit: contain;
+  padding: 18px;
+  filter: drop-shadow(0 20px 18px rgba(0, 0, 0, 0.48));
+}
+
 .socialActions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -721,6 +817,14 @@
     min-height: auto;
     padding-top: 80px;
   }
+  .heroVisual {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    width: min(100%, 620px);
+    height: 520px;
+    margin: 20px auto -48px;
+  }
   .aboutGrid,
   .logisticsGrid,
   .contactGrid {
@@ -740,6 +844,25 @@
 }
 
 @media (max-width: 640px) {
+  .hero {
+    padding-bottom: 32px;
+  }
+  .heroVisual {
+    height: 390px;
+    margin: 8px auto -26px;
+  }
+  .heroProductPrimary {
+    right: 0;
+    width: 88%;
+  }
+  .heroProductAccentOne {
+    left: -10%;
+    width: 45%;
+  }
+  .heroProductAccentTwo {
+    right: -13%;
+    width: 43%;
+  }
   .heroActions {
     flex-direction: column;
     align-items: stretch;

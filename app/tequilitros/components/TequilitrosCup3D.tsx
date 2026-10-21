@@ -24,7 +24,7 @@ export const DRINK_FLAVORS: DrinkFlavor[] = [
     frostColor: 0xc84224,
     frostType: "sal_chile",
     description: "Naranja, toronja y limón con tequila blanco, refresco de toronja y escarchado. La receta se confirma por evento.",
-    photoUrl: "/tequilitros/cantarito.jpg",
+    photoUrl: "/tequilitros/productos/cantarito.png",
   },
   {
     id: "paloma",
@@ -34,7 +34,7 @@ export const DRINK_FLAVORS: DrinkFlavor[] = [
     frostColor: 0xf5f0ea,
     frostType: "sal_fina",
     description: "Toronja, limón, tequila reposado y escarchado. La receta se confirma por evento.",
-    photoUrl: "/tequilitros/paloma.jpg",
+    photoUrl: "/tequilitros/productos/paloma.png",
   },
   {
     id: "vampiro",
@@ -44,7 +44,7 @@ export const DRINK_FLAVORS: DrinkFlavor[] = [
     frostColor: 0xb52c1b,
     frostType: "sal_chile",
     description: "Sangrita, cítricos, tequila blanco y sal. La receta se confirma por evento.",
-    photoUrl: "/tequilitros/vampiro.jpg",
+    photoUrl: "/tequilitros/productos/vampiro.png",
   },
   {
     id: "tequimango",
@@ -64,7 +64,7 @@ export const DRINK_FLAVORS: DrinkFlavor[] = [
     frostColor: 0xe0d4cb,
     frostType: "sal_fina",
     description: "Zarzamora macerada con tequila blanco y cítricos. La receta se confirma por evento.",
-    photoUrl: "/tequilitros/zarzamora.jpg",
+    photoUrl: "/tequilitros/productos/tequimora.png",
   },
   {
     id: "tequimiche",
@@ -74,7 +74,7 @@ export const DRINK_FLAVORS: DrinkFlavor[] = [
     frostColor: 0xb8381d,
     frostType: "sal_chile",
     description: "Salsas sazonadoras, limón y escarchado. La receta se confirma por evento.",
-    photoUrl: "/tequilitros/tequimiche.jpg",
+    photoUrl: "/tequilitros/productos/tequimiche.png",
   },
 ];
 
@@ -514,12 +514,12 @@ export default function TequilitrosCup3D({
         ) : (
           /* Fallback visual 2.5D optimizado con fotografía real de alta resolución */
           <div className="flex h-[440px] sm:h-[500px] w-full items-center justify-center p-6 text-center">
-            <div className="relative h-full w-full max-w-md overflow-hidden rounded-xl border border-[#2A343D] bg-[#141B22]">
+            <div className="relative h-full w-full max-w-md overflow-hidden rounded-xl border border-[#2A343D] bg-[radial-gradient(circle_at_50%_30%,rgba(226,135,53,0.28),transparent_40%),linear-gradient(145deg,#1B242C_0%,#0B1014_58%,#17100D_100%)]">
               <Image
                 src={activeDrink.photoUrl}
                 alt={activeDrink.name}
                 fill
-                className="object-cover"
+                className="object-contain p-6 drop-shadow-2xl"
                 sizes="(max-width: 768px) 100vw, 450px"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#080B0E] via-transparent to-transparent" />
@@ -531,6 +531,20 @@ export default function TequilitrosCup3D({
                 <p className="text-xs text-[#9AA5AC]">{activeDrink.description}</p>
               </div>
             </div>
+          </div>
+        )}
+        {webglSupported && (
+          <div className="pointer-events-none absolute right-4 top-4 hidden h-40 w-28 overflow-hidden rounded-xl border border-[#D4AF37]/25 bg-[#080B0E]/65 p-1.5 shadow-2xl backdrop-blur-md sm:block">
+            <Image
+              src={activeDrink.photoUrl}
+              alt=""
+              fill
+              sizes="112px"
+              className="object-contain p-1 drop-shadow-2xl"
+            />
+            <span className="absolute bottom-1.5 left-2 right-2 text-center font-mono text-[8px] font-bold uppercase tracking-[0.12em] text-[#F5F2EB]/80">
+              Referencia real
+            </span>
           </div>
         )}
       </div>

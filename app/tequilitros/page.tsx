@@ -188,6 +188,39 @@ export default function TequilitrosPage() {
               </span>
             </div>
           </div>
+
+          <div className={styles.heroVisual} aria-hidden="true">
+            <div className={styles.heroHalo} />
+            <div className={styles.heroProductAccentOne}>
+              <Image
+                src="/tequilitros/productos/vampiro.png"
+                alt=""
+                fill
+                sizes="(max-width: 1024px) 34vw, 250px"
+                className={styles.cutoutImage}
+              />
+            </div>
+            <div className={styles.heroProductAccentTwo}>
+              <Image
+                src="/tequilitros/productos/paloma.png"
+                alt=""
+                fill
+                sizes="(max-width: 1024px) 30vw, 220px"
+                className={styles.cutoutImage}
+              />
+            </div>
+            <div className={styles.heroProductPrimary}>
+              <Image
+                src="/tequilitros/productos/cantarito.png"
+                alt=""
+                fill
+                priority
+                sizes="(max-width: 1024px) 72vw, 620px"
+                className={styles.cutoutImage}
+              />
+            </div>
+            <span className={styles.heroVisualCaption}>Carta de sabores · Tequilitros</span>
+          </div>
         </section>
 
         {/* ================================================================
@@ -554,28 +587,31 @@ export default function TequilitrosPage() {
           </div>
 
           <div className={styles.socialGallery}>
-            <div className={styles.socialPhoto}>
+            <div className={`${styles.socialPhoto} ${styles.socialProduct}`}>
               <Image
-                src="/tequilitros/vampiro.jpg"
+                src="/tequilitros/productos/vampiro.png"
                 alt="Vampiro Tequilitros preparado para evento"
                 fill
                 sizes="(max-width: 768px) 100vw, 40vw"
+                className={styles.cutoutImage}
               />
             </div>
-            <div className={styles.socialPhoto}>
+            <div className={`${styles.socialPhoto} ${styles.socialProduct}`}>
               <Image
-                src="/tequilitros/paloma.jpg"
+                src="/tequilitros/productos/paloma.png"
                 alt="Paloma tradicional con escarchado"
                 fill
                 sizes="(max-width: 768px) 50vw, 30vw"
+                className={styles.cutoutImage}
               />
             </div>
-            <div className={styles.socialPhoto}>
+            <div className={`${styles.socialPhoto} ${styles.socialProduct}`}>
               <Image
-                src="/tequilitros/cantarito.jpg"
+                src="/tequilitros/productos/cantarito.png"
                 alt="Cantarito frente a barrica de tequila"
                 fill
                 sizes="(max-width: 768px) 50vw, 30vw"
+                className={styles.cutoutImage}
               />
             </div>
           </div>

@@ -12,6 +12,7 @@ export type CocktailItem = {
   ingredients: string;
   glass: string;
   image: string;
+  isCutout?: boolean;
 };
 
 const COCKTAILS: CocktailItem[] = [
@@ -23,7 +24,8 @@ const COCKTAILS: CocktailItem[] = [
     description: "Preparación con cítricos, tequila blanco, refresco de toronja y escarchado. La receta y disponibilidad se confirman por evento.",
     ingredients: "Toronja, naranja, limón, tequila blanco y escarchado, sujetos a confirmación.",
     glass: "Vaso Reyma 32 EU o presentación por confirmar",
-    image: "/tequilitros/cantarito.jpg",
+    image: "/tequilitros/productos/cantarito.png",
+    isCutout: true,
   },
   {
     id: "paloma",
@@ -33,7 +35,8 @@ const COCKTAILS: CocktailItem[] = [
     description: "Preparación con toronja, limón, tequila reposado y escarchado. La receta y presentación se confirman por evento.",
     ingredients: "Toronja, limón, tequila reposado y escarchado, sujetos a confirmación.",
     glass: "Vaso Reyma 32 EU o copa, por confirmar",
-    image: "/tequilitros/paloma.jpg",
+    image: "/tequilitros/productos/paloma.png",
+    isCutout: true,
   },
   {
     id: "vampiro",
@@ -43,7 +46,8 @@ const COCKTAILS: CocktailItem[] = [
     description: "Preparación con sangrita, cítricos, tequila blanco y sal. La receta y disponibilidad se confirman por evento.",
     ingredients: "Sangrita, tequila blanco, limón, sal y refresco de toronja, sujetos a confirmación.",
     glass: "Vaso Reyma 32 EU o presentación por confirmar",
-    image: "/tequilitros/vampiro.jpg",
+    image: "/tequilitros/productos/vampiro.png",
+    isCutout: true,
   },
   {
     id: "tequimango",
@@ -63,7 +67,8 @@ const COCKTAILS: CocktailItem[] = [
     description: "Preparación con zarzamora, tequila blanco, cítricos y jarabe. La receta y disponibilidad se confirman por evento.",
     ingredients: "Zarzamora, tequila blanco, cítricos y jarabe, sujetos a confirmación.",
     glass: "Vaso Reyma 32 EU o vaso corto, por confirmar",
-    image: "/tequilitros/zarzamora.jpg",
+    image: "/tequilitros/productos/tequimora.png",
+    isCutout: true,
   },
   {
     id: "tequimiche",
@@ -73,7 +78,8 @@ const COCKTAILS: CocktailItem[] = [
     description: "Preparación con salsas sazonadoras, limón y tequila. La receta y disponibilidad se confirman por evento.",
     ingredients: "Salsas, limón, sal, chile y tequila, sujetos a confirmación.",
     glass: "Vaso Reyma 32 EU o presentación por confirmar",
-    image: "/tequilitros/tequimiche.jpg",
+    image: "/tequilitros/productos/tequimiche.png",
+    isCutout: true,
   },
   {
     id: "blanco",
@@ -166,15 +172,17 @@ export default function CocktailCatalog({
             className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-[#242E37] bg-[#0E1318] transition-all duration-300 hover:-translate-y-1 hover:border-[#E28735]/50 hover:shadow-2xl hover:shadow-[#E28735]/5"
           >
             {/* Foto con gradiente */}
-            <div className="relative aspect-[4/5] w-full overflow-hidden bg-[#141B22]">
+            <div className={`relative aspect-[4/5] w-full overflow-hidden ${item.isCutout ? "bg-[radial-gradient(circle_at_50%_28%,rgba(226,135,53,0.28),transparent_38%),linear-gradient(145deg,#1B242C_0%,#0B1014_54%,#17100D_100%)]" : "bg-[#141B22]"}`}>
               <Image
                 src={item.image}
                 alt={`${item.name} de Tequilitros`}
                 fill
                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-                className="object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                className={item.isCutout
+                  ? "object-contain p-3 drop-shadow-2xl transition-transform duration-700 ease-out group-hover:scale-105"
+                  : "object-cover transition-transform duration-700 ease-out group-hover:scale-105"}
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0E1318] via-[#0E1318]/20 to-transparent" />
+              <div className={`absolute inset-0 ${item.isCutout ? "bg-gradient-to-t from-[#0E1318] via-transparent to-transparent" : "bg-gradient-to-t from-[#0E1318] via-[#0E1318]/20 to-transparent"}`} />
 
               {/* Tag superior */}
               <div className="absolute left-3 top-3">
