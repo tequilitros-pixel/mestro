@@ -155,6 +155,10 @@ export default function WeeklyEntryForm({
             const descriptor = getInventoryCaptureDescriptor(0, product);
             const packageSize = getPiecePresentationSize(product);
             const presentation = formatCommercialPresentation(product);
+            const loosePiecesLabel = product.name.toLocaleLowerCase("es-MX").includes("vaso")
+              ? "Vasos sueltos"
+              : "Piezas sueltas";
+            const pieceUnitLabel = loosePiecesLabel.startsWith("Vasos") ? "vasos" : "piezas";
             return (
               <div key={product.id} className="grid grid-cols-[minmax(0,1fr)_9rem_11rem] items-center gap-3 border-b border-outline-variant px-4 py-3 last:border-b-0">
                 <div className="min-w-0">
@@ -163,12 +167,18 @@ export default function WeeklyEntryForm({
                 </div>
                 <span className="truncate text-sm text-on-surface-variant">{product.category}</span>
                 {packageSize !== null ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="sr-only" htmlFor={`weekly-${product.id}`}>Paquetes de {product.name}</label>
-                    <input id={`weekly-${product.id}`} data-weekly-entry-input type="number" inputMode="numeric" min="0" step="1" value={value.quantity} onChange={(event) => updateValue(product.id, "quantity", event.target.value)} onKeyDown={focusNextInput} placeholder="paq." className="w-full rounded-lg border border-outline-variant bg-background px-2 py-2.5 text-sm text-on-surface outline-none focus:border-primary" style={numberInputStyle} />
-                    <label className="sr-only" htmlFor={`weekly-loose-${product.id}`}>Piezas sueltas de {product.name}</label>
-                    <input id={`weekly-loose-${product.id}`} data-weekly-entry-input type="number" inputMode="numeric" min="0" max={packageSize - 1} step="1" value={value.loosePieces} onChange={(event) => updateValue(product.id, "loosePieces", event.target.value)} onKeyDown={focusNextInput} placeholder="sueltas" className="w-full rounded-lg border border-outline-variant bg-background px-2 py-2.5 text-sm text-on-surface outline-none focus:border-primary" style={numberInputStyle} />
-                  </div>
+                  <fieldset className="grid grid-cols-2 gap-2" aria-label={`Captura de ${product.name}`}>
+                    <label className="space-y-1" htmlFor={`weekly-${product.id}`}>
+                      <span className="block text-[11px] font-semibold text-on-surface">Paquetes completos</span>
+                      <span className="block text-[10px] text-on-surface-variant">De {packageSize} {pieceUnitLabel}</span>
+                      <input id={`weekly-${product.id}`} data-weekly-entry-input type="number" inputMode="numeric" min="0" step="1" value={value.quantity} onChange={(event) => updateValue(product.id, "quantity", event.target.value)} onKeyDown={focusNextInput} placeholder="0" className="w-full rounded-lg border border-outline-variant bg-background px-2 py-2.5 text-sm text-on-surface outline-none focus:border-primary" style={numberInputStyle} />
+                    </label>
+                    <label className="space-y-1" htmlFor={`weekly-loose-${product.id}`}>
+                      <span className="block text-[11px] font-semibold text-on-surface">{loosePiecesLabel}</span>
+                      <span className="block text-[10px] text-on-surface-variant">De 0 a {packageSize - 1}</span>
+                      <input id={`weekly-loose-${product.id}`} data-weekly-entry-input type="number" inputMode="numeric" min="0" max={packageSize - 1} step="1" value={value.loosePieces} onChange={(event) => updateValue(product.id, "loosePieces", event.target.value)} onKeyDown={focusNextInput} placeholder="0" className="w-full rounded-lg border border-outline-variant bg-background px-2 py-2.5 text-sm text-on-surface outline-none focus:border-primary" style={numberInputStyle} />
+                    </label>
+                  </fieldset>
                 ) : (
                   <label className="relative">
                     <span className="sr-only">Cantidad de {product.name}</span>

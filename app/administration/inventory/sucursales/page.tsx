@@ -174,6 +174,7 @@ export default async function SucursalesInventoryPage() {
       return map;
     }, new Map<string, { branchName: string; count: number }>()),
   ).map(([branchId, value]) => ({ branchId, ...value })).sort((a, b) => b.count - a.count);
+  const countAttentionRows = dashboard.recentDifferences.slice(0, 6);
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface sm:px-6 lg:px-8">
@@ -207,6 +208,59 @@ export default async function SucursalesInventoryPage() {
             ))}
           </div>
         </div>
+
+        {(negativeRows.length > 0 || countAttentionRows.length > 0) && (
+          <section aria-labelledby="weekly-count-attention" className="rounded-2xl border border-secondary/35 bg-secondary/10 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <AlertIcon className="h-5 w-5 text-secondary" />
+                  <h2 id="weekly-count-attention" className="font-bold text-on-surface">Atención para el conteo semanal</h2>
+                </div>
+                <p className="mt-1 text-sm text-on-surface-variant">Saldos negativos y diferencias recientes que conviene revisar antes de capturar o surtir.</p>
+              </div>
+              {user?.role === "ADMIN" && (
+                <Link href="/administration/inventory/branch-counts/statistics" className="rounded-lg border border-outline-variant bg-background px-3 py-2 text-sm font-semibold text-on-surface hover:bg-surface-container-high">
+                  Ver dashboard de conteos
+                </Link>
+              )}
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-xl border border-error/25 bg-error/5 p-4">
+                <p className="text-sm font-semibold text-error">Saldos negativos · {dashboard.negativeLegacy.length}</p>
+                {negativeRows.length === 0 ? (
+                  <p className="mt-2 text-sm text-on-surface-variant">No hay saldos negativos pendientes.</p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {negativeRows.slice(0, 3).map((row) => (
+                      <div key={`${row.branchId}:${row.productId}`} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="min-w-0 truncate"><strong>{row.productName}</strong><span className="text-on-surface-variant"> · {row.branchName}</span></span>
+                        <span className="shrink-0 font-semibold text-error">{row.displayQuantity}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-secondary/25 bg-background/60 p-4">
+                <p className="text-sm font-semibold text-secondary">Diferencias recientes de conteo · {dashboard.recentDifferences.length}</p>
+                {countAttentionRows.length === 0 ? (
+                  <p className="mt-2 text-sm text-on-surface-variant">No hay diferencias recientes por revisar.</p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {countAttentionRows.map((difference) => (
+                      <div key={difference.id} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="min-w-0 truncate"><strong>{difference.productName}</strong><span className="text-on-surface-variant"> · {difference.branchName}</span></span>
+                        <span className="shrink-0 font-semibold text-secondary">{difference.difference}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
 
         <PageTabs
           tabs={[
