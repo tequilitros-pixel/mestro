@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
@@ -16,6 +16,8 @@ import {
   payrollWeekInstantRange,
 } from "@/lib/payroll/legacyRules";
 import { resolveBranchHourlyRate, summarizeHourlyRates, type HourlyRateRow } from "@/lib/payroll/branchRates";
+import { formatCivilDate } from "@/lib/dateTime";
+import { sendPayrollReviewEmail } from "@/lib/email";
 
 /**
  * ==========================================================
@@ -574,6 +576,277 @@ async function computeLiveEmployeeDetail(
 }
 
 /**
+ * Versión en lote de `computeLiveEmployeeDetail`. Ejecuta UNA consulta
+ * por tabla para todos los empleados y construye el expediente de cada
+ * uno en memoria, eliminando el patrón N+1 de la presentación a revisión.
+ *
+ * @returns Map keyed by userId. Each value is either the employee detail
+ *          (without `period`) or `{ error: string }` when the user record
+ *          is missing from the database.
+ */
+async function computeLiveEmployeeDetailsBatch(
+  userIds: string[],
+  mondayStr: string,
+  db: Prisma.TransactionClient = prisma,
+): Promise<Map<string, Omit<PayrollEmployeeDetail, "period"> | { error: string }>> {
+  if (userIds.length === 0) return new Map();
+
+  const dayKeys = weekDayKeys(mondayStr);
+  const weekStartDate = parseDateOnly(mondayStr);
+  const weekEndDate = parseDateOnly(addDaysToDateOnly(mondayStr, 7));
+  const { start: clockStart, end: clockEnd } = payrollWeekInstantRange(mondayStr);
+  const rateReferenceDate = new Date(clockEnd.getTime() - 1);
+
+  // ── One query per table ──────────────────────────────────────────────────
+  const [employees, allEntries, allShifts, allSalaryRates, allUserBranches, allAdjustments, allJustifications] =
+    await Promise.all([
+      db.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true, hourlyRate: true },
+      }),
+      db.timeClockEntry.findMany({
+        where: { userId: { in: userIds }, clockIn: { gte: clockStart, lt: clockEnd } },
+        include: { branch: { select: { name: true } } },
+        orderBy: { clockIn: "asc" },
+      }),
+      db.scheduledShift.findMany({
+        where: { userId: { in: userIds }, type: "TURNO", date: { gte: weekStartDate, lt: weekEndDate } },
+        include: { branch: { select: { name: true } } },
+      }),
+      db.salaryRate.findMany({
+        where: { userId: { in: userIds }, scheme: "HORA" },
+        select: { userId: true, branchId: true, amount: true, effectiveFrom: true, effectiveTo: true },
+        orderBy: { effectiveFrom: "desc" },
+      }),
+      db.userBranch.findMany({
+        where: { userId: { in: userIds } },
+        include: { branch: { select: { id: true, name: true } } },
+        orderBy: { branch: { name: "asc" } },
+      }),
+      db.payrollAdjustment.findMany({
+        where: { userId: { in: userIds }, weekStart: weekStartDate },
+        include: { createdBy: { select: { name: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
+      db.payrollIncidentJustification.findMany({
+        where: { userId: { in: userIds }, date: { gte: weekStartDate, lt: weekEndDate } },
+        include: { justifiedBy: { select: { name: true } } },
+      }),
+    ]);
+
+  // ── Index results by userId for O(1) look-ups ───────────────────────────
+  const employeesById = new Map(employees.map((e) => [e.id, e]));
+
+  const entriesByUser = new Map<string, typeof allEntries>(userIds.map((id) => [id, []]));
+  for (const entry of allEntries) {
+    entriesByUser.get(entry.userId)?.push(entry);
+  }
+
+  const shiftsByUser = new Map<string, typeof allShifts>(userIds.map((id) => [id, []]));
+  for (const shift of allShifts) {
+    shiftsByUser.get(shift.userId)?.push(shift);
+  }
+
+  const salaryRatesByUser = new Map<string, typeof allSalaryRates>(userIds.map((id) => [id, []]));
+  for (const rate of allSalaryRates) {
+    salaryRatesByUser.get(rate.userId)?.push(rate);
+  }
+
+  const userBranchesByUser = new Map<string, typeof allUserBranches>(userIds.map((id) => [id, []]));
+  for (const ub of allUserBranches) {
+    userBranchesByUser.get(ub.userId)?.push(ub);
+  }
+
+  const adjustmentsByUser = new Map<string, typeof allAdjustments>(userIds.map((id) => [id, []]));
+  for (const adj of allAdjustments) {
+    adjustmentsByUser.get(adj.userId)?.push(adj);
+  }
+
+  const justificationsByUser = new Map<
+    string,
+    Map<string, { notes: string | null; justifiedByName: string }>
+  >(userIds.map((id) => [id, new Map()]));
+  for (const j of allJustifications) {
+    justificationsByUser.get(j.userId)?.set(formatDateOnly(j.date), {
+      notes: j.notes,
+      justifiedByName: j.justifiedBy.name,
+    });
+  }
+
+  // ── Build each employee's detail in memory ───────────────────────────────
+  const result = new Map<string, Omit<PayrollEmployeeDetail, "period"> | { error: string }>();
+
+  for (const userId of userIds) {
+    const employee = employeesById.get(userId);
+    if (!employee) {
+      result.set(userId, { error: "Empleado no encontrado" });
+      continue;
+    }
+
+    const entries = entriesByUser.get(userId) ?? [];
+    const shifts = shiftsByUser.get(userId) ?? [];
+    const salaryRates = salaryRatesByUser.get(userId) ?? [];
+    const userBranches = userBranchesByUser.get(userId) ?? [];
+    const adjustments = adjustmentsByUser.get(userId) ?? [];
+    const justifications = justificationsByUser.get(userId) ?? new Map<string, { notes: string | null; justifiedByName: string }>();
+
+    // -- Rate helpers -------------------------------------------------------
+    const employeeRates: HourlyRateRow[] = salaryRates.map((rate) => ({
+      branchId: rate.branchId,
+      amount: Number(rate.amount),
+      effectiveFrom: rate.effectiveFrom,
+      effectiveTo: rate.effectiveTo,
+    }));
+    const generalRate = resolveHourlyRate(
+      employeeRates.filter((rate) => rate.branchId === null),
+      rateReferenceDate,
+      employee.hourlyRate !== null ? Number(employee.hourlyRate) : null,
+    );
+
+    // -- Group entries and shifts by day ------------------------------------
+    const entriesByDay = new Map<string, typeof entries>();
+    for (const entry of entries) {
+      const key = payrollBusinessDate(entry.clockIn);
+      const list = entriesByDay.get(key) ?? [];
+      list.push(entry);
+      entriesByDay.set(key, list);
+    }
+
+    const shiftsByDay = new Map<string, (typeof shifts)[number]>();
+    for (const shift of shifts) {
+      shiftsByDay.set(formatDateOnly(shift.date), shift);
+    }
+
+    // -- Build day-level details (mirrors computeLiveEmployeeDetail) ---------
+    const days: PayrollDayDetail[] = dayKeys.map((dateKey) => {
+      const dayEntries = entriesByDay.get(dateKey) ?? [];
+      const shift = shiftsByDay.get(dateKey) ?? null;
+
+      const closedEntries = dayEntries.filter((e) => e.clockOut);
+      const hoursWorked = closedEntries.reduce(
+        (sum, e) => sum + hoursBetween(e.clockIn, e.clockOut!),
+        0,
+      );
+
+      const firstEntry = dayEntries[0] ?? null;
+      const lastClosedEntry = closedEntries[closedEntries.length - 1] ?? null;
+      const dayShiftEntries = dayEntries.map((entry) => ({
+        id: entry.id,
+        branchId: entry.branchId,
+        branchName: entry.branch.name,
+        clockIn: entry.clockIn.toISOString(),
+        clockOut: entry.clockOut ? entry.clockOut.toISOString() : null,
+        source: entry.source,
+        hourlyRate: resolveBranchHourlyRate(employeeRates, entry.branchId, entry.clockIn, generalRate),
+        pay: entry.clockOut
+          ? computeHourlyPay(
+              hoursBetween(entry.clockIn, entry.clockOut),
+              resolveBranchHourlyRate(employeeRates, entry.branchId, entry.clockIn, generalRate),
+            )
+          : 0,
+      }));
+      const hasOpenEntry = dayEntries.some((e) => !e.clockOut);
+
+      let incident: PayrollDayDetail["incident"] = null;
+      if (hasOpenEntry) {
+        incident = "SIN_SALIDA";
+      } else if (firstEntry && !shift) {
+        incident = "SIN_TURNO";
+      } else if (shift && dayEntries.length === 0) {
+        incident = "TURNO_NO_TRABAJADO";
+      } else if (shift && firstEntry && shift.startTime) {
+        const scheduledMinutes = minutesFromHHMM(shift.startTime);
+        const actualMinutes = minutesOfDayInMexicoCity(firstEntry.clockIn);
+        if (actualMinutes - scheduledMinutes > 10) {
+          incident = "LLEGADA_TARDE";
+        }
+      }
+
+      if (!incident && shift && lastClosedEntry && shift.endTime) {
+        const scheduledEndMinutes = minutesFromHHMM(shift.endTime);
+        const actualEndMinutes = minutesOfDayInMexicoCity(lastClosedEntry.clockOut!);
+        if (scheduledEndMinutes - actualEndMinutes > 10) {
+          incident = "SALIDA_ANTICIPADA";
+        }
+      }
+
+      return {
+        date: dateKey,
+        scheduled: shift
+          ? { branchName: shift.branch?.name ?? "Sin sucursal", startTime: shift.startTime ?? "—", endTime: shift.endTime ?? "—" }
+          : null,
+        actual: firstEntry
+          ? {
+              branchName: firstEntry.branch.name,
+              clockIn: firstEntry.clockIn.toISOString(),
+              clockOut: lastClosedEntry?.clockOut?.toISOString() ?? null,
+              source: firstEntry.source,
+            }
+          : null,
+        entries: dayShiftEntries,
+        hoursWorked,
+        incident,
+        justified: false,
+        justifiedNotes: null,
+        justifiedByName: null,
+      };
+    });
+
+    // -- Totals and pay -------------------------------------------------------
+    const totalHours = days.reduce((sum, d) => sum + d.hoursWorked, 0);
+    const regularHours = totalHours;
+    const overtimeHours = 0;
+
+    const closedRates = days.flatMap((day) =>
+      day.entries.filter((entry) => entry.clockOut).map((entry) => entry.hourlyRate ?? null),
+    );
+    const { hourlyRate } = summarizeHourlyRates(closedRates, generalRate);
+
+    const overtimePay = 0;
+    const basePay = days.reduce(
+      (sum, day) => sum + day.entries.reduce((daySum, entry) => daySum + (entry.pay ?? 0), 0),
+      0,
+    );
+    const totalPay = basePay;
+
+    const adjustmentRows: PayrollAdjustmentRow[] = adjustments.map((adj) => ({
+      id: adj.id,
+      type: adj.type,
+      concept: adj.concept,
+      amount: Number(adj.amount),
+      notes: adj.notes,
+      createdByName: adj.createdBy.name,
+      createdAt: adj.createdAt.toISOString(),
+    }));
+    const adjustmentsTotal = netAdjustmentAmount(
+      adjustmentRows.map((a) => ({ type: a.type, amount: a.amount })),
+    );
+
+    result.set(userId, {
+      employee: { id: employee.id, name: employee.name, hourlyRate },
+      branches: userBranches
+        .filter((item) => item.branch)
+        .map((item) => ({ id: item.branchId, name: item.branch.name })),
+      weekStart: mondayStr,
+      weekEnd: addDaysToDateOnly(mondayStr, 6),
+      days: applyJustifications(days, justifications),
+      regularHours,
+      overtimeHours,
+      totalHours,
+      basePay,
+      overtimePay,
+      totalPay,
+      adjustments: adjustmentRows,
+      adjustmentsTotal,
+      finalPay: totalPay + adjustmentsTotal,
+      approval: { status: "BORRADOR", approvedByName: null, approvedAt: null },
+    });
+  }
+
+  return result;
+}
+
+/**
  * Justificaciones vigentes de un empleado en una semana. Se cargan
  * siempre en vivo (aunque la semana ya esté congelada en
  * PayrollEntry) porque justificar una incidencia es documentación,
@@ -984,10 +1257,10 @@ export async function createPayrollAdjustmentAction(input: {
   });
 
   revalidatePath("/timeclock/payroll");
+  revalidateTag("payroll-analytics", "max");
   return { success: true };
 }
 
-/** Elimina un bono/deducción manual de un empleado aún sin aprobar. */
 export async function deletePayrollAdjustmentAction(id: string) {
   const admin = await requireAdmin();
   if (!admin) return { error: "No tienes permiso" };
@@ -1004,6 +1277,7 @@ export async function deletePayrollAdjustmentAction(id: string) {
   await prisma.payrollAdjustment.delete({ where: { id } });
 
   revalidatePath("/timeclock/payroll");
+  revalidateTag("payroll-analytics", "max");
   return { success: true };
 }
 
@@ -1028,8 +1302,10 @@ export async function submitPayrollPeriodAction(weekStart: string) {
     return { error: "No hay horas ni ajustes registrados en esta semana" };
   }
 
-  const details = await Promise.all(
-    live.employees.map((e) => computeLiveEmployeeDetail(e.id, mondayStr)),
+  // Batch all employee detail queries (7 queries total instead of N×6).
+  const detailsMap = await computeLiveEmployeeDetailsBatch(
+    live.employees.map((e) => e.id),
+    mondayStr,
   );
 
   await prisma.$transaction(async (tx) => {
@@ -1052,10 +1328,9 @@ export async function submitPayrollPeriodAction(weekStart: string) {
 
     await tx.payrollEntry.deleteMany({ where: { periodId: period.id } });
 
-    for (const detail of details) {
-      if ("error" in detail) continue;
-      const hoursByDay =
-        live.employees.find((e) => e.id === detail.employee.id)?.hoursByDay ?? new Array(7).fill(0);
+    for (const liveEmployee of live.employees) {
+      const detail = detailsMap.get(liveEmployee.id);
+      if (!detail || "error" in detail) continue;
 
       await tx.payrollEntry.create({
         data: {
@@ -1069,7 +1344,7 @@ export async function submitPayrollPeriodAction(weekStart: string) {
           overtimePay: detail.overtimePay,
           adjustmentsTotal: detail.adjustmentsTotal,
           totalPay: detail.finalPay,
-          hoursByDay,
+          hoursByDay: liveEmployee.hoursByDay,
           daysSnapshot: detail.days,
           adjustmentsSnapshot: detail.adjustments,
         },
@@ -1077,7 +1352,35 @@ export async function submitPayrollPeriodAction(weekStart: string) {
     }
   });
 
+  // Notificación asíncrona a administradores (no bloquea la respuesta al usuario)
+  void (async () => {
+    try {
+      const admins = await prisma.user.findMany({
+        where: { role: "ADMIN", active: true, email: { not: null } },
+        select: { email: true },
+      });
+      const toEmails = admins.map((a) => a.email!).filter(Boolean);
+      if (toEmails.length > 0) {
+        const startCivil = formatCivilDate(`${mondayStr}T00:00:00.000Z`, { day: "numeric", month: "short" });
+        const endCivil = formatCivilDate(`${addDaysToDateOnly(mondayStr, 6)}T00:00:00.000Z`, { day: "numeric", month: "short", year: "numeric" });
+        const weekRange = `${startCivil} – ${endCivil}`;
+        const payrollUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "https://maestro-destiladora.space"}/timeclock/payroll`;
+        await sendPayrollReviewEmail({
+          to: toEmails,
+          weekRange,
+          employeeCount: live.employees.length,
+          estimatedTotal: live.totals.finalPay,
+          submittedByName: admin.name,
+          payrollUrl,
+        });
+      }
+    } catch (err) {
+      console.error("[submitPayrollPeriodAction] Error sending review email notification:", err);
+    }
+  })();
+
   revalidatePath("/timeclock/payroll");
+  revalidateTag("payroll-analytics", "max");
   return { success: true };
 }
 
@@ -1186,6 +1489,7 @@ export async function approvePayrollEntryAction(weekStart: string, userId: strin
   });
 
   revalidatePath("/timeclock/payroll");
+  revalidateTag("payroll-analytics", "max");
   return result;
 }
 
@@ -1218,6 +1522,7 @@ export async function markPayrollPeriodPaidAction(weekStart: string) {
   });
 
   revalidatePath("/timeclock/payroll");
+  revalidateTag("payroll-analytics", "max");
   return result;
 }
 
@@ -1252,6 +1557,7 @@ export async function reopenPayrollPeriodAction(weekStart: string, notes?: strin
   });
 
   revalidatePath("/timeclock/payroll");
+  revalidateTag("payroll-analytics", "max");
   return result;
 }
 
@@ -1279,6 +1585,7 @@ export async function reopenPayrollEntryAction(weekStart: string, userId: string
     return { success: true };
   });
   revalidatePath("/timeclock/payroll");
+  revalidateTag("payroll-analytics", "max");
   return result;
 }
 
@@ -1308,6 +1615,7 @@ export async function closePayrollReviewAction(weekStart: string) {
     return { success: true };
   });
   revalidatePath("/timeclock/payroll");
+  revalidateTag("payroll-analytics", "max");
   return result;
 }
 
@@ -1338,6 +1646,7 @@ export async function justifyIncidentAction(input: {
   });
 
   revalidatePath("/timeclock/payroll");
+  revalidateTag("payroll-analytics", "max");
   return { success: true };
 }
 
@@ -1351,5 +1660,6 @@ export async function unjustifyIncidentAction(userId: string, date: string) {
   });
 
   revalidatePath("/timeclock/payroll");
+  revalidateTag("payroll-analytics", "max");
   return { success: true };
 }
