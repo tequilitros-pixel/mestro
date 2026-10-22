@@ -5,7 +5,11 @@ import { getMyApprovedPayrollHistory } from "@/app/actions/employeePayrollHistor
 import EmployeePayrollView from "./EmployeePayrollView";
 import PayrollDashboard from "./PayrollDashboard";
 
-export default async function PayrollPage() {
+export default async function PayrollPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+}) {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -13,12 +17,25 @@ export default async function PayrollPage() {
   }
 
   if (user.role !== "ADMIN") {
-    const [summary, historyResult] = await Promise.all([
+    const [summary, historyResult, query] = await Promise.all([
       getMyTimeClockSummary(),
       getMyApprovedPayrollHistory(),
+      searchParams,
     ]);
     const history = "error" in historyResult ? historyResult : historyResult.data;
-    return <EmployeePayrollView userName={user.name} summary={summary} history={history} />;
+    const initialTab =
+      query?.tab === "PAGOS" || query?.tab === "SEMANA" || query?.tab === "RESUMEN"
+        ? query.tab
+        : undefined;
+
+    return (
+      <EmployeePayrollView
+        userName={user.name}
+        summary={summary}
+        history={history}
+        initialTab={initialTab}
+      />
+    );
   }
 
   return (

@@ -25,8 +25,8 @@ async function runSync() {
     if (!navigator.onLine) break;
     // No adelantar ventas a una apertura/cierre de caja que quedó pendiente.
     if (blocked && operation.kind.startsWith("cash-cut.")) break;
-    // Las ventas son independientes; conserva el orden de los demás eventos.
-    if (blocked && operation.kind !== "pos.sale.create") continue;
+    // Las ventas y correos de recibo son independientes; conserva el orden de los demás eventos.
+    if (blocked && operation.kind !== "pos.sale.create" && operation.kind !== "pos.sale.email") continue;
 
     const syncing = { ...operation, status: "syncing" as const };
     await updateOperation(syncing);
@@ -40,8 +40,10 @@ async function runSync() {
       }
       const endpoint = operation.kind === "pos.sale.create"
         ? "/api/pos/sales"
-        : operation.kind.startsWith("timeclock.")
-          ? "/api/timeclock/sync"
+        : operation.kind === "pos.sale.email"
+          ? `/api/pos/sales/${String((operation.payload as Record<string, unknown>).saleId)}/receipt-email`
+          : operation.kind.startsWith("timeclock.")
+            ? "/api/timeclock/sync"
           : operation.kind === "cash-cut.open"
             ? "/api/cash-cuts"
             : operation.kind === "cash-cut.inflow.create"
@@ -53,7 +55,7 @@ async function runSync() {
                   : operation.kind === "cash-cut.venta.set"
                     ? `/api/cash-cuts/${String((operation.payload as Record<string, unknown>).cashCutId)}/ventas`
           : "/api/sync/operations";
-      const directApiOperation = operation.kind === "pos.sale.create" || operation.kind.startsWith("cash-cut.");
+      const directApiOperation = operation.kind === "pos.sale.create" || operation.kind === "pos.sale.email" || operation.kind.startsWith("cash-cut.");
       const body = directApiOperation
         ? { ...operation.payload, clientOperationId: operation.id, clientCreatedAt: operation.createdAt }
         : operation;

@@ -13,6 +13,7 @@ import {
   payrollBusinessDate,
   payrollWeekInstantRange,
 } from "@/lib/payroll/legacyRules";
+import { resolveBranchHourlyRate } from "@/lib/payroll/branchRates";
 import type { PayrollDayDetail } from "./payroll";
 
 // ─── Local helpers (mirrored from payroll.ts — not exported from there) ───────
@@ -55,13 +56,17 @@ export type EmployeeSelfWeekDetail = {
   weekEnd: string;
   days: PayrollDayDetail[];
   totalHours: number;
+  totalPay: number | null;
+  status: "PAGADA" | "APROBADA" | "PENDIENTE";
+  isFrozen: boolean;
 };
 
 // ─── Server action ────────────────────────────────────────────────────────────
 
 /**
  * Devuelve el detalle día a día (turno programado vs. asistencia real e
- * incidencias) para el empleado autenticado. No incluye importes ni tarifas.
+ * incidencias) y el pago acumulado o congelado de la semana para el
+ * empleado autenticado.
  *
  * @param weekStart  Lunes de la semana en formato "YYYY-MM-DD".
  *                   Por defecto usa el lunes de la semana actual.
@@ -81,7 +86,7 @@ export async function getEmployeeSelfWeekDetail(
   const { start: clockStart, end: clockEnd } = payrollWeekInstantRange(mondayStr);
 
   // ── Queries ──────────────────────────────────────────────────────────────
-  const [entries, shifts, justifications] = await Promise.all([
+  const [entries, shifts, justifications, existingEntry, salaryRates, dbUser] = await Promise.all([
     prisma.timeClockEntry.findMany({
       where: { userId: user.id, clockIn: { gte: clockStart, lt: clockEnd } },
       include: { branch: { select: { name: true } } },
@@ -101,6 +106,26 @@ export async function getEmployeeSelfWeekDetail(
         date: { gte: weekStartDate, lt: weekEndDate },
       },
       include: { justifiedBy: { select: { name: true } } },
+    }),
+    prisma.payrollEntry.findFirst({
+      where: {
+        userId: user.id,
+        period: { weekStart: weekStartDate },
+      },
+      select: {
+        status: true,
+        totalPay: true,
+        period: { select: { status: true } },
+      },
+    }),
+    prisma.salaryRate.findMany({
+      where: { userId: user.id, scheme: "HORA" },
+      select: { branchId: true, amount: true, effectiveFrom: true, effectiveTo: true },
+      orderBy: { effectiveFrom: "desc" },
+    }),
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: { hourlyRate: true },
     }),
   ]);
 
@@ -205,6 +230,40 @@ export async function getEmployeeSelfWeekDetail(
 
   const totalHours = days.reduce((sum, d) => sum + d.hoursWorked, 0);
 
+  // Determinar pago y estado de la semana
+  let totalPay: number | null = null;
+  let status: "PAGADA" | "APROBADA" | "PENDIENTE" = "PENDIENTE";
+  let isFrozen = false;
+
+  if (existingEntry && (existingEntry.status === "PAGADA" || existingEntry.status === "APROBADA" || existingEntry.period.status === "PAGADA" || existingEntry.period.status === "APROBADA")) {
+    totalPay = Number(existingEntry.totalPay);
+    status = existingEntry.status === "PAGADA" || existingEntry.period.status === "PAGADA" ? "PAGADA" : "APROBADA";
+    isFrozen = true;
+  } else {
+    // Cálculo estimado con las tarifas vigentes del colaborador
+    const rates = salaryRates.map((r) => ({ ...r, amount: Number(r.amount) }));
+    const baseRate = dbUser?.hourlyRate !== null && dbUser?.hourlyRate !== undefined ? Number(dbUser.hourlyRate) : null;
+
+    let computedPay = 0;
+    let hasApplicableRate = baseRate !== null;
+
+    for (const entry of entries) {
+      if (!entry.clockOut) continue;
+      const hours = hoursBetween(entry.clockIn, entry.clockOut);
+      if (!(hours > 0)) continue;
+
+      const rate = resolveBranchHourlyRate(rates, entry.branchId, entry.clockIn, baseRate);
+      if (rate !== null) {
+        hasApplicableRate = true;
+        computedPay += hours * rate;
+      }
+    }
+
+    totalPay = hasApplicableRate ? Math.round(computedPay * 100) / 100 : null;
+    status = "PENDIENTE";
+    isFrozen = false;
+  }
+
   return {
     success: true,
     data: {
@@ -212,6 +271,9 @@ export async function getEmployeeSelfWeekDetail(
       weekEnd: addDaysToDateOnly(mondayStr, 6),
       days,
       totalHours,
+      totalPay,
+      status,
+      isFrozen,
     },
   };
 }

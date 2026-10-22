@@ -456,6 +456,19 @@ export async function multiDuplicateShiftAction(
   return { success: true, created: toCreate.length, skipped };
 }
 
+/** Duplica un turno directamente hacia otro colaborador y/o fecha (para arrastrar con Alt). */
+export async function copyShiftToCellAction(
+  shiftId: string,
+  targetUserId: string,
+  targetDate: string,
+) {
+  const result = await multiDuplicateShiftAction(shiftId, [
+    { userId: targetUserId, date: targetDate },
+  ]);
+  if ("error" in result) return { error: result.error };
+  return { success: true, createdCount: result.created };
+}
+
 /** Publica todos los turnos de la semana como acción administrativa global. */
 export async function publishWeekAction(weekStart: string) {
   const admin = await getCurrentUser();

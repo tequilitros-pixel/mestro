@@ -226,9 +226,34 @@ function WeeklyDetailTab() {
           </div>
 
           {/* Week total */}
-          <div className="flex items-center justify-between rounded-xl border border-outline-variant px-4 py-3">
-            <p className="text-sm font-semibold text-on-surface">Total de la semana</p>
-            <p className="text-sm font-bold text-on-surface">{formatHours(detail.totalHours)}</p>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant bg-surface-container px-4 py-3">
+            <div>
+              <p className="text-xs text-on-surface-variant">Horas trabajadas</p>
+              <p className="text-sm font-bold text-on-surface">{formatHours(detail.totalHours)}</p>
+            </div>
+            <div className="text-right">
+              <div className="flex items-center justify-end gap-1.5">
+                <p className="text-xs text-on-surface-variant">Pago de la semana</p>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                    detail.status === "PAGADA"
+                      ? "bg-primary/15 text-primary"
+                      : detail.status === "APROBADA"
+                        ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
+                        : "bg-secondary/15 text-secondary"
+                  }`}
+                >
+                  {detail.status === "PAGADA"
+                    ? "Pagada"
+                    : detail.status === "APROBADA"
+                      ? "Aprobada"
+                      : "Calculado"}
+                </span>
+              </div>
+              <p className="text-base font-bold text-primary">
+                {detail.totalPay === null ? "Sin tarifa" : formatCurrency(detail.totalPay)}
+              </p>
+            </div>
           </div>
         </>
       )}
@@ -322,15 +347,17 @@ export default function EmployeePayrollView({
   userName,
   summary,
   history,
+  initialTab = "RESUMEN",
 }: {
   userName: string;
   summary: EmployeePayrollSummary | { error: string };
   history: ApprovedPayrollHistoryItem[] | { error: string };
+  initialTab?: "RESUMEN" | "PAGOS" | "SEMANA";
 }) {
   const approvedHistory = "error" in history ? [] : history;
-  const [activeTab, setActiveTab] = useState<"RESUMEN" | "PAGOS" | "SEMANA">("RESUMEN");
-  const [paymentIndex, setPaymentIndex] = useState(0);
-  const selectedPayment = approvedHistory[paymentIndex] ?? null;
+  const [activeTab, setActiveTab] = useState<"RESUMEN" | "PAGOS" | "SEMANA">(initialTab);
+  const [selectedWeekStart, setSelectedWeekStart] = useState<string | null>(() => approvedHistory[0]?.weekStart ?? null);
+  const selectedPayment = approvedHistory.find((p) => p.weekStart === selectedWeekStart) ?? approvedHistory[0] ?? null;
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
@@ -440,82 +467,91 @@ export default function EmployeePayrollView({
 
         {activeTab === "PAGOS" && (
           <Card>
-            <CardLabel>Pagos aprobados</CardLabel>
+            <CardLabel>Historial de nómina y pagos</CardLabel>
             <p className="mt-1 text-sm text-on-surface-variant">
-              Consulta una semana a la vez. Las horas y el pago no cambian después de su aprobación.
+              Consulta cuánto se te pagó la semana pasada, antepasada y en semanas anteriores.
             </p>
 
             {"error" in history ? (
               <p className="mt-4 rounded-xl border border-error/40 bg-error/10 p-3 text-sm text-error">{history.error}</p>
-            ) : !selectedPayment ? (
-              <p className="mt-4 rounded-xl bg-surface-container p-4 text-sm text-on-surface-variant">
-                Aún no tienes semanas de nómina aprobadas.
-              </p>
+            ) : approvedHistory.length === 0 ? (
+              <div className="mt-4 rounded-xl bg-surface-container p-6 text-center">
+                <p className="text-sm font-semibold text-on-surface">No se encontraron semanas en el historial</p>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  Puedes consultar tus horas registradas en la pestaña &ldquo;Semana&rdquo;.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("SEMANA")}
+                  className="mt-3 inline-flex items-center rounded-xl bg-primary px-4 py-2 text-xs font-bold text-on-primary shadow"
+                >
+                  Ver mis horas por semana →
+                </button>
+              </div>
             ) : (
-              <div className="mt-4 space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentIndex((index) => Math.max(0, index - 1))}
-                    disabled={paymentIndex === 0}
-                    aria-label="Ver semana más reciente"
-                    className="rounded-xl border border-outline-variant p-2 text-on-surface transition hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <ChevronLeftIcon className="h-5 w-5" />
-                  </button>
-                  <p className="text-center text-sm font-bold text-on-surface">
-                    Pago {paymentIndex + 1} de {approvedHistory.length}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentIndex((index) => Math.min(approvedHistory.length - 1, index + 1))}
-                    disabled={paymentIndex === approvedHistory.length - 1}
-                    aria-label="Ver semana anterior"
-                    className="rounded-xl border border-outline-variant p-2 text-on-surface transition hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <ChevronRightIcon className="h-5 w-5" />
-                  </button>
-                </div>
-
-                <div className="space-y-4 rounded-xl border border-outline-variant p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="font-bold text-on-surface">
-                        {formatWeek(selectedPayment.weekStart, selectedPayment.weekEnd)}
-                      </p>
-                      <p className="mt-1 text-xs text-on-surface-variant">
-                        {selectedPayment.regularHours.toFixed(2)} h regulares
-                        {selectedPayment.overtimeHours > 0 && ` · ${selectedPayment.overtimeHours.toFixed(2)} h extra`}
-                      </p>
-                    </div>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-bold ${
-                        selectedPayment.status === "PAGADA"
-                          ? "bg-primary/15 text-primary"
-                          : "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
+              <div className="mt-4 space-y-3">
+                {approvedHistory.map((item) => {
+                  const isSelected = selectedPayment?.weekStart === item.weekStart;
+                  return (
+                    <div
+                      key={item.weekStart}
+                      onClick={() => setSelectedWeekStart(item.weekStart)}
+                      className={`cursor-pointer rounded-2xl border p-4 transition ${
+                        isSelected
+                          ? "border-primary/50 bg-primary/5 shadow-sm"
+                          : "border-outline-variant bg-surface-container hover:border-primary/30"
                       }`}
                     >
-                      {selectedPayment.status === "PAGADA" ? "Pagada" : "Aprobada"}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-end justify-between gap-2">
-                    <div>
-                      <p className="text-xs text-on-surface-variant">Horas aprobadas</p>
-                      <p className="font-semibold text-on-surface">{formatHours(selectedPayment.totalHours)}</p>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="font-bold text-on-surface">
+                            {formatWeek(item.weekStart, item.weekEnd)}
+                          </p>
+                          <p className="mt-0.5 text-xs text-on-surface-variant">
+                            {formatHours(item.totalHours)}
+                            {item.regularHours > 0 && ` (${item.regularHours.toFixed(1)}h reg.`}
+                            {item.overtimeHours > 0 && ` · ${item.overtimeHours.toFixed(1)}h extra`}
+                            {item.regularHours > 0 && ")"}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-primary">
+                            {formatCurrency(item.totalPay)}
+                          </p>
+                          <span
+                            className={`inline-block mt-0.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                              item.status === "PAGADA"
+                                ? "bg-primary/15 text-primary"
+                                : item.status === "APROBADA"
+                                  ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
+                                  : "bg-secondary/15 text-secondary"
+                            }`}
+                          >
+                            {item.status === "PAGADA"
+                              ? "Pagada"
+                              : item.status === "APROBADA"
+                                ? "Aprobada"
+                                : "Pendiente de corte"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isSelected && (
+                        <div className="mt-3 border-t border-outline-variant/60 pt-3 text-xs text-on-surface-variant">
+                          <p>
+                            {item.status === "PAGADA" && item.paidAt
+                              ? `Pagada el ${formatApprovalDate(item.paidAt)}`
+                              : item.status === "APROBADA" && item.approvedAt
+                                ? `Aprobada el ${formatApprovalDate(item.approvedAt)}`
+                                : item.status === "PENDIENTE"
+                                  ? "Horas calculadas según checador; el monto final se confirmará al aprobar la nómina."
+                                  : "Aprobada"}
+                          </p>
+                        </div>
+                      )}
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-on-surface-variant">Pago aprobado</p>
-                      <p className="text-lg font-bold text-primary">{formatCurrency(selectedPayment.totalPay)}</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-on-surface-variant">
-                    {selectedPayment.paidAt
-                      ? `Pagada el ${formatApprovalDate(selectedPayment.paidAt)}`
-                      : selectedPayment.approvedAt
-                        ? `Aprobada el ${formatApprovalDate(selectedPayment.approvedAt)}`
-                        : "Aprobada"}
-                  </p>
-                </div>
+                  );
+                })}
               </div>
             )}
           </Card>

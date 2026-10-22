@@ -286,3 +286,58 @@ export function normalizeCommercialQuantity(input: {
   if (!Number.isFinite(closed) || closed < 0 || !Number.isFinite(fraction) || fraction < 0 || fraction > 1) throw new Error("Cantidad inválida.");
   return closed * content + fraction * content;
 }
+
+/**
+ * Convierte cantidades de inventario a unidades comprensibles y razonables para lectura humana:
+ * - Gramos mayores o iguales a 1,000 g (o residuos como -10,000 g) se convierten automáticamente a kg (ej. "10 kg", "−10 kg").
+ * - Mililitros mayores o iguales a 1,000 ml (ej. 45,000 ml de tequila o agua) se convierten a litros (ej. "45 L", "1.5 L").
+ * - Maneja de forma limpia signos negativos para residuos, faltantes o consumos.
+ */
+export function formatHumanInventoryQuantity(
+  value: number | string | null | undefined,
+  unit?: string | null,
+): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "—";
+
+  const rawUnit = (unit ?? "").trim();
+  const lowerUnit = rawUnit.toLowerCase();
+  const isNegative = num < 0;
+  const absValue = Math.abs(num);
+  const sign = isNegative ? "−" : "";
+
+  // Peso: gramos / kilos
+  if (lowerUnit === "g" || lowerUnit === "gramo" || lowerUnit === "gramos") {
+    if (absValue >= 1000) {
+      const kg = absValue / 1000;
+      return `${sign}${kg.toLocaleString("es-MX", { maximumFractionDigits: 2 })} kg`;
+    }
+    return `${sign}${absValue.toLocaleString("es-MX", { maximumFractionDigits: 2 })} g`;
+  }
+  if (lowerUnit === "kg" || lowerUnit === "kilo" || lowerUnit === "kilos" || lowerUnit === "kilogramo" || lowerUnit === "kilogramos") {
+    return `${sign}${absValue.toLocaleString("es-MX", { maximumFractionDigits: 2 })} kg`;
+  }
+
+  // Volumen: mililitros / litros
+  if (lowerUnit === "ml" || lowerUnit === "mililitro" || lowerUnit === "mililitros") {
+    if (absValue >= 1000) {
+      const l = absValue / 1000;
+      return `${sign}${l.toLocaleString("es-MX", { maximumFractionDigits: 2 })} L`;
+    }
+    return `${sign}${absValue.toLocaleString("es-MX", { maximumFractionDigits: 2 })} ml`;
+  }
+  if (lowerUnit === "l" || lowerUnit === "litro" || lowerUnit === "litros") {
+    return `${sign}${absValue.toLocaleString("es-MX", { maximumFractionDigits: 2 })} L`;
+  }
+
+  // Piezas / Unidades
+  if (lowerUnit === "pz" || lowerUnit === "pza" || lowerUnit === "pzas" || lowerUnit === "piezas" || lowerUnit === "pieza" || lowerUnit === "unidad" || lowerUnit === "unidades" || lowerUnit === "unit") {
+    const label = absValue === 1 ? "pza" : "pzas";
+    return `${sign}${absValue.toLocaleString("es-MX", { maximumFractionDigits: 2 })} ${label}`;
+  }
+
+  // Default si la unidad no coincide con las estándar
+  const displayUnit = rawUnit ? ` ${rawUnit}` : "";
+  return `${sign}${absValue.toLocaleString("es-MX", { maximumFractionDigits: 2 })}${displayUnit}`;
+}

@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertIcon, RefreshIcon } from "@/components/ui/icons";
+import { AlertIcon, PrinterIcon, RefreshIcon } from "@/components/ui/icons";
 import { cancelQueuedOperation, listOperations, retryQueuedOperation } from "@/lib/offline/queue";
 import type { OfflineOperation } from "@/lib/offline/types";
 import { useOfflineSync } from "@/components/offline/OfflineProvider";
 import { todayDateOnly } from "@/lib/dateOnly";
+import PostSaleModal from "@/components/pos/PostSaleModal";
+import type { ReceiptData } from "@/components/pos/ReceiptTicket";
 
 type Sale = {
   id: string;
@@ -48,7 +50,68 @@ export default function TransactionCenter({ branches, workers, initialSales, can
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [viewingReceipt, setViewingReceipt] = useState<ReceiptData | null>(null);
   const { snapshot, syncNow } = useOfflineSync();
+
+  function openReceipt(item: ViewItem) {
+    if (item.source === "server" && item.sale) {
+      setViewingReceipt({
+        saleId: item.sale.id,
+        saleCode: item.sale.code,
+        branchName: item.sale.branch.name,
+        date: new Date(item.sale.createdAt).toLocaleString("es-MX", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        cashierName: item.sale.soldBy.name,
+        items: item.sale.items.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          unitPrice: i.quantity > 0 ? i.lineTotal / i.quantity : i.lineTotal,
+          lineTotal: i.lineTotal,
+        })),
+        subtotal: item.sale.subtotal,
+        discountAmount: item.sale.discountAmount,
+        total: item.sale.total,
+        payments: item.sale.payments.map((p) => ({ method: p.method, amount: p.amount })),
+        isOffline: false,
+      });
+    } else if (item.source === "local" && item.operation) {
+      const payload = item.operation.payload as {
+        displayTotal?: number;
+        discountAmount?: number;
+        items?: Array<{ quantity?: number; description?: string; variantId?: string; amount?: number }>;
+        payments?: Array<{ method: string; amount: number }>;
+      };
+      setViewingReceipt({
+        saleId: item.id,
+        saleCode: item.code,
+        branchName: item.branch,
+        date: new Date(item.createdAt).toLocaleString("es-MX", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        cashierName: null,
+        items: (payload.items ?? []).map((i) => ({
+          name: i.description ?? (i.variantId ? "Producto de catálogo" : "Artículo"),
+          quantity: i.quantity ?? 1,
+          unitPrice: (i.amount ?? 0) / (i.quantity ?? 1),
+          lineTotal: i.amount ?? 0,
+        })),
+        subtotal: payload.displayTotal ?? 0,
+        discountAmount: payload.discountAmount ?? 0,
+        total: payload.displayTotal ?? 0,
+        payments: payload.payments ?? [],
+        isOffline: true,
+      });
+    }
+  }
 
   const refresh = useCallback(async () => {
     setOperations(await listOperations());
@@ -133,10 +196,16 @@ export default function TransactionCenter({ branches, workers, initialSales, can
         const terminal = local ? item.operation!.status === "failed" ? "Error de sincronización" : item.operation!.status === "cancelled" ? "Cancelada en dispositivo" : item.operation!.status === "syncing" ? "Subiendo…" : "Pendiente de subir" : item.status === "CANCELADA" ? "Cancelada / reembolsada" : "Subida a la nube";
         return <article key={`${item.source}-${item.id}`} className={`rounded-2xl border bg-surface-container p-4 ${item.status === "CANCELADA" || (local && item.operation!.status === "cancelled") ? "border-outline-variant opacity-70" : "border-outline-variant"}`}>
           <button type="button" onClick={() => setSelectedId(selected ? null : item.id)} className="flex w-full items-center justify-between gap-3 text-left"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-on-surface">{item.code}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${local && item.operation!.status === "failed" ? "bg-error/15 text-error" : item.status === "CANCELADA" || (local && item.operation!.status === "cancelled") ? "bg-outline-variant text-on-surface-variant" : local ? "bg-secondary/15 text-secondary" : "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"}`}>{terminal}</span></div><p className="mt-1 truncate text-xs text-on-surface-variant">{time(item.createdAt)} · {item.branch} · {item.detail || "Sin detalle"}</p></div><span className="shrink-0 text-lg font-bold text-on-surface">{item.total === null ? "Por confirmar" : currency(item.total)}</span></button>
-          {selected && <div className="mt-4 border-t border-outline-variant pt-3 text-sm"><div className="grid gap-2 text-on-surface-variant sm:grid-cols-3"><span>Origen: <b className="text-on-surface">{local ? "Este dispositivo" : "Servidor"}</b></span><span>Estado: <b className="text-on-surface">{terminal}</b></span><span>{local ? `Intentos: ${item.operation!.attempts}` : `Cajero: ${item.sale!.soldBy.name}`}</span></div>{!local && item.sale!.payments.length > 0 && <p className="mt-2 text-xs text-on-surface-variant">Pagos: {item.sale!.payments.map((payment) => `${payment.method} ${currency(payment.amount)}`).join(" · ")}</p>}<div className="mt-3 flex flex-wrap gap-2">{local && item.operation!.status === "failed" && <button onClick={() => void actLocal(item, "retry")} disabled={busyId === item.id} className="rounded-lg border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface">Reintentar</button>}{local && ["pending", "failed"].includes(item.operation!.status) && <button onClick={() => void actLocal(item, "cancel")} disabled={busyId === item.id} className="rounded-lg border border-error/30 px-3 py-2 text-xs font-bold text-error">Cancelar localmente</button>}{!local && canCancel && item.sale!.status !== "CANCELADA" && <><button onClick={() => void resolveSale(item, "CANCELACION")} disabled={busyId === item.id} className="rounded-lg border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface">Cancelar</button><button onClick={() => void resolveSale(item, "REEMBOLSO")} disabled={busyId === item.id} className="rounded-lg bg-secondary px-3 py-2 text-xs font-bold text-on-secondary">Reembolsar</button></>}{!local && <Link href={`/pos/sales/${item.id}`} className="rounded-lg border border-outline-variant px-3 py-2 text-xs font-bold text-primary">Ver detalle</Link>}</div>{!local && item.sale!.cancelReason && <p className="mt-3 rounded-lg bg-surface p-2 text-xs text-on-surface-variant">{item.sale!.cancelReason}</p>}</div>}
+          {selected && <div className="mt-4 border-t border-outline-variant pt-3 text-sm"><div className="grid gap-2 text-on-surface-variant sm:grid-cols-3"><span>Origen: <b className="text-on-surface">{local ? "Este dispositivo" : "Servidor"}</b></span><span>Estado: <b className="text-on-surface">{terminal}</b></span><span>{local ? `Intentos: ${item.operation!.attempts}` : `Cajero: ${item.sale!.soldBy.name}`}</span></div>{!local && item.sale!.payments.length > 0 && <p className="mt-2 text-xs text-on-surface-variant">Pagos: {item.sale!.payments.map((payment) => `${payment.method} ${currency(payment.amount)}`).join(" · ")}</p>}<div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => openReceipt(item)} className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/20 transition"><PrinterIcon className="h-3.5 w-3.5" />Ticket / Correo</button>{local && item.operation!.status === "failed" && <button onClick={() => void actLocal(item, "retry")} disabled={busyId === item.id} className="rounded-lg border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface">Reintentar</button>}{local && ["pending", "failed"].includes(item.operation!.status) && <button onClick={() => void actLocal(item, "cancel")} disabled={busyId === item.id} className="rounded-lg border border-error/30 px-3 py-2 text-xs font-bold text-error">Cancelar localmente</button>}{!local && canCancel && item.sale!.status !== "CANCELADA" && <><button onClick={() => void resolveSale(item, "CANCELACION")} disabled={busyId === item.id} className="rounded-lg border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface">Cancelar</button><button onClick={() => void resolveSale(item, "REEMBOLSO")} disabled={busyId === item.id} className="rounded-lg bg-secondary px-3 py-2 text-xs font-bold text-on-secondary">Reembolsar</button></>}{!local && <Link href={`/pos/sales/${item.id}`} className="rounded-lg border border-outline-variant px-3 py-2 text-xs font-bold text-primary">Ver detalle</Link>}</div>{!local && item.sale!.cancelReason && <p className="mt-3 rounded-lg bg-surface p-2 text-xs text-on-surface-variant">{item.sale!.cancelReason}</p>}</div>}
         </article>;
       })}</div>
       <p className="flex items-center gap-2 text-xs text-on-surface-variant"><AlertIcon className="h-4 w-4" />Las operaciones pendientes se conservan con el mismo identificador; no se duplica el cobro al reintentar.</p>
+      {viewingReceipt && (
+        <PostSaleModal
+          receipt={viewingReceipt}
+          onClose={() => setViewingReceipt(null)}
+        />
+      )}
     </main>
   );
 }

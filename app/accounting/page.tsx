@@ -17,7 +17,13 @@ import { getBranchAccountingHistory } from "@/lib/accounting/branchHistory";
 import { getBranchPayrollOverview } from "@/lib/accounting/payrollOverview";
 import { getBranchSalesOverview } from "@/lib/accounting/branchSalesOverview";
 import { getBranchInventoryOverview } from "@/lib/accounting/branchInventoryOverview";
-import { getBranchFinancialOverview } from "@/lib/accounting/branchFinancialOverview";
+import {
+  getBranchFinancialOverview,
+  getMultiBranchFinancialOverview,
+  formatHumanQuantity,
+} from "@/lib/accounting/financialEngine";
+import { ExecutiveMultiBranchDashboard } from "@/components/accounting/ExecutiveMultiBranchDashboard";
+import { BranchFinancialDashboard } from "@/components/accounting/BranchFinancialDashboard";
 import { DailyBranchChart, DistributionPieChart, RankingBarChart } from "@/components/pos/SalesCharts";
 import { PaymentForm, VoidPaymentForm } from "./PaymentForm";
 
@@ -117,7 +123,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       orderBy: { name: "asc" },
     }),
     prisma.financialMovementCategory.findMany({
-      where: { direction: "EXPENSE", scope: "ACCOUNTING" },
+      where: { direction: "EXPENSE", scope: { in: ["ACCOUNTING", "BOTH"] } },
       select: { id: true, name: true, isActive: true, requiresReason: true, requiresReceipt: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
@@ -159,7 +165,10 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     }),
     prisma.accountingPayment.count({ where: listWhere }),
   ]);
-  const [branchFinancialOverview, branchHistory, payrollOverview, salesOverview, inventoryOverview] = await Promise.all([
+  const [multiBranchOverview, branchFinancialOverview, branchHistory, payrollOverview, salesOverview, inventoryOverview] = await Promise.all([
+    !selectedBranch && view === "summary"
+      ? getMultiBranchFinancialOverview({ branchIds: scopedBranchIds, from, to })
+      : Promise.resolve(null),
     selectedBranch && view === "summary" ? getBranchFinancialOverview({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
     selectedBranch && view === "payroll" ? getBranchAccountingHistory({ branchId: selectedBranch.id, from, to }) : Promise.resolve(null),
     selectedBranch && view === "payroll" ? getBranchPayrollOverview({ branchId: selectedBranch.id, anchor, period }) : Promise.resolve(null),
@@ -377,30 +386,24 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
           <Card><h3 className="font-bold">Insumos con mayor costo teórico</h3><p className="mt-1 text-sm text-on-surface-variant">Recetas de las ventas completadas del periodo.</p><div className="mt-3"><RankingBarChart data={inventoryOverview.products.filter((product) => product.theoreticalCost > 0).slice(0, 10).map((product) => ({ name: product.name, value: product.theoreticalCost }))} valueLabel="Costo teórico" /></div></Card>
           <Card><h3 className="font-bold">Cómo leer el consumo</h3><div className="mt-3 space-y-3 text-sm text-on-surface-variant"><p><strong className="text-on-surface">Registrado:</strong> salidas y devoluciones que ya están en el libro de inventario.</p><p><strong className="text-on-surface">Teórico:</strong> cantidad que debería consumirse según las recetas actuales y las ventas completadas.</p><p>Los importes convierten el costo de botella, paquete o presentación a ml, g o unidad cuando el consumo usa la unidad base. No modifican existencias.</p></div></Card>
         </div>
-        <Card><h3 className="font-bold">Detalle de inventario consumido</h3><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr className="border-b border-outline-variant text-left text-xs text-on-surface-variant"><th className="pb-2 font-medium">Insumo</th><th className="pb-2 text-right font-medium">Registrado</th><th className="pb-2 text-right font-medium">Teórico</th><th className="pb-2 text-right font-medium">Costo registrado</th><th className="pb-2 text-right font-medium">Costo teórico</th></tr></thead><tbody className="divide-y divide-outline-variant">{inventoryOverview.products.map((product) => <tr key={product.id}><td className="py-3"><p className="font-semibold">{product.name}</p><p className="text-xs text-on-surface-variant">{product.category} · {product.code}</p></td><td className="py-3 text-right">{product.actualQuantity.toLocaleString("es-MX", { maximumFractionDigits: 3 })} {product.unit}</td><td className="py-3 text-right">{product.theoreticalQuantity.toLocaleString("es-MX", { maximumFractionDigits: 3 })} {product.unit}</td><td className="py-3 text-right font-semibold">{money(product.actualCost)}{product.actualCostKnown ? "" : "*"}</td><td className="py-3 text-right font-semibold">{money(product.theoreticalCost)}{product.theoreticalCostKnown ? "" : "*"}</td></tr>)}</tbody></table></div>{(!inventoryOverview.actual.costKnown || !inventoryOverview.theoretical.costKnown) && <p className="mt-3 text-xs text-on-surface-variant">* El importe es parcial porque uno o más insumos no tienen costo unitario configurado.</p>}</Card>
+        <Card><h3 className="font-bold">Detalle de inventario consumido</h3><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr className="border-b border-outline-variant text-left text-xs text-on-surface-variant"><th className="pb-2 font-medium">Insumo</th><th className="pb-2 text-right font-medium">Registrado</th><th className="pb-2 text-right font-medium">Teórico</th><th className="pb-2 text-right font-medium">Costo registrado</th><th className="pb-2 text-right font-medium">Costo teórico</th></tr></thead><tbody className="divide-y divide-outline-variant">{inventoryOverview.products.map((product) => <tr key={product.id}><td className="py-3"><p className="font-semibold">{product.name}</p><p className="text-xs text-on-surface-variant">{product.category} · {product.code}</p></td><td className="py-3 text-right">{formatHumanQuantity(product.actualQuantity, product.unit)}</td><td className="py-3 text-right">{formatHumanQuantity(product.theoreticalQuantity, product.unit)}</td><td className="py-3 text-right font-semibold">{money(product.actualCost)}{product.actualCostKnown ? "" : "*"}</td><td className="py-3 text-right font-semibold">{money(product.theoreticalCost)}{product.theoreticalCostKnown ? "" : "*"}</td></tr>)}</tbody></table></div>{(!inventoryOverview.actual.costKnown || !inventoryOverview.theoretical.costKnown) && <p className="mt-3 text-xs text-on-surface-variant">* El importe es parcial porque uno o más insumos no tienen costo unitario configurado.</p>}</Card>
       </> : <Card><p className="text-sm text-on-surface-variant">No hay consumo de inventario ni recetas vendidas en {selectedBranch.name} durante este periodo.</p></Card>}
     </section> : <>
-    {branchFinancialOverview && selectedBranch && <section aria-label={`Resultado de ${selectedBranch.name}`} className="space-y-4">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">Resumen contable</p>
-        <h2 className="text-2xl font-bold">Resultado operativo · {selectedBranch.name}</h2>
-        <p className="text-sm text-on-surface-variant">Comparativo de ventas, nómina, inventario y gastos registrados de {from} a {to}.</p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Card highlight><CardLabel>Total vendido</CardLabel><CardValue>{money(branchFinancialOverview.sales)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">{branchFinancialOverview.saleCount} venta(s) completada(s).</p></Card>
-        <Card><CardLabel>Nómina pagada</CardLabel><CardValue>{money(branchFinancialOverview.payroll)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Importe asignado a {selectedBranch.name}.</p></Card>
-        <Card><CardLabel>Costo de inventario registrado</CardLabel><CardValue>{money(branchFinancialOverview.inventory.actualCost)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">{branchFinancialOverview.inventory.actualCostKnown ? "Consumo con costo disponible." : "Hay costos de insumos pendientes."}</p></Card>
-        <Card><CardLabel>Salidas de caja</CardLabel><CardValue>{money(branchFinancialOverview.cashOutflows)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Vinculadas a cortes cerrados o auditados.</p></Card>
-        <Card><CardLabel>Pagos contables</CardLabel><CardValue>{money(branchFinancialOverview.accountingPayments)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Pagos vigentes registrados en contabilidad.</p></Card>
-        <Card className={branchFinancialOverview.registeredResult < 0 ? "border-error/40 bg-error/5" : "border-primary/30 bg-primary/5"}><CardLabel>Resultado operativo registrado</CardLabel><CardValue>{money(branchFinancialOverview.registeredResult)}</CardValue><p className="mt-1 text-xs text-on-surface-variant">Ventas menos nómina, inventario y gastos.</p></Card>
-      </div>
-      <Card>
-        <h3 className="font-bold">Comparación del período</h3>
-        <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[580px] text-sm"><thead><tr className="border-b border-outline-variant text-left text-xs text-on-surface-variant"><th className="pb-2 font-medium">Concepto</th><th className="pb-2 text-right font-medium">Registrado</th><th className="pb-2 text-right font-medium">Con costo teórico</th></tr></thead><tbody className="divide-y divide-outline-variant"><tr><td className="py-3">Ventas</td><td className="py-3 text-right font-semibold">{money(branchFinancialOverview.sales)}</td><td className="py-3 text-right font-semibold">{money(branchFinancialOverview.sales)}</td></tr><tr><td className="py-3">Nómina pagada</td><td className="py-3 text-right">− {money(branchFinancialOverview.payroll)}</td><td className="py-3 text-right">− {money(branchFinancialOverview.payroll)}</td></tr><tr><td className="py-3">Costo de inventario</td><td className="py-3 text-right">− {money(branchFinancialOverview.inventory.actualCost)}{branchFinancialOverview.inventory.actualCostKnown ? "" : "*"}</td><td className="py-3 text-right">− {money(branchFinancialOverview.inventory.theoreticalCost)}{branchFinancialOverview.inventory.theoreticalCostKnown ? "" : "*"}</td></tr><tr><td className="py-3">Salidas de caja</td><td className="py-3 text-right">− {money(branchFinancialOverview.cashOutflows)}</td><td className="py-3 text-right">− {money(branchFinancialOverview.cashOutflows)}</td></tr><tr><td className="py-3">Pagos contables</td><td className="py-3 text-right">− {money(branchFinancialOverview.accountingPayments)}</td><td className="py-3 text-right">− {money(branchFinancialOverview.accountingPayments)}</td></tr><tr className="font-bold"><td className="py-3">Resultado operativo</td><td className="py-3 text-right">{money(branchFinancialOverview.registeredResult)}{branchFinancialOverview.registeredResultComplete ? "" : "*"}</td><td className="py-3 text-right">{money(branchFinancialOverview.theoreticalResult)}{branchFinancialOverview.theoreticalResultComplete ? "" : "*"}</td></tr></tbody></table></div>
-        {(!branchFinancialOverview.registeredResultComplete || !branchFinancialOverview.theoreticalResultComplete) && <p className="mt-3 text-xs text-on-surface-variant">* El resultado es parcial porque uno o más insumos no tienen costo unitario configurado.</p>}
-      </Card>
-      <p className="text-xs text-on-surface-variant">El resultado operativo usa ventas completadas y gastos ya registrados; no crea movimientos en Caja, Cortes ni Inventario.</p>
-    </section>}
+    {view === "summary" && !selectedBranch && multiBranchOverview && (
+      <ExecutiveMultiBranchDashboard
+        overview={multiBranchOverview}
+        period={period}
+        date={anchor}
+      />
+    )}
+    {view === "summary" && selectedBranch && branchFinancialOverview && (
+      <BranchFinancialDashboard
+        metrics={branchFinancialOverview}
+        periodLabel={periodLabel}
+        from={from}
+        to={to}
+      />
+    )}
     <section aria-label="Resumen de pagos" className="grid gap-3 sm:grid-cols-3">
       <Card highlight><CardLabel>Total pagado</CardLabel><CardValue>{money(summary._sum.amount ?? 0)}</CardValue></Card>
       <Card><CardLabel>Pagos</CardLabel><CardValue>{summary._count._all}</CardValue></Card>

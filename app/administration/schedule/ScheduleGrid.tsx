@@ -7,6 +7,8 @@ import {
   publishWeekAction,
   unpublishWeekAction,
   copyPreviousWeekAction,
+  moveScheduledShiftAction,
+  copyShiftToCellAction,
 } from "@/app/actions/schedule";
 import {
   addDaysToDateOnly,
@@ -31,6 +33,7 @@ import {
 } from "@/components/ui/icons";
 import { useToast } from "@/components/ui/Toast";
 import { fallbackBranchColor } from "@/lib/branchColors";
+import { getPositionColor } from "@/lib/positionColors";
 import ShiftModal from "./ShiftModal";
 import SaveAsTemplateModal from "./SaveAsTemplateModal";
 import UseTemplateModal, { type TemplateSummary } from "./UseTemplateModal";
@@ -163,22 +166,43 @@ function getMostRecentMonday() {
   return mondayOfWeek(todayDateOnly());
 }
 
-/** Tarjeta compacta de turno / descanso estilo Connecteam */
+/** Tarjeta compacta de turno / descanso estilo Connecteam con Drag & Drop */
 function ShiftBlock({
   shift,
+  colorBy = "branch",
+  isDragging = false,
   onClick,
+  onDragStart,
+  onDragEnd,
 }: {
   shift: Shift;
+  colorBy?: "branch" | "position";
+  isDragging?: boolean;
   onClick: () => void;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
 }) {
   const published = shift.publicationStatus === "PUBLISHED";
 
   if (shift.type === "DESCANSO") {
     return (
-      <button
+      <div
+        draggable
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
         onClick={onClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick();
+          }
+        }}
         aria-label="Descanso programado"
-        className={`group/shift flex w-full items-center justify-between rounded-md border px-2 py-1 text-left transition hover:border-outline ${
+        className={`group/shift flex w-full cursor-grab items-center justify-between rounded-md border px-2 py-1 text-left transition active:cursor-grabbing hover:border-outline ${
+          isDragging ? "opacity-35 scale-[0.98] ring-2 ring-primary" : ""
+        } ${
           published
             ? "border-outline-variant/80 bg-surface-container-high/60"
             : "border-dashed border-outline-variant bg-surface-container-high/40"
@@ -191,21 +215,37 @@ function ShiftBlock({
         <span className="text-[10px] text-on-surface-variant opacity-0 transition group-hover/shift:opacity-100">
           •••
         </span>
-      </button>
+      </div>
     );
   }
 
   const color =
-    shift.branch?.color || fallbackBranchColor(shift.event?.id ?? shift.branchId ?? shift.id);
+    colorBy === "position"
+      ? getPositionColor(shift.position)
+      : shift.branch?.color || fallbackBranchColor(shift.event?.id ?? shift.branchId ?? shift.id);
+
   const branchTint = `color-mix(in srgb, ${color} ${published ? "15%" : "8%"}, var(--surface-container-high, #202020))`;
 
   return (
-    <button
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       aria-label={`${shift.event?.name ?? shift.branch?.name ?? "Turno"} · ${
         published ? "Publicado" : "Borrador"
       }`}
-      className={`group/shift relative flex w-full flex-col rounded-md border px-2 py-1 text-left transition-all hover:shadow-sm ${
+      className={`group/shift relative flex w-full cursor-grab flex-col rounded-md border px-2 py-1 text-left transition-all active:cursor-grabbing hover:shadow-sm ${
+        isDragging ? "opacity-35 scale-[0.98] ring-2 ring-primary shadow-lg" : ""
+      } ${
         published
           ? "border-outline-variant/70 hover:border-outline"
           : "border-dashed border-secondary/50 bg-secondary/[0.04] hover:border-secondary"
@@ -219,7 +259,7 @@ function ShiftBlock({
         shift.startTime ? formatTime12(shift.startTime) : ""
       } – ${shift.endTime ? formatTime12(shift.endTime) : ""}${
         shift.position ? `\nPuesto: ${shift.position}` : ""
-      }${shift.notes ? `\nNota: ${shift.notes}` : ""}`}
+      }${shift.notes ? `\nNota: ${shift.notes}` : ""}\n\n💡 Arrastra para mover · Mantén Alt/Option al arrastrar para duplicar`}
     >
       <div className="flex w-full items-center justify-between gap-1 leading-tight">
         <span className="font-mono text-[11px] font-bold tracking-tight text-on-surface">
@@ -244,7 +284,13 @@ function ShiftBlock({
           {shift.event?.name ?? shift.branch?.name ?? "Sin sucursal"}
         </span>
         {shift.position && (
-          <span className="truncate text-on-surface-variant font-normal opacity-85">
+          <span
+            className={`truncate font-normal ${
+              colorBy === "position"
+                ? "font-semibold text-on-surface"
+                : "text-on-surface-variant opacity-85"
+            }`}
+          >
             · {shift.position}
           </span>
         )}
@@ -257,7 +303,7 @@ function ShiftBlock({
           <span className="ml-auto shrink-0 h-1.5 w-1.5 rounded-full bg-secondary" title="Borrador" />
         )}
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -338,6 +384,7 @@ function MobileDayView({
   onAddClick,
   availability,
   showAvailability,
+  colorBy = "branch",
 }: {
   days: Date[];
   dayIndex: number;
@@ -355,6 +402,7 @@ function MobileDayView({
   onAddClick: (userId: string, date: string) => void;
   availability: GridData["availability"];
   showAvailability: boolean;
+  colorBy?: "branch" | "position";
 }) {
   const selectedDay = days[dayIndex] ?? days[0];
   const dateStr = formatDateOnly(selectedDay);
@@ -481,7 +529,7 @@ function MobileDayView({
 
               <div className="mt-2 space-y-1.5">
                 {cellShifts.map((s) => (
-                  <ShiftBlock key={s.id} shift={s} onClick={() => onShiftClick(s)} />
+                  <ShiftBlock key={s.id} shift={s} colorBy={colorBy} onClick={() => onShiftClick(s)} />
                 ))}
 
                 <button
@@ -522,6 +570,11 @@ export default function ScheduleGrid() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hoveredEmployeeId, setHoveredEmployeeId] = useState<string | null>(null);
 
+  const [colorBy, setColorBy] = useState<"branch" | "position">("branch");
+  const [draggingShift, setDraggingShift] = useState<Shift | null>(null);
+  const [dragOverCellKey, setDragOverCellKey] = useState<string | null>(null);
+  const [isAltPressed, setIsAltPressed] = useState(false);
+
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [showUseTemplate, setShowUseTemplate] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState<{
@@ -531,6 +584,130 @@ export default function ScheduleGrid() {
   const [eventModal, setEventModal] = useState<
     { mode: "create"; date: string } | { mode: "edit"; eventId: string } | null
   >(null);
+
+  // Listener para detectar tecla Alt/Option y actualizar el cursor de duplicación
+  useEffect(() => {
+    const handleKeyChange = (e: KeyboardEvent) => {
+      setIsAltPressed(e.altKey);
+    };
+    window.addEventListener("keydown", handleKeyChange);
+    window.addEventListener("keyup", handleKeyChange);
+    return () => {
+      window.removeEventListener("keydown", handleKeyChange);
+      window.removeEventListener("keyup", handleKeyChange);
+    };
+  }, []);
+
+  function checkDragConflict(targetUserId: string, targetDateStr: string): string | null {
+    if (!draggingShift || !data) return null;
+
+    const cellKey = `${targetUserId}|${targetDateStr}`;
+    const availability = data.availability[cellKey];
+
+    if (availability && availability.type === "UNAVAILABLE") {
+      return "Colaborador no disponible este día";
+    }
+
+    if (availability && availability.type === "PREFER_OFF") {
+      return "Colaborador prefiere descanso este día";
+    }
+
+    // Revisar traslape con otros turnos del mismo trabajador en ese día
+    const targetCellShifts = data.shifts.filter(
+      (s) =>
+        s.userId === targetUserId &&
+        formatDateOnly(new Date(s.date)) === targetDateStr &&
+        s.id !== draggingShift.id &&
+        s.type === "TURNO",
+    );
+
+    if (draggingShift.startTime && draggingShift.endTime) {
+      const dragRange = shiftRangeMinutes(draggingShift.startTime, draggingShift.endTime);
+      if (dragRange) {
+        for (const existing of targetCellShifts) {
+          if (existing.startTime && existing.endTime) {
+            const existingRange = shiftRangeMinutes(existing.startTime, existing.endTime);
+            if (existingRange && rangesOverlap(dragRange, existingRange)) {
+              return `Traslape (${existing.startTime}–${existing.endTime})`;
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  async function handleDropShift(targetUserId: string, targetDateStr: string, isDuplicate: boolean) {
+    if (!draggingShift || !data) return;
+
+    const sourceShift = draggingShift;
+    const sourceUserId = sourceShift.userId;
+    const sourceDateStr = formatDateOnly(new Date(sourceShift.date));
+
+    // Si es la misma casilla y no es duplicar, no hacer nada
+    if (sourceUserId === targetUserId && sourceDateStr === targetDateStr && !isDuplicate) {
+      setDraggingShift(null);
+      setDragOverCellKey(null);
+      return;
+    }
+
+    setDraggingShift(null);
+    setDragOverCellKey(null);
+
+    const targetEmployee = data.employees.find((e) => e.id === targetUserId);
+    const targetEmployeeName = targetEmployee?.name ?? "Colaborador";
+
+    if (isDuplicate) {
+      showToast(`Duplicando turno para ${targetEmployeeName}...`);
+      const result = await copyShiftToCellAction(sourceShift.id, targetUserId, targetDateStr);
+      if ("error" in result && result.error) {
+        showToast(result.error, "error");
+      } else {
+        showToast(`Turno duplicado para ${targetEmployeeName}.`);
+        load();
+      }
+      return;
+    }
+
+    // Actualización optimista inmediata en pantalla (movimiento suave y sin parpadeo)
+    const previousShifts = data.shifts;
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        shifts: prev.shifts.map((s) =>
+          s.id === sourceShift.id
+            ? {
+                ...s,
+                userId: targetUserId,
+                date: targetDateStr,
+                user: { id: targetUserId, name: targetEmployeeName },
+                publicationStatus: "DRAFT" as const,
+              }
+            : s,
+        ),
+      };
+    });
+
+    const result = await moveScheduledShiftAction(sourceShift.id, {
+      userId: targetUserId,
+      date: targetDateStr,
+    });
+
+    if (result.error) {
+      setData((prev) => (prev ? { ...prev, shifts: previousShifts } : prev));
+      showToast(result.error, "error");
+    } else {
+      showToast(`Turno movido a ${targetEmployeeName}.`);
+      // Recargar datos frescos en segundo plano
+      getScheduleGridForWeek(weekStart).then((res) => {
+        if (!("error" in res)) {
+          setData(res as unknown as GridData);
+        }
+      });
+    }
+  }
 
   function handleShiftClick(shift: Shift) {
     if (shift.event) {
@@ -557,7 +734,6 @@ export default function ScheduleGrid() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekStart]);
@@ -1031,8 +1207,39 @@ export default function ScheduleGrid() {
               })}
             </div>
 
-            {/* Opciones adicionales: Disponibilidad, Plantillas, Copiar */}
-            <div className="flex items-center gap-2">
+            {/* Opciones adicionales: Color, Disponibilidad, Plantillas, Copiar */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Modo de color estilo Connecteam */}
+              <div className="flex items-center rounded-lg border border-outline-variant bg-surface-container p-0.5 text-xs font-semibold">
+                <span className="px-1.5 text-[10px] uppercase tracking-wider text-on-surface-variant font-bold hidden sm:inline">
+                  Color:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setColorBy("branch")}
+                  className={`rounded px-2 py-0.5 text-[10px] font-bold transition ${
+                    colorBy === "branch"
+                      ? "bg-primary text-on-primary shadow-xs"
+                      : "text-on-surface-variant hover:text-on-surface"
+                  }`}
+                  title="Colores basados en la sucursal"
+                >
+                  Sucursal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setColorBy("position")}
+                  className={`rounded px-2 py-0.5 text-[10px] font-bold transition ${
+                    colorBy === "position"
+                      ? "bg-primary text-on-primary shadow-xs"
+                      : "text-on-surface-variant hover:text-on-surface"
+                  }`}
+                  title="Colores basados en el puesto (Bartender, Cocina, Mesero, etc.)"
+                >
+                  Puesto
+                </button>
+              </div>
+
               <label className="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -1104,6 +1311,9 @@ export default function ScheduleGrid() {
               </span>
             </>
           )}
+          <span className="hidden xl:inline text-[11px] text-on-surface-variant/80">
+            • 🖐️ <strong className="font-semibold text-on-surface">Arrastra</strong> para mover · <strong className="font-semibold text-on-surface">Alt + Arrastra</strong> para duplicar
+          </span>
           <span className="ml-auto hidden font-medium sm:inline">
             Costo proyectado: <strong className="font-bold text-on-surface">{formatCurrency(summary.totalCost)}</strong>
           </span>
@@ -1162,6 +1372,7 @@ export default function ScheduleGrid() {
               onAddClick={(userId, date) => setModal({ mode: "create", userId, date })}
               availability={data.availability}
               showAvailability={showAvailability}
+              colorBy={colorBy}
             />
           </div>
 
@@ -1325,22 +1536,68 @@ export default function ScheduleGrid() {
                       const cellShifts = shiftsByCell.get(key) ?? [];
                       const hasAlert = alertCellKeys.has(key);
                       const availability = data.availability[key];
+                      const isDragOver = dragOverCellKey === key;
+                      const dragConflict = isDragOver ? checkDragConflict(employee.id, dateStr) : null;
 
                       return (
                         <div
                           key={i}
                           onMouseEnter={() => setHoveredEmployeeId(employee.id)}
                           onMouseLeave={() => setHoveredEmployeeId(null)}
-                          className={`group relative min-h-[50px] p-1 border-b border-r border-outline-variant transition-colors ${
-                            isRowHovered ? "bg-primary/[0.03]" : ""
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = e.altKey || isAltPressed ? "copy" : "move";
+                            if (dragOverCellKey !== key) {
+                              setDragOverCellKey(key);
+                            }
+                          }}
+                          onDragLeave={(e) => {
+                            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                              if (dragOverCellKey === key) {
+                                setDragOverCellKey(null);
+                              }
+                            }
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const isDuplicate = e.altKey || isAltPressed;
+                            void handleDropShift(employee.id, dateStr, isDuplicate);
+                          }}
+                          className={`group relative min-h-[50px] p-1 border-b border-r border-outline-variant transition-all ${
+                            isDragOver
+                              ? dragConflict
+                                ? "bg-error/20 ring-2 ring-inset ring-error"
+                                : "bg-primary/15 ring-2 ring-inset ring-primary"
+                              : isRowHovered
+                                ? "bg-primary/[0.03]"
+                                : ""
                           } ${
-                            hasAlert
+                            hasAlert && !isDragOver
                               ? "bg-error/[0.06] ring-1 ring-inset ring-error/40"
                               : ""
                           }`}
                         >
+                          {/* Banner de Feedback al arrastrar estilo Connecteam */}
+                          {isDragOver && (
+                            <div
+                              className={`pointer-events-none absolute inset-x-1 top-1 z-30 flex items-center justify-center rounded px-1.5 py-0.5 text-[9px] font-bold shadow-md transition-transform animate-in fade-in zoom-in-95 duration-100 ${
+                                dragConflict
+                                  ? "bg-error text-on-error"
+                                  : "bg-primary text-on-primary"
+                              }`}
+                            >
+                              <span className="truncate">
+                                {dragConflict
+                                  ? `⚠️ ${dragConflict}`
+                                  : isAltPressed
+                                    ? "Duplicar aquí (+)"
+                                    : "Soltar para mover"}
+                              </span>
+                            </div>
+                          )}
+
                           {/* Alerta de Traslape */}
-                          {hasAlert && (
+                          {hasAlert && !isDragOver && (
                             <div className="mb-1 flex items-center gap-1 rounded bg-error/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-error">
                               <AlertIcon className="h-2.5 w-2.5 shrink-0" />
                               <span>Traslape</span>
@@ -1348,7 +1605,7 @@ export default function ScheduleGrid() {
                           )}
 
                           {/* Indicador de Disponibilidad no intrusivo (Connecteam) */}
-                          {showAvailability && availability && availability.type !== "AVAILABLE_ALL_DAY" && (
+                          {showAvailability && availability && availability.type !== "AVAILABLE_ALL_DAY" && !isDragOver && (
                             <>
                               {availability.type === "UNAVAILABLE" && (
                                 <div className="mb-1 flex items-center gap-1 rounded bg-error/10 px-1 py-0.5 text-[9px] font-bold text-error">
@@ -1394,7 +1651,18 @@ export default function ScheduleGrid() {
                                 <ShiftBlock
                                   key={s.id}
                                   shift={s}
+                                  colorBy={colorBy}
+                                  isDragging={draggingShift?.id === s.id}
                                   onClick={() => handleShiftClick(s)}
+                                  onDragStart={(e) => {
+                                    e.dataTransfer.setData("text/plain", s.id);
+                                    e.dataTransfer.effectAllowed = "copyMove";
+                                    setDraggingShift(s);
+                                  }}
+                                  onDragEnd={() => {
+                                    setDraggingShift(null);
+                                    setDragOverCellKey(null);
+                                  }}
                                 />
                               ))}
 

@@ -32,6 +32,7 @@ export type OfflineOperation = {
     | "fermentation.reading.create"
     | "distillation.event.create"
     | "pos.sale.create"
+    | "pos.sale.email"
     | "timeclock.clock-in"
     | "timeclock.clock-out"
     | "cash-cut.open"

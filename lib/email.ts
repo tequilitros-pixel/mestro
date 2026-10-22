@@ -37,14 +37,18 @@ export async function sendPasswordResetEmail(
 
 export async function sendPayrollReviewEmail(params: {
   to: string[];
-  weekRange: string;        // e.g. "21 oct – 27 oct 2026"
+  weekRange: string;
   employeeCount: number;
-  estimatedTotal: number;   // MXN number
+  estimatedTotal: number;
   submittedByName: string;
-  payrollUrl: string;       // full URL to the payroll page
+  payrollUrl: string;
 }) {
   if (params.to.length === 0) return;
-  const totalFormatted = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(params.estimatedTotal);
+  const totalFormatted = new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    maximumFractionDigits: 0,
+  }).format(params.estimatedTotal);
   await resend.emails.send({
     from: FROM_ADDRESS,
     to: params.to,
@@ -60,6 +64,164 @@ export async function sendPayrollReviewEmail(params: {
         </table>
         <a href="${params.payrollUrl}" style="display: inline-block; background: #0f172a; color: #fbbf24; font-weight: 700; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-size: 15px;">Revisar nómina →</a>
         <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">Ingresa como administrador para aprobar o hacer correcciones.</p>
+      </div>
+    `,
+  });
+}
+
+export async function sendSaleReceiptEmail(params: {
+  to: string;
+  saleCode: string;
+  branchName: string;
+  branchAddress?: string | null;
+  date: string;
+  cashierName?: string | null;
+  items: Array<{
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+  }>;
+  subtotal: number;
+  discountAmount: number;
+  total: number;
+  payments: Array<{
+    method: string;
+    amount: number;
+  }>;
+  change?: number | null;
+}) {
+  const currency = (val: number) =>
+    new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(val);
+
+  const paymentLabels: Record<string, string> = {
+    EFECTIVO: "Efectivo",
+    TARJETA: "Tarjeta",
+    TRANSFERENCIA: "Transferencia",
+    DIDI: "DiDi",
+    UBER: "Uber",
+    RAPPI: "Rappi",
+    VALES: "Vales",
+    OTRO: "Otro",
+  };
+
+  const itemsHtml = params.items
+    .map(
+      (item) => `
+      <tr>
+        <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; color: #0f172a;">
+          <div style="font-weight: 600;">${item.name}</div>
+          <div style="font-size: 12px; color: #64748b;">${item.quantity} × ${currency(item.unitPrice)}</div>
+        </td>
+        <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; font-weight: 600; text-align: right; color: #0f172a; white-space: nowrap;">
+          ${currency(item.lineTotal)}
+        </td>
+      </tr>
+    `
+    )
+    .join("");
+
+  const paymentsHtml = params.payments
+    .map(
+      (p) => `
+      <div style="display: flex; justify-content: space-between; font-size: 13px; color: #475569; margin-top: 4px;">
+        <span>${paymentLabels[p.method] ?? p.method}</span>
+        <span style="font-weight: 600;">${currency(p.amount)}</span>
+      </div>
+    `
+    )
+    .join("");
+
+  return await resend.emails.send({
+    from: FROM_ADDRESS,
+    to: params.to,
+    subject: `Tu ticket de compra — ${params.saleCode} (Destiladora del Norte)`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden;">
+        <!-- Header -->
+        <div style="background: #0f172a; padding: 24px 20px; text-align: center;">
+          <p style="text-transform: uppercase; letter-spacing: 3px; font-size: 11px; color: #fbbf24; font-weight: 700; margin: 0 0 8px 0;">
+            Destiladora del Norte
+          </p>
+          <h1 style="color: #ffffff; font-size: 20px; font-weight: 700; margin: 0;">
+            Recibo de Compra
+          </h1>
+          <p style="color: #94a3b8; font-size: 13px; margin: 6px 0 0 0;">
+            ${params.branchName}${params.branchAddress ? ` · ${params.branchAddress}` : ""}
+          </p>
+        </div>
+
+        <div style="padding: 24px 20px;">
+          <!-- Meta info -->
+          <div style="background: #f8fafc; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #475569;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #64748b;">Folio:</span>
+              <strong style="color: #0f172a; font-family: monospace;">${params.saleCode}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #64748b;">Fecha:</span>
+              <span style="color: #0f172a;">${params.date}</span>
+            </div>
+            ${params.cashierName ? `
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #64748b;">Atendido por:</span>
+              <span style="color: #0f172a;">${params.cashierName}</span>
+            </div>` : ""}
+          </div>
+
+          <!-- Items Table -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+            <thead>
+              <tr style="border-bottom: 2px solid #e2e8f0;">
+                <th style="padding-bottom: 8px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #64748b;">Concepto</th>
+                <th style="padding-bottom: 8px; text-align: right; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #64748b;">Importe</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+
+          <!-- Totals -->
+          <div style="border-top: 1px dashed #cbd5e1; padding-top: 12px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #64748b; margin-bottom: 4px;">
+              <span>Subtotal</span>
+              <span>${currency(params.subtotal)}</span>
+            </div>
+            ${params.discountAmount > 0 ? `
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #16a34a; margin-bottom: 4px;">
+              <span>Descuento</span>
+              <span>−${currency(params.discountAmount)}</span>
+            </div>` : ""}
+            <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0;">
+              <span>TOTAL</span>
+              <span style="color: #0f172a;">${currency(params.total)}</span>
+            </div>
+          </div>
+
+          <!-- Payments breakdown -->
+          <div style="background: #f8fafc; border-radius: 10px; padding: 12px 16px; margin-bottom: 24px;">
+            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 6px;">
+              Forma de pago
+            </div>
+            ${paymentsHtml}
+            ${typeof params.change === "number" && params.change > 0 ? `
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #16a34a; margin-top: 4px; font-weight: 600;">
+              <span>Cambio entregado</span>
+              <span>${currency(params.change)}</span>
+            </div>` : ""}
+          </div>
+
+          <!-- Footer note -->
+          <div style="text-align: center; border-top: 1px solid #f1f5f9; padding-top: 18px;">
+            <p style="font-size: 14px; font-weight: 600; color: #0f172a; margin: 0 0 4px 0;">
+              ¡Gracias por tu compra!
+            </p>
+            <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+              Comprobante de operación simplificado emitido por Maestro POSpress.
+            </p>
+          </div>
+        </div>
       </div>
     `,
   });

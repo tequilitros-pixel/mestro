@@ -23,9 +23,19 @@ export function costPerInventoryBaseUnit(product: CostedInventoryProduct) {
   return baseUnit && content !== null ? unitCost / content : unitCost;
 }
 
+import { formatHumanInventoryQuantity } from "../inventory/units";
+
 export function inventoryBaseUnitLabel(value: unknown, fallback: string) {
   if (value === "ML") return "ml";
   if (value === "G") return "g";
   if (value === "UNIT") return "unidad";
   return fallback;
 }
+
+/**
+ * Convierte medidas en unidades base (gramos, mililitros) a escalas comprensibles para
+ * humanos (kg, L) cuando el volumen supera o iguala 1,000 unidades.
+ * Por ejemplo: 10,000 g -> "10 kg", -10,000 g -> "−10 kg", 45,000 ml -> "45 L", 750 ml -> "750 ml".
+ */
+export const formatHumanQuantity = formatHumanInventoryQuantity;
+export const formatReadableMeasure = formatHumanInventoryQuantity;

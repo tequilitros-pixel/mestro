@@ -31,7 +31,10 @@ export async function getBranchInventoryOverview(input: {
       where: {
         branchId: input.branchId,
         createdAt: { gte: start, lt: end },
-        movementType: { in: ["SALE_CONSUMPTION", "SALE_REVERSAL"] },
+        OR: [
+          { movementType: { in: ["SALE_CONSUMPTION", "SALE_REVERSAL", "ADJUSTMENT_OUT", "COUNT_CORRECTION"] } },
+          { reasonCode: { in: ["WASTE", "AUDIT_DISCREPANCY", "INTERNAL_USE", "DAMAGED"] } },
+        ],
       },
       select: {
         inventoryProductId: true,
@@ -100,7 +103,11 @@ export async function getBranchInventoryOverview(input: {
   ];
   const theoreticalRows: InventoryTheoreticalRow[] = sales.flatMap((sale) => sale.items.flatMap((item) =>
     item.variant?.ingredients.map((ingredient) => {
-      const isBaseUnitRecipe = ingredient.unitStatus === "RESOLVED" && ingredient.unit === ingredient.inventoryProduct.inventoryBaseUnit;
+      const hasBaseUnitPresentation = Boolean(
+        ingredient.inventoryProduct.inventoryBaseUnit &&
+        Number(ingredient.inventoryProduct.normalizedContentPerUnit) > 0,
+      );
+      const isBaseUnitRecipe = hasBaseUnitPresentation || (ingredient.unitStatus === "RESOLVED" && ingredient.unit === ingredient.inventoryProduct.inventoryBaseUnit);
       return {
         productId: ingredient.inventoryProduct.id,
         code: ingredient.inventoryProduct.code,

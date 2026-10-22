@@ -18,6 +18,8 @@ import {
 import { getProductVisual } from "@/lib/pos/productVisual";
 import { useToast } from "@/components/ui/Toast";
 import { enqueueOperation } from "@/lib/offline/queue";
+import PostSaleModal from "./PostSaleModal";
+import type { ReceiptData } from "./ReceiptTicket";
 
 type Variant = {
   id: string;
@@ -178,6 +180,7 @@ export default function PosSellClient({
   const [discountBlockedBy, setDiscountBlockedBy] = useState<string | null>(null);
   const [localOpenBranches, setLocalOpenBranches] = useState<Set<string>>(new Set());
   const [isOnline, setIsOnline] = useState(true);
+  const [completedReceipt, setCompletedReceipt] = useState<ReceiptData | null>(null);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -853,7 +856,8 @@ export default function PosSellClient({
       {showPayment && branch && (
         <PaymentModal
           total={total}
-          branchId={branch.id}
+          subtotal={subtotal}
+          branch={branch}
           cart={cart}
           discountAmount={clampedDiscount}
           discountReasonCode={discountReasonCode}
@@ -863,10 +867,20 @@ export default function PosSellClient({
           managers={managers}
           inventoryMode={inventoryMode}
           onClose={() => setShowPayment(false)}
-          onSuccess={() => {
+          onSuccess={(receipt) => {
             setShowPayment(false);
+            setCompletedReceipt(receipt);
+          }}
+        />
+      )}
+
+      {completedReceipt && (
+        <PostSaleModal
+          receipt={completedReceipt}
+          onClose={() => {
+            setCompletedReceipt(null);
             resetSale();
-            showToast("Venta registrada correctamente.");
+            showToast("Venta completada.");
           }}
         />
       )}
@@ -1279,7 +1293,8 @@ function ItemDiscountModal({
 
 function PaymentModal({
   total,
-  branchId,
+  subtotal,
+  branch,
   cart,
   discountAmount,
   discountReasonCode,
@@ -1292,7 +1307,8 @@ function PaymentModal({
   onSuccess,
 }: {
   total: number;
-  branchId: string;
+  subtotal: number;
+  branch: BranchOption;
   cart: CartLine[];
   discountAmount: number;
   discountReasonCode: string;
@@ -1302,7 +1318,7 @@ function PaymentModal({
   managers: Employee[];
   inventoryMode: "legacy" | "v2";
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (receipt: ReceiptData) => void;
 }) {
   const isFree = total <= 0;
   const [rows, setRows] = useState<{ method: string; amount: number }[]>(
@@ -1314,10 +1330,18 @@ function PaymentModal({
   const [authPin, setAuthPin] = useState("");
   const [clientOperationId] = useState(() => crypto.randomUUID());
   const [clientCreatedAt] = useState(() => new Date().toISOString());
+  const [cashTendered, setCashTendered] = useState<number | "">("");
   const authReady = !needsAuthorization || (Boolean(authManagerId) && authPin.length === 4);
 
   const paid = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
   const remaining = Math.round((total - paid) * 100) / 100;
+
+  const hasCash = rows.some((r) => r.method === "EFECTIVO");
+  const cashAmount = rows
+    .filter((r) => r.method === "EFECTIVO")
+    .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  const tenderedVal = typeof cashTendered === "number" ? cashTendered : cashAmount;
+  const change = hasCash && tenderedVal > cashAmount ? Math.round((tenderedVal - cashAmount) * 100) / 100 : 0;
 
   function updateRow(index: number, patch: Partial<{ method: string; amount: number }>) {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
@@ -1334,6 +1358,50 @@ function PaymentModal({
     setRows((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function buildReceipt(serverData?: { id?: string; code?: string }): ReceiptData {
+    return {
+      saleId: serverData?.id ?? clientOperationId,
+      saleCode: serverData?.code ?? `LOCAL-${clientOperationId.slice(0, 8).toUpperCase()}`,
+      branchName: branch.name,
+      branchAddress: null,
+      date: new Date().toLocaleTimeString("es-MX", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      cashierName: null,
+      items: cart.map((line) => {
+        if (line.isCustom) {
+          return {
+            name: line.description || "Cobro personalizado",
+            quantity: 1,
+            unitPrice: line.amount,
+            lineTotal: line.amount,
+          };
+        }
+        const name =
+          line.variantName && line.variantName !== "Único"
+            ? `${line.productName} (${line.variantName})`
+            : line.productName;
+        return {
+          name,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          lineTotal: line.quantity * line.unitPrice,
+        };
+      }),
+      subtotal,
+      discountAmount,
+      total,
+      payments: isFree ? [] : rows.map((r) => ({ method: r.method, amount: Number(r.amount) })),
+      cashReceived: hasCash && typeof cashTendered === "number" && cashTendered > 0 ? cashTendered : undefined,
+      change: change > 0 ? change : undefined,
+      isOffline: !navigator.onLine,
+    };
+  }
+
   async function submit() {
     setSubmitting(true);
     setError(null);
@@ -1342,7 +1410,7 @@ function PaymentModal({
       clientOperationId,
       clientCreatedAt,
       displayTotal: total,
-      branchId,
+      branchId: branch.id,
       discountAmount,
       discountReasonCode,
       discountReason: discountReasonNote,
@@ -1374,7 +1442,7 @@ function PaymentModal({
           payload: salePayload,
           createdAt: clientCreatedAt,
         });
-        onSuccess();
+        onSuccess(buildReceipt());
       } catch {
         setError("No fue posible guardar la venta en este dispositivo. Conserva esta pantalla y reintenta.");
       }
@@ -1397,14 +1465,14 @@ function PaymentModal({
         return;
       }
 
-      onSuccess();
+      onSuccess(buildReceipt(data));
     } catch {
       if (needsAuthorization) {
         setError("No fue posible verificar la autorización. Revisa tu conexión.");
       } else {
         try {
           await enqueueOperation({ id: clientOperationId, kind: "pos.sale.create", payload: salePayload, createdAt: clientCreatedAt });
-          onSuccess();
+          onSuccess(buildReceipt());
         } catch {
           setError("No fue posible guardar el cobro por confirmar. Conserva esta pantalla y reintenta la misma operación.");
         }
@@ -1497,6 +1565,49 @@ function PaymentModal({
               <PlusIcon className="h-3.5 w-3.5" />
               Dividir pago
             </button>
+
+            {hasCash && (
+              <div className="space-y-1.5 rounded-xl border border-outline-variant bg-surface-container p-3">
+                <div className="flex items-center justify-between text-xs font-bold text-on-surface-variant">
+                  <span>Efectivo recibido</span>
+                  {change > 0 && (
+                    <span className="text-emerald-500 font-extrabold text-xs">
+                      Cambio: {formatCurrency(change)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={cashAmount}
+                    step="1"
+                    value={cashTendered === "" ? "" : cashTendered}
+                    placeholder={`$${cashAmount}`}
+                    onChange={(e) => setCashTendered(e.target.value === "" ? "" : Number(e.target.value))}
+                    className="flex-1 rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface font-mono outline-none focus:border-primary"
+                  />
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setCashTendered(cashAmount)}
+                      className="rounded-lg border border-outline-variant px-2 py-1 text-xs font-semibold text-on-surface hover:bg-surface-container-high transition"
+                    >
+                      Exacto
+                    </button>
+                    {[50, 100, 200, 500].filter((val) => val >= cashAmount).slice(0, 3).map((val) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setCashTendered(val)}
+                        className="rounded-lg border border-outline-variant px-2 py-1 text-xs font-semibold text-on-surface hover:bg-surface-container-high transition"
+                      >
+                        ${val}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div
               className={`flex items-center justify-between rounded-xl p-3 text-sm font-semibold ${
