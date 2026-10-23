@@ -119,12 +119,12 @@ export default async function ProfilePage({
           >
             Centro de ayuda y soporte →
           </Link>
-          <a
-            href="mailto:support@maestro-destiladora.space?subject=Solicitud%20de%20eliminación%20de%20cuenta"
+          <Link
+            href="/support#delete-account"
             className="text-xs font-semibold text-error hover:underline"
           >
             Solicitar eliminación de datos personales
-          </a>
+          </Link>
         </div>
       </section>
     </main>

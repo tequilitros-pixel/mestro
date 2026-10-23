@@ -13,7 +13,7 @@ const config: CapacitorConfig = {
   appName: "Maestro",
   webDir: "public",
   server: {
-    url: "https://maestro-destiladora.space",
+    url: "https://www.destiladoradelnorte.com",
     cleartext: false,
     errorPath: "offline.html",
   },
