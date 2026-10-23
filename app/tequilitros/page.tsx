@@ -11,7 +11,7 @@ import CocktailCatalog from "./components/CocktailCatalog";
 import EventQuote from "./EventQuote";
 import FloatingWhatsApp from "./components/FloatingWhatsApp";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://maestro-destiladora.space";
+const siteUrl = "https://www.destiladoradelnorte.com";
 const whatsappUrl =
   "https://wa.me/525662989202?text=" +
   encodeURIComponent("Hola, quiero cotizar Tequilitros para mi evento.");
@@ -29,7 +29,7 @@ const serviceAreas = [
 const faqList = [
   {
     q: "¿Qué incluye el servicio de barra móvil y bartender de Tequilitros Eventos?",
-    a: "El servicio incluye el montaje de barra móvil artesanal de madera, bartenders profesionales dedicados a tu fiesta, vaso oficial Tequilitros de 32 oz (Reyma 946 ml), insumos frescos (naranja, toronja y limón del día), hielo ilimitado para la coctelería, escarchados de sal marina y chile tajín, y la preparación al instante de cócteles con tequila blanco y reposado.",
+    a: "El alcance se define por escrito en cada cotización. Puede incluir barra móvil, personal de servicio, vasos, hielo, fruta, escarchados y las bebidas elegidas, conforme a la fecha, localidad y paquete confirmado.",
   },
   {
     q: "¿Cómo contratar una barra móvil con bartender para bodas, XV años o fiestas privadas?",
@@ -37,7 +37,7 @@ const faqList = [
   },
   {
     q: "¿Cuáles son las bebidas y cócteles que prepara el bartender en los eventos?",
-    a: "Nuestra carta estelar incluye: Cantarito Tequilitros (cítricos frescos con tequila y chile tajín), Paloma Tradicional (toronja y tequila reposado con sal de mar), Vampiro del Norte (sangrita artesanal de la casa), Tequimojito (menta fresca y toque turquesa), Tequimora (zarzamora silvestre macerada) y Tequimiche (salsas negras sazonadoras botaneras), además de botellas de Tequila Blanco y Reposado de Destiladora del Norte.",
+    a: "La carta disponible incluye Cantarito, Paloma, Vampiro, Tequimojito, Tequimora y Tequimiche. Las recetas, botellas e insumos se confirman en la cotización del evento.",
   },
   {
     q: "¿En qué ciudades y localidades de Jalisco y Zacatecas dan servicio de barra móvil?",
@@ -45,15 +45,15 @@ const faqList = [
   },
   {
     q: "¿Cómo funciona la modalidad de Barra Libre por Horas vs. Coctelería por Litros?",
-    a: "La modalidad de Barra Libre por Horas es la preferida para bodas, graduaciones y XV años: tus invitados disfrutan de preparación ilimitada de cócteles durante el bloque de tiempo contratado (ej. 3, 4 o 5 horas). La modalidad Por Litros o Volumen es perfecta para reuniones o cumpleaños con un número definido de vasos Reyma de 32 oz.",
+    a: "Barra Libre cubre el bloque de servicio y las condiciones definidas en la cotización. Por Litros o Volumen establece una cantidad acordada de litros o vasos. Ambas modalidades se confirman antes de reservar.",
   },
   {
     q: "¿Ofrecen opciones de cócteles sin alcohol (mocktails) para menores o invitados que no beben?",
-    a: "¡Sí, por supuesto! Preparamos versiones sin alcohol con frutas naturales del día, cítricos frescos, refresco de toronja o lima-limón y escarchados artesanales para que todos tus invitados disfruten al máximo la experiencia de la barra móvil.",
+    a: "Las alternativas sin alcohol se pueden solicitar al cotizar; se confirman según el menú, la fecha y la disponibilidad de insumos.",
   },
   {
     q: "¿Con cuánta anticipación debo reservar la fecha de mi evento?",
-    a: "Recomendamos apartar tu fecha con al menos 3 a 6 semanas de anticipación, especialmente para sábados y temporadas altas (noviembre a mayo). La fecha queda formalmente reservada al confirmar la propuesta.",
+    a: "Comparte la fecha, localidad, invitados estimados y servicio deseado. La disponibilidad y el método de reserva se confirman por escrito antes de cualquier compromiso.",
   },
 ];
 
@@ -426,17 +426,17 @@ export default function TequilitrosPage() {
                 <span>Modalidad 01 · Para Bodas y Graduaciones</span>
                 <h3>Barra Libre con Bartender por Horas</h3>
                 <p>
-                  Servicio continuo de cócteles preparados en vivo por nuestros bartenders
-                  durante el bloque de tiempo acordado (3, 4, 5 o más horas).
+                  Servicio de coctelería durante el bloque de tiempo y bajo las condiciones
+                  establecidos en la cotización.
                 </p>
               </div>
 
               <ul className={styles.serviceFeatures}>
                 <li><span>✓</span> Bartenders profesionales atendiendo la barra</li>
                 <li><span>✓</span> Preparación continua durante el horario acordado</li>
-                <li><span>✓</span> Montaje de barra móvil con iluminación y decoración</li>
-                <li><span>✓</span> Hielo ilimitado, fruta fresca del día e insumos</li>
-                <li><span>✓</span> Vaso oficial Tequilitros o cristalería por evento</li>
+                <li><span>✓</span> Montaje y personal según el paquete confirmado</li>
+                <li><span>✓</span> Insumos y carta definidos en la cotización</li>
+                <li><span>✓</span> Vaso o cristalería según el servicio acordado</li>
               </ul>
 
               <a href="#cotizar" className={styles.btnSecondary}>
@@ -456,10 +456,10 @@ export default function TequilitrosPage() {
 
               <ul className={styles.serviceFeatures}>
                 <li><span>✓</span> Paquete por número exacto de vasos o litros</li>
-                <li><span>✓</span> Servicio y montaje de barra móvil incluido</li>
-                <li><span>✓</span> Elección de tus recetas favoritas (Cantaritos, Palomas, etc.)</li>
-                <li><span>✓</span> Escarchados y fruta fresca en cada vaso</li>
-                <li><span>✓</span> Opción de recarga si el evento lo requiere</li>
+                <li><span>✓</span> Servicio y montaje conforme al paquete contratado</li>
+                <li><span>✓</span> Carta de bebidas confirmada antes del evento</li>
+                <li><span>✓</span> Insumos y presentación detallados en la propuesta</li>
+                <li><span>✓</span> Recargas sólo si se acuerdan previamente</li>
               </ul>
 
               <a href="#cotizar" className={styles.btnSecondary}>
@@ -472,17 +472,17 @@ export default function TequilitrosPage() {
                 <span>Modalidad 03 · Mesas de Honor y Regalos</span>
                 <h3>Botellas y Barricas de Tequila</h3>
                 <p>
-                  Tequila Blanco y Reposado 100% de agave de Destiladora del Norte para
-                  servir directo en mesas de invitados o como obsequio especial.
+                  Consulta botellas de Tequila Blanco y Reposado de Destiladora del Norte
+                  para el servicio, mesas de invitados u obsequios.
                 </p>
               </div>
 
               <ul className={styles.serviceFeatures}>
-                <li><span>✓</span> Botellas selladas de Tequila Blanco y Reposado</li>
-                <li><span>✓</span> Presentaciones especiales para centros de mesa</li>
+                <li><span>✓</span> Presentaciones y cantidades por confirmar</li>
+                <li><span>✓</span> Disponibilidad sujeta a inventario</li>
                 <li><span>✓</span> Servicio directo a mesa si se acuerda</li>
-                <li><span>✓</span> Precio preferencial por caja para eventos</li>
-                <li><span>✓</span> Directo desde la destiladora en Colotlán</li>
+                <li><span>✓</span> Precio y condiciones incluidos en la cotización</li>
+                <li><span>✓</span> Entrega conforme a lo acordado</li>
               </ul>
 
               <a href="#cotizar" className={styles.btnSecondary}>
@@ -511,7 +511,7 @@ export default function TequilitrosPage() {
               <span className="font-mono text-xs font-bold text-[#E28735]">FACTOR 01</span>
               <h3 className="mt-2 font-serif text-xl font-bold text-[#F5F2EB]">Número de Invitados</h3>
               <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
-                Calculamos la cantidad exacta de fruta, hielo, vasos de 32 oz y tequila necesarios para que nunca falte bebida.
+                Estimamos fruta, hielo, vasos y tequila con la información proporcionada para la cotización.
               </p>
             </div>
 
@@ -535,7 +535,7 @@ export default function TequilitrosPage() {
               <span className="font-mono text-xs font-bold text-[#E28735]">FACTOR 04</span>
               <h3 className="mt-2 font-serif text-xl font-bold text-[#F5F2EB]">Lugar y Traslado</h3>
               <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
-                Revisamos la distancia y logística desde Colotlán para cotizar viáticos justos y sin sorpresas.
+                Revisamos distancia y logística desde Colotlán; los viáticos aplicables se detallan antes de contratar.
               </p>
             </div>
           </div>
@@ -571,7 +571,7 @@ export default function TequilitrosPage() {
                 <div className={styles.travelCardNumber}>CRITERIO 01</div>
                 <h3>Traslado Seguro y Puntual</h3>
                 <p>
-                  Calculamos combustible y peajes de forma transparente para llegar con el equipo completo a tu localidad.
+                  Revisamos combustible, peajes y necesidades de traslado según la localidad solicitada.
                 </p>
               </article>
 
@@ -579,7 +579,7 @@ export default function TequilitrosPage() {
                 <div className={styles.travelCardNumber}>CRITERIO 02</div>
                 <h3>Montaje Anticipado</h3>
                 <p>
-                  Llegamos de 1.5 a 2 horas antes de que comience el evento para montar la barra, enfriar insumos y dejar todo listo.
+                  El horario de llegada y montaje se acuerda en la propuesta de acuerdo con el lugar y el servicio solicitado.
                 </p>
               </article>
 
@@ -604,8 +604,8 @@ export default function TequilitrosPage() {
               La Barra Móvil en Acción: <em>El Ambiente de Fiesta se Vive.</em>
             </h2>
             <p className={styles.sectionSubtitle}>
-              Mira cómo luce el montaje de la <strong>barra móvil de Tequilitros</strong> y el servicio de nuestros bartenders
-              atendiendo a los invitados en celebraciones reales.
+              Conoce la barra y algunas bebidas de Tequilitros. El montaje y el alcance dependen
+              de la propuesta confirmada para cada evento.
             </p>
           </div>
 
@@ -626,7 +626,7 @@ export default function TequilitrosPage() {
                   Montaje Rústico y Elegante
                 </h3>
                 <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
-                  Barra fabricada en madera con acabados artesanales que luce perfecta tanto en bodas de jardín como en salones de fiesta.
+                  El tipo de montaje y sus elementos se revisan según el espacio y la propuesta solicitada.
                 </p>
               </div>
 
@@ -638,7 +638,7 @@ export default function TequilitrosPage() {
                   Preparación Rápida y Profesional
                 </h3>
                 <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
-                  Atención continua sin filas largas, asegurando que cada vaso salga con la temperatura perfecta, hielo abundante y escarchado recién hecho.
+                  La preparación, los tiempos y el personal se definen según la carta y el alcance acordado.
                 </p>
               </div>
             </div>

@@ -1,9 +1,7 @@
 import { DistillationEvent } from "@prisma/client";
 import {
-  calculateCorrectedAlcohol,
   calculateAbsoluteAlcohol,
   calculateDistillationYield,
-  calculateLAA,
 } from "../processCalculations";
 
 export function getCurrentAlcohol(events: DistillationEvent[]) {
@@ -74,15 +72,6 @@ export function getTailLiters(events: DistillationEvent[]) {
   return total;
 }
 
-export function getCorrectedAlcohol(
-  alcohol: number | null,
-  temperature: number | null
-) {
-  if (alcohol === null || temperature === null) return null;
-
-  return calculateCorrectedAlcohol(alcohol, temperature);
-}
-
 export function getAbsoluteAlcohol(
   liters: number,
   correctedAlcohol: number | null
@@ -102,14 +91,17 @@ export function getYield(
   );
 }
 export function getTotalLAA(events: DistillationEvent[]) {
+  let hasCorrectedMeasurement = false;
   const laa = events.reduce((sum, event) => {
     if (event.type === "FIN_DESTILACION") return sum;
     const liters = event.liters ?? 0;
-    const alcohol = event.alcoholCorrected ?? event.alcohol ?? 0;
+    const alcohol = event.alcoholCorrected;
+    if (liters <= 0 || alcohol === null) return sum;
+    hasCorrectedMeasurement = true;
     return sum + (liters * alcohol) / 100;
   }, 0);
 
-  return Number(laa.toFixed(2));
+  return hasCorrectedMeasurement ? Number(laa.toFixed(2)) : null;
 }
 
 export function getDistillationStatus(events: DistillationEvent[]) {

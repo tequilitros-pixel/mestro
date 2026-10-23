@@ -29,7 +29,6 @@ import {
   getHeartLiters,
   getHeadsLiters,
   getTailLiters,
-  getCorrectedAlcohol,
   getAbsoluteAlcohol,
   getTotalLAA,
   getYield,
@@ -122,15 +121,10 @@ export default async function DistillationDetailPage({
         (event) => event.alcoholCorrected !== null
       )?.alcoholCorrected ?? null;
 
-  const calculatedCorrectedAlcohol =
-    getCorrectedAlcohol(
-      lastAlcohol,
-      lastOutputTemperature
-    );
-
-  const lastAlcoholCorrected =
-    lastRegisteredCorrectedAlcohol ??
-    calculatedCorrectedAlcohol;
+  // Sólo una lectura capturada ya corregida a 20 °C puede respaldar LAA.
+  // La corrección legal/técnica requiere las tablas alcoholométricas, no una
+  // fórmula lineal aproximada aplicada en la interfaz.
+  const lastAlcoholCorrected = lastRegisteredCorrectedAlcohol;
 
   const totalLiters = getTotalLiters(
     distillation.events
@@ -153,7 +147,7 @@ export default async function DistillationDetailPage({
     lastAlcoholCorrected
   );
   const calculatedLAA = getTotalLAA(distillation.events);
-  const absoluteAlcohol = calculatedLAA > 0 ? calculatedLAA : fallbackAbsoluteAlcohol;
+  const absoluteAlcohol = calculatedLAA ?? fallbackAbsoluteAlcohol;
 
   const distillationYield = getYield(
     distillation.loadedLiters,

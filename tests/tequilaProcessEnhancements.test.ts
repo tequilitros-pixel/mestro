@@ -110,6 +110,13 @@ test("Cálculo de Litros de Alcohol Absoluto / Anhidro (LAA a 20°C)", () => {
   // 20*0.65 (13) + 200*0.55 (110) + 50*0.25 (12.5) = 135.5 LAA
   const totalLAA = getTotalLAA(mockEvents as any);
   assert.equal(totalLAA, 135.5);
+
+  assert.equal(
+    getTotalLAA([
+      { ...mockEvents[0], alcoholCorrected: null },
+    ] as any),
+    null,
+  );
 });
 
 test("Trazabilidad energética y consumo de vapor por tonelada", () => {

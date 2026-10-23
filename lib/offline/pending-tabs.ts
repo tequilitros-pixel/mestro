@@ -113,19 +113,6 @@ export async function saveLocalPendingTab(tab: PendingTab): Promise<PendingTab> 
     window.dispatchEvent(new CustomEvent("maestro:pending-tabs-changed", { detail: normalized }));
   }
 
-  // Si hay conexión, intentar persistir en servidor
-  if (typeof navigator !== "undefined" && navigator.onLine) {
-    try {
-      void fetch("/api/pos/pending-tabs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(normalized),
-      }).catch(() => {});
-    } catch {
-      // Ignora error silencioso para no bloquear UI local
-    }
-  }
-
   return normalized;
 }
 
@@ -147,69 +134,13 @@ export async function deleteLocalPendingTab(id: string): Promise<void> {
     window.dispatchEvent(new CustomEvent("maestro:pending-tabs-changed", { detail: { id, deleted: true } }));
   }
 
-  if (typeof navigator !== "undefined" && navigator.onLine) {
-    try {
-      void fetch(`/api/pos/pending-tabs?id=${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      }).catch(() => {});
-    } catch {
-      // Ignora error silencioso
-    }
-  }
 }
 
 /**
- * Sincroniza las cuentas del servidor con el IndexedDB local para compartir cuentas entre dispositivos.
+ * Las cuentas pendientes se conservan en el dispositivo que las creó. No se
+ * simulan como sincronizadas: una venta sólo se registra por la ruta auditada
+ * de POS cuando se liquida la cuenta.
  */
 export async function syncPendingTabs(branchId?: string): Promise<PendingTab[]> {
-  const localTabs = await listLocalPendingTabs(branchId);
-
-  if (typeof navigator === "undefined" || !navigator.onLine) {
-    return localTabs;
-  }
-
-  try {
-    const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : "";
-    const response = await fetch(`/api/pos/pending-tabs${query}`);
-    if (!response.ok) return localTabs;
-
-    const serverTabs = (await response.json()) as PendingTab[];
-    if (!Array.isArray(serverTabs)) return localTabs;
-
-    // Fusionar: si el servidor tiene cuentas más recientes o nuevas, guardarlas localmente
-    const db = await openDatabase();
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    const store = tx.objectStore(STORE_NAME);
-
-    const localMap = new Map(localTabs.map((t) => [t.id, t]));
-
-    for (const serverTab of serverTabs) {
-      const local = localMap.get(serverTab.id);
-      if (!local || new Date(serverTab.updatedAt) > new Date(local.updatedAt)) {
-        store.put(serverTab);
-      }
-    }
-
-    // Si local tiene cuentas creadas offline que el servidor no tiene, subirlas al servidor
-    const serverMap = new Map(serverTabs.map((t) => [t.id, t]));
-    for (const local of localTabs) {
-      if (!serverMap.has(local.id)) {
-        void fetch("/api/pos/pending-tabs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(local),
-        }).catch(() => {});
-      }
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-    db.close();
-
-    return listLocalPendingTabs(branchId);
-  } catch {
-    return localTabs;
-  }
+  return listLocalPendingTabs(branchId);
 }

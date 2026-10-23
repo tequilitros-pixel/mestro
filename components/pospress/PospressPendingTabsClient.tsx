@@ -976,10 +976,19 @@ function PendingTabPaymentModal({
       branchId,
       inventoryMode: "v2" as const,
       discountReason: `Cuenta pendiente: ${tab.customerName}`,
-      items: tab.lines.map((line) => ({
-        variantId: line.variantId,
-        quantity: line.quantity,
-      })),
+      items: tab.lines.map((line) =>
+        line.variantId === "custom"
+          ? {
+              isCustom: true as const,
+              description: line.productName || "Cobro personalizado",
+              amount: line.unitPrice,
+              quantity: line.quantity,
+            }
+          : {
+              variantId: line.variantId,
+              quantity: line.quantity,
+            },
+      ),
       payments: [{ method, amount: numAmount }],
     };
 

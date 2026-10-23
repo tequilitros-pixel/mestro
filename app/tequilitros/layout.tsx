@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://maestro-destiladora.space";
+const siteUrl = "https://www.destiladoradelnorte.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

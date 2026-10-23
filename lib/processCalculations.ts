@@ -5,8 +5,8 @@ export function calculateAbsoluteAlcohol(liters: number, alcoholPercent: number)
 }
 
 /**
- * Litros de Alcohol Absoluto / Anhidro (LAA) a 20°C.
- * Estándar oficial de medición fiscal y técnica en la industria tequilera (NOM-006-SCFI / CRT).
+ * Litros de Alcohol Absoluto / Anhidro (LAA) a 20 °C, calculados a partir de
+ * una graduación que ya fue corregida con el procedimiento aplicable.
  */
 export function calculateLAA(liters: number, correctedAlcohol: number) {
   if (liters <= 0 || correctedAlcohol <= 0) return 0;
@@ -137,8 +137,8 @@ export function analyzeFermentationKinetics(
     return {
       status: "TERMINADA",
       consumptionRateBxPerHour: 0,
-      message: `Fermentación concluida con éxito (${latestBrix.toFixed(1)} °Bx).`,
-      recommendation: "El mosto está listo para ser enviado a destilación inmediata y evitar acescencia.",
+      message: `°Brix bajo registrado (${latestBrix.toFixed(1)} °Bx).`,
+      recommendation: "Confirma el cierre con el protocolo de planta antes de transferir a destilación.",
       isStuckRisk: false,
     };
   }
@@ -177,7 +177,7 @@ export function analyzeFermentationKinetics(
       status: "ESTANCADA",
       consumptionRateBxPerHour: rateBxPerHour,
       message: `Alerta: Fermentación atascada (consumo crítico de ${rateBxPerHour} °Bx/h con ${latestBrix.toFixed(1)} °Bx remanentes).`,
-      recommendation: "Verifica si la temperatura superó los 38°C (muerte térmica de levadura) o pH < 3.5. Considera aireación leve o reinoculación de pie de cuba.",
+      recommendation: "Verifica temperatura, pH y el protocolo de planta; escala la evaluación al responsable técnico antes de intervenir.",
       isStuckRisk: true,
     };
   }
@@ -187,7 +187,7 @@ export function analyzeFermentationKinetics(
       status: "LENTA",
       consumptionRateBxPerHour: rateBxPerHour,
       message: `Fermentación lenta (${rateBxPerHour} °Bx/h).`,
-      recommendation: "Verifica temperatura y nutrientes (sulfato de amonio / sales de nitrógeno) para reactivar la cinetica.",
+      recommendation: "Verifica temperatura, pH y condiciones del proceso con el responsable técnico antes de realizar ajustes.",
       isStuckRisk: true,
     };
   }

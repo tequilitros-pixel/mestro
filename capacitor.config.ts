@@ -15,6 +15,7 @@ const config: CapacitorConfig = {
   server: {
     url: "https://maestro-destiladora.space",
     cleartext: false,
+    errorPath: "offline.html",
   },
   ios: {
     contentInset: "automatic",
