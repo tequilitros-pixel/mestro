@@ -405,7 +405,7 @@ export default function PosSellClient({
         return {
           key: line.key,
           variantId: "custom",
-          productName: line.label,
+          productName: line.description,
           variantName: "Personalizado",
           unitPrice: line.amount,
           quantity: 1,

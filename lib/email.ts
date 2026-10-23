@@ -135,7 +135,7 @@ export async function sendSaleReceiptEmail(params: {
   return await resend.emails.send({
     from: FROM_ADDRESS,
     to: params.to,
-    reply_to: REPLY_TO_ADDRESS,
+    replyTo: REPLY_TO_ADDRESS,
     subject: `Tu ticket de compra — ${params.saleCode} (Destiladora del Norte)`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden;">

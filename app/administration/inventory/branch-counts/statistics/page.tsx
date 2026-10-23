@@ -258,7 +258,14 @@ export default async function BranchCountStatisticsPage({
   // 1. TOP CONSUMO: Ordenado por valor financiero consumido ($) y velocidad de agotamiento
   const consumption = consumptionGroupRows
     .map((group) => {
-      const p = productConfigs.get(group.inventoryProductId) ?? { inventoryBaseUnit: group.unit };
+      // A historical movement can remain after its catalog item was removed. Keep
+      // it visible with a neutral cost/unit configuration instead of inventing a
+      // cost or failing the entire statistics screen.
+      const p = productConfigs.get(group.inventoryProductId) ?? {
+        unit: group.unit,
+        inventoryBaseUnit: group.unit,
+        unitCost: null,
+      };
       const amount = Math.abs(Number(group._sum.quantityDelta ?? 0));
       const baseCost = costPerInventoryBaseUnit(p) ?? (p.unitCost ? Number(p.unitCost) : 0);
       const totalCost = amount * baseCost;
