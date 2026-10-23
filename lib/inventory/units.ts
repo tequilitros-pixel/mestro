@@ -258,20 +258,48 @@ export function formatInventoryDashboardQuantity(
 
   const magnitude = Math.abs(quantity);
   const sign = quantity < 0 ? "−" : "";
-  const commercial = formatCommercialQuantity(magnitude, config);
   const base = config.inventoryBaseUnit?.trim().toUpperCase();
   const contentUnit = config.contentUnit?.trim().toUpperCase();
   const handling = config.handlingUnit?.trim().toUpperCase();
 
-  if (base === "G" && contentUnit === "KG" && handling !== "KILOGRAMO") {
-    return `${sign}${commercial} (${formatNumber(magnitude / 1000)} kg)`;
+  if (hasValidCommercialConversion(config)) {
+    const commercial = formatCommercialQuantity(magnitude, config);
+
+    if (base === "G" && (contentUnit === "KG" || magnitude >= 1000) && handling !== "KILOGRAMO") {
+      return `${sign}${commercial} (${formatNumber(magnitude / 1000)} kg)`;
+    }
+
+    if (base === "ML" && (contentUnit === "L" || magnitude >= 1000) && handling !== "LITRO") {
+      return `${sign}${commercial} (${formatNumber(magnitude / 1000)} L)`;
+    }
+
+    return `${sign}${commercial}`;
   }
 
-  if (base === "ML" && contentUnit === "L" && handling !== "LITRO") {
-    return `${sign}${commercial} (${formatNumber(magnitude / 1000)} L)`;
+  // Para productos sin presentación comercial o con unidad base cruda:
+  // Convertir a unidades comprensibles para humanos (evitar números exorbitantes en gramos o ml)
+  if (base === "G") {
+    if (magnitude >= 1000) {
+      return `${sign}${formatNumber(magnitude / 1000)} kg`;
+    }
+    return `${sign}${formatNumber(magnitude)} g`;
   }
 
-  return `${sign}${commercial}`;
+  if (base === "ML") {
+    if (magnitude >= 1000) {
+      return `${sign}${formatNumber(magnitude / 1000)} L`;
+    }
+    return `${sign}${formatNumber(magnitude)} ml`;
+  }
+
+  if (base === "UNIT") {
+    const label = magnitude === 1 ? "pieza" : "piezas";
+    return `${sign}${formatNumber(magnitude)} ${label}`;
+  }
+
+  const rawUnit = config.unit?.trim();
+  const label = rawUnit && !rawUnit.toLowerCase().includes("configurar") ? ` ${rawUnit}` : "";
+  return `${sign}${formatNumber(magnitude)}${label}`;
 }
 
 export function normalizeCommercialQuantity(input: {

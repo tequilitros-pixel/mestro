@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import CountItemRow from "./CountItemRow";
+import CountItemsList from "./CountItemsList";
 import CloseCountButton from "./CloseCountButton";
 import AddCountProduct from "./AddCountProduct";
 import { formatDateOnly } from "@/lib/dateOnly";
@@ -124,20 +124,17 @@ export default async function CountDetailPage({
           </div>
         )}
 
-        <div className="rounded-2xl border border-outline-variant bg-surface-container">
-          {count.items.length === 0 && <p className="p-6 text-sm text-on-surface-variant">Este conteo no tiene partidas registradas.</p>}
-          {count.items.map((item) => (
-            <CountItemRow
-              key={item.id}
-              countId={count.id}
-              editable={editable}
-              item={buildInventoryCountItemClientView(item, {
-                status: count.status,
-                canViewHistory: isAdmin,
-              })}
-            />
-          ))}
-        </div>
+        <CountItemsList
+          items={count.items.map((item) =>
+            buildInventoryCountItemClientView(item, {
+              status: count.status,
+              canViewHistory: isAdmin,
+            }),
+          )}
+          countId={count.id}
+          editable={editable}
+          isAdmin={isAdmin}
+        />
 
         {editable && missingProducts.length > 0 && (
           <AddCountProduct key={missingProducts.map(({ id }) => id).join(",")} countId={count.id} products={missingProducts.map(({ id, name }) => ({ id, name }))} />

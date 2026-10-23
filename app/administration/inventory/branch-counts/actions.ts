@@ -211,6 +211,7 @@ export async function updateCountItemQuantityAction(
     quantity: string;
     loosePieces?: string;
     captureUnit: InventoryCaptureUnit;
+    notes?: string;
   },
 ): Promise<ActionResult> {
   try {
@@ -239,9 +240,15 @@ export async function updateCountItemQuantityAction(
         product: item.product,
       });
 
+      const updatedNotes = input.notes !== undefined ? (input.notes.trim() || null) : item.notes;
+
       await tx.inventoryCountItem.update({
         where: { id: item.id },
-        data: { quantityCounted: normalized.baseQuantity, countedAt: new Date() },
+        data: {
+          quantityCounted: normalized.baseQuantity,
+          countedAt: new Date(),
+          notes: updatedNotes,
+        },
       });
 
       return normalized;
@@ -285,6 +292,41 @@ export async function updateCountItemQuantityAction(
       return { success: false, error: "La cantidad o unidad de captura no es válida." };
     }
     return { success: false, error: "No fue posible guardar la cantidad." };
+  }
+}
+
+export async function updateCountItemNotesAction(
+  countId: string,
+  itemId: string,
+  notes: string,
+): Promise<ActionResult> {
+  try {
+    const scopedItem = await prisma.inventoryCountItem.findUnique({
+      where: { id: itemId },
+      select: { countId: true, count: { select: { branchId: true } } },
+    });
+    if (!scopedItem || scopedItem.countId !== countId) throw new Error("PERMISSION_DENIED");
+    await authorizeCountBranch(scopedItem.count.branchId);
+
+    await prisma.$transaction(async (tx) => {
+      const lockedCount = await tx.$queryRaw<Array<{ id: string; status: string }>>`SELECT "id", "status"::text FROM "InventoryCount" WHERE "id"=${countId} FOR UPDATE`;
+      if (!lockedCount[0]) throw new Error("COUNT_NOT_FOUND");
+      if (lockedCount[0].status !== "BORRADOR") throw new Error("COUNT_ALREADY_CLOSED");
+
+      await tx.inventoryCountItem.update({
+        where: { id: itemId },
+        data: { notes: notes.trim() || null },
+      });
+    });
+
+    revalidatePath(`/administration/inventory/branch-counts/${countId}`);
+    return { success: true, message: "Justificación guardada." };
+  } catch (error) {
+    console.error("Error updating count item notes:", error);
+    if (error instanceof Error && error.message === "COUNT_ALREADY_CLOSED") {
+      return { success: false, error: "Este conteo ya está cerrado." };
+    }
+    return { success: false, error: "No fue posible guardar la justificación." };
   }
 }
 

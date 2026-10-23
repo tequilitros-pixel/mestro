@@ -28,11 +28,18 @@ export default async function PosCatalogPage() {
       },
     }),
     prisma.inventoryProduct.findMany({
-      where: { isActive: true, trackStock: true, inventoryBaseUnit: { not: null } },
+      where: { isActive: true },
       orderBy: { name: "asc" },
       select: { id: true, code: true, name: true, unit: true, inventoryBaseUnit: true },
     }),
   ]);
+
+  const normalizedInventory = inventoryProducts.map((p) => ({
+    ...p,
+    inventoryBaseUnit:
+      p.inventoryBaseUnit ??
+      (p.unit?.toLowerCase() === "ml" ? "ML" : p.unit?.toLowerCase() === "g" ? "G" : "UNIT"),
+  }));
 
   return (
     <PosCatalogManager
@@ -58,7 +65,7 @@ export default async function PosCatalogPage() {
           })),
         })),
       }))}
-      inventoryProducts={inventoryProducts}
+      inventoryProducts={normalizedInventory}
     />
   );
 }

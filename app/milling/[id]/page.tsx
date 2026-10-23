@@ -29,6 +29,10 @@ import {
   weightedAverage,
 } from "@/lib/milling/millingMetrics";
 import { millingWorkedMilliseconds, pauseMilling, resumeMilling } from "@/lib/milling/workSessions";
+import {
+  calculateExtractedSugarKg,
+  calculateSugarExtractionEfficiency,
+} from "@/lib/processCalculations";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -126,6 +130,9 @@ export default async function MillingDetailPage({
     milling.cookedKg > 0
       ? (totalLiters / milling.cookedKg) * 100
       : 0;
+
+  const estimatedSugarKg = calculateExtractedSugarKg(totalLiters, averageBrix ?? 0);
+  const sugarEfficiency = calculateSugarExtractionEfficiency(estimatedSugarKg, milling.cookedKg);
 
   const millingHealth = getMillingHealth({
     hasFinished,
@@ -546,7 +553,7 @@ export default async function MillingDetailPage({
             </div>
           </div>
 
-          <div className="grid border-t border-on-surface-variant/10 sm:grid-cols-3">
+          <div className="grid border-t border-on-surface-variant/10 sm:grid-cols-2 lg:grid-cols-4">
             <ProcessIndicator
               title="Recuperación"
               value={`${formatNumber(
@@ -556,15 +563,21 @@ export default async function MillingDetailPage({
             />
 
             <ProcessIndicator
-              title="Tinas utilizadas"
-              value={String(tanksUsed.length)}
-              warning={tanksUsed.length === 0}
+              title="Azúcar extraído (ART)"
+              value={`${formatNumber(estimatedSugarKg, 1)} kg`}
+              warning={estimatedSugarKg <= 0}
             />
 
             <ProcessIndicator
-              title="Proceso"
-              value={formatStatus(milling.status)}
-              warning={false}
+              title="Eficiencia de azúcares"
+              value={`${formatNumber(sugarEfficiency, 1)} %`}
+              warning={sugarEfficiency < 65 && totalLiters > 0}
+            />
+
+            <ProcessIndicator
+              title="Tinas utilizadas"
+              value={String(tanksUsed.length)}
+              warning={tanksUsed.length === 0}
             />
           </div>
         </section>
@@ -998,7 +1011,8 @@ export default async function MillingDetailPage({
                         event.temperature !== null ||
                         event.waterLiters !== null ||
                         event.bagasseKg !== null ||
-                        event.pressPasses !== null) && (
+                        event.pressPasses !== null ||
+                        event.washRecoveredLiters !== null) && (
                         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                           {event.brix !== null && (
                             <Mini
@@ -1052,6 +1066,16 @@ export default async function MillingDetailPage({
                             <Mini
                               title="Pasadas"
                               value={event.pressPasses}
+                            />
+                          )}
+
+                          {event.washRecoveredLiters !==
+                            null && (
+                            <Mini
+                              title="Mosto lavado"
+                              value={`${formatNumber(
+                                event.washRecoveredLiters
+                              )} L`}
                             />
                           )}
                         </div>

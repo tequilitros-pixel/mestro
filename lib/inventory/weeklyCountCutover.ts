@@ -104,6 +104,7 @@ export async function reconcileWeeklyCountCutover(
             countId: input.countId,
             countType: count.countType,
             authoritative: true,
+            ...(item.notes?.trim() ? { notes: item.notes.trim() } : {}),
           },
         },
       });
@@ -113,6 +114,8 @@ export async function reconcileWeeklyCountCutover(
         data: { quantity: counted, version: { increment: 1 } },
       });
     }
+
+    const declarationNotes = item.notes?.trim() || count.notes || `Conteo ${count.code}`;
 
     const declaration = await tx.inventoryCountDeclaration.create({
       data: {
@@ -125,7 +128,7 @@ export async function reconcileWeeklyCountCutover(
         movementId,
         actorId: input.actorId,
         operationId: declarationOperationId(count.id, item.id, count.countDate),
-        notes: count.notes ?? `Conteo ${count.code}`,
+        notes: declarationNotes,
       },
     });
 

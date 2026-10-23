@@ -4,6 +4,7 @@ type DecimalLike = number | string | { toString(): string };
 
 export type InventoryCountItemRecord = {
   id: string;
+  notes?: string | null;
   quantityCounted: DecimalLike | null;
   countedAt: Date | null;
   previousQuantity: DecimalLike | null;
@@ -11,6 +12,9 @@ export type InventoryCountItemRecord = {
   quantityConsumed: DecimalLike | null;
   costTotal: DecimalLike | null;
   product: {
+    id?: string;
+    code?: string;
+    category?: string;
     name: string;
     unit: string;
     inventoryBaseUnit: string | null;
@@ -23,7 +27,11 @@ export type InventoryCountItemRecord = {
 
 export type InventoryCountItemClientView = {
   id: string;
+  productId?: string;
+  productCode?: string;
   productName: string;
+  productCategory?: string;
+  notes?: string | null;
   unit: string;
   inventoryBaseUnit: string | null;
   handlingUnit: string | null;
@@ -50,7 +58,11 @@ export function buildInventoryCountItemClientView(
 ): InventoryCountItemClientView {
   const view: InventoryCountItemClientView = {
     id: item.id,
+    productId: item.product.id,
+    productCode: item.product.code,
     productName: item.product.name,
+    productCategory: item.product.category,
+    notes: item.notes ?? null,
     unit: item.product.unit,
     inventoryBaseUnit: item.product.inventoryBaseUnit,
     handlingUnit: item.product.handlingUnit,
@@ -61,14 +73,18 @@ export function buildInventoryCountItemClientView(
     isCaptured: options.status === "CERRADO" || item.countedAt !== null,
   };
 
-  if (options.status !== "CERRADO" || !options.canViewHistory) return view;
+  if (!options.canViewHistory) return view;
 
   return {
     ...view,
     previousQuantity: asNumber(item.previousQuantity ?? 0),
-    entriesQuantity: asNumber(item.entriesQuantity),
-    quantityConsumed: asNumber(item.quantityConsumed),
-    costTotal: asNumber(item.costTotal),
+    ...(options.status === "CERRADO"
+      ? {
+          entriesQuantity: asNumber(item.entriesQuantity),
+          quantityConsumed: asNumber(item.quantityConsumed),
+          costTotal: asNumber(item.costTotal),
+        }
+      : {}),
   };
 }
 

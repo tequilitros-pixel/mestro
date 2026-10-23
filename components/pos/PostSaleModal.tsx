@@ -47,7 +47,6 @@ export default function PostSaleModal({
           payload: {
             saleId: receipt.saleId,
             email: targetEmail,
-            fallbackReceipt: receipt,
           },
           createdAt: new Date().toISOString(),
         });
@@ -69,7 +68,6 @@ export default function PostSaleModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: targetEmail,
-          fallbackReceipt: receipt,
         }),
       });
 
@@ -208,7 +206,12 @@ export default function PostSaleModal({
           {/* Collapsible Ticket Preview */}
           {showPreview && (
             <div className="max-h-60 overflow-y-auto rounded-2xl bg-surface-container-high p-3">
-              <ReceiptTicket data={receipt} showPreviewBorders={false} />
+              <ReceiptTicket
+                data={receipt}
+                containerId="thermal-receipt-preview"
+                showPreviewBorders={false}
+                printable={false}
+              />
             </div>
           )}
 
@@ -224,7 +227,7 @@ export default function PostSaleModal({
       </div>
 
       {/* Hidden container for thermal printing */}
-      <div className="hidden">
+      <div className="hidden print:block">
         <ReceiptTicket data={receipt} containerId="thermal-receipt-print-area" />
       </div>
     </div>

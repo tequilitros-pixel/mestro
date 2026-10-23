@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import styles from "./quote.module.css";
 
 const services = ["Barra móvil con preparación", "Bebidas para evento", "Servicio de coctelería", "Quiero asesoría para elegir"];
-const drinks = ["Cantarito", "Paloma", "Vampiro", "Tequimango", "Tequimiche", "Tequimora", "Otra bebida / por confirmar"];
+const drinks = ["Cantarito", "Paloma", "Vampiro", "Tequimojito", "Tequimora", "Tequimiche", "Otra bebida / por confirmar"];
 
 export default function EventQuote() {
   const [name, setName] = useState("");

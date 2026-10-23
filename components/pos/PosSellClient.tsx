@@ -14,10 +14,16 @@ import {
   TagIcon,
   ReceiptIcon,
   ChartLineIcon,
+  ClockIcon,
 } from "@/components/ui/icons";
 import { getProductVisual } from "@/lib/pos/productVisual";
 import { useToast } from "@/components/ui/Toast";
 import { enqueueOperation } from "@/lib/offline/queue";
+import {
+  saveLocalPendingTab,
+  type PendingTab,
+  type PendingTabLine,
+} from "@/lib/offline/pending-tabs";
 import PostSaleModal from "./PostSaleModal";
 import type { ReceiptData } from "./ReceiptTicket";
 
@@ -181,6 +187,10 @@ export default function PosSellClient({
   const [localOpenBranches, setLocalOpenBranches] = useState<Set<string>>(new Set());
   const [isOnline, setIsOnline] = useState(true);
   const [completedReceipt, setCompletedReceipt] = useState<ReceiptData | null>(null);
+  const [showPendingTabModal, setShowPendingTabModal] = useState(false);
+  const [pendingCustomerName, setPendingCustomerName] = useState("");
+  const [pendingCustomerNotes, setPendingCustomerNotes] = useState("");
+  const [pendingCustomerPhone, setPendingCustomerPhone] = useState("");
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -387,6 +397,55 @@ export default function PosSellClient({
     setEmployeeBuyerId("");
   }
 
+  async function handleSavePendingTab() {
+    if (!pendingCustomerName.trim() || !branchId || cart.length === 0) return;
+
+    const lines: PendingTabLine[] = cart.map((line) => {
+      if (line.isCustom) {
+        return {
+          key: line.key,
+          variantId: "custom",
+          productName: line.label,
+          variantName: "Personalizado",
+          unitPrice: line.amount,
+          quantity: 1,
+        };
+      }
+      return {
+        key: line.key,
+        variantId: line.variantId,
+        productName: line.productName,
+        variantName: line.variantName,
+        unitPrice: line.unitPrice,
+        quantity: line.quantity,
+      };
+    });
+
+    const newTab: PendingTab = {
+      id: crypto.randomUUID(),
+      branchId,
+      customerName: pendingCustomerName.trim(),
+      phone: pendingCustomerPhone.trim() || undefined,
+      notes: pendingCustomerNotes.trim() || undefined,
+      status: "PENDIENTE",
+      lines,
+      total,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await saveLocalPendingTab(newTab);
+    showToast(`Cuenta pendiente guardada para "${pendingCustomerName.trim()}".`, "success");
+    setCart([]);
+    setDiscountAmount(0);
+    setDiscountReasonCode("");
+    setDiscountReasonNote("");
+    setShowPendingTabModal(false);
+    setPendingCustomerName("");
+    setPendingCustomerNotes("");
+    setPendingCustomerPhone("");
+  }
+
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col lg:flex-row">
       <div className="flex flex-1 flex-col overflow-hidden border-b border-outline-variant lg:border-b-0 lg:border-r">
@@ -443,22 +502,27 @@ export default function PosSellClient({
               <ReceiptIcon className="h-4 w-4" />
               Transacciones
             </Link>
-            {inventoryMode === "v2" && (
-              <>
-                <Link
-                  href="/pospress/transactions"
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
-                >
-                  Transacciones
-                </Link>
-                <Link
-                  href="/pospress/tables"
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
-                >
-                  Mesas
-                </Link>
-              </>
-            )}
+            <Link
+              href="/pospress/tables"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+            >
+              <GridIcon className="h-4 w-4" />
+              Mesas
+            </Link>
+            <Link
+              href="/pospress/pending-tabs"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-600 dark:text-amber-400 transition hover:bg-amber-500/20"
+            >
+              <ClockIcon className="h-4 w-4" />
+              Cuentas pendientes
+            </Link>
+            <Link
+              href="/pospress/recipes"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+            >
+              <TagIcon className="h-4 w-4" />
+              Recetas y catálogo
+            </Link>
             <Link
               href="/cash-cuts"
               className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
@@ -786,6 +850,16 @@ export default function PosSellClient({
           >
             Cobrar {cart.length > 0 ? formatCurrency(total) : ""}
           </button>
+          {cart.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowPendingTabModal(true)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 py-2.5 text-xs font-bold text-amber-600 dark:text-amber-400 transition hover:bg-amber-500/20"
+            >
+              <ClockIcon className="h-4 w-4" />
+              Guardar como cuenta pendiente
+            </button>
+          )}
           {employeeMode && !employeeBuyerId && (
             <p className="text-center text-xs text-secondary">
               Selecciona qué empleado está comprando.
@@ -883,6 +957,87 @@ export default function PosSellClient({
             showToast("Venta completada.");
           }}
         />
+      )}
+
+      {showPendingTabModal && (
+        <ModalShell title="Guardar cuenta pendiente" onClose={() => setShowPendingTabModal(false)}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleSavePendingTab();
+            }}
+            className="space-y-4"
+          >
+            <p className="text-xs text-on-surface-variant">
+              Guarda los productos actuales a nombre de la persona para que puedan regresar a pagar más tarde o mañana.
+            </p>
+
+            <div>
+              <label className="text-xs font-semibold text-on-surface-variant">
+                Nombre de la persona <span className="text-error">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="ej. Don Beto, Juan Pérez, Amigo de la mesa 3..."
+                value={pendingCustomerName}
+                onChange={(e) => setPendingCustomerName(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2.5 text-sm text-on-surface"
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-on-surface-variant">
+                Teléfono de contacto (opcional)
+              </label>
+              <input
+                type="tel"
+                placeholder="ej. 33 1234 5678"
+                value={pendingCustomerPhone}
+                onChange={(e) => setPendingCustomerPhone(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-on-surface-variant">
+                Notas / Compromiso (opcional)
+              </label>
+              <textarea
+                rows={2}
+                placeholder="ej. Regresa en un rato con efectivo / Viene mañana temprano"
+                value={pendingCustomerNotes}
+                onChange={(e) => setPendingCustomerNotes(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface"
+              />
+            </div>
+
+            <div className="rounded-xl bg-surface-container p-3 text-xs">
+              <div className="flex justify-between font-semibold text-on-surface">
+                <span>{cart.length} {cart.length === 1 ? "artículo" : "artículos"} a guardar</span>
+                <span>Total a deber: {formatCurrency(total)}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowPendingTabModal(false)}
+                className="flex-1 rounded-xl border border-outline-variant px-3 py-2.5 text-xs font-bold text-on-surface-variant hover:bg-surface"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={!pendingCustomerName.trim()}
+                className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-on-primary transition hover:scale-[1.02] disabled:opacity-40"
+              >
+                Guardar cuenta pendiente
+              </button>
+            </div>
+          </form>
+        </ModalShell>
       )}
     </div>
   );
@@ -1403,6 +1558,15 @@ function PaymentModal({
   }
 
   async function submit() {
+    if (
+      hasCash &&
+      typeof cashTendered === "number" &&
+      (!Number.isFinite(cashTendered) || cashTendered < cashAmount)
+    ) {
+      setError("El efectivo recibido no puede ser menor al importe cobrado en efectivo.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 

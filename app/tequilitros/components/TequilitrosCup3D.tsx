@@ -10,8 +10,12 @@ export type DrinkFlavor = {
   subtitle: string;
   liquidColor: number;
   frostColor: number;
-  frostType: "sal_chile" | "sal_fina" | "chamoy_tajin";
+  hasFrost: boolean;
+  frostType: "tajin" | "sal" | "none";
+  transmission: number;
+  roughness: number;
   description: string;
+  ingredients: string;
   photoUrl: string;
 };
 
@@ -19,132 +23,131 @@ export const DRINK_FLAVORS: DrinkFlavor[] = [
   {
     id: "cantarito",
     name: "Cantarito",
-    subtitle: "Cítricos, tequila blanco y escarchado",
-    liquidColor: 0xe59424,
-    frostColor: 0xc84224,
-    frostType: "sal_chile",
-    description: "Naranja, toronja y limón con tequila blanco, refresco de toronja y escarchado. La receta se confirma por evento.",
+    subtitle: "Cítricos, tequila blanco y escarchado Tajín",
+    liquidColor: 0xf7961d, // Cítrico mandarina/naranja brillante
+    frostColor: 0xb83818, // Escarchado rojo terracota chile-tajín
+    hasFrost: true,
+    frostType: "tajin",
+    transmission: 0.68,
+    roughness: 0.16,
+    description: "Naranja, toronja y limón recién exprimidos con tequila blanco, refresco de toronja y escarchado abundante de sal con chile tajín.",
+    ingredients: "Jugo de naranja, toronja y limón, tequila blanco de la casa, refresco de toronja y escarchado de sal y chile.",
     photoUrl: "/tequilitros/productos/cantarito.png",
   },
   {
     id: "paloma",
-    name: "Paloma",
-    subtitle: "Toronja, limón y tequila reposado",
-    liquidColor: 0xe89785,
-    frostColor: 0xf5f0ea,
-    frostType: "sal_fina",
-    description: "Toronja, limón, tequila reposado y escarchado. La receta se confirma por evento.",
+    name: "Paloma Tradicional",
+    subtitle: "Toronja, limón, tequila reposado y sal de mar",
+    liquidColor: 0xf0cfbe, // Tono translúcido rubor toronja / durazno escarchado
+    frostColor: 0xfbfaf8, // Sal de grano fina blanca brillante
+    hasFrost: true,
+    frostType: "sal",
+    transmission: 0.78,
+    roughness: 0.18,
+    description: "Toronja rosada, jugo de limón, tequila reposado y escarchado tradicional de sal fina de mar.",
+    ingredients: "Toronja, limón fresco, tequila reposado de barrica, toque de sal marina y refresco de toronja.",
     photoUrl: "/tequilitros/productos/paloma.png",
   },
   {
     id: "vampiro",
-    name: "Vampiro",
-    subtitle: "Sangrita, cítricos y tequila",
-    liquidColor: 0x8a181b,
-    frostColor: 0xb52c1b,
-    frostType: "sal_chile",
-    description: "Sangrita, cítricos, tequila blanco y sal. La receta se confirma por evento.",
+    name: "Vampiro del Norte",
+    subtitle: "Sangrita de la casa, cítricos y tequila blanco",
+    liquidColor: 0xd83b16, // Rojo sangrita intenso / blood orange
+    frostColor: 0x8c1b12, // Escarchado oscuro de chile y sal
+    hasFrost: true,
+    frostType: "tajin",
+    transmission: 0.58,
+    roughness: 0.15,
+    description: "Sangrita tradicional de la casa con cítricos frescos, tequila blanco, hielo abundante y escarchado picante.",
+    ingredients: "Sangrita especial de la casa, tequila blanco, jugo de limón, sal y refresco cítrico.",
     photoUrl: "/tequilitros/productos/vampiro.png",
   },
   {
-    id: "tequimango",
-    name: "Tequimango",
-    subtitle: "Mango fresco y toque agridulce",
-    liquidColor: 0xe6a817,
-    frostColor: 0x9b2418,
-    frostType: "chamoy_tajin",
-    description: "Mango, licor de mango, tequila y escarchado. La receta se confirma por evento.",
-    photoUrl: "/tequilitros/tequimango.jpg",
+    id: "tequimojito",
+    name: "Tequimojito",
+    subtitle: "Menta fresca, cítricos, tequila y toque turquesa",
+    liquidColor: 0x0ebfae, // Turquesa eléctrico / menta cyan brillante
+    frostColor: 0xffffff,
+    hasFrost: false, // Borde liso limpio de plástico termoformado
+    frostType: "none",
+    transmission: 0.72,
+    roughness: 0.12,
+    description: "Menta fresca macerada con limón, tequila blanco, refresco lima-limón y toque cítrico color turquesa, servido a tope con hielo.",
+    ingredients: "Hojas de menta natural, tequila blanco, jugo de limón recién exprimido, refresco de lima y jarabe cítrico turquesa.",
+    photoUrl: "/tequilitros/productos/tequimojito.png",
   },
   {
     id: "tequimora",
     name: "Tequimora",
-    subtitle: "Zarzamora, cítricos y tequila",
-    liquidColor: 0x5a1838,
-    frostColor: 0xe0d4cb,
-    frostType: "sal_fina",
-    description: "Zarzamora macerada con tequila blanco y cítricos. La receta se confirma por evento.",
+    subtitle: "Zarzamora silvestre, cítricos y tequila",
+    liquidColor: 0x8a2884, // Morado zarzamora royal translúcido
+    frostColor: 0xffffff,
+    hasFrost: false, // Borde liso limpio con hielos sobresalientes
+    frostType: "none",
+    transmission: 0.62,
+    roughness: 0.14,
+    description: "Zarzamora macerada artesanalmente con tequila blanco, cítricos y jarabe natural, con hielo en cubos que sobresalen de la copa.",
+    ingredients: "Zarzamora macerada natural, tequila blanco, limón fresco, jarabe y agua mineral gasificada.",
     photoUrl: "/tequilitros/productos/tequimora.png",
   },
   {
     id: "tequimiche",
     name: "Tequimiche",
-    subtitle: "Salsas negras y mezcla michelada",
-    liquidColor: 0x542b14,
-    frostColor: 0xb8381d,
-    frostType: "sal_chile",
-    description: "Salsas sazonadoras, limón y escarchado. La receta se confirma por evento.",
+    subtitle: "Salsas negras, limón, sazonadores y escarchado botanero",
+    liquidColor: 0x481f10, // Ámbar oscuro / clamato-salsas sazonadoras
+    frostColor: 0x9e2d14, // Chamoy y chile tajín abundante
+    hasFrost: true,
+    frostType: "tajin",
+    transmission: 0.42,
+    roughness: 0.22,
+    description: "Mezcla de salsas sazonadoras negras estilo michelada, limón, chile en polvo, toque de tequila o cerveza y escarchado botanero completo.",
+    ingredients: "Salsas negras preparadas, limón, jugo sazonador, sal con chile en polvo y base de tequila o cerveza.",
     photoUrl: "/tequilitros/productos/tequimiche.png",
   },
 ];
 
-function createLabelTexture(): THREE.CanvasTexture {
+// Genera una textura procedimental de escarchado para sal o chile tajín
+function createRimTexture(type: "tajin" | "sal"): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = 1024;
-  canvas.height = 512;
+  canvas.width = 512;
+  canvas.height = 128;
   const ctx = canvas.getContext("2d");
 
   if (ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const numGrains = type === "tajin" ? 900 : 700;
 
-    // Fondo sutil del sticker
-    ctx.fillStyle = "rgba(18, 14, 12, 0.94)";
-    ctx.beginPath();
-    ctx.roundRect(140, 60, 744, 392, 40);
-    ctx.fill();
+    for (let i = 0; i < numGrains; i++) {
+      const x = Math.random() * canvas.width;
+      const y = Math.random() * canvas.height;
+      const radius = 1 + Math.random() * 2.8;
 
-    // Borde doble dorado
-    ctx.strokeStyle = "#D4AF37";
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.roundRect(154, 74, 716, 364, 32);
-    ctx.stroke();
+      if (type === "tajin") {
+        // Mezcla de granos rojos, terracota oscuro, naranja chile y destellos de sal
+        const colors = [
+          "rgba(195, 45, 20, 0.95)",
+          "rgba(145, 25, 12, 0.95)",
+          "rgba(225, 80, 25, 0.9)",
+          "rgba(105, 18, 10, 0.98)",
+          "rgba(255, 245, 230, 0.85)", // Grano de sal entre el chile
+        ];
+        ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+      } else {
+        // Cristales de sal blanca con transparencia y brillo
+        const alpha = 0.5 + Math.random() * 0.45;
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+      }
 
-    ctx.strokeStyle = "rgba(226, 135, 53, 0.4)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(166, 86, 692, 340, 26);
-    ctx.stroke();
-
-    // Sello superior
-    ctx.fillStyle = "#E28735";
-    ctx.font = "bold 44px Georgia, serif";
-    ctx.textAlign = "center";
-    ctx.fillText("✳", 512, 140);
-
-    // Marca TEQUILITROS
-    ctx.fillStyle = "#F5F2EB";
-    ctx.font = "900 68px Arial, sans-serif";
-    ctx.letterSpacing = "6px";
-    ctx.fillText("TEQUILITROS", 512, 225);
-
-    // Subtítulo
-    ctx.fillStyle = "#D4AF37";
-    ctx.font = "bold 26px Georgia, serif";
-    ctx.letterSpacing = "4px";
-    ctx.fillText("DESTILADORA DEL NORTE", 512, 275);
-
-    // Línea separadora
-    ctx.strokeStyle = "#E28735";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(320, 305);
-    ctx.lineTo(704, 305);
-    ctx.stroke();
-
-    // Origen y especificación
-    ctx.fillStyle = "#A8B4BC";
-    ctx.font = "600 20px monospace";
-    ctx.letterSpacing = "3px";
-    ctx.fillText("COLOTLÁN, JALISCO", 512, 345);
-
-    ctx.fillStyle = "#F5F2EB";
-    ctx.font = "bold 24px monospace";
-    ctx.letterSpacing = "2px";
-    ctx.fillText("VASO 946 ML · REYMA 32 EU", 512, 395);
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.repeat.set(4, 1);
   texture.needsUpdate = true;
   return texture;
 }
@@ -168,7 +171,7 @@ export default function TequilitrosCup3D({
     const container = containerRef.current;
     if (!container) return;
 
-    // Comprobar soporte WebGL
+    // Comprobación de WebGL
     try {
       const testCanvas = document.createElement("canvas");
       const gl = testCanvas.getContext("webgl") || testCanvas.getContext("experimental-webgl");
@@ -184,10 +187,10 @@ export default function TequilitrosCup3D({
     const width = container.clientWidth;
     const height = container.clientHeight || 520;
 
-    // Escena, cámara y renderizador
+    // 1. Escena, cámara y renderizador optimizado
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
-    camera.position.set(0, 0.2, 4.3);
+    const camera = new THREE.PerspectiveCamera(36, width / height, 0.1, 100);
+    camera.position.set(0, 0.22, 4.2);
 
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -197,128 +200,171 @@ export default function TequilitrosCup3D({
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.2;
     container.appendChild(renderer.domElement);
 
-    // Iluminación de estudio
-    const ambientLight = new THREE.AmbientLight(0xfff6ea, 0.9);
+    // 2. Iluminación realista de estudio fotográfico
+    const ambientLight = new THREE.AmbientLight(0xfff5ea, 1.1);
     scene.add(ambientLight);
 
-    const keyLight = new THREE.DirectionalLight(0xffe2b8, 2.4);
-    keyLight.position.set(3, 4, 3);
+    // Luz principal (Key Light) cálida de estudio
+    const keyLight = new THREE.DirectionalLight(0xfff0db, 2.8);
+    keyLight.position.set(3.5, 4.5, 3.2);
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0x7aa5c2, 1.2);
-    fillLight.position.set(-3, 2, -2);
+    // Luz de relleno (Fill Light) fría para dar volumen al plástico translúcido
+    const fillLight = new THREE.DirectionalLight(0x8cb6d4, 1.4);
+    fillLight.position.set(-3.5, 2.5, -1.5);
     scene.add(fillLight);
 
-    const rimLight = new THREE.PointLight(0xffaa44, 3.2, 10);
-    rimLight.position.set(0, 2.5, -2.5);
+    // Luz trasera de recorte (Rim Light) que perfila el borde y el escarchado
+    const rimLight = new THREE.PointLight(0xffb766, 3.6, 12);
+    rimLight.position.set(0, 2.8, -2.6);
     scene.add(rimLight);
 
-    // Grupo principal para rotación
+    // Luz inferior tenue para iluminar la base escalonada
+    const bottomLight = new THREE.DirectionalLight(0xffe8d6, 0.6);
+    bottomLight.position.set(0, -3, 2);
+    scene.add(bottomLight);
+
+    // Grupo contenedor para rotación 360 interactiva
     const cupGroup = new THREE.Group();
     scene.add(cupGroup);
 
-    // 1. Geometría fiel del Vaso Reyma 32 EU (18cm alto, 10.6cm sup, 6.4cm inf)
-    // Coordenadas normalizadas: h = 1.8 (y entre -0.9 y 0.9)
+    // 3. Geometría fidedigna del Vaso Reyma 32 EU (32 oz / 946 ml)
+    // Coordenadas exactas tomadas de las fotografías:
+    // Altura total normalizada h = 1.8 (desde y = -0.9 hasta y = +0.9)
+    // Base escalonada + 3 estrías de refuerzo termoformadas + labio superior enrollado
     const cupPoints: THREE.Vector2[] = [];
-    cupPoints.push(new THREE.Vector2(0, -0.9));
-    cupPoints.push(new THREE.Vector2(0.28, -0.9));
-    cupPoints.push(new THREE.Vector2(0.32, -0.87)); // Base biselada
 
-    // Cuerpo con estrías de termoformado Reyma
-    cupPoints.push(new THREE.Vector2(0.36, -0.42));
-    cupPoints.push(new THREE.Vector2(0.38, -0.40));
-    cupPoints.push(new THREE.Vector2(0.375, -0.38));
+    // Base plana con reborde inferior
+    cupPoints.push(new THREE.Vector2(0, -0.90));
+    cupPoints.push(new THREE.Vector2(0.265, -0.90));
+    cupPoints.push(new THREE.Vector2(0.278, -0.89));
 
-    cupPoints.push(new THREE.Vector2(0.42, 0.16));
-    cupPoints.push(new THREE.Vector2(0.44, 0.18));
-    cupPoints.push(new THREE.Vector2(0.435, 0.20));
+    // Pie cilíndrico inferior característico del vaso Reyma 32
+    cupPoints.push(new THREE.Vector2(0.282, -0.71));
+    // Escalón exterior
+    cupPoints.push(new THREE.Vector2(0.315, -0.68));
+    cupPoints.push(new THREE.Vector2(0.325, -0.65));
 
-    cupPoints.push(new THREE.Vector2(0.48, 0.58));
-    cupPoints.push(new THREE.Vector2(0.50, 0.60));
-    cupPoints.push(new THREE.Vector2(0.495, 0.62));
+    // Estría 1 de termoformado
+    cupPoints.push(new THREE.Vector2(0.332, -0.58));
+    cupPoints.push(new THREE.Vector2(0.348, -0.56));
+    cupPoints.push(new THREE.Vector2(0.338, -0.54));
 
-    // Labio superior curvado
-    cupPoints.push(new THREE.Vector2(0.525, 0.86));
-    cupPoints.push(new THREE.Vector2(0.54, 0.885));
-    cupPoints.push(new THREE.Vector2(0.542, 0.90));
-    cupPoints.push(new THREE.Vector2(0.528, 0.90));
+    // Estría 2 de termoformado
+    cupPoints.push(new THREE.Vector2(0.352, -0.47));
+    cupPoints.push(new THREE.Vector2(0.368, -0.45));
+    cupPoints.push(new THREE.Vector2(0.360, -0.43));
 
-    const cupGeometry = new THREE.LatheGeometry(cupPoints, 52);
+    // Estría 3 de termoformado
+    cupPoints.push(new THREE.Vector2(0.375, -0.36));
+    cupPoints.push(new THREE.Vector2(0.392, -0.34));
+    cupPoints.push(new THREE.Vector2(0.385, -0.32));
+
+    // Cuerpo principal cónico liso donde asienta la etiqueta
+    cupPoints.push(new THREE.Vector2(0.425, 0.05));
+    cupPoints.push(new THREE.Vector2(0.468, 0.45));
+    cupPoints.push(new THREE.Vector2(0.510, 0.82));
+
+    // Cuello y labio enrollado exterior (Rolled rim Reyma)
+    cupPoints.push(new THREE.Vector2(0.522, 0.875));
+    cupPoints.push(new THREE.Vector2(0.542, 0.895)); // Borde exterior redondeado
+    cupPoints.push(new THREE.Vector2(0.536, 0.905)); // Cúspide del labio
+    cupPoints.push(new THREE.Vector2(0.520, 0.902)); // Borde interior
+    cupPoints.push(new THREE.Vector2(0.510, 0.875));
+
+    const cupGeometry = new THREE.LatheGeometry(cupPoints, 64);
     const cupMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
-      transmission: 0.84,
-      opacity: 0.95,
+      transmission: 0.85,
+      opacity: 0.96,
       transparent: true,
-      roughness: 0.24,
-      ior: 1.49,
+      roughness: 0.18,
+      ior: 1.49, // Índice de refracción del polipropileno (PP)
       thickness: 0.22,
-      specularIntensity: 1.2,
+      specularIntensity: 1.25,
       side: THREE.DoubleSide,
     });
     const cupMesh = new THREE.Mesh(cupGeometry, cupMaterial);
     cupGroup.add(cupMesh);
 
-    // 2. Líquido dinámico interior
-    const liquidGeometry = new THREE.CylinderGeometry(0.495, 0.295, 1.55, 40);
+    // 4. Geometría del Líquido interior fiel al perfil del vaso
+    const liquidPoints: THREE.Vector2[] = [];
+    liquidPoints.push(new THREE.Vector2(0, -0.87));
+    liquidPoints.push(new THREE.Vector2(0.26, -0.87));
+    liquidPoints.push(new THREE.Vector2(0.27, -0.70));
+    liquidPoints.push(new THREE.Vector2(0.305, -0.66));
+    liquidPoints.push(new THREE.Vector2(0.32, -0.56));
+    liquidPoints.push(new THREE.Vector2(0.34, -0.45));
+    liquidPoints.push(new THREE.Vector2(0.365, -0.34));
+    liquidPoints.push(new THREE.Vector2(0.41, 0.05));
+    liquidPoints.push(new THREE.Vector2(0.45, 0.45));
+    liquidPoints.push(new THREE.Vector2(0.495, 0.78)); // Nivel superior de la bebida
+    liquidPoints.push(new THREE.Vector2(0, 0.78));
+
+    const liquidGeometry = new THREE.LatheGeometry(liquidPoints, 48);
     const liquidMaterial = new THREE.MeshPhysicalMaterial({
-      color: DRINK_FLAVORS[0].liquidColor,
-      transmission: 0.72,
-      opacity: 0.96,
+      color: activeDrink.liquidColor,
+      transmission: activeDrink.transmission,
+      opacity: 0.98,
       transparent: true,
-      roughness: 0.12,
-      ior: 1.33,
+      roughness: activeDrink.roughness,
+      ior: 1.333, // Agua / cóctel
     });
     const liquidMesh = new THREE.Mesh(liquidGeometry, liquidMaterial);
-    liquidMesh.position.y = -0.09;
     cupGroup.add(liquidMesh);
 
-    // 3. Cubos de hielo flotantes
+    // 5. Cubos de Hielo flotantes realistas en la superficie
+    // En las fotos reales, los hielos sobresalen visiblemente del borde del vaso
     const iceGroup = new THREE.Group();
-    const iceGeo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
+    const iceGeo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
     const iceMat = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
       transmission: 0.92,
-      opacity: 0.88,
+      opacity: 0.89,
       transparent: true,
       roughness: 0.08,
-      ior: 1.31,
+      ior: 1.31, // Hielo
+      specularIntensity: 1.6,
     });
 
+    // Posiciones agrupadas en el tope del vaso (algunos asomando sobre el borde)
     const icePositions = [
-      { x: -0.12, y: 0.54, z: 0.1, r: [0.3, 0.4, 0.1] },
-      { x: 0.14, y: 0.52, z: -0.08, r: [0.1, 0.7, 0.5] },
-      { x: 0.02, y: 0.62, z: 0.06, r: [0.6, 0.2, 0.4] },
-      { x: -0.05, y: 0.42, z: -0.12, r: [0.4, 0.1, 0.8] },
+      { x: -0.12, y: 0.81, z: 0.08, r: [0.35, 0.45, 0.15], s: 1.05 },
+      { x: 0.14, y: 0.79, z: -0.06, r: [0.12, 0.78, 0.48], s: 0.95 },
+      { x: 0.03, y: 0.88, z: 0.09, r: [0.65, 0.25, 0.38], s: 1.1 }, // Sobresale arriba
+      { x: -0.16, y: 0.76, z: -0.12, r: [0.42, 0.18, 0.82], s: 0.9 },
+      { x: 0.12, y: 0.84, z: 0.14, r: [0.28, 0.62, 0.18], s: 0.98 },
+      { x: -0.02, y: 0.82, z: -0.15, r: [0.55, 0.35, 0.22], s: 1.0 },
     ];
 
     icePositions.forEach((pos) => {
       const ice = new THREE.Mesh(iceGeo, iceMat);
       ice.position.set(pos.x, pos.y, pos.z);
       ice.rotation.set(pos.r[0], pos.r[1], pos.r[2]);
+      ice.scale.setScalar(pos.s);
       iceGroup.add(ice);
     });
     cupGroup.add(iceGroup);
 
-    // 4. Escarchado (Rim Frosting de sal de grano y chile)
-    const frostGeometry = new THREE.TorusGeometry(0.536, 0.024, 12, 52);
-    const frostMaterial = new THREE.MeshStandardMaterial({
-      color: DRINK_FLAVORS[0].frostColor,
-      roughness: 0.92,
-      metalness: 0.05,
-    });
-    const frostMesh = new THREE.Mesh(frostGeometry, frostMaterial);
-    frostMesh.rotation.x = Math.PI / 2;
-    frostMesh.position.y = 0.902;
-    cupGroup.add(frostMesh);
+    // 6. Etiqueta / Escudo Oficial Tequilitros (Circular con Greca y Agave)
+    // Extraída de las fotografías en alta resolución con fondo transparente
+    const textureLoader = new THREE.TextureLoader();
+    const labelTexture = textureLoader.load(
+      "/tequilitros/logo-tequilitros-vaso.png",
+      () => {
+        labelTexture.colorSpace = THREE.SRGBColorSpace;
+        labelTexture.needsUpdate = true;
+      }
+    );
 
-    // 5. Etiqueta frontal original
-    const labelTexture = createLabelTexture();
+    // Patch cilíndrico curvado sobre el cono superior del vaso (y = 0.16)
+    // Radio superior 0.458, radio inferior 0.412, altura 0.54, ángulo ~ 56 grados
     const labelGeo = new THREE.CylinderGeometry(
-      0.442,
-      0.395,
+      0.458,
+      0.412,
       0.54,
       36,
       1,
@@ -330,16 +376,57 @@ export default function TequilitrosCup3D({
       map: labelTexture,
       transparent: true,
       side: THREE.DoubleSide,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
     const labelMesh = new THREE.Mesh(labelGeo, labelMat);
-    labelMesh.position.y = 0.05;
+    labelMesh.position.y = 0.16;
     cupGroup.add(labelMesh);
 
-    // Inclinación inicial estética
-    cupGroup.rotation.x = 0.18;
-    cupGroup.rotation.y = -0.3;
+    // 7. Escarchado Superior (Rim Frosting) Dinámico
+    // Para Cantarito, Vampiro y Tequimiche: chile tajín con textura granular y relieve
+    // Para Paloma: sal marina blanca brillante
+    // Para Tequimora y Tequimojito: borde liso transparente (hasFrost = false)
+    const frostGroup = new THREE.Group();
+    const tajinTexture = createRimTexture("tajin");
+    const salTexture = createRimTexture("sal");
 
-    // Manejo de interacción de arrastre (touch y mouse)
+    const frostGeometry = new THREE.TorusGeometry(0.536, 0.032, 16, 64);
+    const frostMaterial = new THREE.MeshStandardMaterial({
+      color: activeDrink.frostColor,
+      roughness: 0.94,
+      metalness: 0.05,
+      map: activeDrink.frostType === "sal" ? salTexture : tajinTexture,
+    });
+    const frostMesh = new THREE.Mesh(frostGeometry, frostMaterial);
+    frostMesh.rotation.x = Math.PI / 2;
+    frostMesh.position.y = 0.902;
+    frostGroup.add(frostMesh);
+
+    // Anillo secundario irregular con salpicaduras de chile para emular el escarchado real
+    const dripGeometry = new THREE.CylinderGeometry(0.54, 0.528, 0.06, 48, 1, true);
+    const dripMaterial = new THREE.MeshStandardMaterial({
+      color: activeDrink.frostColor,
+      roughness: 0.98,
+      transparent: true,
+      opacity: 0.88,
+      map: activeDrink.frostType === "sal" ? salTexture : tajinTexture,
+      side: THREE.DoubleSide,
+    });
+    const dripMesh = new THREE.Mesh(dripGeometry, dripMaterial);
+    dripMesh.position.y = 0.875;
+    frostGroup.add(dripMesh);
+
+    frostGroup.visible = activeDrink.hasFrost;
+    cupGroup.add(frostGroup);
+
+    // Inclinación inicial estética para apreciar la etiqueta y el borde
+    cupGroup.rotation.x = 0.18;
+    cupGroup.rotation.y = -0.28;
+
+    // Interacción táctil y mouse con arrastre 360° fluido
     let isDragging = false;
     let previousMouseX = 0;
     let autoRotate = true;
@@ -372,13 +459,16 @@ export default function TequilitrosCup3D({
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
 
-    // Render loop con IntersectionObserver para cuidar la batería y CPU
+    // Render loop con IntersectionObserver para ahorro de batería
     let animationFrameId: number;
     let isVisible = true;
 
-    const observer = new IntersectionObserver(([entry]) => {
-      isVisible = entry.isIntersecting;
-    }, { threshold: 0.1 });
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry.isIntersecting;
+      },
+      { threshold: 0.1 }
+    );
     observer.observe(container);
 
     const animate = () => {
@@ -387,11 +477,11 @@ export default function TequilitrosCup3D({
       if (!isVisible) return;
 
       if (autoRotate) {
-        cupGroup.rotation.y += 0.004;
+        cupGroup.rotation.y += 0.0035;
       }
 
-      // Animación suave de los hielos
-      iceGroup.rotation.y = Math.sin(Date.now() * 0.001) * 0.04;
+      // Animación suave de los hielos en la superficie
+      iceGroup.rotation.y = Math.sin(Date.now() * 0.001) * 0.035;
 
       renderer.render(scene, camera);
     };
@@ -408,12 +498,24 @@ export default function TequilitrosCup3D({
     };
     window.addEventListener("resize", handleResize);
 
-    // Guardar referencia para actualizar color del líquido
-    (container as unknown as { _updateLiquid?: (d: DrinkFlavor) => void })._updateLiquid = (
+    // Función interna para actualizar el material dinámicamente al cambiar bebida
+    (container as unknown as { _updateDrink?: (d: DrinkFlavor) => void })._updateDrink = (
       drink: DrinkFlavor
     ) => {
       liquidMaterial.color.setHex(drink.liquidColor);
-      frostMaterial.color.setHex(drink.frostColor);
+      liquidMaterial.transmission = drink.transmission;
+      liquidMaterial.roughness = drink.roughness;
+
+      frostGroup.visible = drink.hasFrost;
+      if (drink.hasFrost) {
+        frostMaterial.color.setHex(drink.frostColor);
+        dripMaterial.color.setHex(drink.frostColor);
+        const tex = drink.frostType === "sal" ? salTexture : tajinTexture;
+        frostMaterial.map = tex;
+        dripMaterial.map = tex;
+        frostMaterial.needsUpdate = true;
+        dripMaterial.needsUpdate = true;
+      }
     };
 
     return () => {
@@ -432,6 +534,10 @@ export default function TequilitrosCup3D({
       iceMat.dispose();
       frostGeometry.dispose();
       frostMaterial.dispose();
+      dripGeometry.dispose();
+      dripMaterial.dispose();
+      tajinTexture.dispose();
+      salTexture.dispose();
       labelGeo.dispose();
       labelMat.dispose();
       labelTexture.dispose();
@@ -443,13 +549,13 @@ export default function TequilitrosCup3D({
     };
   }, [webglSupported]);
 
-  // Actualizar material cuando cambie la bebida
+  // Actualizar materiales al seleccionar otra bebida
   useEffect(() => {
     const container = containerRef.current as unknown as {
-      _updateLiquid?: (d: DrinkFlavor) => void;
+      _updateDrink?: (d: DrinkFlavor) => void;
     };
-    if (container?._updateLiquid) {
-      container._updateLiquid(activeDrink);
+    if (container?._updateDrink) {
+      container._updateDrink(activeDrink);
     }
   }, [activeDrink]);
 
@@ -460,7 +566,7 @@ export default function TequilitrosCup3D({
 
   return (
     <div className="relative w-full overflow-hidden rounded-2xl border border-[#2A343D] bg-[#0E1318]/90 p-4 sm:p-8 backdrop-blur-xl">
-      {/* Encabezado y Medidas de Ingeniería */}
+      {/* Encabezado y Especificaciones del Vaso */}
       <div className="mb-6 flex flex-col justify-between gap-4 border-b border-[#242E37] pb-6 sm:flex-row sm:items-end">
         <div>
           <div className="flex items-center gap-2">
@@ -470,14 +576,15 @@ export default function TequilitrosCup3D({
             <span className="inline-flex h-2 w-2 rounded-full bg-[#30D158] animate-pulse" />
           </div>
           <h3 className="mt-1 font-serif text-2xl font-bold tracking-tight text-[#F5F2EB] sm:text-3xl">
-            Vaso Reyma 32 EU
+            Vaso Reyma 32 EU Oficial
           </h3>
           <p className="mt-1 text-xs text-[#9AA5AC] sm:text-sm">
-            Capacidad nominal de 946 ml. La presentación se confirma para cada evento.
+            Modelado con base en las fotos de producto de alta resolución de Tequilitros: pie escalonado,
+            estrías termoformadas, hielos reales a tope y etiqueta oficial de la marca.
           </p>
         </div>
 
-        {/* Ficha de medidas reales */}
+        {/* Ficha de medidas reales de ingeniería */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="rounded-lg border border-[#242E37] bg-[#141B22] px-3 py-1.5 text-center">
             <p className="font-mono text-[10px] uppercase text-[#9AA5AC]">Altura</p>
@@ -499,21 +606,22 @@ export default function TequilitrosCup3D({
       </div>
 
       {/* Área del Canvas 3D / Fallback */}
-      <div className="relative min-h-[440px] sm:min-h-[500px] w-full">
+      <div className="relative min-h-[460px] sm:min-h-[520px] w-full">
         {webglSupported ? (
           <>
             <div
               ref={containerRef}
-              className="h-[440px] sm:h-[500px] w-full select-none cursor-grab active:cursor-grabbing"
+              className="h-[460px] sm:h-[520px] w-full select-none cursor-grab active:cursor-grabbing"
             />
-            {/* Indicador de interacción 360 */}
-            <div className="pointer-events-none absolute bottom-4 left-4 flex items-center gap-2 rounded-full border border-[#2A343D] bg-[#0E1318]/80 px-3 py-1 text-[11px] font-mono text-[#9AA5AC] backdrop-blur">
-              <span>↻ Arrastra para girar 360°</span>
+            {/* Indicador interactivo */}
+            <div className="pointer-events-none absolute bottom-4 left-4 flex items-center gap-2 rounded-full border border-[#2A343D] bg-[#0E1318]/85 px-3 py-1 text-[11px] font-mono text-[#9AA5AC] backdrop-blur">
+              <span className="text-[#E28735]">↻</span>
+              <span>Arrastra para girar 360° · Inspecciona el vaso</span>
             </div>
           </>
         ) : (
           /* Fallback visual 2.5D optimizado con fotografía real de alta resolución */
-          <div className="flex h-[440px] sm:h-[500px] w-full items-center justify-center p-6 text-center">
+          <div className="flex h-[460px] sm:h-[520px] w-full items-center justify-center p-6 text-center">
             <div className="relative h-full w-full max-w-md overflow-hidden rounded-xl border border-[#2A343D] bg-[radial-gradient(circle_at_50%_30%,rgba(226,135,53,0.28),transparent_40%),linear-gradient(145deg,#1B242C_0%,#0B1014_58%,#17100D_100%)]">
               <Image
                 src={activeDrink.photoUrl}
@@ -525,7 +633,7 @@ export default function TequilitrosCup3D({
               <div className="absolute inset-0 bg-gradient-to-t from-[#080B0E] via-transparent to-transparent" />
               <div className="absolute bottom-4 left-4 right-4 text-left">
                 <span className="font-mono text-[10px] uppercase text-[#E28735]">
-                  Vista de Producto Real
+                  Fotografía de Producto Real
                 </span>
                 <h4 className="text-xl font-bold text-[#F5F2EB]">{activeDrink.name}</h4>
                 <p className="text-xs text-[#9AA5AC]">{activeDrink.description}</p>
@@ -533,27 +641,42 @@ export default function TequilitrosCup3D({
             </div>
           </div>
         )}
+
+        {/* Tarjeta flotante con la fotografía real de referencia para comparar de inmediato */}
         {webglSupported && (
-          <div className="pointer-events-none absolute right-4 top-4 hidden h-40 w-28 overflow-hidden rounded-xl border border-[#D4AF37]/25 bg-[#080B0E]/65 p-1.5 shadow-2xl backdrop-blur-md sm:block">
-            <Image
-              src={activeDrink.photoUrl}
-              alt=""
-              fill
-              sizes="112px"
-              className="object-contain p-1 drop-shadow-2xl"
-            />
-            <span className="absolute bottom-1.5 left-2 right-2 text-center font-mono text-[8px] font-bold uppercase tracking-[0.12em] text-[#F5F2EB]/80">
-              Referencia real
-            </span>
+          <div className="pointer-events-none absolute right-4 top-4 hidden h-48 w-36 overflow-hidden rounded-xl border border-[#D4AF37]/30 bg-[#080B0E]/80 p-2 shadow-2xl backdrop-blur-md sm:flex sm:flex-col sm:items-center sm:justify-between">
+            <div className="relative h-36 w-full">
+              <Image
+                src={activeDrink.photoUrl}
+                alt={activeDrink.name}
+                fill
+                sizes="144px"
+                className="object-contain p-1 drop-shadow-2xl"
+              />
+            </div>
+            <div className="w-full rounded bg-[#141B22]/90 py-1 text-center">
+              <span className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#E28735]">
+                Foto Real de Referencia
+              </span>
+            </div>
           </div>
         )}
       </div>
 
       {/* Selector de Bebidas (Reactivo al Vaso 3D) */}
       <div className="mt-6 border-t border-[#242E37] pt-6">
-        <p className="mb-3 font-mono text-xs font-semibold uppercase tracking-wider text-[#9AA5AC]">
-          Selecciona una bebida para simular en el vaso:
-        </p>
+        <div className="mb-3 flex items-center justify-between">
+          <p className="font-mono text-xs font-semibold uppercase tracking-wider text-[#9AA5AC]">
+            Selecciona una bebida para simular en el vaso 3D:
+          </p>
+          <span className="font-mono text-[11px] text-[#E28735]">
+            {activeDrink.hasFrost
+              ? activeDrink.frostType === "sal"
+                ? "🧂 Escarchado con Sal de Mar"
+                : "🌶️ Escarchado con Sal y Chile"
+              : "🧊 Borde Liso · Hielos a Tope"}
+          </span>
+        </div>
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {DRINK_FLAVORS.map((drink) => {
@@ -571,13 +694,13 @@ export default function TequilitrosCup3D({
               >
                 <div className="flex w-full items-center justify-between">
                   <span
-                    className="h-3 w-3 rounded-full border border-white/20 shadow-sm"
+                    className="h-3.5 w-3.5 rounded-full border border-white/20 shadow-sm"
                     style={{
                       backgroundColor: `#${drink.liquidColor.toString(16).padStart(6, "0")}`,
                     }}
                   />
                   {isSelected && (
-                    <span className="font-mono text-[9px] uppercase tracking-wider text-[#E28735]">
+                    <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-[#E28735]">
                       Activo
                     </span>
                   )}
@@ -592,9 +715,24 @@ export default function TequilitrosCup3D({
         </div>
 
         {/* Ficha descriptiva de la bebida activa */}
-        <div className="mt-4 rounded-xl border border-[#242E37] bg-[#141B22]/50 p-4">
-          <p className="text-xs text-[#F5F2EB]/90 leading-relaxed sm:text-sm">
-            <strong className="text-[#E28735]">{activeDrink.name}:</strong> {activeDrink.description}
+        <div className="mt-4 rounded-xl border border-[#242E37] bg-[#141B22]/60 p-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+            <h4 className="text-base font-bold text-[#F5F2EB]">
+              <span className="text-[#E28735]">{activeDrink.name}:</span> {activeDrink.subtitle}
+            </h4>
+            <span className="font-mono text-xs text-[#9AA5AC]">
+              {activeDrink.hasFrost
+                ? activeDrink.frostType === "sal"
+                  ? "Escarchado de sal fina"
+                  : "Escarchado con chile tajín"
+                : "Sin escarcha · Borde clásico"}
+            </span>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-[#D2DAE0] sm:text-sm">
+            {activeDrink.description}
+          </p>
+          <p className="mt-1 font-mono text-[11px] text-[#9AA5AC]">
+            <strong className="text-[#A8B4BC]">Ingredientes:</strong> {activeDrink.ingredients}
           </p>
         </div>
       </div>

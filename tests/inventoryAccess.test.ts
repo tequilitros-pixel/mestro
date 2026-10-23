@@ -41,3 +41,15 @@ test("el dashboard expresa faltantes de hielo en bolsas y kilogramos sin cambiar
   assert.equal(formatInventoryDashboardQuantity(-70_000, hielo), "−14 bolsas (70 kg)");
   assert.equal(formatInventoryDashboardQuantity(2_500, hielo), "0.5 bolsa (2.5 kg)");
 });
+
+test("el dashboard convierte gramos y mililitros crudos a kilogramos y litros legibles", () => {
+  const sal = { productName: "Sal en grano", inventoryBaseUnit: "G", handlingUnit: null, contentPerUnit: null, contentUnit: null, normalizedContentPerUnit: null };
+  assert.equal(formatInventoryDashboardQuantity(10_000, sal), "10 kg");
+  assert.equal(formatInventoryDashboardQuantity(-10_000, sal), "−10 kg");
+  assert.equal(formatInventoryDashboardQuantity(450, sal), "450 g");
+
+  const tequila = { productName: "Tequila Blanco", inventoryBaseUnit: "ML", handlingUnit: null, contentPerUnit: null, contentUnit: null, normalizedContentPerUnit: null };
+  assert.equal(formatInventoryDashboardQuantity(45_000, tequila), "45 L");
+  assert.equal(formatInventoryDashboardQuantity(-2_500, tequila), "−2.5 L");
+  assert.equal(formatInventoryDashboardQuantity(750, tequila), "750 ml");
+});

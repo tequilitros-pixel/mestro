@@ -31,6 +31,7 @@ import {
   getTailLiters,
   getCorrectedAlcohol,
   getAbsoluteAlcohol,
+  getTotalLAA,
   getYield,
   getDistillationStatus,
 } from "@/lib/services/distillation";
@@ -147,10 +148,12 @@ export default async function DistillationDetailPage({
     distillation.events
   );
 
-  const absoluteAlcohol = getAbsoluteAlcohol(
+  const fallbackAbsoluteAlcohol = getAbsoluteAlcohol(
     totalLiters,
     lastAlcoholCorrected
   );
+  const calculatedLAA = getTotalLAA(distillation.events);
+  const absoluteAlcohol = calculatedLAA > 0 ? calculatedLAA : fallbackAbsoluteAlcohol;
 
   const distillationYield = getYield(
     distillation.loadedLiters,

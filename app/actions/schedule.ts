@@ -16,23 +16,21 @@ import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/perio
 import { availabilityConflict, getAvailabilityMatrix, getEffectiveAvailability } from "@/lib/availability";
 
 /**
- * Devuelve a borrador únicamente el horario del empleado afectado.
- * Editar a Eduardo no debe ocultar los turnos ya publicados de los
- * demás trabajadores.
+ * Granularidad individual por turno (estilo Connecteam):
+ * Modificar un turno de lunes o martes ya no despublica los demás días
+ * de la semana del trabajador. Únicamente el turno que se crea, edita o
+ * mueve pasa a DRAFT, conservando publicados los días no modificados.
  */
 export async function ensureEmployeeStartsAsDraft(
-  tx: Prisma.TransactionClient,
-  dateStr: string,
-  userId: string,
+  _tx: Prisma.TransactionClient,
+  _dateStr: string,
+  _userId: string,
 ) {
-  const weekStartStr = mondayOfWeek(dateStr);
-  const weekStart = parseDateOnly(weekStartStr);
-  const weekEnd = parseDateOnly(addDaysToDateOnly(weekStartStr, 7));
-
-  await tx.scheduledShift.updateMany({
-    where: { userId, date: { gte: weekStart, lt: weekEnd } },
-    data: { publicationStatus: "DRAFT" },
-  });
+  void _tx;
+  void _dateStr;
+  void _userId;
+  // No-op intencional: se preserva la firma para compatibilidad, pero ya
+  // no se despublican masivamente los turnos no modificados de la semana.
 }
 
 /**

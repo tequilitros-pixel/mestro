@@ -8,14 +8,14 @@ const WHATSAPP_URL =
   encodeURIComponent("Hola, quiero cotizar Tequilitros para mi evento.");
 
 const NAV_LINKS = [
-  { href: "#nosotros", label: "Destilería" },
-  { href: "#bebidas", label: "Mixología" },
+  { href: "#servicios", label: "Barras Móviles" },
+  { href: "#bebidas", label: "Bartender & Carta" },
   { href: "#vaso3d", label: "Vaso 3D" },
-  { href: "#servicios", label: "Servicios" },
-  { href: "#viaticos", label: "Traslados" },
+  { href: "#nosotros", label: "Quiénes Somos" },
+  { href: "#viaticos", label: "Cobertura" },
   { href: "#galeria", label: "Galería" },
   { href: "#faq", label: "Preguntas" },
-  { href: "#cotizar", label: "Cotizar" },
+  { href: "#cotizar", label: "Cotizar Evento" },
 ];
 
 export default function Navbar() {
@@ -39,7 +39,7 @@ export default function Navbar() {
           Colotlán · Jalisco · México
         </span>
         <span className="hidden sm:inline">
-          Destiladora del Norte · Barra Móvil para Eventos
+          Tequilitros Eventos · Barras Móviles & Servicio de Bartender
         </span>
         <a
           href="tel:+525662989202"

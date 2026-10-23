@@ -38,6 +38,7 @@ import {
   getTemperatureStatus,
   isTemperatureWarning,
 } from "@/lib/cooking/cookingMetrics";
+import { calculateSteamEnergyMetrics } from "@/lib/processCalculations";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -136,6 +137,8 @@ export default async function CookingDetailPage({
     hasStartedVapor,
     lastTemperature,
   });
+
+  const steamMetrics = calculateSteamEnergyMetrics(cooking.steamIntervals, cooking.agaveKg);
 
   async function addSimpleEvent(
     formData: FormData
@@ -557,6 +560,37 @@ export default async function CookingDetailPage({
           </div>
         </section>
 
+        <section className="mt-6 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-6">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="font-mono text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+              Trazabilidad y Balance Energético de Vapor
+            </h3>
+            <span className="font-mono text-xs text-primary">
+              {steamMetrics.agaveTons} Toneladas de Agave
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-outline-variant/60 bg-surface-container-high p-4">
+              <p className="text-xs text-on-surface-variant">Inyección neta de vapor</p>
+              <p className="mt-1 text-2xl font-bold text-primary">{steamMetrics.injectionHours} hrs</p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">Tiempo activo de caldera</p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant/60 bg-surface-container-high p-4">
+              <p className="text-xs text-on-surface-variant">Reposo / Enfriamiento</p>
+              <p className="mt-1 text-2xl font-bold text-on-surface">{steamMetrics.restHours} hrs</p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">Cocción por inercia térmica</p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant/60 bg-surface-container-high p-4">
+              <p className="text-xs text-on-surface-variant">Ratio vapor / tonelada</p>
+              <p className="mt-1 text-2xl font-bold text-secondary">{steamMetrics.hoursPerTon} h/Ton</p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">Eficiencia energética del horno</p>
+            </div>
+          </div>
+        </section>
+
         <section
           className={`mt-6 rounded-2xl border p-6 ${
             cookingHealth === "ATENCION"
@@ -923,7 +957,11 @@ export default async function CookingDetailPage({
   );
 
   const graficasTabContent = (
-    <CookingCharts events={cooking.events} steamIntervals={cooking.steamIntervals} />
+    <CookingCharts
+      events={cooking.events}
+      steamIntervals={cooking.steamIntervals}
+      sweetHoneyRecoveries={cooking.sweetHoneyRecoveries}
+    />
   );
 
   const bitacoraTabContent = (

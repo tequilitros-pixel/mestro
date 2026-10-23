@@ -19,30 +19,7 @@ export async function POST(
   }
 
   const { id } = await params;
-  let body: {
-    email?: string;
-    fallbackReceipt?: {
-      saleCode: string;
-      branchName: string;
-      branchAddress?: string | null;
-      date: string;
-      cashierName?: string | null;
-      items: Array<{
-        name: string;
-        quantity: number;
-        unitPrice: number;
-        lineTotal: number;
-      }>;
-      subtotal: number;
-      discountAmount: number;
-      total: number;
-      payments: Array<{
-        method: string;
-        amount: number;
-      }>;
-      change?: number | null;
-    };
-  };
+  let body: { email?: string };
 
   try {
     body = await request.json();
@@ -114,37 +91,11 @@ export async function POST(
     }
   }
 
-  // 2. Si es una venta local/offline y trae fallbackReceipt
-  if (body.fallbackReceipt) {
-    const f = body.fallbackReceipt;
-    try {
-      await sendSaleReceiptEmail({
-        to: email,
-        saleCode: f.saleCode,
-        branchName: f.branchName,
-        branchAddress: f.branchAddress,
-        date: f.date,
-        cashierName: f.cashierName ?? user.name,
-        items: f.items,
-        subtotal: f.subtotal,
-        discountAmount: f.discountAmount,
-        total: f.total,
-        payments: f.payments,
-        change: f.change,
-      });
-
-      return NextResponse.json({
-        success: true,
-        message: `Ticket enviado a ${email}`,
-      });
-    } catch (err) {
-      console.error("Error sending offline receipt email:", err);
-      return NextResponse.json(
-        { error: "No fue posible enviar el correo." },
-        { status: 500 }
-      );
-    }
-  }
-
-  return NextResponse.json({ error: "Venta no encontrada." }, { status: 404 });
+  // Las ventas sin conexión conservan el correo en cola hasta que la venta
+  // exista en el servidor. No aceptamos un ticket aportado por el cliente:
+  // los importes y el contenido del correo siempre salen de la venta auditada.
+  return NextResponse.json(
+    { error: "La venta aún no está confirmada. El recibo se enviará al sincronizarla." },
+    { status: 409 },
+  );
 }

@@ -399,6 +399,13 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       permissionKey: "/pos",
     },
     {
+      href: "/pospress/pending-tabs",
+      label: "Cuentas pendientes",
+      icon: ClockIcon,
+      iconVariant: "amber",
+      permissionKey: "/pos",
+    },
+    {
       href: "/pospress/catalog",
       label: "Editor de productos",
       icon: PackageIcon,

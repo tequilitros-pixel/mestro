@@ -45,10 +45,12 @@ export default function ReceiptTicket({
   data,
   containerId = "thermal-receipt-print-area",
   showPreviewBorders = true,
+  printable = true,
 }: {
   data: ReceiptData;
   containerId?: string;
   showPreviewBorders?: boolean;
+  printable?: boolean;
 }) {
   return (
     <div
@@ -57,7 +59,7 @@ export default function ReceiptTicket({
         showPreviewBorders ? "rounded-xl border border-gray-200 shadow-sm" : ""
       }`}
     >
-      <style>{`
+      {printable && <style>{`
         @media print {
           @page {
             margin: 0;
@@ -83,7 +85,7 @@ export default function ReceiptTicket({
             border: none !important;
           }
         }
-      `}</style>
+      `}</style>}
 
       {/* Header */}
       <div className="text-center pb-2 border-b border-dashed border-gray-400">

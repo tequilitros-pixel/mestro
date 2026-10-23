@@ -200,19 +200,24 @@ function ShiftBlock({
           }
         }}
         aria-label="Descanso programado"
-        className={`group/shift flex w-full cursor-grab items-center justify-between rounded-md border px-2 py-1 text-left transition active:cursor-grabbing hover:border-outline ${
+        className={`group/shift flex w-full cursor-grab items-center justify-between rounded-md border px-2 py-1.5 text-left transition-all active:cursor-grabbing hover:shadow-xs ${
           isDragging ? "opacity-35 scale-[0.98] ring-2 ring-primary" : ""
         } ${
           published
-            ? "border-outline-variant/80 bg-surface-container-high/60"
-            : "border-dashed border-outline-variant bg-surface-container-high/40"
+            ? "border-amber-500/50 bg-amber-500/20 text-amber-100 hover:border-amber-400 shadow-xs"
+            : "border-dashed border-amber-500/40 bg-amber-500/10 text-amber-200/90 hover:border-amber-400"
         }`}
+        style={{
+          borderLeftColor: "#f59e0b",
+          borderLeftWidth: 4,
+        }}
+        title="Día de descanso programado · Arrastra para mover o mantén Alt para duplicar"
       >
-        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+        <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-amber-300">
           <span>☕</span>
           <span>Descanso</span>
         </span>
-        <span className="text-[10px] text-on-surface-variant opacity-0 transition group-hover/shift:opacity-100">
+        <span className="text-[10px] text-amber-400/80 opacity-0 transition group-hover/shift:opacity-100">
           •••
         </span>
       </div>
@@ -224,7 +229,9 @@ function ShiftBlock({
       ? getPositionColor(shift.position)
       : shift.branch?.color || fallbackBranchColor(shift.event?.id ?? shift.branchId ?? shift.id);
 
-  const branchTint = `color-mix(in srgb, ${color} ${published ? "15%" : "8%"}, var(--surface-container-high, #202020))`;
+  // Colores intensos y llamativos visualmente estilo Connecteam
+  const branchTint = `color-mix(in srgb, ${color} ${published ? "36%" : "26%"}, var(--surface-container-high, #1a1a1a))`;
+  const borderTone = `color-mix(in srgb, ${color} ${published ? "70%" : "45%"}, transparent)`;
 
   return (
     <div
@@ -243,17 +250,18 @@ function ShiftBlock({
       aria-label={`${shift.event?.name ?? shift.branch?.name ?? "Turno"} · ${
         published ? "Publicado" : "Borrador"
       }`}
-      className={`group/shift relative flex w-full cursor-grab flex-col rounded-md border px-2 py-1 text-left transition-all active:cursor-grabbing hover:shadow-sm ${
+      className={`group/shift relative flex w-full cursor-grab flex-col rounded-md border px-2 py-1.5 text-left transition-all active:cursor-grabbing hover:shadow-md ${
         isDragging ? "opacity-35 scale-[0.98] ring-2 ring-primary shadow-lg" : ""
       } ${
         published
-          ? "border-outline-variant/70 hover:border-outline"
-          : "border-dashed border-secondary/50 bg-secondary/[0.04] hover:border-secondary"
+          ? "hover:brightness-110 shadow-xs"
+          : "border-dashed hover:brightness-110"
       }`}
       style={{
         backgroundColor: branchTint,
+        borderColor: borderTone,
         borderLeftColor: color,
-        borderLeftWidth: 3.5,
+        borderLeftWidth: 4.5,
       }}
       title={`${shift.event?.name ?? shift.branch?.name ?? "Sin sucursal"}\n${
         shift.startTime ? formatTime12(shift.startTime) : ""
@@ -262,45 +270,50 @@ function ShiftBlock({
       }${shift.notes ? `\nNota: ${shift.notes}` : ""}\n\n💡 Arrastra para mover · Mantén Alt/Option al arrastrar para duplicar`}
     >
       <div className="flex w-full items-center justify-between gap-1 leading-tight">
-        <span className="font-mono text-[11px] font-bold tracking-tight text-on-surface">
+        <span className="font-mono text-[11px] font-extrabold tracking-tight text-white drop-shadow-xs">
           {shift.startTime ? formatTime12Compact(shift.startTime) : "—"}
           {" – "}
           {shift.endTime ? formatTime12Compact(shift.endTime) : "—"}
         </span>
         {shift.startTime && shift.endTime && (
-          <span className="shrink-0 rounded bg-surface-container-highest/80 px-1 py-0.2 text-[9px] font-bold text-on-surface-variant">
+          <span className="shrink-0 rounded bg-black/40 px-1.5 py-0.5 text-[9px] font-black text-white/95 backdrop-blur-xs">
             {formatHours(shiftHours(shift.startTime, shift.endTime))}
           </span>
         )}
       </div>
 
-      <div className="mt-0.5 flex w-full items-center gap-1 truncate text-[10px] leading-tight">
+      <div className="mt-1 flex w-full items-center gap-1.5 truncate text-[10px] leading-tight">
         <span
-          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          className="h-2 w-2 shrink-0 rounded-full shadow-xs"
           style={{ backgroundColor: color }}
           aria-hidden="true"
         />
-        <span className="truncate font-semibold text-on-surface">
+        <span className="truncate font-bold text-white/95 drop-shadow-xs">
           {shift.event?.name ?? shift.branch?.name ?? "Sin sucursal"}
         </span>
         {shift.position && (
           <span
-            className={`truncate font-normal ${
+            className={`truncate font-semibold ${
               colorBy === "position"
-                ? "font-semibold text-on-surface"
-                : "text-on-surface-variant opacity-85"
+                ? "text-white font-bold"
+                : "text-white/85 opacity-90"
             }`}
           >
             · {shift.position}
           </span>
         )}
         {shift.notes && (
-          <span className="shrink-0 text-[10px] opacity-70" title={shift.notes}>
+          <span className="shrink-0 text-[10px] opacity-90" title={shift.notes}>
             📝
           </span>
         )}
         {!published && (
-          <span className="ml-auto shrink-0 h-1.5 w-1.5 rounded-full bg-secondary" title="Borrador" />
+          <span
+            className="ml-auto shrink-0 inline-flex items-center rounded-full bg-secondary px-1.5 py-0.2 text-[8px] font-black text-on-secondary uppercase tracking-wider shadow-xs"
+            title="Borrador pendiente de publicar"
+          >
+            Borrador
+          </span>
         )}
       </div>
     </div>

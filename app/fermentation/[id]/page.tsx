@@ -25,6 +25,7 @@ import {
   TARGET_BRIX,
   evaluateFermentation,
 } from "@/lib/fermentation/fermentationMetrics";
+import { analyzeFermentationKinetics } from "@/lib/processCalculations";
 import ProcessSwitcher from "@/components/production/ProcessSwitcher";
 import ProcessBoilerUsage from "@/components/boiler/ProcessBoilerUsage";
 
@@ -321,6 +322,8 @@ export default async function FermentationDetailPage({ params }: Props) {
     isFinished,
   });
 
+  const kinetics = analyzeFermentationKinetics(fermentation.readings);
+
   const temperatureNeedsAttention = temperatureStatus !== "ÓPTIMA";
   const phNeedsAttention = phStatus !== "ÓPTIMO";
 
@@ -512,6 +515,40 @@ export default async function FermentationDetailPage({ params }: Props) {
             warning={false}
           />
         </div>
+      </section>
+
+      <section
+        className={`mt-6 rounded-2xl border p-5 sm:p-6 ${
+          kinetics.isStuckRisk
+            ? "border-error/40 bg-error/10 text-on-surface"
+            : kinetics.status === "TERMINADA"
+              ? "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 text-on-surface"
+              : "border-outline-variant bg-surface-container text-on-surface"
+        }`}
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span
+              className={`h-2.5 w-2.5 rounded-full ${
+                kinetics.isStuckRisk
+                  ? "bg-error animate-ping"
+                  : kinetics.status === "TERMINADA"
+                    ? "bg-tertiary-fixed-dim"
+                    : "bg-primary animate-pulse"
+              }`}
+            />
+            <p className="font-mono text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+              Cinética y Detección de Estancamiento
+            </p>
+          </div>
+          {kinetics.consumptionRateBxPerHour !== null && (
+            <span className="font-mono text-xs font-semibold text-primary">
+              Velocidad: {kinetics.consumptionRateBxPerHour} °Bx/hora
+            </span>
+          )}
+        </div>
+        <h3 className="mt-2 text-base font-bold text-on-surface">{kinetics.message}</h3>
+        <p className="mt-1 text-xs text-on-surface-variant">{kinetics.recommendation}</p>
       </section>
 
       <section

@@ -2,10 +2,10 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// ⚠️ Cambia "onboarding@resend.dev" por tu propio remitente
-// (ej. "Destiladora del Norte <no-responder@maestro-destiladora.space>")
-// una vez que verifiques tu dominio en Resend.
-const FROM_ADDRESS = "Destiladora del Norte <onboarding@resend.dev>";
+// Remitente por defecto. Puedes personalizarlo con la variable de entorno EMAIL_FROM en .env
+// (ej. EMAIL_FROM="Destiladora del Norte <tickets@destiladoradelnorte.com>")
+const FROM_ADDRESS = process.env.EMAIL_FROM || "Destiladora del Norte <onboarding@resend.dev>";
+const REPLY_TO_ADDRESS = process.env.EMAIL_REPLY_TO || "tequilitros@gmail.com";
 
 export async function sendPasswordResetEmail(
   to: string,
@@ -135,6 +135,7 @@ export async function sendSaleReceiptEmail(params: {
   return await resend.emails.send({
     from: FROM_ADDRESS,
     to: params.to,
+    reply_to: REPLY_TO_ADDRESS,
     subject: `Tu ticket de compra — ${params.saleCode} (Destiladora del Norte)`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden;">
@@ -217,7 +218,10 @@ export async function sendSaleReceiptEmail(params: {
             <p style="font-size: 14px; font-weight: 600; color: #0f172a; margin: 0 0 4px 0;">
               ¡Gracias por tu compra!
             </p>
-            <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+            <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">
+              ¿Dudas o aclaraciones? Contáctanos en <a href="mailto:${REPLY_TO_ADDRESS}" style="color: #d97706; text-decoration: none; font-weight: 600;">${REPLY_TO_ADDRESS}</a>
+            </p>
+            <p style="font-size: 10px; color: #94a3b8; margin: 8px 0 0 0;">
               Comprobante de operación simplificado emitido por Maestro POSpress.
             </p>
           </div>

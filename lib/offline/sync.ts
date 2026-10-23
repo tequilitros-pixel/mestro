@@ -20,9 +20,15 @@ async function runSync() {
 
   const operations = await listOperations();
   let blocked = false;
+  const failedSaleIds = new Set<string>();
 
   for (const operation of operations) {
     if (!navigator.onLine) break;
+    const saleId = String((operation.payload as Record<string, unknown>).saleId ?? "");
+    // Un recibo electrónico sólo puede salir después de que su venta esté
+    // confirmada. Nunca enviamos un comprobante de un cobro que el servidor
+    // rechazó o que sigue pendiente de sincronizar.
+    if (operation.kind === "pos.sale.email" && failedSaleIds.has(saleId)) continue;
     // No adelantar ventas a una apertura/cierre de caja que quedó pendiente.
     if (blocked && operation.kind.startsWith("cash-cut.")) break;
     // Las ventas y correos de recibo son independientes; conserva el orden de los demás eventos.
@@ -87,6 +93,7 @@ async function runSync() {
         // Un fallo del indicador no debe volver a encolar una venta confirmada.
       }
     } catch (error) {
+      if (operation.kind === "pos.sale.create") failedSaleIds.add(operation.id);
       await updateOperation({
         ...operation,
         attempts: operation.attempts + 1,
