@@ -1,7 +1,10 @@
+import { withOpenCashCutWrite } from "@/lib/cash-cuts/openCutWrite";
+import { DomainError } from "@/lib/domain/errors";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { getCashCutScope, withCashCutReadScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { requireFinancialMovementCategory } from "@/lib/financialMovementCategories";
 
 const ROLES_QUE_PUEDEN_EDITAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -10,26 +13,22 @@ const TIPOS_VALIDOS = ["CAMBIO_RECIBIDO", "REEMBOLSO", "AJUSTE", "PRESTAMO", "OT
 async function recalcularTotalEntradas(cashCutId: string) {
   const entradas = await prisma.cashInflow.findMany({ where: { cashCutId } });
   const totalInflows = entradas.reduce((sum, e) => sum + e.amount, 0);
-  await prisma.cashCut.update({
-    where: { id: cashCutId },
-    data: { totalInflows },
-  });
   return totalInflows;
 }
 
-async function checkAccessToCut(userId: string, role: string, cashCutId: string) {
+async function checkAccessToCut(userId: string, role: string, cashCutId: string, readOnly = false) {
   /*
    * El alcance se resuelve desde la sesion, no desde los parametros.
    * Los argumentos solo se usan para comprobar que coinciden con la
    * sesion real; si no, se rechaza.
    */
-  const scope = await getCashCutScope();
+  const scope = await getCashCutScope(["/cash-cuts/daily"]);
   if (!scope || scope.user.id !== userId || scope.user.role !== role) {
     return { ok: false, status: 401 as const, error: "No autorizado", cashCut: null };
   }
 
   const cashCut = await prisma.cashCut.findFirst({
-    where: withCashCutScope(scope, { id: cashCutId }),
+    where: (readOnly ? withCashCutReadScope : withCashCutScope)(scope, { id: cashCutId }),
     select: { branchId: true, status: true },
   });
 
@@ -79,7 +78,7 @@ export async function POST(
 
   const { id: cashCutId } = await params;
 
-  const access = await checkAccessToCut(user.id, user.role, cashCutId);
+  const access = await checkAccessToCut(user.id, user.role, cashCutId, true);
   if (!access.ok) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
@@ -89,7 +88,7 @@ export async function POST(
   }
 
   const body = await request.json();
-  const { type, amount, notes, clientOperationId, clientCreatedAt } = body;
+  const { type, categoryId, amount, notes, clientOperationId, clientCreatedAt } = body;
 
   if (clientOperationId) {
     const existing = await prisma.cashInflow.findUnique({ where: { id: clientOperationId } });
@@ -104,14 +103,28 @@ export async function POST(
   if (!TIPOS_VALIDOS.includes(type) || typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json({ error: "type inválido o amount faltante" }, { status: 400 });
   }
+  let categoryRef;
+  try { categoryRef = await requireFinancialMovementCategory(prisma, { categoryId, direction: "INCOME", scope: "CASH" }); }
+  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Categoría inválida" }, { status: 400 }); }
+  if (categoryRef.requiresReason && (!notes || typeof notes !== "string" || !notes.trim())) return NextResponse.json({ error: "Esta categoría requiere motivo." }, { status: 400 });
+  if (categoryRef.requiresReceipt) return NextResponse.json({ error: "Esta categoría requiere comprobante." }, { status: 400 });
 
   const occurredAt = clientCreatedAt ? new Date(clientCreatedAt) : null;
   if (occurredAt && Number.isNaN(occurredAt.getTime())) return NextResponse.json({ error: "Fecha de entrada inválida" }, { status: 400 });
-  const entrada = await prisma.cashInflow.create({
-    data: { ...(clientOperationId ? { id: clientOperationId } : {}), cashCutId, type, amount, notes, ...(occurredAt ? { occurredAt, createdAt: occurredAt } : {}) },
+  try {
+    const result = await withOpenCashCutWrite(cashCutId, async (tx) => {
+  const entrada = await tx.cashInflow.create({
+    data: { ...(clientOperationId ? { id: clientOperationId } : {}), cashCutId, type, categoryId: categoryRef.id, categoryNameSnapshot: categoryRef.name, amount, notes, receiptPhotoUrl: body.receiptPhotoUrl ?? null, ...(occurredAt ? { occurredAt, createdAt: occurredAt } : {}) },
   });
 
-  const totalInflows = await recalcularTotalEntradas(cashCutId);
-
-  return NextResponse.json({ entrada, totalInflows }, { status: 201 });
+  const records = await tx.cashInflow.findMany({ where: { cashCutId } });
+  const totalInflows = records.reduce((sum, record) => sum + record.amount, 0);
+  await tx.cashCut.update({ where: { id: cashCutId }, data: { totalInflows } });
+  return { entrada, totalInflows };
+    });
+    return NextResponse.json(result, { status: 201 });
+  } catch (error) {
+    if (error instanceof DomainError) return NextResponse.json(error.toResponse(), { status: error.httpStatus });
+    throw error;
+  }
 }

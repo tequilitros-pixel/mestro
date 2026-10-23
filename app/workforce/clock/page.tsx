@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { Card } from "@/components/ui/Card";
 import { getCurrentUser } from "@/lib/auth";
+import { formatBusinessTime } from "@/lib/dateTime";
 import { getClockDashboard } from "@/lib/workforce/clock/service";
 import {
   workforceClockAction,
   workforceCorrectionRequestAction,
 } from "@/app/actions/workforceClock";
+import { ClockActionForm } from "./ClockActionForm";
 
-const button =
-  "min-h-14 w-full rounded-xl bg-primary px-5 py-4 text-lg font-bold text-on-primary";
 export default async function ClockPage({
   searchParams,
 }: {
@@ -45,6 +45,17 @@ export default async function ClockPage({
     CLOCK_OUT: "Registrar salida",
   }[primary];
   const back = "/workforce/clock";
+  const availableBranches = [
+    ...dashboard.branches,
+    ...dashboard.shifts
+      .map((shift) => shift.branch)
+      .filter((candidate) => !dashboard.branches.some((item) => item.id === candidate.id)),
+  ];
+  const requiresForAction = primary === "CLOCK_IN"
+    ? dashboard.locationPolicy.requireGeolocationClockIn
+    : primary === "CLOCK_OUT"
+      ? dashboard.locationPolicy.requireGeolocationClockOut
+      : false;
   return (
     <section className="mx-auto max-w-xl space-y-4">
       {query.saved ? (
@@ -68,15 +79,9 @@ export default async function ClockPage({
           <p className="rounded-lg bg-surface-container p-3 text-sm">
             Turno publicado · {dashboard.shifts[0].branch.name}
             <br />
-            {dashboard.shifts[0].startAt.toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatBusinessTime(dashboard.shifts[0].startAt)}
             –
-            {dashboard.shifts[0].endAt.toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatBusinessTime(dashboard.shifts[0].endAt)}
           </p>
         ) : (
           <p className="rounded-lg bg-secondary/10 p-3 text-sm">
@@ -87,35 +92,18 @@ export default async function ClockPage({
       </Card>
       {branch ? (
         <Card className="space-y-3">
-          <form action={workforceClockAction} className="space-y-3">
-            <input type="hidden" name="returnTo" value={back} />
-            <input type="hidden" name="type" value={primary} />
-            <input type="hidden" name="idempotencyKey" value={randomUUID()} />
-            <label className="block text-sm font-semibold">
-              Sucursal
-              <select
-                name="branchId"
-                defaultValue={branch.id}
-                className="mt-1 w-full rounded-lg border border-outline-variant bg-surface p-3"
-              >
-                {dashboard.branches.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-                {dashboard.shifts
-                  .filter(
-                    (s) => !dashboard.branches.some((b) => b.id === s.branchId),
-                  )
-                  .map((s) => (
-                    <option key={s.branchId} value={s.branchId}>
-                      {s.branch.name} · turno
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <button className={button}>{label}</button>
-          </form>
+          <ClockActionForm
+            branches={availableBranches.map((item) => ({
+              id: item.id,
+              name: item.name,
+              requiresLocation: Boolean(requiresForAction && item.geofenceEnabled && item.geofenceId),
+            }))}
+            defaultBranchId={branch.id}
+            type={primary}
+            idempotencyKey={randomUUID()}
+            returnTo={back}
+            label={label}
+          />
           {dashboard.state === "CLOCKED_IN" ? (
             <form action={workforceClockAction}>
               <input type="hidden" name="returnTo" value={back} />
@@ -131,7 +119,6 @@ export default async function ClockPage({
       ) : (
         <Card>No hay sucursal autorizada ni Shift publicado cercano.</Card>
       )}
-      <div id="solicitudes">
       <Card>
         <details>
           <summary className="cursor-pointer font-bold">
@@ -203,7 +190,6 @@ export default async function ClockPage({
           </form>
         </details>
       </Card>
-      </div>
     </section>
   );
 }

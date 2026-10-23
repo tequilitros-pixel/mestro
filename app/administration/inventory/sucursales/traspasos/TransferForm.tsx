@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { generateClientOperationId } from "@/lib/pos2/offline/canonical";
 import { createTransferAction, type ActionResult } from "./actions";
 
 type Branch = { id: string; name: string };
@@ -14,20 +15,28 @@ export default function TransferForm({
   products: Product[];
 }) {
   const [result, setResult] = useState<ActionResult | null>(null);
+  const operationId = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(formData: FormData) {
     setSaving(true);
     setResult(null);
 
-    const response = await createTransferAction(formData);
+    operationId.current ??= generateClientOperationId();
+    formData.set("operationId", operationId.current);
+    try {
+      const response = await createTransferAction(formData);
+      setResult(response);
+      if (response.success) {
+        operationId.current = null;
+        const form = document.getElementById("transfer-form") as HTMLFormElement | null;
+        form?.reset();
 
-    setResult(response);
-    setSaving(false);
-
-    if (response.success) {
-      const form = document.getElementById("transfer-form") as HTMLFormElement | null;
-      form?.reset();
+      }
+    } catch {
+      setResult({ success: false, error: "No se pudo confirmar el movimiento. Reintenta para verificarlo sin duplicarlo." });
+    } finally {
+      setSaving(false);
     }
   }
 

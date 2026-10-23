@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
 
 /**
  * Eventos elegibles para vincular a un nuevo corte de caja: aquellos
@@ -8,7 +8,7 @@ import { getCurrentUser } from "@/lib/auth";
  * que no están cancelados. Se listan del más próximo al más lejano.
  */
 export async function GET() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/cash-cuts", "/cash-cuts/daily"]);
 
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });

@@ -12,7 +12,10 @@
  */
 
 import { forwardRef, InputHTMLAttributes } from "react";
-import clsx from "clsx";
+
+function joinClasses(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(" ");
+}
 
 type NumberFieldProps = InputHTMLAttributes<HTMLInputElement> & {
   label?: string;
@@ -47,7 +50,7 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
         )}
 
         <div
-          className={clsx(
+          className={joinClasses(
             "flex items-center rounded-xl border bg-background transition",
             error
               ? "border-error"
@@ -59,7 +62,7 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
             ref={ref}
             id={id}
             type="number"
-            className={clsx(
+            className={joinClasses(
               "w-full bg-transparent px-4 py-3 text-sm outline-none",
               "text-on-surface placeholder:text-outline",
               "[appearance:textfield]",

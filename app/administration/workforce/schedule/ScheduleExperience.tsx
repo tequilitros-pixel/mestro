@@ -10,13 +10,11 @@ import {
   saveWorkforceCoverageAction,
   saveWorkforceShiftAction,
 } from "@/app/actions/workforceScheduling";
-import { initialShiftBranch, shiftBranchOptions } from "@/lib/workforce/scheduling/shiftBranchSelection";
 import { scheduleWarningLabel } from "@/lib/workforce/scheduling/presentation";
 
 type Branch = { id: string; name: string; color: string | null; timezone: string | null };
 type Shift = {
   id: string; periodId: string; branchId: string; branchName: string; branchColor: string | null;
-  visualState: "PUBLISHED" | "DRAFT" | "CHANGES_PENDING";
   employmentId: string | null; employeeName: string | null; date: string; start: string; end: string;
   breakMinutes: number; version: number; cancelled: boolean; warnings: string[];
   revisions: { id: string; reason: string; by: string; at: string }[];
@@ -75,11 +73,17 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
   const activeShifts = model.shifts.filter((shift) => !shift.cancelled);
   const visibleShifts = activeShifts.filter((shift) => !model.selectedBranchId || shift.branchId === model.selectedBranchId);
   const normalizedSearch = search.trim().toLocaleLowerCase("es-MX");
-  const visibleEmployments = model.employments.filter((employment) => !normalizedSearch || employment.name.toLocaleLowerCase("es-MX").includes(normalizedSearch));
+  const visibleEmployments = model.employments.filter((employment) => {
+    const matchesSearch = !normalizedSearch || employment.name.toLocaleLowerCase("es-MX").includes(normalizedSearch);
+    const matchesBranch = !model.selectedBranchId || employment.assignments.some((assignment) => assignment.branchId === model.selectedBranchId) || visibleShifts.some((shift) => shift.employmentId === employment.id);
+    return matchesSearch && matchesBranch;
+  });
+  const assigned = visibleEmployments.filter((employment) => employment.assignments.length > 0);
+  const withoutBranch = visibleEmployments.filter((employment) => employment.assignments.length === 0);
   const unassignedShifts = visibleShifts.filter((shift) => !shift.employmentId);
   const periodByBranch = new Map(model.periods.map((period) => [period.branchId, period]));
   const target = href(model.selectedBranchId, model.weekStart, selectedDay);
-  const defaultBranch = (employment?: Employment) => initialShiftBranch(model.branches, model.selectedBranchId, employment);
+  const defaultBranch = (employment?: Employment) => model.selectedBranchId ?? employment?.assignments.find((item) => item.type === "HOME")?.branchId ?? employment?.assignments[0]?.branchId ?? model.branches[0]?.id ?? "";
   const publishablePeriods = model.periods.filter((period) => period.shiftCount > 0 && !period.published && (!model.selectedBranchId || period.branchId === model.selectedBranchId));
   const previousBranches = model.previousWeek.branches.filter((item) => item.shifts.length > 0 && (!model.selectedBranchId || item.branchId === model.selectedBranchId));
 
@@ -89,14 +93,9 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
   }
   function openEdit(shift: Shift) { setEditor({ shift, employmentId: shift.employmentId ?? "", branchId: shift.branchId, date: shift.date }); }
   const totalHours = visibleShifts.reduce((sum, shift) => sum + Math.max(0, minutes(shift.start, shift.end) - shift.breakMinutes), 0) / 60;
-  const scopedPeriods = model.selectedBranchId
-    ? model.periods.filter((period) => period.branchId === model.selectedBranchId)
-    : model.periods;
-  const publicationLabel = scopedPeriods.some((period) => period.shiftCount > 0)
-    ? scopedPeriods.some((period) => !period.published)
-      ? "Cambios pendientes"
-      : "Publicado"
-    : "Sin publicar";
+  const publicationLabel = model.selectedBranchId
+    ? (periodByBranch.get(model.selectedBranchId)?.published ? "Publicado" : "Sin publicar")
+    : model.periods.length && model.periods.every((period) => period.published) ? "Publicado" : model.periods.some((period) => period.published) ? "Publicación parcial" : "Sin publicar";
 
   return <section className="w-full min-w-0 space-y-2 pb-20 lg:pb-4">
     {(model.notice || model.error) && <div role={model.error ? "alert" : "status"} className={`mx-2 rounded-lg border px-3 py-2 text-sm font-semibold lg:mx-4 ${model.error ? "border-error/30 bg-error/10 text-error" : "border-primary/30 bg-primary/10"}`}>{model.error ?? model.notice}</div>}
@@ -114,9 +113,8 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
       <div className="mt-2 flex items-center gap-2 lg:hidden"><label className="relative flex-1"><span className="sr-only">Buscar empleado</span><span className="pointer-events-none absolute left-3 top-2.5 text-on-surface-variant"><Icon name="search" /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar empleado" className={`${field} pl-9`} /></label></div>
     </header>
 
-    <details className="mx-2 rounded-lg border border-outline-variant px-3 py-2 lg:hidden"><summary className="text-xs font-semibold">Estado por sucursal</summary><div className="mt-2 flex flex-wrap gap-2">{model.branches.map((branch) => { const period = periodByBranch.get(branch.id); const status = period?.published ? "Publicado" : period?.shiftCount ? "Cambios pendientes" : "Sin publicar"; return <span key={branch.id} className="rounded-lg border border-outline-variant px-2 py-1 text-xs"><strong>{branch.name}</strong> · {status}</span>; })}</div></details>
-    <div className="mx-2 flex flex-wrap items-center gap-3 px-1 text-[11px] text-on-surface-variant lg:mx-4" aria-label="Leyenda de publicación"><span><span aria-hidden="true" className="mr-1 inline-block h-2.5 w-2.5 rounded-full bg-primary" />Publicado</span><span><span aria-hidden="true" className="mr-1 inline-block h-2.5 w-2.5 rounded-full border border-primary/50 bg-primary/30" />Sin publicar o cambios pendientes</span></div>
-    <div className="mx-2 hidden flex-wrap gap-2 lg:mx-4 lg:flex" aria-label="Publicación por sucursal">{model.branches.map((branch) => { const period = periodByBranch.get(branch.id); const status = period?.published ? "Publicado" : period?.shiftCount ? "Cambios pendientes" : "Sin publicar"; return <span key={branch.id} className="rounded-lg border border-outline-variant px-2 py-1 text-xs"><strong>{branch.name}</strong> · {status}</span>; })}</div>
+    <details className="mx-2 rounded-lg border border-outline-variant px-3 py-2 lg:hidden"><summary className="text-xs font-semibold">Estado por sucursal</summary><div className="mt-2 flex flex-wrap gap-2">{model.branches.map((branch) => { const period = periodByBranch.get(branch.id); return <span key={branch.id} className="rounded-lg border border-outline-variant px-2 py-1 text-xs"><strong>{branch.name}</strong> · {period?.published ? "Publicado" : period?.lastPublishedAt ? "Cambios pendientes" : "Sin publicar"}</span>; })}</div></details>
+    <div className="mx-2 hidden flex-wrap gap-2 lg:mx-4 lg:flex" aria-label="Publicación por sucursal">{model.branches.map((branch) => { const period = periodByBranch.get(branch.id); return <span key={branch.id} className="rounded-lg border border-outline-variant px-2 py-1 text-xs"><strong>{branch.name}</strong> · {period?.published ? "Publicado" : period?.lastPublishedAt ? "Cambios pendientes" : "Sin publicar"}</span>; })}</div>
     {!model.employments.length ? <EmptyWorkforce /> : <>
       <nav aria-label="Días de la semana" className="flex gap-1 overflow-x-auto px-2 pb-1 lg:hidden">{dates.map((date, index) => <button key={date} onClick={() => setSelectedDay(date)} aria-current={selectedDay === date ? "date" : undefined} className={`min-w-[58px] rounded-lg border px-2 py-1.5 text-center text-[11px] font-bold ${selectedDay === date ? "border-primary bg-primary text-on-primary" : "border-outline-variant bg-surface"}`}>{dayNames[index]}<span className="block text-base">{new Date(`${date}T00:00:00Z`).getUTCDate()}</span></button>)}</nav>
 
@@ -126,7 +124,7 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
             <div className="sticky left-0 z-30 flex items-center gap-2 bg-surface-container-low p-2"><strong className="text-sm">Equipo</strong><label className="relative ml-auto w-28 xl:w-36"><span className="sr-only">Buscar empleado</span><span className="pointer-events-none absolute left-2 top-2 text-on-surface-variant"><Icon name="search" /></span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar" className="w-full rounded-md border border-outline-variant bg-surface py-1.5 pl-7 pr-2 text-xs outline-none focus:border-primary" /></label></div>
             {dates.map((date, index) => { const shifts = visibleShifts.filter((shift) => shift.date === date); const people = new Set(shifts.map((shift) => shift.employmentId).filter(Boolean)).size; const hours = shifts.reduce((sum, shift) => sum + Math.max(0, minutes(shift.start, shift.end) - shift.breakMinutes), 0) / 60; return <div key={date} className="border-l border-outline-variant p-2"><strong className="text-sm">{dayNames[index]} {dateLabel(date, { day: "numeric", month: "numeric" })}</strong><p className="text-[10px] text-on-surface-variant">{hours.toFixed(hours % 1 ? 1 : 0)} h · {people} {people === 1 ? "persona" : "personas"}</p></div>; })}
           </div>
-          {visibleEmployments.map((employee) => <EmployeeRow key={employee.id} employee={employee} dates={dates} shifts={visibleShifts} availability={availability} branches={model.branches} selectedDay={selectedDay} threshold={model.threshold} onAdd={openNew} onEdit={openEdit} />)}
+          {[...assigned, ...withoutBranch].map((employee, index) => <EmployeeRow key={employee.id} employee={employee} dates={dates} shifts={visibleShifts} availability={availability} branches={model.branches} selectedDay={selectedDay} threshold={model.threshold} sectionStart={index === assigned.length && withoutBranch.length > 0} onAdd={openNew} onEdit={openEdit} />)}
           {!visibleEmployments.length && <div className="p-8 text-center text-sm text-on-surface-variant">No hay empleados que coincidan con este filtro.</div>}
         </div>
       </div>
@@ -139,7 +137,7 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
 
       {unassignedShifts.length > 0 && <details className="mx-2 rounded-xl border border-amber-400/50 bg-amber-50/60 p-3 dark:bg-amber-950/20 lg:mx-4"><summary className="cursor-pointer text-sm font-bold">{unassignedShifts.length} turnos sin empleado</summary><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{unassignedShifts.map((shift) => <ShiftCard key={shift.id} shift={shift} branches={model.branches} onEdit={openEdit} />)}</div></details>}
 
-      <footer className="sticky bottom-0 z-20 mx-2 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl border border-outline-variant bg-surface/95 px-4 py-2 text-xs shadow-lg backdrop-blur lg:mx-4"><strong>{visibleEmployments.length} empleados</strong><span>{visibleShifts.length} turnos</span><span>{totalHours.toFixed(1)} h programadas</span></footer>
+      <footer className="sticky bottom-0 z-20 mx-2 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl border border-outline-variant bg-surface/95 px-4 py-2 text-xs shadow-lg backdrop-blur lg:mx-4"><strong>{visibleEmployments.length} empleados</strong><span>{visibleShifts.length} turnos</span><span>{totalHours.toFixed(1)} h programadas</span>{withoutBranch.length > 0 && <Link href="/administration/workforce" className="ml-auto font-bold text-primary">{withoutBranch.length} sin sucursal · Asignar</Link>}</footer>
       <details className="mx-2 rounded-xl border border-outline-variant bg-surface lg:mx-4"><summary className="cursor-pointer px-4 py-2 text-xs font-bold">Cobertura del equipo</summary><Coverage model={model} target={target} /></details>
     </>}
 
@@ -151,21 +149,19 @@ export function ScheduleExperience({ model }: { model: ScheduleViewModel }) {
 
 function Avatar({ name }: { name: string }) { return <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/10 text-[11px] font-black text-primary">{initials(name)}</span>; }
 
-function EmployeeRow({ employee, dates, shifts, availability, branches, selectedDay, threshold, onAdd, onEdit }: { employee: Employment; dates: string[]; shifts: Shift[]; availability: Map<string, ScheduleViewModel["availability"][number]>; branches: Branch[]; selectedDay: string; threshold: number; onAdd: (employmentId: string | null, date: string) => void; onEdit: (shift: Shift) => void }) {
-  return <div className="grid grid-cols-[11rem_repeat(7,minmax(7rem,1fr))] border-b border-outline-variant last:border-b-0">
-    <div className="sticky left-0 z-10 flex min-h-[62px] items-center gap-2 bg-surface px-2 py-1.5"><Avatar name={employee.name} /><div className="min-w-0"><p className="truncate text-sm font-bold">{employee.name}</p><p className={`text-xs ${employee.hours >= threshold ? "font-bold text-error" : "text-on-surface-variant"}`}>{employee.hours.toFixed(1)} h {employee.hours >= threshold ? "⚠" : ""}</p></div><button aria-label={`Agregar turno para ${employee.name}`} className="ml-auto rounded-md p-1.5 text-primary hover:bg-primary/10" onClick={() => onAdd(employee.id, selectedDay)}><Icon name="plus" /></button></div>
+function EmployeeRow({ employee, dates, shifts, availability, branches, selectedDay, threshold, sectionStart, onAdd, onEdit }: { employee: Employment; dates: string[]; shifts: Shift[]; availability: Map<string, ScheduleViewModel["availability"][number]>; branches: Branch[]; selectedDay: string; threshold: number; sectionStart: boolean; onAdd: (employmentId: string | null, date: string) => void; onEdit: (shift: Shift) => void }) {
+  return <>{sectionStart && <div className="sticky left-0 z-10 border-b border-t border-outline-variant bg-surface-container px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-on-surface-variant">Sin sucursal</div>}<div className="grid grid-cols-[11rem_repeat(7,minmax(7rem,1fr))] border-b border-outline-variant last:border-b-0">
+    <div className="sticky left-0 z-10 flex min-h-[62px] items-center gap-2 bg-surface px-2 py-1.5"><Avatar name={employee.name} /><div className="min-w-0"><p className="truncate text-sm font-bold">{employee.name}</p><p className={`text-xs ${employee.hours >= threshold ? "font-bold text-error" : "text-on-surface-variant"}`}>{employee.hours.toFixed(1)} h {employee.hours >= threshold ? "⚠" : ""}</p>{!employee.assignments.length && <Link href={`/administration/workforce/employees/${employee.employeeId}`} className="text-[10px] font-bold text-primary">Asignar sucursal</Link>}</div><button aria-label={`Agregar turno para ${employee.name}`} className="ml-auto rounded-md p-1.5 text-primary hover:bg-primary/10" onClick={() => onAdd(employee.id, selectedDay)}><Icon name="plus" /></button></div>
     {dates.map((date) => { const cellShifts = shifts.filter((shift) => shift.employmentId === employee.id && shift.date === date); const state = availability.get(`${employee.id}|${date}`); return <div key={date} className={`min-h-[62px] border-l border-outline-variant p-1 ${state?.state === "UNAVAILABLE" ? "bg-[repeating-linear-gradient(135deg,transparent,transparent_6px,color-mix(in_srgb,currentColor_4%,transparent)_6px,color-mix(in_srgb,currentColor_4%,transparent)_12px)]" : ""}`}><div className="space-y-0.5">{cellShifts.map((shift) => <ShiftCard key={shift.id} shift={shift} branches={branches} onEdit={onEdit} />)}</div>{state?.state === "UNAVAILABLE" && !cellShifts.length && <p className="text-[9px] text-on-surface-variant">No disponible</p>}<button className="mt-0.5 flex w-full items-center justify-center rounded-md px-1 py-1 text-xs font-bold text-primary hover:bg-primary/10" onClick={() => onAdd(employee.id, date)}>+ Agregar</button></div>; })}
-  </div>;
+  </div></>;
 }
 
 function ShiftCard({ shift, branches, onEdit }: { shift: Shift; branches: Branch[]; onEdit: (shift: Shift) => void }) {
   const warning = shift.warnings[0] ? scheduleWarningLabel(shift.warnings[0]) : null;
-  const pending = shift.visualState !== "PUBLISHED";
-  const stateLabel = shift.visualState === "PUBLISHED" ? "Publicado" : shift.visualState === "CHANGES_PENDING" ? "Cambios pendientes" : "Sin publicar";
-  return <button type="button" onClick={() => onEdit(shift)} title={warning ?? stateLabel} aria-label={`${shift.branchName} ${shift.start}–${shift.end}, ${stateLabel}`} className={`block w-full rounded-md border-l-[3px] px-1.5 py-0.5 text-left shadow-sm transition hover:-translate-y-px hover:shadow ${branchTone(shift.branchId, branches)} ${pending ? "border-dashed opacity-40" : "opacity-100"}`}><span className="flex items-center gap-1"><span className="block min-w-0 flex-1 truncate text-[10px] font-black uppercase tracking-wide">{shift.branchName}</span>{warning && <span aria-label={warning} className="text-[9px] text-amber-600 dark:text-amber-300">⚠</span>}</span><span className="flex items-baseline gap-1 whitespace-nowrap text-xs font-bold leading-tight"><span>{shift.start}–{shift.end}</span>{shift.breakMinutes > 0 && <span className="text-[8px] font-medium opacity-70">{shift.breakMinutes}m</span>}</span><span className="sr-only">{stateLabel}</span></button>;
+  return <button type="button" onClick={() => onEdit(shift)} title={warning ?? undefined} className={`block w-full rounded-md border-l-[3px] px-1.5 py-0.5 text-left shadow-sm transition hover:-translate-y-px hover:shadow ${branchTone(shift.branchId, branches)}`}><span className="flex items-center gap-1"><span className="block min-w-0 flex-1 truncate text-[10px] font-black uppercase tracking-wide">{shift.branchName}</span>{warning && <span aria-label={warning} className="text-[9px] text-amber-600 dark:text-amber-300">⚠</span>}</span><span className="flex items-baseline gap-1 whitespace-nowrap text-xs font-bold leading-tight"><span>{shift.start}–{shift.end}</span>{shift.breakMinutes > 0 && <span className="text-[8px] font-medium opacity-70">{shift.breakMinutes}m</span>}</span></button>;
 }
 
-function MobileShift({ shift, branches, onEdit }: { shift: Shift; branches: Branch[]; onEdit: (shift: Shift) => void }) { const pending = shift.visualState !== "PUBLISHED"; const stateLabel = shift.visualState === "PUBLISHED" ? "Publicado" : shift.visualState === "CHANGES_PENDING" ? "Cambios pendientes" : "Sin publicar"; return <button onClick={() => onEdit(shift)} aria-label={`${shift.employeeName ?? "Sin asignar"}, ${shift.start}–${shift.end}, ${shift.branchName}, ${stateLabel}`} className={`flex w-full items-center gap-3 rounded-xl border-l-4 p-3 text-left ${branchTone(shift.branchId, branches)} ${pending ? "border-dashed opacity-40" : "opacity-100"}`}><Avatar name={shift.employeeName ?? "?"} /><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{shift.employeeName ?? "Sin asignar"}</strong><span className="text-xs font-bold">{shift.start}–{shift.end}</span>{shift.breakMinutes > 0 && <span className="ml-2 text-[10px] opacity-75">{shift.breakMinutes}m</span>}</span><span className="sr-only">{shift.branchName} · {stateLabel}</span><Icon name="more" /></button>; }
+function MobileShift({ shift, branches, onEdit }: { shift: Shift; branches: Branch[]; onEdit: (shift: Shift) => void }) { return <button onClick={() => onEdit(shift)} className={`flex w-full items-center gap-3 rounded-xl border-l-4 p-3 text-left ${branchTone(shift.branchId, branches)}`}><Avatar name={shift.employeeName ?? "?"} /><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{shift.employeeName ?? "Sin asignar"}</strong><span className="text-xs font-bold">{shift.start}–{shift.end}</span>{shift.breakMinutes > 0 && <span className="ml-2 text-[10px] opacity-75">{shift.breakMinutes}m</span>}</span><Icon name="more" /></button>; }
 
 function EmptyWorkforce() { return <div className="mx-2 rounded-xl border border-dashed border-outline-variant bg-surface p-10 text-center lg:mx-4"><h2 className="text-lg font-bold">Aún no hay empleados activos</h2><p className="mt-1 text-sm text-on-surface-variant">Crea el primer empleado para comenzar a construir el horario.</p><Link href="/administration/workforce/employees/new" className={`${primary} mt-4`}>Crear empleado</Link></div>; }
 
@@ -176,24 +172,18 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 function ShiftDialog({ editor, model, target, onClose, onDuplicate }: { editor: { shift?: Shift; employmentId: string; branchId: string; date: string; duplicate?: boolean }; model: ScheduleViewModel; target: string; onClose: () => void; onDuplicate: (shift: Shift) => void }) {
-  const [employmentId, setEmploymentId] = useState(editor.employmentId);
   const [branchId, setBranchId] = useState(editor.branchId);
-  const employment = model.employments.find(item => item.id === employmentId);
-  const eligibleBranches = employmentId && !employment ? [] : shiftBranchOptions(model.branches);
-  const unavailableEmployee = Boolean(employmentId && !eligibleBranches.length);
-  const validBranch = eligibleBranches.some(branch => branch.id === branchId);
   const shift = editor.shift; const isEdit = Boolean(shift && !editor.duplicate); const sourcePeriod = shift ? model.periods.find((period) => period.id === shift.periodId) : null; const selectedPeriod = model.periods.find((period) => period.branchId === branchId); const postPublish = Boolean(sourcePeriod?.lastPublishedAt || selectedPeriod?.lastPublishedAt);
   return <Modal title={isEdit ? "Editar turno" : editor.duplicate ? "Duplicar turno" : "Nuevo turno"} onClose={onClose}><form action={saveWorkforceShiftAction}  className="space-y-3">
     <input type="hidden" name="periodId" value={shift?.periodId ?? selectedPeriod?.id ?? ""} /><input type="hidden" name="weekStart" value={model.weekStart} />{isEdit && <><input type="hidden" name="shiftId" value={shift!.id} /><input type="hidden" name="expectedVersion" value={shift!.version} /></>}<input type="hidden" name="returnTo" value={target} />
-    <label className="block text-sm font-semibold">Empleado<select aria-label="Empleado" name="employmentId" value={employmentId} onChange={(event) => { const id = event.target.value; setEmploymentId(id); setBranchId(initialShiftBranch(model.branches, branchId, model.employments.find(item => item.id === id))); }} className={`${field} mt-1`}><option value="">Sin asignar</option>{model.employments.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select></label>
-    <label className="block text-sm font-semibold">Sucursal<select aria-label="Sucursal" name="branchId" value={branchId} onChange={(event) => setBranchId(event.target.value)} className={`${field} mt-1`} required><option value="">Seleccionar sucursal</option>{eligibleBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
-    {unavailableEmployee && <p role="alert" className="text-sm text-error">No hay un empleado activo o una sucursal activa disponible.</p>}
+    <label className="block text-sm font-semibold">Empleado<select aria-label="Empleado" name="employmentId" defaultValue={editor.employmentId} className={`${field} mt-1`}><option value="">Sin asignar</option>{model.employments.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select></label>
+    <label className="block text-sm font-semibold">Sucursal<select aria-label="Sucursal" name="branchId" value={branchId} onChange={(event) => setBranchId(event.target.value)} className={`${field} mt-1`}>{model.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
     <label className="block text-sm font-semibold">Fecha<input required name="businessDate" type="date" min={model.weekStart} max={model.weekEnd} defaultValue={editor.date} className={`${field} mt-1`} /></label>
     <div className="grid grid-cols-2 gap-3"><label className="text-sm font-semibold">Hora de entrada<input required name="startTime" type="time" defaultValue={shift?.start ?? "09:00"} className={`${field} mt-1`} /></label><label className="text-sm font-semibold">Hora de salida<input required name="endTime" type="time" defaultValue={shift?.end ?? "17:00"} className={`${field} mt-1`} /></label></div>
     <label className="block text-sm font-semibold">Descanso<input name="expectedBreakMinutes" type="number" min="0" max="480" defaultValue={shift?.breakMinutes ?? 30} className={`${field} mt-1`} /><span className="mt-1 block text-xs font-normal text-on-surface-variant">Minutos</span></label>
     {postPublish && <label className="block text-sm font-semibold">Motivo del cambio<input required name="reason" maxLength={200} placeholder="Ej. cambio solicitado por la persona" className={`${field} mt-1`} /></label>}
     {shift?.warnings.length ? <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">{shift.warnings.map((warning) => <p key={warning}>{scheduleWarningLabel(warning)}</p>)}</div> : null}
-    <div className="flex gap-2"><button type="button" className={`${secondary} flex-1`} onClick={onClose}>Cancelar</button><button disabled={!validBranch || unavailableEmployee} className={`${primary} flex-1`}>{isEdit ? "Guardar cambios" : "Guardar turno"}</button></div>
+    <div className="flex gap-2"><button type="button" className={`${secondary} flex-1`} onClick={onClose}>Cancelar</button><button className={`${primary} flex-1`}>{isEdit ? "Guardar cambios" : "Guardar turno"}</button></div>
   </form>{isEdit && <div className="mt-3 grid grid-cols-2 gap-2"><button className={secondary} onClick={() => onDuplicate(shift!)}><Icon name="copy" /><span className="ml-2">Duplicar</span></button><form action={deleteWorkforceShiftAction} ><input type="hidden" name="shiftId" value={shift!.id} /><input type="hidden" name="expectedVersion" value={shift!.version} /><input type="hidden" name="returnTo" value={target} />{postPublish && <input required name="reason" aria-label="Motivo para retirar" placeholder="Motivo para retirar" className={`${field} mb-2`} />}<button className="min-h-9 w-full rounded-lg border border-error/30 px-3 py-2 text-sm font-bold text-error">{postPublish ? "Retirar turno" : "Eliminar"}</button></form></div>}</Modal>;
 }
 
@@ -208,7 +198,9 @@ function TemplateDialog({ model, target, onClose }: { model: ScheduleViewModel; 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [templateId, setTemplateId] = useState(available[0]?.id ?? "");
   const template = available.find((item) => item.id === templateId);
-  const eligible = model.employments;
+  const eligible = model.employments.filter((employment) =>
+    employment.assignments.some((assignment) => assignment.branchId === template?.branchId),
+  );
   return <Modal title="Aplicar plantilla" onClose={onClose}>
     <form action={applyWorkforceScheduleTemplateAction}  className="space-y-4">
       <input type="hidden" name="returnTo" value={target} />
@@ -216,8 +208,8 @@ function TemplateDialog({ model, target, onClose }: { model: ScheduleViewModel; 
       <label className="block text-sm font-semibold">Sucursal<select aria-label="Sucursal" className={`${field} mt-1`} value={branchId} onChange={(event) => { setBranchId(event.target.value); setTemplateId(model.templates.find((item) => item.branchId === event.target.value)?.id ?? ""); setSelectedIds([]); }}>{model.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label>
       <p className="text-sm">Semana: {model.weekStart} — {model.weekEnd}</p>
       <label className="block text-sm font-semibold">Plantilla<select aria-label="Plantilla" required name="templateId" value={templateId} onChange={(event) => setTemplateId(event.target.value)} className={`${field} mt-1`}>{available.map((item) => <option key={item.id} value={item.id}>{item.branchName} · {item.name}</option>)}</select></label>
-      {template && <div className="rounded-lg border border-outline-variant bg-surface-container p-3"><p className="mb-2 text-xs font-black uppercase tracking-wide text-on-surface-variant">Vista previa · nunca publica automáticamente</p><div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">{Array.from({ length: 7 }, (_, day) => { const blocks = template.blocks.filter((block) => block.dayOfWeek === day); return <div key={day} className="rounded-md bg-surface p-2"><strong>{dayNames[day]}</strong>{blocks.length ? blocks.map((block, index) => <p key={`${day}-${index}`}>{block.start}–{block.end}{block.breakMinutes ? ` · ${block.breakMinutes}m` : ""}</p>) : <p className="text-on-surface-variant">Día libre</p>}</div>; })}</div></div>}
-      <fieldset><legend className="mb-2 text-sm font-semibold">Empleados</legend><button type="button" className="mb-2 text-sm font-bold text-primary" onClick={() => setSelectedIds(eligible.map((item) => item.id))}>Seleccionar todos</button><div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-outline-variant p-2">{eligible.map((employment) => <label key={employment.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface-container"><input type="checkbox" name="employmentId" value={employment.id} checked={selectedIds.includes(employment.id)} onChange={(event) => setSelectedIds(event.target.checked ? [...selectedIds, employment.id] : selectedIds.filter((id) => id !== employment.id))} />{employment.name}</label>)}{!eligible.length && <p className="p-2 text-sm text-on-surface-variant">No hay empleados activos.</p>}</div></fieldset>
+      {template && <div className="rounded-lg border border-outline-variant bg-surface-container p-3"><p className="mb-2 text-xs font-black uppercase tracking-wide text-on-surface-variant">Vista previa · nunca publica automáticamente</p><div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">{Array.from({ length: 7 }, (_, day) => { const blocks = template.blocks.filter((block) => block.dayOfWeek === day); return <div key={day} className="rounded-md bg-surface p-2"><strong>{dayNames[day]}</strong>{blocks.length ? blocks.map((block, index) => <p key={`${day}-${index}`}>{block.start}–{block.end}{block.breakMinutes ? ` · ${block.breakMinutes}m` : ""}</p>) : <p className="text-on-surface-variant">Descanso</p>}</div>; })}</div></div>}
+      <fieldset><legend className="mb-2 text-sm font-semibold">Empleados</legend><button type="button" className="mb-2 text-sm font-bold text-primary" onClick={() => setSelectedIds(eligible.map((item) => item.id))}>Seleccionar todos</button><div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-outline-variant p-2">{eligible.map((employment) => <label key={employment.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface-container"><input type="checkbox" name="employmentId" value={employment.id} checked={selectedIds.includes(employment.id)} onChange={(event) => setSelectedIds(event.target.checked ? [...selectedIds, employment.id] : selectedIds.filter((id) => id !== employment.id))} />{employment.name}</label>)}{!eligible.length && <p className="p-2 text-sm text-on-surface-variant">No hay empleados asignados a esta sucursal.</p>}</div></fieldset>
       <div className="flex gap-2"><button type="button" className={`${secondary} flex-1`} onClick={onClose}>Cancelar</button><button disabled={!template || !selectedIds.length} className={`${primary} flex-1`}>Aplicar horario</button></div>
     </form>
   </Modal>;

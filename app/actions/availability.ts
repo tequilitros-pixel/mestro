@@ -44,8 +44,8 @@ export async function getMyAvailabilityWeek(weekStartInput: string) {
     prisma.employeeAvailabilityRule.findMany({ where: { userId: user.id, active: true } }),
     prisma.employeeAvailabilityException.findMany({ where: { userId: user.id, date: { gte: start, lt: end } } }),
     prisma.scheduledShift.findMany({
-      where: { userId: user.id, type: "TURNO", date: { gte: start, lt: end } },
-      select: { id: true, date: true, startTime: true, endTime: true, branch: { select: { name: true } } },
+      where: { userId: user.id, type: "TURNO", date: { gte: start, lt: end }, publicationStatus: "PUBLISHED" },
+      select: { id: true, date: true, startTime: true, endTime: true, publicationStatus: true, branch: { select: { name: true } } },
     }),
     prisma.scheduleWeek.findUnique({ where: { weekStart: start }, select: { status: true } }),
     isAvailabilityClosed(weekStart),
@@ -78,7 +78,7 @@ export async function getMyAvailabilityWeek(weekStartInput: string) {
     weekStart,
     days,
     closed: deadline.closed,
-    published: weekRow?.status === "PUBLISHED",
+    published: weekRow?.status === "PUBLISHED" || days.some((day) => day.shift !== null),
     deadline: { weekday: deadline.settings.deadlineWeekday, time: deadline.settings.deadlineTime },
   };
 }
@@ -103,13 +103,11 @@ export async function saveMyAvailabilityAction(input: {
   if (deadline.closed) return { error: "El periodo de disponibilidad para esta semana ya cerró." };
 
   if (input.type === "UNAVAILABLE") {
-    const weekStart = parseDateOnly(mondayOfWeek(input.date));
-    const week = await prisma.scheduleWeek.findUnique({ where: { weekStart }, select: { status: true } });
     const shift = await prisma.scheduledShift.findFirst({
-      where: { userId: user.id, type: "TURNO", date: parseDateOnly(input.date) },
+      where: { userId: user.id, type: "TURNO", date: parseDateOnly(input.date), publicationStatus: "PUBLISHED" },
       select: { id: true },
     });
-    if (shift && week?.status === "PUBLISHED") {
+    if (shift) {
       return { error: "Ya tienes un turno programado para este día. Consulta tu horario y solicita un cambio." };
     }
   }

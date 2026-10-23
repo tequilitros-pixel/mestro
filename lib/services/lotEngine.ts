@@ -5,6 +5,7 @@ import {
   Distillation,
   Lot,
 } from "@prisma/client";
+import { getLotFinalization } from "@/lib/lots/finalization";
 
 type Priority = "BAJA" | "NORMAL" | "ALTA";
 
@@ -25,6 +26,23 @@ export function getLotEngine(lot: LotWithProcess) {
   const lastMilling = lot.millings.at(-1);
   const lastFermentation = lot.fermentations.at(-1);
   const lastDistillation = lot.distillations.at(-1);
+
+  if (lot.finishedAt && lot.totalLitersObtained !== null) {
+    return {
+      status: "Terminado",
+      progress: 100,
+      priority: "BAJA" as Priority,
+      nextAction: "Ver resultados",
+      nextHref: `/lots/${lot.id}/costs`,
+      message: "El lote terminó. Revisa rendimiento, costos y aprendizaje.",
+      advice: [
+        "Revisa litros finales y alcohol obtenido.",
+        "Calcula costo por litro y rendimiento.",
+        "Documenta qué salió bien y qué se puede mejorar.",
+        "Usa este lote como aprendizaje para el siguiente proceso.",
+      ],
+    };
+  }
 
   if (!hasCooking) {
     return {
@@ -145,7 +163,7 @@ export function getLotEngine(lot: LotWithProcess) {
     };
   }
 
-  if (lastDistillation?.status !== "TERMINADA") {
+  if (lot.distillations.some((run) => run.status === "ACTIVA")) {
     return {
       status: "Destilando",
       progress: 92,
@@ -163,18 +181,54 @@ export function getLotEngine(lot: LotWithProcess) {
     };
   }
 
+  const finalization = getLotFinalization({
+    stage: lot.stage,
+    finishedAt: lot.finishedAt,
+    totalLitersObtained: lot.totalLitersObtained,
+    runs: lot.distillations,
+  });
+  if (finalization.ready) {
+    return {
+      status: "Listo para finalizar",
+      progress: 98,
+      priority: "ALTA" as Priority,
+      nextAction: "Finalizar lote",
+      nextHref: "#finalizar-lote",
+      message: `Las rectificaciones terminaron y registraron ${finalization.totalLiters.toLocaleString("es-MX")} L finales. Confirma el cierre del lote.`,
+      advice: [
+        "Confirma que no exista ninguna corrida activa.",
+        "Al finalizar se guardarán los litros finales y la fecha de cierre.",
+        "El sistema generará el QR de trazabilidad automáticamente.",
+      ],
+    };
+  }
+
+  if (lot.stage === "RECTIFICACION") {
+    return {
+      status: "Listo para rectificación",
+      progress: 95,
+      priority: "ALTA" as Priority,
+      nextAction: "Iniciar rectificación",
+      nextHref: "/distillation/new",
+      message: "El destrozado terminó. Falta registrar y terminar la rectificación antes de cerrar el lote.",
+      advice: [
+        "Selecciona como origen el destrozado terminado.",
+        "Registra los litros cargados en cada alambique.",
+        "Finaliza todas las corridas de rectificación antes de cerrar el lote.",
+      ],
+    };
+  }
+
   return {
-    status: "Terminado",
-    progress: 100,
-    priority: "BAJA" as Priority,
-    nextAction: "Ver resultados",
-    nextHref: `/lots/${lot.id}/costs`,
-    message: "El lote terminó. Revisa rendimiento, costos y aprendizaje.",
+    status: "Destilación pendiente",
+    progress: 95,
+    priority: "ALTA" as Priority,
+    nextAction: "Continuar destilación",
+    nextHref: "/distillation/new",
+    message: "Las corridas registradas terminaron, pero el lote todavía no cumple las condiciones de cierre.",
     advice: [
-      "Revisa litros finales y alcohol obtenido.",
-      "Calcula costo por litro y rendimiento.",
-      "Documenta qué salió bien y qué se puede mejorar.",
-      "Usa este lote como aprendizaje para el siguiente proceso.",
+      "Revisa los litros que aún quedan disponibles en fermentación o destrozado.",
+      "Registra las corridas faltantes antes de finalizar.",
     ],
   };
 }

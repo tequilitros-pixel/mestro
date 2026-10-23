@@ -1,10 +1,16 @@
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 import FermentationCharts from "@/components/FermentationCharts";
 import FinishFermentationModal from "@/components/FinishFermentationModal";
 import { FermentationStatus, LotStage } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
+import {
+  businessDayStart,
+  formatBusinessDateOnly,
+  formatBusinessDateTime,
+  formatBusinessTime,
+} from "@/lib/dateTime";
 import PageTabs from "@/components/ui/PageTabs";
 import OfflineOperationForm from "@/components/offline/OfflineOperationForm";
 import SuccessToast from "@/components/ui/SuccessToast";
@@ -19,6 +25,9 @@ import {
   TARGET_BRIX,
   evaluateFermentation,
 } from "@/lib/fermentation/fermentationMetrics";
+import { analyzeFermentationKinetics } from "@/lib/processCalculations";
+import ProcessSwitcher from "@/components/production/ProcessSwitcher";
+import ProcessBoilerUsage from "@/components/boiler/ProcessBoilerUsage";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -42,10 +51,17 @@ export default async function FermentationDetailPage({ params }: Props) {
 
   if (!fermentation) notFound();
 
+  const siblingFermentations = await prisma.fermentation.findMany({
+    where: { lotId: fermentation.lotId },
+    orderBy: [{ tank: "asc" }, { startedAt: "asc" }],
+    select: { id: true, tank: true, status: true, mustLiters: true },
+  });
+
   const fermentationLotId = fermentation.lotId;
 
   async function addReading(formData: FormData) {
     "use server";
+    await requireModuleActionAccess("/fermentation");
 
     const currentFermentation = await prisma.fermentation.findUnique({
       where: { id },
@@ -127,11 +143,7 @@ export default async function FermentationDetailPage({ params }: Props) {
   async function finishFermentation(formData: FormData) {
     "use server";
 
-    const user = await getCurrentUser();
-
-    if (!user) {
-      redirect("/login");
-    }
+    const user = await requireModuleActionAccess("/fermentation");
 
     const finalBrix = parseRequiredNumber(
       formData.get("finalBrix")
@@ -214,6 +226,11 @@ export default async function FermentationDetailPage({ params }: Props) {
     if (result.count === 0) {
       redirect(`/fermentation/${id}`);
     }
+
+    await prisma.boilerProcessLink.updateMany({
+      where: { processType: "FERMENTACION", processId: id, endedAt: null },
+      data: { endedAt: finishedAt },
+    });
 
     await advanceLotStage(
       prisma,
@@ -304,6 +321,8 @@ export default async function FermentationDetailPage({ params }: Props) {
     currentTemp,
     isFinished,
   });
+
+  const kinetics = analyzeFermentationKinetics(fermentation.readings);
 
   const temperatureNeedsAttention = temperatureStatus !== "ÓPTIMA";
   const phNeedsAttention = phStatus !== "ÓPTIMO";
@@ -499,6 +518,40 @@ export default async function FermentationDetailPage({ params }: Props) {
       </section>
 
       <section
+        className={`mt-6 rounded-2xl border p-5 sm:p-6 ${
+          kinetics.isStuckRisk
+            ? "border-error/40 bg-error/10 text-on-surface"
+            : kinetics.status === "TERMINADA"
+              ? "border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/10 text-on-surface"
+              : "border-outline-variant bg-surface-container text-on-surface"
+        }`}
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span
+              className={`h-2.5 w-2.5 rounded-full ${
+                kinetics.isStuckRisk
+                  ? "bg-error animate-ping"
+                  : kinetics.status === "TERMINADA"
+                    ? "bg-tertiary-fixed-dim"
+                    : "bg-primary animate-pulse"
+              }`}
+            />
+            <p className="font-mono text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+              Cinética y Detección de Estancamiento
+            </p>
+          </div>
+          {kinetics.consumptionRateBxPerHour !== null && (
+            <span className="font-mono text-xs font-semibold text-primary">
+              Velocidad: {kinetics.consumptionRateBxPerHour} °Bx/hora
+            </span>
+          )}
+        </div>
+        <h3 className="mt-2 text-base font-bold text-on-surface">{kinetics.message}</h3>
+        <p className="mt-1 text-xs text-on-surface-variant">{kinetics.recommendation}</p>
+      </section>
+
+      <section
         className={`mt-6 rounded-2xl border p-6 ${
           health === "ATENCION"
             ? "border-error/30 bg-error/10"
@@ -563,6 +616,7 @@ export default async function FermentationDetailPage({ params }: Props) {
 
   const registrarTabContent = (
     <>
+      {!isFinished && <ProcessBoilerUsage processType="FERMENTACION" processId={id} />}
       {!isFinished && (
         <section className="rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
           <div className="mb-6">
@@ -943,6 +997,17 @@ export default async function FermentationDetailPage({ params }: Props) {
         </header>
 
         <div className="mt-8">
+          <ProcessSwitcher
+            title="Tinas de este lote"
+            basePath="/fermentation"
+            currentId={id}
+            items={siblingFermentations.map((item) => ({
+              id: item.id,
+              label: item.tank,
+              detail: `${formatNumber(item.mustLiters, 0)} L`,
+              status: item.status === FermentationStatus.TERMINADA ? "Terminada" : "Activa",
+            }))}
+          />
           <PageTabs tabs={tabs} />
         </div>
       </div>
@@ -1554,10 +1619,9 @@ function getPreviousNumericValue<
 }
 
 async function createClosureCode(date: Date) {
-  const year = date.getFullYear();
-
-  const startOfYear = new Date(year, 0, 1);
-  const startOfNextYear = new Date(year + 1, 0, 1);
+  const year = Number(formatBusinessDateOnly(date).slice(0, 4));
+  const startOfYear = businessDayStart(`${year}-01-01`);
+  const startOfNextYear = businessDayStart(`${year + 1}-01-01`);
 
   const closuresThisYear =
     await prisma.fermentation.count({
@@ -1633,17 +1697,11 @@ function formatNumber(
 }
 
 function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatBusinessDateTime(date);
 }
 
 function formatTime(date: Date) {
-  return new Intl.DateTimeFormat("es-MX", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  return formatBusinessTime(date);
 }
 
 function formatDuration(start: Date, end: Date) {

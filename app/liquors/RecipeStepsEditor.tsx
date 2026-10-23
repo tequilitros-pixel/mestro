@@ -2,7 +2,6 @@
 
 import {
   deleteLiquorRecipeStepAction,
-  initialLiquorRecipeStepState,
   moveLiquorRecipeStepDownAction,
   moveLiquorRecipeStepUpAction,
   saveLiquorRecipeStepAction,
@@ -159,6 +158,11 @@ const EMPTY_FORM: StepFormValues = {
   checks: "",
   required: true,
   active: true,
+};
+
+const initialLiquorRecipeStepState = {
+  success: false,
+  error: null,
 };
 
 export default function RecipeStepsEditor({

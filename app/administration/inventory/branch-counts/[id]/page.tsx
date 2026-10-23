@@ -1,7 +1,15 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import CountItemRow from "./CountItemRow";
+import CountItemsList from "./CountItemsList";
 import CloseCountButton from "./CloseCountButton";
+import AddCountProduct from "./AddCountProduct";
+import { formatDateOnly } from "@/lib/dateOnly";
+import { getAccessibleBranchIds, requireInventoryCountCaptureAccess } from "@/lib/auth";
+import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility";
+import { generateOperationId } from "@/lib/pos2/operationId";
+import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresentation";
+import { formatBusinessDateTime } from "@/lib/dateTime";
+import { inventoryCountTypeLabel, isProductIncludedInInventoryCount } from "@/lib/inventory/countScope";
 
 export default async function CountDetailPage({
   params,
@@ -9,11 +17,20 @@ export default async function CountDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const user = await requireInventoryCountCaptureAccess();
+  const allowedBranchIds = await getAccessibleBranchIds();
+  const isAdmin = canViewInventoryCountSystemData(user?.role ?? "");
+  const scope = await prisma.inventoryCount.findUnique({ where: { id }, select: { branchId: true } });
+  if (!scope) notFound();
+  if (allowedBranchIds !== null && !allowedBranchIds.includes(scope.branchId)) {
+    return <main className="mx-auto max-w-2xl space-y-4 p-6 text-on-surface"><h1 className="text-2xl font-bold">Acceso denegado</h1><p className="text-on-surface-variant">Este conteo pertenece a una sucursal fuera de tu alcance.</p></main>;
+  }
 
   const count = await prisma.inventoryCount.findUnique({
     where: { id },
     include: {
       branch: true,
+      closedBy: { select: { name: true, username: true } },
       items: { include: { product: true }, orderBy: { product: { name: "asc" } } },
     },
   });
@@ -22,7 +39,27 @@ export default async function CountDetailPage({
     notFound();
   }
 
+  if (user.role !== "ADMIN" && count.status !== "BORRADOR") {
+    notFound();
+  }
+
   const editable = count.status === "BORRADOR";
+  const missingProducts = editable
+    ? (await prisma.inventoryProduct.findMany({
+        where: {
+          isActive: true,
+          archivedAt: null,
+          trackStock: true,
+          ...(count.countType === "WEEKLY" ? { countFrequency: "WEEKLY" } : {}),
+          id: { notIn: count.items.map((item) => item.productId) },
+        },
+        select: { id: true, name: true, isActive: true, archivedAt: true, trackStock: true, countFrequency: true },
+        orderBy: { name: "asc" },
+      })).filter((product) => isProductIncludedInInventoryCount(product, count.countType))
+    : [];
+  const pendingItems = editable
+    ? count.items.filter((item) => item.quantityCounted === null || item.countedAt === null)
+    : [];
   const totalCost = count.items.reduce(
     (sum, item) => sum + (item.costTotal !== null ? Number(item.costTotal) : 0),
     0,
@@ -33,9 +70,9 @@ export default async function CountDetailPage({
       <div className="mx-auto max-w-6xl space-y-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">{count.branch.name}</h1>
+            <h1 className="text-3xl font-bold">{inventoryCountTypeLabel(count.countType)} · {count.branch.name}</h1>
             <p className="mt-2 text-on-surface-variant">
-              {new Date(count.countDate).toLocaleDateString("es-MX")}
+              {formatDateOnly(count.countDate)}
             </p>
           </div>
 
@@ -51,6 +88,14 @@ export default async function CountDetailPage({
         </div>
 
         {count.status === "CERRADO" && (
+          <p className="-mt-5 text-sm text-on-surface-variant">
+            Cerrado {count.closedAt ? formatBusinessDateTime(count.closedAt) : "sin fecha registrada"}
+            {count.closedBy ? ` · ${count.closedBy.name} (${count.closedBy.username})` : " · usuario no registrado"}
+            {` · ID ${count.id}`}
+          </p>
+        )}
+
+        {count.status === "CERRADO" && (
           <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
             <p className="text-xs text-on-surface-variant">Costo total consumido esta semana</p>
             <p className="mt-1 text-2xl font-bold text-tertiary-fixed-dim">
@@ -59,29 +104,43 @@ export default async function CountDetailPage({
           </div>
         )}
 
-        <div className="rounded-2xl border border-outline-variant bg-surface-container">
-          {count.items.map((item) => (
-            <CountItemRow
-              key={item.id}
-              countId={count.id}
-              editable={editable}
-              item={{
-                id: item.id,
-                productName: item.product.name,
-                unit: item.product.unit,
-                previousQuantity: Number(item.previousQuantity ?? 0),
-                quantityCounted: Number(item.quantityCounted),
-                entriesQuantity:
-                  item.entriesQuantity !== null ? Number(item.entriesQuantity) : null,
-                quantityConsumed:
-                  item.quantityConsumed !== null ? Number(item.quantityConsumed) : null,
-                costTotal: item.costTotal !== null ? Number(item.costTotal) : null,
-              }}
-            />
-          ))}
-        </div>
+        {editable && pendingItems.length > 0 && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-2xl border border-secondary/40 bg-secondary/10 p-5 text-sm text-on-surface"
+          >
+            <p className="font-semibold text-secondary">
+              Faltan {pendingItems.length} productos por contar.
+            </p>
+            <p className="mt-1 text-on-surface-variant">
+              Captura una cantidad explícita, incluido 0, en cada renglón antes de cerrar.
+            </p>
+            <ul className="mt-3 grid gap-1 text-on-surface-variant sm:grid-cols-2">
+              {pendingItems.map((item) => (
+                <li key={item.id}>• {item.product.name}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-        {editable && <CloseCountButton countId={count.id} />}
+        <CountItemsList
+          items={count.items.map((item) =>
+            buildInventoryCountItemClientView(item, {
+              status: count.status,
+              canViewHistory: isAdmin,
+            }),
+          )}
+          countId={count.id}
+          editable={editable}
+          isAdmin={isAdmin}
+        />
+
+        {editable && missingProducts.length > 0 && (
+          <AddCountProduct key={missingProducts.map(({ id }) => id).join(",")} countId={count.id} products={missingProducts.map(({ id, name }) => ({ id, name }))} />
+        )}
+
+        {editable && user.role === "ADMIN" && <CloseCountButton countId={count.id} operationId={generateOperationId()} />}
       </div>
     </main>
   );

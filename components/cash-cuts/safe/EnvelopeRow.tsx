@@ -6,6 +6,7 @@ import { ChevronDownIcon } from "@/components/ui/icons";
 import { EnvelopeMovementHistory } from "./EnvelopeMovementHistory";
 import { WithdrawEnvelopeForm } from "./WithdrawEnvelopeForm";
 import { AdjustEnvelopeForm } from "./AdjustEnvelopeForm";
+import { formatCivilDate } from "@/lib/dateTime";
 
 interface EnvelopeSummary {
   id: string;
@@ -14,7 +15,7 @@ interface EnvelopeSummary {
   originalAmount: number;
   currentBalance: number;
   status: "PENDIENTE" | "EN_CAJA_FUERTE" | "PARCIAL" | "VACIO";
-  cashCut: { id: string; code: string } | null;
+  cashCut: { id: string; code: string; envelopeNumber: string | null } | null;
   createdBy: { id: string; name: string } | null;
   receivedBy: { id: string; name: string } | null;
 }
@@ -23,7 +24,7 @@ const formatMoney = (v: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(v);
 
 const formatDate = (v: string) =>
-  new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "2-digit", month: "2-digit" }).format(new Date(v));
+  formatCivilDate(v, { weekday: "long", day: "2-digit", month: "2-digit" });
 
 const STATUS_LABEL: Record<EnvelopeSummary["status"], string> = {
   PENDIENTE: "Pendiente de recibir",
@@ -42,10 +43,14 @@ const STATUS_CLASS: Record<EnvelopeSummary["status"], string> = {
 export function EnvelopeRow({
   envelope,
   canWithdraw,
+  canAdjust,
+  canViewHistory,
   onChanged,
 }: {
   envelope: EnvelopeSummary;
   canWithdraw: boolean;
+  canAdjust: boolean;
+  canViewHistory: boolean;
   onChanged: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -80,7 +85,12 @@ export function EnvelopeRow({
     <Card>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-sm font-bold text-on-surface">{envelope.code}</p>
+          <p className="font-mono text-sm font-bold text-on-surface">
+            {envelope.cashCut?.envelopeNumber ? `Sobre ${envelope.cashCut.envelopeNumber}` : envelope.code}
+          </p>
+          {envelope.cashCut?.envelopeNumber && (
+            <p className="text-xs text-on-surface-variant">Código interno: {envelope.code}</p>
+          )}
           <p className="text-xs text-on-surface-variant capitalize">{formatDate(envelope.cutDate)}</p>
         </div>
         <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${STATUS_CLASS[envelope.status]}`}>
@@ -106,9 +116,11 @@ export function EnvelopeRow({
           <Button size="sm" variant="secondary" onClick={() => setShowWithdraw((v) => !v)}>
             Retirar
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setShowAdjust((v) => !v)}>
-            Ajustar saldo
-          </Button>
+          {canAdjust && (
+            <Button size="sm" variant="ghost" onClick={() => setShowAdjust((v) => !v)}>
+              Ajustar saldo
+            </Button>
+          )}
           {!confirmingFull ? (
             <Button size="sm" variant="ghost" onClick={() => setConfirmingFull(true)}>
               Retirar sobre completo
@@ -153,16 +165,16 @@ export function EnvelopeRow({
         />
       )}
 
-      <button
+      {canViewHistory && <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-on-surface-variant hover:text-on-surface"
       >
         <ChevronDownIcon className={`h-3.5 w-3.5 transition ${expanded ? "rotate-90" : ""}`} />
         {expanded ? "Ocultar movimientos" : "Ver movimientos"}
-      </button>
+      </button>}
 
-      {expanded && <EnvelopeMovementHistory envelopeId={envelope.id} />}
+      {canViewHistory && expanded && <EnvelopeMovementHistory envelopeId={envelope.id} />}
     </Card>
   );
 }

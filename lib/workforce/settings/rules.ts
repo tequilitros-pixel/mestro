@@ -33,6 +33,7 @@ export function assertWorkforcePolicy(input: EditableWorkforcePolicy) {
     ["scheduledHoursWarningMinutes", input.scheduledHoursWarningMinutes, 7 * 24 * 60],
     ["preventiveOvertimeWarningMinutes", input.preventiveOvertimeWarningMinutes, 7 * 24 * 60],
     ["shiftLinkProximityMinutes", input.shiftLinkProximityMinutes, 24 * 60],
+    ["maximumGpsAccuracyMeters", input.maximumGpsAccuracyMeters, 1_000],
     ["lateGraceMinutes", input.lateGraceMinutes, 24 * 60],
     ["earlyDepartureGraceMinutes", input.earlyDepartureGraceMinutes, 24 * 60],
     ["longBreakThresholdMinutes", input.longBreakThresholdMinutes, 24 * 60],
@@ -47,6 +48,7 @@ export function assertWorkforcePolicy(input: EditableWorkforcePolicy) {
     if (!Number.isInteger(value) || value < 0 || value > maximum)
       throw new Error(`Valor inválido: ${field}.`);
   if (
+    input.maximumGpsAccuracyMeters < 10 ||
     input.legalDayOrdinaryLimitMinutes === 0 ||
     input.legalNightOrdinaryLimitMinutes === 0 ||
     input.legalMixedOrdinaryLimitMinutes === 0

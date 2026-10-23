@@ -1,6 +1,13 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, CashSafeEnvelope, CashSafeEnvelopeStatus } from "@prisma/client";
+import { Money } from "@/lib/domain/money";
+import { DomainError } from "@/lib/domain/errors";
+import type { CommandActor } from "@/lib/pos2/authorization";
+import { requireActorBranch, lockCashSession } from "@/lib/pos2/cash/guards";
+import { formatDateOnly, parseDateOnly } from "@/lib/dateOnly";
+import { formatBusinessDateOnly } from "@/lib/dateTime";
+import { requireFinancialMovementCategory } from "@/lib/financialMovementCategories";
 
 /*
  * ============================================================
@@ -14,11 +21,11 @@ import type { Prisma, CashSafeEnvelope, CashSafeEnvelopeStatus } from "@prisma/c
  * ============================================================
  */
 
-const ROLES_QUE_PUEDEN_RETIRAR: string[] = ["ADMIN", "GERENTE"];
 /** Un ajuste corrige un error: mas restringido que un retiro normal. */
 const ROLES_QUE_PUEDEN_AJUSTAR: string[] = ["ADMIN"];
 const ROLES_QUE_PUEDEN_RECIBIR: string[] = ["ADMIN", "GERENTE", "ENCARGADO"];
 const MAX_WRITE_ATTEMPTS = 5;
+const TRANSFER_ROLES = ["ADMIN", "GERENTE", "ENCARGADO"];
 
 function isWriteConflict(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
@@ -69,6 +76,53 @@ async function withEnvelopeWriteTransaction<T>(
   throw new Error("No se pudo completar la operacion del sobre");
 }
 
+type TransferEndpoint = { type: "CASH_SESSION" | "ENVELOPE"; id: string };
+const legacyAmount = (value: Money) => Number(value.toString());
+
+export async function transferCash(params: { operationId: string; source: TransferEndpoint; destination: TransferEndpoint; amount: string; reason: string; actor: CommandActor }) {
+  if (!TRANSFER_ROLES.includes(params.actor.role)) throw new DomainError("PERMISSION_DENIED");
+  if (params.source.type === params.destination.type && params.source.id === params.destination.id) throw new DomainError("VALIDATION_ERROR", { field: "destination" });
+  if (!params.reason.trim()) throw new DomainError("VALIDATION_ERROR", { field: "reason" });
+  let amount: Money;
+  try { amount = Money.nonNegative(params.amount); } catch { throw new DomainError("VALIDATION_ERROR", { field: "amount" }); }
+  if (amount.equals(Money.zero())) throw new DomainError("VALIDATION_ERROR", { field: "amount" });
+  return withEnvelopeWriteTransaction(async (tx) => {
+    const replay = await tx.cashTransfer.findUnique({ where: { operationId: params.operationId } });
+    if (replay) {
+      const same = replay.sourceType === params.source.type && replay.sourceId === params.source.id && replay.destinationType === params.destination.type && replay.destinationId === params.destination.id && replay.amount.equals(amount.toDecimal());
+      if (!same) throw new DomainError("IDEMPOTENCY_KEY_REUSED", { operationId: params.operationId });
+      return { replayed: true, transferId: replay.id, amount: replay.amount.toFixed(2), branchId: replay.branchId };
+    }
+    const source = await lockTransferEndpoint(tx, params.source);
+    const destination = await lockTransferEndpoint(tx, params.destination);
+    if (source.branchId !== destination.branchId) throw new DomainError("PERMISSION_DENIED", { branchId: destination.branchId });
+    requireActorBranch(params.actor, source.branchId);
+    if (source.type === "CASH_SESSION" && source.status !== "OPEN") throw new DomainError("CASH_SESSION_NOT_OPEN");
+    if (source.type === "ENVELOPE" && (source.status === "PENDIENTE" || source.status === "VACIO")) throw new DomainError("INVALID_STATE_TRANSITION", { status: source.status });
+    if (destination.type === "CASH_SESSION" && destination.status !== "OPEN") throw new DomainError("CASH_SESSION_NOT_OPEN");
+    if (destination.type === "ENVELOPE" && (destination.status === "PENDIENTE" || destination.status === "VACIO")) throw new DomainError("INVALID_STATE_TRANSITION", { status: destination.status });
+    if (amount.compare(source.balance) > 0) throw new DomainError("VALIDATION_ERROR", { field: "amount", reason: "INSUFFICIENT_BALANCE" });
+    const transfer = await tx.cashTransfer.create({ data: { operationId: params.operationId, branchId: source.branchId, sourceType: params.source.type, sourceId: params.source.id, destinationType: params.destination.type, destinationId: params.destination.id, amount: amount.toDecimal(), reason: params.reason.trim(), actorId: params.actor.id } });
+    if (source.type === "CASH_SESSION") await tx.cashMovement.create({ data: { cashSessionId: source.id, branchId: source.branchId, registerId: source.registerId, type: "SAFE_TRANSFER", direction: "OUT", amount: amount.toDecimal(), sourceType: "CASH_TRANSFER", sourceId: transfer.id, actorId: params.actor.id, operationId: crypto.randomUUID(), metadata: { transferId: transfer.id, destinationType: params.destination.type, destinationId: params.destination.id } } });
+    else await tx.cashSafeEnvelopeMovement.create({ data: { envelopeId: source.id, type: "RETIRO", amount: legacyAmount(amount), previousBalance: legacyAmount(source.balance), newBalance: legacyAmount(source.balance.subtract(amount)), userId: params.actor.id, notes: `Transferencia a ${params.destination.type}: ${params.reason.trim()}` } });
+    if (destination.type === "CASH_SESSION") await tx.cashMovement.create({ data: { cashSessionId: destination.id, branchId: destination.branchId, registerId: destination.registerId, type: "SAFE_TRANSFER", direction: "IN", amount: amount.toDecimal(), sourceType: "CASH_TRANSFER", sourceId: transfer.id, actorId: params.actor.id, operationId: crypto.randomUUID(), metadata: { transferId: transfer.id, sourceType: params.source.type, sourceId: params.source.id } } });
+    else await tx.cashSafeEnvelopeMovement.create({ data: { envelopeId: destination.id, type: "INGRESO", amount: legacyAmount(amount), previousBalance: legacyAmount(destination.balance), newBalance: legacyAmount(destination.balance.add(amount)), userId: params.actor.id, notes: `Transferencia desde ${params.source.type}: ${params.reason.trim()}` } });
+    if (source.type === "ENVELOPE") await tx.cashSafeEnvelope.update({ where: { id: source.id }, data: { currentBalance: legacyAmount(source.balance.subtract(amount)), status: source.balance.subtract(amount).equals(Money.zero()) ? "VACIO" : "PARCIAL" } });
+    if (destination.type === "ENVELOPE") await tx.cashSafeEnvelope.update({ where: { id: destination.id }, data: { currentBalance: legacyAmount(destination.balance.add(amount)), status: "EN_CAJA_FUERTE" } });
+    return { replayed: false, transferId: transfer.id, amount: amount.toString(), branchId: transfer.branchId };
+  });
+}
+
+async function lockTransferEndpoint(tx: Prisma.TransactionClient, endpoint: TransferEndpoint) {
+  if (endpoint.type === "CASH_SESSION") {
+    const session = await lockCashSession(tx, endpoint.id);
+    const rows = await tx.$queryRaw<Array<{ balance: Prisma.Decimal }>>`SELECT COALESCE(SUM(CASE WHEN "direction" = 'IN' THEN "amount" ELSE -"amount" END), 0) AS balance FROM "CashMovement" WHERE "cashSessionId" = ${endpoint.id}`;
+    return { ...session, type: endpoint.type, balance: Money.from(rows[0]?.balance ?? 0) };
+  }
+  const envelope = await lockEnvelopeForUpdate(tx, endpoint.id);
+  return { ...envelope, type: endpoint.type, balance: Money.fromLegacyFloat(envelope.currentBalance) };
+}
+
 /**
  * Bloquea el sobre antes de derivar un nuevo saldo. El ledger y el
  * encabezado se escriben en la misma transaccion, por lo que dos
@@ -90,9 +144,6 @@ async function lockEnvelopeForUpdate(
   return envelope;
 }
 
-export function canWithdraw(role: string) {
-  return ROLES_QUE_PUEDEN_RETIRAR.includes(role);
-}
 export function canAdjust(role: string) {
   return ROLES_QUE_PUEDEN_AJUSTAR.includes(role);
 }
@@ -112,10 +163,7 @@ export async function generateEnvelopeCode(
   branchCode: string,
   cutDate: Date
 ): Promise<string> {
-  const y = cutDate.getFullYear();
-  const m = String(cutDate.getMonth() + 1).padStart(2, "0");
-  const d = String(cutDate.getDate()).padStart(2, "0");
-  const prefix = `${branchCode}-${y}${m}${d}`;
+  const prefix = `${branchCode}-${formatDateOnly(cutDate).replace(/-/g, "")}`;
 
   const existing = await tx.cashSafeEnvelope.count({
     where: { code: { startsWith: `${prefix}-` } },
@@ -175,6 +223,7 @@ export async function createEnvelopeForCashCut(
    * ya ve el sobre del otro corte y genera el siguiente numero.
    */
   const code = await generateEnvelopeCode(tx, params.branchCode, params.cutDate);
+  const receivedAt = new Date();
   return tx.cashSafeEnvelope.create({
     data: {
       code,
@@ -183,10 +232,13 @@ export async function createEnvelopeForCashCut(
       cutDate: params.cutDate,
       originalAmount: params.amount,
       currentBalance: params.amount,
-      status: "PENDIENTE",
+      status: params.amount > 0 ? "EN_CAJA_FUERTE" : "VACIO",
       createdById: params.userId,
+      receivedById: params.userId,
+      receivedAt,
+      receivedAmount: params.amount,
       movements: {
-        create: {
+        create: [{
           type: "INGRESO",
           amount: params.amount,
           previousBalance: 0,
@@ -194,7 +246,15 @@ export async function createEnvelopeForCashCut(
           cashCutId: params.cashCutId,
           userId: params.userId,
           notes: "Generado al cerrar el corte",
-        },
+        }, {
+          type: "RECEPCION",
+          amount: params.amount,
+          previousBalance: params.amount,
+          newBalance: params.amount,
+          cashCutId: params.cashCutId,
+          userId: params.userId,
+          notes: "Recepción automática al cerrar el corte",
+        }],
       },
     },
   });
@@ -278,7 +338,11 @@ export async function withdrawFromEnvelope(params: {
   amount?: number;
   full?: boolean;
   reason: string;
+  categoryId?: string;
+  receiptPhotoUrl?: string;
   userId: string;
+  allowedBranchIds: string[] | null;
+  currentWeek: { from: Date; toExclusive: Date } | null;
 }) {
   if (!params.reason || !params.reason.trim()) {
     throw new Error("El motivo del retiro es obligatorio");
@@ -286,6 +350,12 @@ export async function withdrawFromEnvelope(params: {
 
   return withEnvelopeWriteTransaction(async (tx) => {
     const envelope = await lockEnvelopeForUpdate(tx, params.envelopeId);
+    if (params.allowedBranchIds !== null && !params.allowedBranchIds.includes(envelope.branchId)) {
+      throw new Error("Sobre no encontrado");
+    }
+    if (params.currentWeek && (envelope.cutDate < params.currentWeek.from || envelope.cutDate >= params.currentWeek.toExclusive)) {
+      throw new Error("Sobre no encontrado");
+    }
 
     if (envelope.status === "PENDIENTE") {
       throw new Error("Este sobre aun no se ha recibido en caja fuerte");
@@ -305,6 +375,8 @@ export async function withdrawFromEnvelope(params: {
     }
 
     const newBalance = Math.max(0, envelope.currentBalance - amount);
+    const category = params.categoryId ? await requireFinancialMovementCategory(tx, { categoryId: params.categoryId, direction: "EXPENSE", scope: "ENVELOPE" }) : null;
+    if (category?.requiresReceipt && !params.receiptPhotoUrl?.trim()) throw new Error("El comprobante es obligatorio para esta categoría");
 
     await tx.cashSafeEnvelopeMovement.create({
       data: {
@@ -315,6 +387,8 @@ export async function withdrawFromEnvelope(params: {
         newBalance,
         userId: params.userId,
         notes: params.reason.trim(),
+        ...(category ? { categoryId: category.id, categoryNameSnapshot: category.name } : {}),
+        receiptPhotoUrl: params.receiptPhotoUrl?.trim() || null,
       },
     });
 
@@ -397,11 +471,17 @@ export interface BranchSafeSummary {
  * app/api/cash-cuts/dashboard) deben migrar a llamar esta funcion
  * en vez de repetir la formula -- ver DISENO.md #3 y #10.
  */
-export async function getBranchSafeSummary(branchId: string): Promise<BranchSafeSummary> {
+export async function getBranchSafeSummary(branchId: string, dateRange?: { from: Date; toExclusive: Date }): Promise<BranchSafeSummary> {
+  const cutDateRange = dateRange
+    ? {
+        gte: parseDateOnly(formatBusinessDateOnly(dateRange.from)),
+        lt: parseDateOnly(formatBusinessDateOnly(dateRange.toExclusive)),
+      }
+    : undefined;
   const [branch, legacyMovements, envelopes] = await Promise.all([
     prisma.branch.findUniqueOrThrow({ where: { id: branchId }, select: { name: true } }),
-    prisma.cashSafeMovement.findMany({ where: { branchId } }),
-    prisma.cashSafeEnvelope.findMany({ where: { branchId } }),
+    prisma.cashSafeMovement.findMany({ where: { branchId, ...(dateRange ? { createdAt: { gte: dateRange.from, lt: dateRange.toExclusive } } : {}) } }),
+    prisma.cashSafeEnvelope.findMany({ where: { branchId, ...(cutDateRange ? { cutDate: cutDateRange } : {}) } }),
   ]);
 
   const legacyBalance = legacyMovements.reduce(
@@ -430,14 +510,19 @@ export async function getBranchSafeSummary(branchId: string): Promise<BranchSafe
 
 export async function listEnvelopesForBranch(
   branchId: string,
-  status?: CashSafeEnvelopeStatus[]
+  dateRange: { from: Date; toExclusive: Date },
+  status?: CashSafeEnvelopeStatus[],
 ) {
   return prisma.cashSafeEnvelope.findMany({
-    where: { branchId, ...(status ? { status: { in: status } } : {}) },
+    where: {
+      branchId,
+      cutDate: { gte: dateRange.from, lt: dateRange.toExclusive },
+      ...(status ? { status: { in: status } } : {}),
+    },
     include: {
       createdBy: { select: { id: true, name: true } },
       receivedBy: { select: { id: true, name: true } },
-      cashCut: { select: { id: true, code: true } },
+      cashCut: { select: { id: true, code: true, envelopeNumber: true } },
     },
     orderBy: { cutDate: "desc" },
   });

@@ -14,6 +14,8 @@ import { distanceMeters, hasGeofence } from "@/lib/geo";
 export const BRANCH_LOCATION_SELECT = {
   id: true,
   name: true,
+  active: true,
+  geofenceEnabled: true,
   geofence: {
     select: { latitude: true, longitude: true, radius: true },
   },
@@ -81,6 +83,7 @@ export async function matchTodaysScheduledShift(
       userId,
       branchId,
       type: "TURNO",
+      publicationStatus: "PUBLISHED",
       date: { gte: todayStart, lt: todayEnd },
     },
     select: { id: true, startTime: true },

@@ -1,6 +1,5 @@
 import { DistillationEvent } from "@prisma/client";
 import {
-  calculateCorrectedAlcohol,
   calculateAbsoluteAlcohol,
   calculateDistillationYield,
 } from "../processCalculations";
@@ -23,7 +22,9 @@ export function getCurrentTemperature(events: DistillationEvent[]) {
 
 export function getTotalLiters(events: DistillationEvent[]) {
   return events.reduce((sum, event) => {
-    return sum + (event.liters ?? 0);
+    // FIN_DESTILACION stores the official total, not an additional
+    // collection. Counting it again duplicated the production result.
+    return event.type === "FIN_DESTILACION" ? sum : sum + (event.liters ?? 0);
   }, 0);
 }
 
@@ -34,7 +35,7 @@ export function getHeartLiters(events: DistillationEvent[]) {
   for (const event of events) {
     if (event.type === "INICIO_CORAZON") counting = true;
 
-    if (counting) {
+    if (counting && event.type !== "FIN_DESTILACION") {
       total += event.liters ?? 0;
     }
 
@@ -63,21 +64,12 @@ export function getTailLiters(events: DistillationEvent[]) {
   for (const event of events) {
     if (event.type === "INICIO_COLAS") counting = true;
 
-    if (counting) {
+    if (counting && event.type !== "FIN_DESTILACION") {
       total += event.liters ?? 0;
     }
   }
 
   return total;
-}
-
-export function getCorrectedAlcohol(
-  alcohol: number | null,
-  temperature: number | null
-) {
-  if (alcohol === null || temperature === null) return null;
-
-  return calculateCorrectedAlcohol(alcohol, temperature);
 }
 
 export function getAbsoluteAlcohol(
@@ -98,6 +90,20 @@ export function getYield(
     loadedLiters
   );
 }
+export function getTotalLAA(events: DistillationEvent[]) {
+  let hasCorrectedMeasurement = false;
+  const laa = events.reduce((sum, event) => {
+    if (event.type === "FIN_DESTILACION") return sum;
+    const liters = event.liters ?? 0;
+    const alcohol = event.alcoholCorrected;
+    if (liters <= 0 || alcohol === null) return sum;
+    hasCorrectedMeasurement = true;
+    return sum + (liters * alcohol) / 100;
+  }, 0);
+
+  return hasCorrectedMeasurement ? Number(laa.toFixed(2)) : null;
+}
+
 export function getDistillationStatus(events: DistillationEvent[]) {
   if (events.some((e) => e.type === "FIN_DESTILACION")) return "Finalizada";
   if (events.some((e) => e.type === "INICIO_COLAS")) return "En colas";
@@ -106,5 +112,5 @@ export function getDistillationStatus(events: DistillationEvent[]) {
   if (events.some((e) => e.type === "CORTE_CABEZAS")) return "Sacando destrozado";
   if (events.some((e) => e.type === "INICIO_CALENTAMIENTO")) return "Calentando";
 
-  return "Sin iniciar";
+  return "Listo para iniciar";
 }

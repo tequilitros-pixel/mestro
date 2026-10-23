@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import * as webpush from "web-push";
 
-import { prisma } from "@/lib/prisma";
+import { prisma, rawPrisma } from "@/lib/prisma";
+import { withDatabaseActor } from "@/lib/database-context";
 import {
   checkStockBajo,
   checkLicorCaducidad,
@@ -82,6 +83,21 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
+    // El cron no tiene cookie de usuario. Al habilitar RLS para CashCut,
+    // necesita un contexto administrativo explícito después de validar el
+    // secreto del cron; nunca se toma identidad desde la petición.
+    const serviceAdmin = await rawPrisma.user.findFirst({
+      where: { active: true, role: "ADMIN" },
+      select: { id: true, role: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!serviceAdmin) {
+      return NextResponse.json(
+        { error: "No hay un administrador activo para el servicio" },
+        { status: 503 },
+      );
+    }
+
     configureWebPush();
 
     const now = new Date();
@@ -106,10 +122,8 @@ export async function GET(request: Request) {
     for (const rule of dueRules) {
       evaluated += 1;
 
-      const result = await runCheck(
-        rule.triggerType,
-        rule.thresholdConfig,
-        rule.lastCheckedAt,
+      const result = await withDatabaseActor(serviceAdmin, () =>
+        runCheck(rule.triggerType, rule.thresholdConfig, rule.lastCheckedAt),
       );
 
       if (!result) {

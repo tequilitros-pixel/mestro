@@ -21,6 +21,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
 import { denominationTotal, validDenominationRows } from "@/lib/cash-cuts/denominations";
 import { createEnvelopeForCashCut } from "@/lib/cash-cuts/safeEnvelopes";
+import { envelopeNumberForClose } from "@/lib/cash-cuts/envelopeNumber";
 
 const ROLES_QUE_PUEDEN_CERRAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -44,7 +45,7 @@ export async function POST(
 
   const { id: cashCutId } = await params;
 
-  const scope = await getCashCutScope();
+  const scope = await getCashCutScope(["/cash-cuts/daily"]);
   if (!scope) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -64,7 +65,6 @@ export async function POST(
   const {
     cashCounted,
     envelopeAmount,
-    envelopeNumber,
     envelopeNotes,
     nextFund,
     totalCostOfGoods,
@@ -114,21 +114,6 @@ export async function POST(
       }));
   }
 
-  const [outflows, inflows] = await Promise.all([
-    prisma.cashOutflow.findMany({ where: { cashCutId } }),
-    prisma.cashInflow.findMany({ where: { cashCutId } }),
-  ]);
-
-  const totalOutflows = outflows.reduce((sum, o) => sum + o.amount, 0);
-  const totalInflows = inflows.reduce((sum, i) => sum + i.amount, 0);
-  const totalSales = cashCut.salesByMethod.reduce((sum, s) => sum + s.amount, 0);
-
-  const cashSales =
-    cashCut.salesByMethod.find((s) => s.method === "EFECTIVO")?.amount ?? 0;
-
-  const cashExpected =
-    cashCut.startingFund + cashSales + totalInflows - totalOutflows;
-
   const countedRows = validDenominationRows(cashCountedDenominations);
   const countedFromDenominations = denominationTotal(countedRows);
   if (countThenEnvelope && Math.abs(Number(cashCounted) - countedFromDenominations) > 0.001) {
@@ -152,6 +137,9 @@ export async function POST(
 
   const finalCashCounted = cashCounted;
   const finalEnvelopeAmount = envelopeAmount;
+  const finalEnvelopeNumber = finalEnvelopeAmount > 0
+    ? envelopeNumberForClose(closedAt)
+    : null;
   const finalNextFund = countThenEnvelope
     ? Math.max(0, cashCounted - envelopeAmount)
     : nextFund;
@@ -161,13 +149,6 @@ export async function POST(
         ...toDenominationRows("CIERRE", cashCountedDenominations),
         ...toDenominationRows("SIGUIENTE_TURNO", nextFundDenominations),
       ];
-  const difference = finalCashCounted - cashExpected;
-
-  const netProfit =
-    totalCostOfGoods !== undefined
-      ? totalSales - totalCostOfGoods - totalOutflows
-      : null;
-
   const assignedCash = (finalEnvelopeAmount ?? 0) + finalNextFund;
   const assignmentWarning =
     Math.abs(assignedCash - finalCashCounted) > 1
@@ -190,6 +171,19 @@ export async function POST(
         throw new CashCutAlreadyClosedError();
       }
 
+      // Read totals after taking the same lock used by sale/cancellation.
+      // A sale committed while closing was waiting must be included.
+      const payments = await tx.cashSalePayment.findMany({ where: { cashCutId } });
+      const outflows = await tx.cashOutflow.findMany({ where: { cashCutId } });
+      const inflows = await tx.cashInflow.findMany({ where: { cashCutId } });
+      const totalSales = payments.reduce((sum, payment) => sum + payment.amount, 0);
+      const totalOutflows = outflows.reduce((sum, outflow) => sum + outflow.amount, 0);
+      const totalInflows = inflows.reduce((sum, inflow) => sum + inflow.amount, 0);
+      const cashSales = payments.find((payment) => payment.method === "EFECTIVO")?.amount ?? 0;
+      const cashExpected = cashCut.startingFund + cashSales + totalInflows - totalOutflows;
+      const difference = finalCashCounted - cashExpected;
+      const netProfit = totalCostOfGoods !== undefined ? totalSales - totalCostOfGoods - totalOutflows : null;
+
       const cut = await tx.cashCut.update({
         where: { id: cashCutId },
         data: {
@@ -197,7 +191,7 @@ export async function POST(
           cashExpected,
           difference,
           envelopeAmount: finalEnvelopeAmount,
-          envelopeNumber,
+          envelopeNumber: finalEnvelopeNumber,
           envelopeNotes,
           nextFund: finalNextFund,
           totalSales,

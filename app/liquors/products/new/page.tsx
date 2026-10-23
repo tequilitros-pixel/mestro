@@ -3,18 +3,14 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 import { MartiniIcon } from "@/components/ui/icons";
 
 export default async function NewLiquorProductPage() {
   async function createProduct(formData: FormData) {
     "use server";
 
-    const user = await getCurrentUser();
-
-    if (!user) {
-      throw new Error("Debes iniciar sesión para crear un producto.");
-    }
+    const user = await requireModuleActionAccess("/liquors");
 
     const name = String(formData.get("name") ?? "").trim();
     const rawSlug = String(formData.get("slug") ?? "").trim();

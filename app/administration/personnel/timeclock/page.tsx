@@ -3,16 +3,20 @@ import {
   getOpenShiftsForAdmin,
   getRecentGeofenceAlerts,
   getPendingTimeClockEditRequests,
+  getPendingLocationRequests,
 } from "@/app/actions/timeclock";
 import { ChevronLeftIcon } from "@/components/ui/icons";
 import OpenShiftsManager from "./OpenShiftsManager";
 import EditRequestsManager from "./EditRequestsManager";
+import LocationRequestsManager from "./LocationRequestsManager";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 export default async function OpenShiftsPage() {
-  const [openShifts, geofenceAlerts, editRequests] = await Promise.all([
+  const [openShifts, geofenceAlerts, editRequests, locationRequests] = await Promise.all([
     getOpenShiftsForAdmin(),
     getRecentGeofenceAlerts(),
     getPendingTimeClockEditRequests(),
+    getPendingLocationRequests(),
   ]);
 
   const serialized = openShifts.map((entry: Awaited<ReturnType<typeof getOpenShiftsForAdmin>>[number]) => ({
@@ -58,6 +62,23 @@ export default async function OpenShiftsPage() {
         <OpenShiftsManager initialShifts={serialized} />
 
         <div>
+          <h2 className="text-xl font-bold text-on-surface">Entradas sin ubicación</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Revisa la nota del empleado y aprueba o rechaza la entrada. Solo las aprobadas se contabilizan en nómina.
+          </p>
+          <div className="mt-4">
+            <LocationRequestsManager initialRequests={locationRequests.map((request) => ({
+              id: request.id,
+              clockIn: request.clockIn.toISOString(),
+              clockOut: request.clockOut?.toISOString() ?? null,
+              reason: request.reason,
+              user: request.user,
+              branch: request.branch,
+            }))} />
+          </div>
+        </div>
+
+        <div>
           <h2 className="text-xl font-bold text-on-surface">
             Solicitudes de corrección
           </h2>
@@ -101,10 +122,7 @@ export default async function OpenShiftsPage() {
                   </div>
 
                   <p className="shrink-0 text-xs text-error">
-                    {new Date(alert.createdAt).toLocaleString("es-MX", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
+                    {formatBusinessDateTime(alert.createdAt)}
                   </p>
                 </div>
               ))}

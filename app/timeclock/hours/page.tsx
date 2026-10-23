@@ -29,25 +29,40 @@ export default async function MyHoursPage() {
         {"error" in summary ? (
           <p className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">{summary.error}</p>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            <Card>
-              <CardLabel><span className="inline-flex items-center gap-1.5"><ClockIcon className="h-3.5 w-3.5" />Hoy</span></CardLabel>
-              <CardValue>{formatHours(summary.todayHours)}</CardValue>
-            </Card>
-            <Card>
-              <CardLabel><span className="inline-flex items-center gap-1.5"><ClockIcon className="h-3.5 w-3.5" />Esta semana</span></CardLabel>
-              <CardValue>{formatHours(summary.weekHours)}</CardValue>
-            </Card>
-            <Card highlight className="col-span-2">
-              <CardLabel><span className="inline-flex items-center gap-1.5"><DollarIcon className="h-3.5 w-3.5" />Pago estimado esta semana</span></CardLabel>
-              <CardValue>{summary.weekPay === null ? "—" : formatCurrency(summary.weekPay)}</CardValue>
-              {summary.hourlyRate === null ? (
-                <p className="mt-2 text-xs text-on-surface-variant">Tu pago por hora todavía no está configurado.</p>
-              ) : (
-                <p className="mt-2 text-xs text-on-surface-variant">Tarifa registrada: {formatCurrency(summary.hourlyRate)} por hora. El total es estimado hasta que cierre la nómina.</p>
-              )}
-            </Card>
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Card>
+                <CardLabel><span className="inline-flex items-center gap-1.5"><ClockIcon className="h-3.5 w-3.5" />Hoy</span></CardLabel>
+                <CardValue>{formatHours(summary.todayHours)}</CardValue>
+              </Card>
+              <Card>
+                <CardLabel><span className="inline-flex items-center gap-1.5"><ClockIcon className="h-3.5 w-3.5" />Esta semana</span></CardLabel>
+                <CardValue>{formatHours(summary.weekHours)}</CardValue>
+              </Card>
+              <Card highlight className="col-span-2">
+                <CardLabel><span className="inline-flex items-center gap-1.5"><DollarIcon className="h-3.5 w-3.5" />Pago estimado esta semana</span></CardLabel>
+                <CardValue>{summary.weekPay === null ? "—" : formatCurrency(summary.weekPay)}</CardValue>
+                {summary.weekPay === null ? (
+                  <p className="mt-2 text-xs text-on-surface-variant">Tu pago por hora todavía no está configurado.</p>
+                ) : (
+                  <p className="mt-2 text-xs text-on-surface-variant">{summary.variableRate ? "Se aplicaron distintas tarifas según la sucursal." : summary.hourlyRate !== null ? `Tarifa registrada: ${formatCurrency(summary.hourlyRate)} por hora.` : "Tarifa por sucursal aplicada."} El total es estimado hasta que cierre la nómina.</p>
+                )}
+              </Card>
+            </div>
+
+            <Link
+              href="/timeclock/payroll?tab=PAGOS"
+              className="flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4 transition hover:bg-primary/10"
+            >
+              <div>
+                <p className="text-sm font-bold text-on-surface">Historial de nómina y semanas anteriores</p>
+                <p className="mt-0.5 text-xs text-on-surface-variant">
+                  Consulta cuánto se te pagó la semana pasada, antepasada y anteriores.
+                </p>
+              </div>
+              <span className="shrink-0 text-xs font-bold text-primary">Ver pagos →</span>
+            </Link>
+          </>
         )}
       </div>
     </main>

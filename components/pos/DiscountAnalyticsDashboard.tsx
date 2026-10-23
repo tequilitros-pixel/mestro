@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 import DiscountRankingChart from "./DiscountAnalyticsCharts";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 export type DiscountRanking = {
   name: string;
@@ -189,7 +190,7 @@ export default function DiscountAnalyticsDashboard({
                   {analytics.recent.map((row) => (
                     <tr key={row.id} className="text-on-surface">
                       <td className="whitespace-nowrap px-5 py-3">
-                        <div>{new Date(row.date).toLocaleDateString("es-MX")}</div>
+                        <div>{formatBusinessDateTime(row.date)}</div>
                         <Link href={`/pos/sales/${row.saleId}`} className="text-xs font-semibold text-primary">{row.code}</Link>
                       </td>
                       <td className="px-5 py-3">{row.giver}</td>

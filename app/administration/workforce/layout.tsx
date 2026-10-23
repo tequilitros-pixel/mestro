@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/auth";
-import { headers } from "next/headers";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 
 export default async function WorkforceV1Layout({
@@ -11,13 +9,7 @@ export default async function WorkforceV1Layout({
   children: React.ReactNode;
 }) {
   if (!workforceV1Enabled()) notFound();
-  const pathname = (await headers()).get("x-pathname") ?? "";
-  if (
-    pathname.startsWith("/administration/workforce/schedule") ||
-    pathname.startsWith("/administration/workforce/schedule")
-  )
-    await requireModuleAccess("/administration/schedule");
-  else await requireAdmin();
+  await requireAdmin();
   return (
     <main className="mx-auto w-full max-w-7xl p-4 sm:p-6">
       <header className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -33,6 +25,7 @@ export default async function WorkforceV1Layout({
           </p>
         </div>
         <nav className="flex gap-2 overflow-x-auto pb-1">
+          <Link className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold" href="/administration/workforce/branches">Sucursales</Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/administration/workforce"
@@ -47,15 +40,9 @@ export default async function WorkforceV1Layout({
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
-            href="/administration/workforce/schedule"
-          >
-            Programar horarios
-          </Link>
-          <Link
-            className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/administration/workforce/clock-corrections"
           >
-            Solicitudes / Correcciones
+            Correcciones
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
@@ -67,7 +54,7 @@ export default async function WorkforceV1Layout({
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/administration/workforce/timesheets"
           >
-            Horas trabajadas
+            Timesheets
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
@@ -79,13 +66,13 @@ export default async function WorkforceV1Layout({
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/administration/workforce/overtime"
           >
-            Horas extra
+            Overtime
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/administration/workforce/payroll"
           >
-            Nómina
+            Payroll
           </Link>
           <Link
             className="whitespace-nowrap rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-on-primary"

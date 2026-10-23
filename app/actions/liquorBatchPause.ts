@@ -2,14 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 
 export async function pauseLiquorBatchAction(formData: FormData) {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const user = await requireModuleActionAccess("/liquors/batches");
 
   const batchId = String(formData.get("batchId") ?? "").trim();
   const reason = String(formData.get("reason") ?? "").trim();
@@ -46,6 +42,8 @@ export async function pauseLiquorBatchAction(formData: FormData) {
   const now = new Date();
 
   await prisma.$transaction(async (tx) => {
+    const current = await tx.$queryRaw<Array<{ status: string }>>`SELECT "status" FROM "LiquorBatch" WHERE "id" = ${batchId} FOR UPDATE`;
+    if (current[0]?.status !== "EN_ELABORACION") throw new Error("Solo se puede pausar un lote en elaboración.");
     await tx.liquorBatch.update({
       where: {
         id: batchId,
@@ -79,11 +77,7 @@ export async function pauseLiquorBatchAction(formData: FormData) {
 }
 
 export async function resumeLiquorBatchAction(formData: FormData) {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const user = await requireModuleActionAccess("/liquors/batches");
 
   const batchId = String(formData.get("batchId") ?? "").trim();
 
@@ -111,6 +105,8 @@ export async function resumeLiquorBatchAction(formData: FormData) {
   }
 
   await prisma.$transaction(async (tx) => {
+    const current = await tx.$queryRaw<Array<{ status: string }>>`SELECT "status" FROM "LiquorBatch" WHERE "id" = ${batchId} FOR UPDATE`;
+    if (current[0]?.status !== "PAUSADO") throw new Error("Este lote no se encuentra pausado.");
     await tx.liquorBatch.update({
       where: {
         id: batchId,

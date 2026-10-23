@@ -14,6 +14,7 @@ import { PageHeader, StatusBadge } from "@/components/ui/CompactUI";
 
 type CorteAbierto = {
   id: string;
+  branchId: string;
   code: string;
   openedAt: string;
   branchName: string;
@@ -47,12 +48,19 @@ export default function CajaOperativa({
   // La hora que se guarda al abrir o cerrar siempre es la del servidor.
   const [ahora, setAhora] = useState<number | null>(null);
   useEffect(() => {
-    setAhora(Date.now());
+    // Deja que la hidratación termine antes de leer el reloj del navegador.
+    // Así conservamos el HTML estable del servidor sin actualizar estado
+    // sincrónicamente dentro del efecto.
+    const initialTimer = window.setTimeout(() => setAhora(Date.now()), 0);
     const t = setInterval(() => setAhora(Date.now()), 30000);
-    return () => clearInterval(t);
+    return () => {
+      window.clearTimeout(initialTimer);
+      clearInterval(t);
+    };
   }, []);
 
   const hoy = new Date().toLocaleDateString("es-MX", {
+    timeZone: "America/Mexico_City",
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -183,6 +191,12 @@ export default function CajaOperativa({
             Cerrar corte
           </Link>
         </div>
+        <Link
+          href={`/pospress?branchId=${encodeURIComponent(corte.branchId)}`}
+          className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-secondary/40 bg-secondary/10 px-5 text-sm font-bold text-secondary transition hover:bg-secondary/15 active:scale-[0.98]"
+        >
+          Abrir POSpress para vender
+        </Link>
       </div>
     </main>
   );

@@ -10,16 +10,19 @@ export type PermissionGroup = {
 
 /** Pantallas personales disponibles para cualquier usuario con sesión. */
 export const ALWAYS_AVAILABLE_PATHS = [
-  "/workforce",
-  "/workforce/availability",
-  "/workforce/clock",
-  "/workforce/timesheet",
-  "/workforce/payroll",
+  "/timeclock",
+  "/timeclock/calendar",
+  "/timeclock/availability",
+  "/timeclock/hours",
+  "/timeclock/payroll",
+  "/timeclock/history",
+  "/timeclock/requests",
 ] as const;
 
 /** Acceso histórico para operadores que aún no tienen permisos configurados. */
 export const LEGACY_OPERATOR_PERMISSION_KEYS = [
   "/cooking",
+  "/boiler",
   "/milling",
   "/fermentation",
   "/distillation",
@@ -27,13 +30,29 @@ export const LEGACY_OPERATOR_PERMISSION_KEYS = [
 
 /** Secciones protegidas por rol ADMIN y que no deben ofrecerse como permisos. */
 export const ADMIN_ONLY_PATH_PREFIXES = [
+  "/accounting",
   "/administration/personnel",
   "/administration/schedule",
-  "/timeclock/payroll",
+  "/administration/workforce/employees",
+  "/administration/workforce/branches",
   "/timeclock/geofences",
   "/pos/categories",
   "/pos/products",
   "/pos/settings",
+  "/cash-cuts/history",
+  "/administration/inventory/branch-counts/statistics",
+] as const;
+
+/** Pantallas administrativas exactas de Workforce; horario se delega aparte. */
+const ADMIN_ONLY_PATHS = [
+  "/administration/workforce",
+  "/administration/workforce/availability",
+  "/administration/workforce/attendance",
+  "/administration/workforce/clock-corrections",
+  "/administration/workforce/timesheets",
+  "/administration/workforce/overtime",
+  "/administration/workforce/payroll",
+  "/administration/workforce/settings",
 ] as const;
 
 export function isAlwaysAvailablePath(pathname: string): boolean {
@@ -41,8 +60,11 @@ export function isAlwaysAvailablePath(pathname: string): boolean {
 }
 
 export function isAdminOnlyPath(pathname: string): boolean {
-  return ADMIN_ONLY_PATH_PREFIXES.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  return (
+    ADMIN_ONLY_PATHS.some((path) => pathname === path) ||
+    ADMIN_ONLY_PATH_PREFIXES.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    )
   );
 }
 
@@ -53,6 +75,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "/plant", label: "Planta" },
       { key: "/lots", label: "Lotes" },
       { key: "/cooking", label: "Cocción" },
+      { key: "/boiler", label: "Caldera" },
       { key: "/milling", label: "Molienda" },
       { key: "/fermentation", label: "Fermentación" },
       { key: "/distillation", label: "Destilación" },
@@ -85,18 +108,13 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "/cash-cuts/envelopes", label: "Sobres" },
       { key: "/cash-cuts/safe", label: "Caja fuerte" },
       { key: "/cash-cuts/audit", label: "Auditoría" },
-      { key: "/cash-cuts/history", label: "Historial" },
     ],
   },
   {
     group: "Punto de Venta",
     modules: [
       { key: "/pos", label: "Vender" },
-      { key: "/pos/sales", label: "Ventas" },
-      { key: "/pos/discounts/rules", label: "Descuentos · Administrar" },
-      { key: "/pos/discounts/courtesies", label: "Descuentos · Cortesías" },
-      { key: "/pos/discounts/employees", label: "Descuentos · Trabajadores" },
-      { key: "/pos/discounts/products", label: "Descuentos · Productos" },
+      { key: "/pos/sales", label: "Transacciones y ventas resumen" },
     ],
   },
   {
@@ -150,7 +168,65 @@ export function isConfigurablePermissionKey(key: string): boolean {
   return CONFIGURABLE_PERMISSION_KEYS.has(key);
 }
 
+/** Regla unica de acceso por modulo para UI, Server Actions y APIs. */
+export function canAccessModule(
+  role: string,
+  moduleKeys: readonly string[],
+  moduleKey: string,
+): boolean {
+  if (role === "ADMIN") return true;
+
+  if (moduleKey === "/administration/inventory/branch-counts") {
+    return isInventoryCountCaptureRole(role);
+  }
+
+  const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);
+  if (
+    role === "OPERATOR" &&
+    !hasConfiguredPermissions &&
+    LEGACY_OPERATOR_PERMISSION_KEYS.some((key) => key === moduleKey)
+  ) {
+    return true;
+  }
+
+  return moduleKeys.includes(moduleKey);
+}
+
 export function getModuleKeyForPath(pathname: string): string | null {
+  if (pathname === "/accounting" || pathname.startsWith("/accounting/")) {
+    return "/accounting";
+  }
+
+  // Resource-oriented URLs still belong to their operational workflow.
+  if (/^\/liquors\/products\/[^/]+\/new\/?$/.test(pathname)) {
+    return "/liquors/production";
+  }
+  if (
+    /^\/liquors\/batches\/[^/]+\/(bottling|labels)(\/|$)/.test(pathname) ||
+    pathname.startsWith("/liquors/print/bottling/")
+  ) {
+    return "/liquors/bottling";
+  }
+  if (/^\/liquors\/bottles\/[^/]+\/(label|qr)(\/|$)/.test(pathname)) {
+    return "/liquors/qr";
+  }
+  if (/^\/liquors\/bottles\/[^/]+\/?$/.test(pathname)) {
+    return "/liquors/inventory";
+  }
+
+  if (
+    pathname === "/pospress/transactions" ||
+    pathname.startsWith("/pospress/transactions/")
+  ) {
+    return "/pos/sales";
+  }
+
+  // POSpress remains the canonical sales workspace while the stored keys
+  // keep backward compatibility with existing grants.
+  if (pathname === "/pospress" || pathname.startsWith("/pospress/")) {
+    return "/pos";
+  }
+
   const allKeys = PERMISSION_GROUPS.flatMap((g) => g.modules.map((m) => m.key));
 
   const matches = allKeys.filter(
@@ -162,11 +238,34 @@ export function getModuleKeyForPath(pathname: string): string | null {
   return matches.sort((a, b) => b.length - a.length)[0];
 }
 
+/** Read-only inventory surfaces available to a manager with branch scope. */
+export function isInventoryManagerReadPath(pathname: string): boolean {
+  return (
+    pathname === "/administration/inventory" ||
+    pathname === "/administration/inventory/products" ||
+    pathname.startsWith("/administration/inventory/products/") ||
+    pathname === "/administration/inventory/sucursales" ||
+    pathname === "/administration/inventory/sucursales/stock" ||
+    pathname === "/administration/inventory/sucursales/legacy-report"
+  );
+}
+
+/** Roles allowed to capture quantities for an assigned branch. */
+export function isInventoryCountCaptureRole(role: string): boolean {
+  return role === "ADMIN" || role === "GERENTE" || role === "OPERATOR";
+}
+
 /** Primera pantalla útil después de iniciar sesión, según los permisos asignados. */
 export function getDefaultPathForModuleKeys(moduleKeys: string[]): string {
   const orderedKeys = PERMISSION_GROUPS.flatMap((group) =>
     group.modules.map((module) => module.key),
   );
 
-  return orderedKeys.find((key) => moduleKeys.includes(key)) ?? "/profile";
+  const defaultKey = orderedKeys.find((key) => moduleKeys.includes(key));
+
+  // /pos remains the stored permission key for existing users, while
+  // POSpress is the only canonical UI entry point.
+  if (defaultKey === "/pos") return "/pospress";
+  if (defaultKey === "/pos/sales") return "/pospress/transactions";
+  return defaultKey ?? "/profile";
 }

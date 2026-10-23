@@ -2,16 +2,12 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 
 export async function finishLiquorBatchAction(
   formData: FormData
 ) {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const user = await requireModuleActionAccess("/liquors/batches");
 
   const batchId = String(
     formData.get("batchId") ?? ""
@@ -89,6 +85,14 @@ export async function finishLiquorBatchAction(
 
   await prisma.$transaction(
     async (tx) => {
+      const batches = await tx.$queryRaw<Array<{ status: string }>>`
+        SELECT "status" FROM "LiquorBatch" WHERE "id" = ${batchId} FOR UPDATE
+      `;
+      if (batches[0]?.status !== "EN_ELABORACION") {
+        throw new Error("Solo puede finalizarse un lote que esté en elaboración; un lote liberado o terminado no se vuelve a abrir.");
+      }
+      const pendingSteps = await tx.liquorBatchStep.count({ where: { batchId, status: { not: "COMPLETADO" } } });
+      if (pendingSteps > 0) throw new Error("Aún existen pasos pendientes.");
       await tx.liquorBatch.update({
         where: {
           id: batchId,

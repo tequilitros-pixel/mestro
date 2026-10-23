@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { requestTimeClockEditAction } from "@/app/actions/timeclock";
 import { PencilIcon, ClockIcon } from "@/components/ui/icons";
+import { formatBusinessDateTime, formatBusinessDateTimeLocal, formatBusinessTime, parseBusinessDateTimeLocal } from "@/lib/dateTime";
 
 type EditRequest = {
   id: string;
@@ -22,11 +23,7 @@ type Shift = {
 };
 
 function toDatetimeLocal(iso: string) {
-  const date = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`;
+  return formatBusinessDateTimeLocal(iso);
 }
 
 function formatShiftHours(clockIn: string, clockOut: string) {
@@ -36,13 +33,7 @@ function formatShiftHours(clockIn: string, clockOut: string) {
 }
 
 function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("es-MX", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatBusinessDateTime(iso);
 }
 
 export default function RecentShifts({ shifts }: { shifts: Shift[] }) {
@@ -73,10 +64,12 @@ export default function RecentShifts({ shifts }: { shifts: Shift[] }) {
     setSaving(true);
     setError(null);
 
-    const adjustedClockIn = new Date(clockInValue);
-    const adjustedClockOut = new Date(clockOutValue);
-
-    if (Number.isNaN(adjustedClockIn.getTime()) || Number.isNaN(adjustedClockOut.getTime())) {
+    let adjustedClockIn: Date;
+    let adjustedClockOut: Date;
+    try {
+      adjustedClockIn = parseBusinessDateTimeLocal(clockInValue);
+      adjustedClockOut = parseBusinessDateTimeLocal(clockOutValue);
+    } catch {
       setSaving(false);
       setError("Las horas no son válidas.");
       return;
@@ -122,7 +115,7 @@ export default function RecentShifts({ shifts }: { shifts: Shift[] }) {
                 <div>
                   <p className="text-sm font-semibold text-on-surface">{shift.branch.name}</p>
                   <p className="mt-0.5 text-xs text-on-surface-variant">
-                    {formatDateTime(shift.clockIn)} — {new Date(shift.clockOut).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                    {formatDateTime(shift.clockIn)} — {formatBusinessTime(shift.clockOut)}
                   </p>
                   <p className="mt-1 text-xs font-medium text-on-surface-variant">
                     {formatShiftHours(shift.clockIn, shift.clockOut)}
@@ -143,7 +136,7 @@ export default function RecentShifts({ shifts }: { shifts: Shift[] }) {
               {pending && (
                 <div className="mt-3 rounded-xl border border-secondary/30 bg-secondary/10 p-3 text-xs text-secondary">
                   Pendiente de aprobación: {formatDateTime(pending.requestedClockIn)} —{" "}
-                  {new Date(pending.requestedClockOut).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                  {formatBusinessTime(pending.requestedClockOut)}
                   {pending.reason && <p className="mt-1 text-secondary/80">Motivo: {pending.reason}</p>}
                 </div>
               )}

@@ -9,7 +9,7 @@ import {
   LiquorBottleStatus,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 
 type CreateLiquorBottlingInput = {
   batchId: string;
@@ -44,9 +44,9 @@ export async function createLiquorBottlingAction(
     const userId = await getAuthenticatedUserId();
 
     const batchId = input.batchId.trim();
-    const bottleSizeMl = Math.trunc(input.bottleSizeMl);
-    const filledBottles = Math.trunc(input.filledBottles);
-    const rejectedBottles = Math.trunc(input.rejectedBottles);
+    const bottleSizeMl = input.bottleSizeMl;
+    const filledBottles = input.filledBottles;
+    const rejectedBottles = input.rejectedBottles;
     const notes = input.notes?.trim() || null;
 
     if (!batchId) {
@@ -99,6 +99,7 @@ export async function createLiquorBottlingAction(
     const lossLiters = roundLiters(rejectedBottles * bottleLiters);
 
     const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "LiquorBatch" WHERE "id" = ${batchId} FOR UPDATE`;
       const batch = await tx.liquorBatch.findUnique({
         where: {
           id: batchId,
@@ -389,7 +390,7 @@ if (batch.product.inventoryProductId) {
     id: batch.id,
   },
   data: {
-    status: LiquorBatchStatus.EMBOTELLANDO,
+    status: remainingLiters <= 0.0001 ? LiquorBatchStatus.TERMINADO : LiquorBatchStatus.EMBOTELLANDO,
   },
 });
 
@@ -429,12 +430,7 @@ if (batch.product.inventoryProductId) {
 }
 
 async function getAuthenticatedUserId() {
-  const user = await getCurrentUser();
-  if (!user) {
-    throw new Error(
-      "Tu sesión no está disponible. Inicia sesión nuevamente."
-    );
-  }
+  const user = await requireModuleActionAccess("/liquors/bottling");
   return user.id;
 }
 

@@ -2,17 +2,19 @@
 // Destino: app/api/cash-cuts/safe/envelopes/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { getBranchSafeSummary, listEnvelopesForBranch } from "@/lib/cash-cuts/safeEnvelopes";
+import { resolveSafeEnvelopeWeek, SafeEnvelopeWeekError } from "@/lib/cash-cuts/safeWeek";
 
 /**
  * GET /api/cash-cuts/safe/envelopes
  * Sin ?branchId: resumen por sucursal (para las tarjetas superiores).
- * Con ?branchId: sobres individuales de esa sucursal (para el
- * detalle al seleccionar una tarjeta).
+ * Con ?branchId: sobres de una sola semana de esa sucursal. ADMIN
+ * puede indicar ?week=YYYY-MM-DD (lunes); los demás roles permanecen
+ * en la semana actual. La consulta se filtra en la base de datos.
  */
 export async function GET(req: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/cash-cuts/safe"]);
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -25,8 +27,31 @@ export async function GET(req: NextRequest) {
     if (allowedBranchIds && !allowedBranchIds.includes(requestedBranchId)) {
       return NextResponse.json({ error: "No tienes acceso a esta sucursal" }, { status: 403 });
     }
-    const envelopes = await listEnvelopesForBranch(requestedBranchId);
-    return NextResponse.json(envelopes);
+    let week;
+    try {
+      week = resolveSafeEnvelopeWeek(searchParams.get("week"), user.role);
+    } catch (error) {
+      if (error instanceof SafeEnvelopeWeekError) {
+        return NextResponse.json(
+          { error: error.code === "INVALID_WEEK" ? "Semana inválida" : "No tienes acceso a esa semana" },
+          { status: error.code === "INVALID_WEEK" ? 400 : 403 },
+        );
+      }
+      throw error;
+    }
+    const envelopes = await listEnvelopesForBranch(
+      requestedBranchId,
+      week,
+      user.role === "ADMIN" ? undefined : ["EN_CAJA_FUERTE", "PARCIAL"],
+    );
+    return NextResponse.json({
+      envelopes,
+      weekStart: week.weekStart,
+      currentWeekStart: week.currentWeekStart,
+      canNavigateWeeks: week.canNavigateWeeks,
+      canAdjust: user.role === "ADMIN",
+      canViewHistory: user.role === "ADMIN",
+    });
   }
 
   if (allowedBranchIds && allowedBranchIds.length === 0) {
@@ -34,7 +59,10 @@ export async function GET(req: NextRequest) {
   }
 
   const branches = await prisma.branch.findMany({
-    where: allowedBranchIds ? { id: { in: allowedBranchIds } } : {},
+    where: {
+      active: true,
+      ...(allowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
+    },
     select: { id: true },
   });
 

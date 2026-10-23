@@ -6,6 +6,7 @@ import { getActiveProcesses } from "@/lib/brain/data/getActiveProcesses";
 import { getRecordingStatus } from "@/lib/brain/getRecordingStatus";
 import { prisma } from "@/lib/prisma";
 import { resolveBottleOrigin } from "@/lib/liquors/bottleOrigin";
+import { addBusinessDays, businessDayStart } from "@/lib/dateTime";
 import {
   type IconProps,
   FactoryIcon,
@@ -13,6 +14,8 @@ import {
   WalletIcon,
   PackageIcon,
   ClockIcon,
+  CalendarIcon,
+  CashRegisterIcon,
   UsersIcon,
   AlertIcon,
   InfoIcon,
@@ -39,17 +42,21 @@ export default async function HomePage() {
     redirect("/login");
   }
 
-  const [
-    { cookings, millings, fermentations, distillations },
-    recordingStatus,
-    expiringBottles,
-    lotsCount,
-  ] = await Promise.all([
-    getActiveProcesses(),
-    getRecordingStatus(),
+  const scheduleCardHref =
+    user.role === "ADMIN" ? "/administration/schedule" : "/timeclock/calendar";
+  const scheduleCardTitle = user.role === "ADMIN" ? "Horario" : "Mi horario";
+  const scheduleCardDescription =
+    user.role === "ADMIN"
+      ? "Edita, revisa y publica los turnos por empleado o sucursal."
+      : "Consulta tu horario publicado y tus turnos de trabajo.";
+
+  const processes = await getActiveProcesses();
+  const [recordingStatus, expiringBottles, lotsCount] = await Promise.all([
+    getRecordingStatus(processes),
     getExpiringBottles(),
     prisma.lot.count(),
   ]);
+  const { cookings, millings, fermentations, distillations } = processes;
 
   const now = new Date();
 
@@ -199,16 +206,34 @@ export default async function HomePage() {
             eyebrow="Eventos y sucursales"
             title="Inventario"
             description="Productos, paquetes, equipo, eventos y conteos."
-            href="/administration"
+            href="/administration/inventory"
+            status="Disponible"
+          />
+
+          <ModuleCard
+            icon={CashRegisterIcon}
+            eyebrow="Operación de ventas"
+            title="Punto de Venta"
+            description="Cobros, mesas, transacciones y resumen de ventas."
+            href="/pospress"
             status="Disponible"
           />
 
           <ModuleCard
             icon={ClockIcon}
+            eyebrow="Entradas y salidas"
+            title="Checador"
+            description="Registra asistencia y consulta horas, pagos e historial."
+            href="/timeclock"
+            status="Disponible"
+          />
+
+          <ModuleCard
+            icon={CalendarIcon}
             eyebrow="Personal, horarios y nómina"
-            title="Workforce"
-            description="Consulta tu horario, disponibilidad, checador, horas y nómina operativa."
-            href="/workforce"
+            title={scheduleCardTitle}
+            description={scheduleCardDescription}
+            href={scheduleCardHref}
             status="Disponible"
           />
 
@@ -249,8 +274,7 @@ export default async function HomePage() {
 
 async function getExpiringBottles() {
   const now = new Date();
-  const in7Days = new Date(now);
-  in7Days.setDate(in7Days.getDate() + 7);
+  const in7Days = businessDayStart(addBusinessDays(now, 7));
 
   return prisma.liquorBottle.findMany({
     where: {

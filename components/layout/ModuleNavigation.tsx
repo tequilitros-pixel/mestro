@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronRightIcon, GridIcon, XIcon } from "@/components/ui/icons";
 import AppIcon from "@/components/ui/AppIcon";
 import {
@@ -16,8 +16,19 @@ import {
 
 const STORAGE_KEY = "maestro:module-nav-collapsed";
 
-export default function ModuleNavigation({ role, moduleKeys }: { role: string; moduleKeys: string[] }) {
+type AccountingBranch = { id: string; name: string };
+
+export default function ModuleNavigation({
+  role,
+  moduleKeys,
+  accountingBranches,
+}: {
+  role: string;
+  moduleKeys: string[];
+  accountingBranches: AccountingBranch[];
+}) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [collapsed, setCollapsed] = useState(
     () => typeof window !== "undefined" && localStorage.getItem(STORAGE_KEY) === "true",
   );
@@ -89,6 +100,9 @@ export default function ModuleNavigation({ role, moduleKeys }: { role: string; m
           moduleKeys={moduleKeys}
           collapsed={collapsed}
         />
+        {currentModule === "accounting" && !collapsed && (
+          <AccountingBranchLinks branches={accountingBranches} searchParams={searchParams} />
+        )}
       </aside>
       {mobileOpen && (
         <div className="fixed inset-0 z-[65] md:hidden" role="presentation">
@@ -124,10 +138,76 @@ export default function ModuleNavigation({ role, moduleKeys }: { role: string; m
               moduleKeys={moduleKeys}
               onNavigate={() => setMobileOpen(false)}
             />
+            {currentModule === "accounting" && (
+              <AccountingBranchLinks
+                branches={accountingBranches}
+                searchParams={searchParams}
+                onNavigate={() => setMobileOpen(false)}
+              />
+            )}
           </aside>
         </div>
       )}
     </>
+  );
+}
+
+function AccountingBranchLinks({
+  branches,
+  searchParams,
+  onNavigate,
+}: {
+  branches: AccountingBranch[];
+  searchParams: Readonly<URLSearchParams>;
+  onNavigate?: () => void;
+}) {
+  const selectedBranch = searchParams.get("branch") ?? "";
+
+  const branchHref = (branchId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("page");
+    if (branchId) params.set("branch", branchId);
+    else params.delete("branch");
+    const query = params.toString();
+    return query ? `/accounting?${query}` : "/accounting";
+  };
+
+  return (
+    <nav aria-label="Contabilidad por sucursal" className="mx-2 mb-2 border-l border-outline-variant pl-2">
+      <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
+        Sucursales
+      </p>
+      <Link
+        href={branchHref("")}
+        onClick={onNavigate}
+        aria-current={!selectedBranch ? "page" : undefined}
+        className={`flex min-h-9 items-center rounded-md px-2 text-[13px] font-medium transition-colors duration-150 ${
+          !selectedBranch
+            ? "bg-surface-container-high text-on-surface"
+            : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+        }`}
+      >
+        Todas
+      </Link>
+      {branches.map((branch) => {
+        const active = branch.id === selectedBranch;
+        return (
+          <Link
+            key={branch.id}
+            href={branchHref(branch.id)}
+            onClick={onNavigate}
+            aria-current={active ? "page" : undefined}
+            className={`flex min-h-9 items-center rounded-md px-2 text-[13px] font-medium transition-colors duration-150 ${
+              active
+                ? "bg-surface-container-high text-on-surface"
+                : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+            }`}
+          >
+            <span className="truncate">{branch.name}</span>
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -180,12 +260,14 @@ function ModuleItem({
 }) {
   const active = isActive(pathname, item);
   const hasChildren = !collapsed && Boolean(item.children?.length);
-  const [expanded, setExpanded] = useState(active);
+  const [expansionOverride, setExpansionOverride] = useState<{
+    pathname: string;
+    expanded: boolean;
+  } | null>(null);
+  const expanded = expansionOverride?.pathname === pathname
+    ? expansionOverride.expanded
+    : active;
   const Icon = item.icon;
-
-  useEffect(() => {
-    if (active) setExpanded(true);
-  }, [active]);
 
   const destination = getSubmenuItemDestination(role, moduleKeys, item);
 
@@ -216,7 +298,7 @@ function ModuleItem({
         {hasChildren && (
           <button
             type="button"
-            onClick={() => setExpanded((value) => !value)}
+            onClick={() => setExpansionOverride({ pathname, expanded: !expanded })}
             aria-label={`${expanded ? "Contraer" : "Expandir"} ${item.label}`}
             aria-expanded={expanded}
             className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-on-surface-variant hover:bg-surface-container-high"

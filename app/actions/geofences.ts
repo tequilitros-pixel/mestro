@@ -118,6 +118,37 @@ export async function assignGeofenceToBranchAction(
   return { success: true };
 }
 
+/**
+ * Archiva una sucursal sin borrar sus históricos. Las sucursales archivadas
+ * dejan de aparecer en los selectores operativos; administración puede
+ * restaurarlas desde la sección de sucursales archivadas.
+ */
+export async function setBranchArchivedAction(
+  branchId: string,
+  archived: boolean,
+): Promise<ActionResult> {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "No tienes permiso" };
+
+  const branch = await prisma.branch.findUnique({
+    where: { id: branchId },
+    select: { id: true },
+  });
+  if (!branch) return { error: "Sucursal no encontrada" };
+
+  await prisma.branch.update({
+    where: { id: branchId },
+    data: { active: !archived },
+  });
+
+  revalidatePath(GEOFENCES_PATH);
+  revalidatePath("/administration/schedule");
+  revalidatePath("/administration/personnel");
+  revalidatePath("/timeclock");
+  revalidatePath("/timeclock/payroll");
+  return { success: true };
+}
+
 export async function createGeofenceAction({
   name,
   latitude,

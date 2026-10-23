@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, startTransition } from "react";
+import { useEffect, useState, useCallback, useRef, startTransition, type TouchEvent } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { DateRangeCalendar } from "@/components/ui/DateRangeCalendar";
@@ -8,6 +8,9 @@ import { BranchSafeSummaryCard } from "@/components/cash-cuts/safe/BranchSafeSum
 import { EnvelopeRow } from "@/components/cash-cuts/safe/EnvelopeRow";
 import { PendingEnvelopeRow } from "@/components/cash-cuts/safe/PendingEnvelopeRow";
 import type { BranchSafeSummary } from "@/lib/cash-cuts/safeEnvelopes";
+import { ChevronLeftIcon, ChevronRightIcon } from "@/components/ui/icons";
+import { formatBusinessDateTime, formatCivilDate } from "@/lib/dateTime";
+import { addDaysToDateOnly, mondayOfWeek, todayDateOnly } from "@/lib/dateOnly";
 
 interface EnvelopeItem {
   id: string;
@@ -16,9 +19,18 @@ interface EnvelopeItem {
   originalAmount: number;
   currentBalance: number;
   status: "PENDIENTE" | "EN_CAJA_FUERTE" | "PARCIAL" | "VACIO";
-  cashCut: { id: string; code: string } | null;
+  cashCut: { id: string; code: string; envelopeNumber: string | null } | null;
   createdBy: { id: string; name: string } | null;
   receivedBy: { id: string; name: string } | null;
+}
+
+interface EnvelopeWeekResponse {
+  envelopes: EnvelopeItem[];
+  weekStart: string;
+  currentWeekStart: string;
+  canNavigateWeeks: boolean;
+  canAdjust: boolean;
+  canViewHistory: boolean;
 }
 
 interface LegacyMovement {
@@ -35,28 +47,21 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
 
 const formatDateTime = (value: string) =>
-  new Intl.DateTimeFormat("es-MX", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-
-/*
- * El permiso real se valida en el servidor (canWithdraw/canReceive
- * en lib/cash-cuts/safeEnvelopes.ts) -- igual que el resto de este
- * modulo, que nunca ha filtrado botones por rol en el cliente. Si
- * el usuario no tiene permiso, el POST responde 403 y el
- * componente muestra ese error tal cual, en vez de duplicar la
- * lista de roles aqui y arriesgar que se desincronice.
- */
+  formatBusinessDateTime(value);
 
 export default function SafePage() {
   const [summaries, setSummaries] = useState<BranchSafeSummary[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
   const [envelopes, setEnvelopes] = useState<EnvelopeItem[]>([]);
   const envelopeRequestRef = useRef(0);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
+  const [currentWeekStart, setCurrentWeekStart] = useState(() => mondayOfWeek(todayDateOnly()));
+  const [canNavigateWeeks, setCanNavigateWeeks] = useState(false);
+  const [canAdjust, setCanAdjust] = useState(false);
+  const [canViewHistory, setCanViewHistory] = useState(false);
+  const [envelopesLoading, setEnvelopesLoading] = useState(true);
+  const [envelopesError, setEnvelopesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,7 +76,11 @@ export default function SafePage() {
       const data: BranchSafeSummary[] = await res.json();
       startTransition(() => {
         setSummaries(data);
-        if (!selectedBranchId && data.length > 0) setSelectedBranchId(data[0].branchId);
+        setSelectedBranchId((current) =>
+          current && data.some((summary) => summary.branchId === current)
+            ? current
+            : data[0]?.branchId ?? null
+        );
         setLoading(false);
       });
     } catch (err) {
@@ -80,18 +89,35 @@ export default function SafePage() {
         setLoading(false);
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadEnvelopes = useCallback(async (branchId: string) => {
+  const loadEnvelopes = useCallback(async (branchId: string, week: string | null) => {
     const requestId = ++envelopeRequestRef.current;
-    const res = await fetch(`/api/cash-cuts/safe/envelopes?branchId=${branchId}`);
-    if (!res.ok) return;
-
-    const data: EnvelopeItem[] = await res.json();
-    // Al cambiar de sucursal puede terminar después una consulta anterior.
-    // Solo la respuesta más reciente puede reemplazar la lista visible.
-    if (requestId === envelopeRequestRef.current) setEnvelopes(data);
+    setEnvelopesLoading(true);
+    setEnvelopesError(null);
+    const params = new URLSearchParams({ branchId });
+    if (week) params.set("week", week);
+    try {
+      const res = await fetch(`/api/cash-cuts/safe/envelopes?${params}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "No se pudieron cargar los sobres");
+      }
+      const data: EnvelopeWeekResponse = await res.json();
+      // Una consulta anterior no puede reemplazar la semana o sucursal visible.
+      if (requestId !== envelopeRequestRef.current) return;
+      setEnvelopes(data.envelopes);
+      setCurrentWeekStart(data.currentWeekStart);
+      setCanNavigateWeeks(data.canNavigateWeeks);
+      setCanAdjust(data.canAdjust);
+      setCanViewHistory(data.canViewHistory);
+      setEnvelopesLoading(false);
+    } catch (err) {
+      if (requestId !== envelopeRequestRef.current) return;
+      setEnvelopes([]);
+      setEnvelopesError(err instanceof Error ? err.message : "No se pudieron cargar los sobres");
+      setEnvelopesLoading(false);
+    }
   }, []);
 
   const loadLegacyMovements = useCallback(async (dateFrom = movementDateFrom, dateTo = movementDateTo) => {
@@ -103,17 +129,43 @@ export default function SafePage() {
 
   useEffect(() => {
     void loadSummaries();
-    void loadLegacyMovements("", "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (selectedBranchId) void loadEnvelopes(selectedBranchId);
-  }, [selectedBranchId, loadEnvelopes]);
+    if (canViewHistory) void loadLegacyMovements("", "");
+  }, [canViewHistory, loadLegacyMovements]);
+
+  useEffect(() => {
+    if (selectedBranchId) void loadEnvelopes(selectedBranchId, selectedWeek);
+  }, [selectedBranchId, selectedWeek, loadEnvelopes]);
 
   function refreshAll() {
     void loadSummaries();
-    if (selectedBranchId) void loadEnvelopes(selectedBranchId);
+    if (selectedBranchId) void loadEnvelopes(selectedBranchId, selectedWeek);
+  }
+
+  const weekStart = selectedWeek ?? currentWeekStart;
+  const weekEnd = addDaysToDateOnly(weekStart, 6);
+  const weekLabel = `${formatCivilDate(weekStart, { day: "numeric", month: "short", year: "numeric" })} – ${formatCivilDate(weekEnd, { day: "numeric", month: "short", year: "numeric" })}`;
+
+  function moveWeek(direction: -1 | 1) {
+    if (!canNavigateWeeks) return;
+    const nextWeek = addDaysToDateOnly(weekStart, direction * 7);
+    if (nextWeek > currentWeekStart) return;
+    setSelectedWeek(nextWeek === currentWeekStart ? null : nextWeek);
+  }
+
+  function finishWeekSwipe(event: TouchEvent<HTMLElement>) {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start || !canNavigateWeeks) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 65 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    moveWeek(dx > 0 ? -1 : 1);
   }
 
   const selectedSummary = summaries.find((s) => s.branchId === selectedBranchId);
@@ -150,49 +202,82 @@ export default function SafePage() {
           ))}
       </div>
 
-      {/* Sobres en caja fuerte de la sucursal seleccionada */}
+      {/* La lista cambia de semana; el saldo de la sucursal conserva su alcance contable. */}
       {selectedSummary && (
-        <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-bold text-on-surface">
-              Sobres en caja fuerte · {selectedSummary.branch}
-            </h2>
-            <span className="text-sm font-semibold text-on-surface-variant">
-              Total: {formatCurrency(selectedSummary.balance)}
-            </span>
+        <section
+          onTouchStart={(event) => {
+            const touch = event.touches[0];
+            if (touch) touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+          }}
+          onTouchEnd={finishWeekSwipe}
+          onTouchCancel={() => { touchStartRef.current = null; }}
+        >
+          <div className="mb-3">
+            <h2 className="text-base font-bold text-on-surface">Sobres · {selectedSummary.branch}</h2>
+            <p className="text-xs text-on-surface-variant">
+              {canNavigateWeeks ? "Por semana del corte. Desliza a los lados para cambiar de semana." : "Sobres de la semana actual del corte."}
+            </p>
           </div>
 
-          {validEnvelopes.length === 0 ? (
-            <Card><p className="text-sm text-on-surface-variant">Sin sobres con saldo en esta sucursal.</p></Card>
-          ) : (
+          <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-outline-variant bg-surface-container p-2">
+            {canNavigateWeeks ? (
+              <button type="button" onClick={() => moveWeek(-1)} aria-label="Semana anterior" className="rounded-lg p-3 text-on-surface hover:bg-surface-container-high">
+                <ChevronLeftIcon className="h-5 w-5" />
+              </button>
+            ) : <span className="w-9" />}
+            <div className="text-center" aria-live="polite">
+              <p className="text-xs font-semibold text-on-surface-variant">{weekStart === currentWeekStart ? "Esta semana" : "Semana seleccionada"}</p>
+              <p className="text-sm font-bold text-on-surface">{weekLabel}</p>
+              {canNavigateWeeks && weekStart !== currentWeekStart && (
+                <button type="button" onClick={() => setSelectedWeek(null)} className="text-xs font-semibold text-primary">Ir a esta semana</button>
+              )}
+            </div>
+            {canNavigateWeeks ? (
+              <button type="button" onClick={() => moveWeek(1)} disabled={weekStart === currentWeekStart} aria-label="Semana siguiente" className="rounded-lg p-3 text-on-surface hover:bg-surface-container-high disabled:opacity-30">
+                <ChevronRightIcon className="h-5 w-5" />
+              </button>
+            ) : <span className="w-9" />}
+          </div>
+
+          {!envelopesLoading && !envelopesError && (
+            <p className="mb-3 text-xs text-on-surface-variant">
+              {envelopes.length} {canViewHistory
+                ? envelopes.length === 1 ? "sobre registrado" : "sobres registrados"
+                : envelopes.length === 1 ? "sobre disponible" : "sobres disponibles"} en esta semana.
+            </p>
+          )}
+
+          {envelopesError && <p className="mb-3 text-sm text-error">{envelopesError}</p>}
+          {envelopesError ? null : envelopesLoading ? (
+            <Card><p className="text-sm text-on-surface-variant">Cargando sobres...</p></Card>
+          ) : validEnvelopes.length === 0 && pendingEnvelopes.length === 0 ? (
+            <Card><p className="text-sm text-on-surface-variant">{canViewHistory ? "No hay sobres registrados en esta semana." : "No hay sobres disponibles en esta semana."}</p></Card>
+          ) : validEnvelopes.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {validEnvelopes.map((env) => (
-                <EnvelopeRow key={env.id} envelope={env} canWithdraw onChanged={refreshAll} />
+                <EnvelopeRow key={env.id} envelope={env} canWithdraw canAdjust={canAdjust} canViewHistory={canViewHistory} onChanged={refreshAll} />
               ))}
+            </div>
+          ) : null}
+
+          {!envelopesLoading && canViewHistory && pendingEnvelopes.length > 0 && (
+            <div className="mt-5">
+              <h3 className="mb-2 text-sm font-bold text-on-surface">Registros históricos por conciliar</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {pendingEnvelopes.map((env) => <PendingEnvelopeRow key={env.id} envelope={env} />)}
+              </div>
             </div>
           )}
         </section>
       )}
 
-      {/* Sobres pendientes de recibir */}
-      {pendingEnvelopes.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-base font-bold text-on-surface">Sobres pendientes de recibir</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {pendingEnvelopes.map((env) => (
-              <PendingEnvelopeRow key={env.id} envelope={env} canReceive onChanged={refreshAll} />
-            ))}
-          </div>
-        </section>
-      )}
-
       {/* Retiro de saldo histórico -- se oculta sola cuando ya no queda nada */}
-      {totalLegacy > 0.01 && (
+      {canViewHistory && totalLegacy > 0.01 && (
         <LegacyWithdrawCard summaries={summaries} onDone={refreshAll} />
       )}
 
       {/* Historial / movimientos legado */}
-      <section>
+      {canViewHistory && <section>
         <Card>
           <div className="flex flex-wrap items-end justify-between gap-3 p-4">
             <div>
@@ -246,7 +331,7 @@ export default function SafePage() {
             </table>
           </div>
         </Card>
-      </section>
+      </section>}
     </div>
   );
 }

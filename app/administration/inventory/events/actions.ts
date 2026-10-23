@@ -1,13 +1,33 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { applyEventInventoryMovement } from "@/lib/inventory/eventMovements";
+import { recordEventAdditionalMovement } from "@/lib/inventory/eventAdditionalMovements";
+import { generateOperationId } from "@/lib/pos2/operationId";
 import { prisma } from "@/lib/prisma";
-import { ServiceEventStatus } from "@prisma/client";
-import { getCurrentUser } from "@/lib/auth";
+import { type Prisma, ServiceEventStatus } from "@prisma/client";
+import { requireModuleActionAccess } from "@/lib/auth";
+import { parseBusinessDateTimeLocal } from "@/lib/dateTime";
 
 export type ActionResult =
   | { success: true; message: string; id?: string }
   | { success: false; error: string };
+
+async function getEventActor() {
+  try {
+    return await requireModuleActionAccess("/administration/inventory/events");
+  } catch {
+    return null;
+  }
+}
+
+async function lockEvent(tx: Prisma.TransactionClient, eventId: string) {
+  await tx.$queryRaw`SELECT "id" FROM "ServiceEvent" WHERE "id"=${eventId} FOR UPDATE`;
+  const event = await tx.serviceEvent.findUnique({ where: { id: eventId } });
+  if (!event) throw new Error("Evento no encontrado.");
+  if (event.status === "CANCELLED") throw new Error("El evento está cancelado.");
+  return event;
+}
 
 function readOptionalNumber(value: FormDataEntryValue | null) {
   if (value === null || value.toString().trim() === "") return null;
@@ -40,6 +60,7 @@ export async function createServiceEventAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     const clientName = formData.get("clientName")?.toString().trim() ?? "";
     const clientPhone = formData.get("clientPhone")?.toString().trim() || null;
     const location = formData.get("location")?.toString().trim() ?? "";
@@ -65,9 +86,10 @@ export async function createServiceEventAction(
       return { success: false, error: "El número de invitados debe ser mayor a cero." };
     }
 
-    const eventDate = new Date(eventDateRaw);
-
-    if (Number.isNaN(eventDate.getTime())) {
+    let eventDate: Date;
+    try {
+      eventDate = parseBusinessDateTimeLocal(eventDateRaw);
+    } catch {
       return { success: false, error: "La fecha del evento no es válida." };
     }
 
@@ -167,15 +189,17 @@ export async function updateSentQuantityAction(
   sentQuantity: number,
 ): Promise<ActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     if (!Number.isFinite(sentQuantity) || sentQuantity < 0) {
       return { success: false, error: "La cantidad no puede ser negativa." };
     }
 
-    const event = await prisma.serviceEvent.findUnique({ where: { id: eventId }, select: { checkoutConfirmedAt: true } });
-    if (!event || event.checkoutConfirmedAt) return { success: false, error: "La salida ya fue confirmada." };
-    await prisma.serviceEventItem.update({
-      where: { id: itemId },
-      data: { sentQuantity, checkedOut: true, checkoutStatus: sentQuantity === 0 ? "NO_SE_LLEVARA" : "REVISADO" },
+    await prisma.$transaction(async (tx) => {
+      const event = await lockEvent(tx, eventId);
+      if (event.checkoutConfirmedAt || event.stockDeductedAt || event.returnConfirmedAt) throw new Error("La salida ya fue confirmada.");
+      const item = await tx.serviceEventItem.findFirst({ where: { id: itemId, eventId } });
+      if (!item) throw new Error("El artículo no pertenece a este evento.");
+      await tx.serviceEventItem.update({ where: { id: itemId }, data: { sentQuantity, checkedOut: true, checkoutStatus: sentQuantity === 0 ? "NO_SE_LLEVARA" : "REVISADO" } });
     });
 
     revalidatePath(`/administration/inventory/events/${eventId}`);
@@ -183,7 +207,39 @@ export async function updateSentQuantityAction(
     return { success: true, message: "Cantidad de salida actualizada." };
   } catch (error) {
     console.error("Error updating sent quantity:", error);
-    return { success: false, error: "No fue posible actualizar la cantidad." };
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible actualizar la cantidad." };
+  }
+}
+
+export async function updatePlannedQuantityAction(
+  itemId: string,
+  eventId: string,
+  plannedQuantity: number,
+): Promise<ActionResult> {
+  try {
+    const user = await getEventActor();
+    if (!user || user.role !== "ADMIN") {
+      return { success: false, error: "Solo los administradores pueden cambiar la cantidad necesaria." };
+    }
+    if (!Number.isFinite(plannedQuantity) || plannedQuantity < 0) {
+      return { success: false, error: "La cantidad no puede ser negativa." };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const event = await lockEvent(tx, eventId);
+      if (event.checkoutConfirmedAt || event.stockDeductedAt || event.returnConfirmedAt) {
+        throw new Error("La salida ya fue confirmada; no puedes cambiar la cantidad necesaria.");
+      }
+      const item = await tx.serviceEventItem.findFirst({ where: { id: itemId, eventId } });
+      if (!item) throw new Error("El artículo no pertenece a este evento.");
+      await tx.serviceEventItem.update({ where: { id: itemId }, data: { plannedQuantity } });
+    });
+
+    revalidatePath(`/administration/inventory/events/${eventId}`);
+    return { success: true, message: "Cantidad necesaria actualizada." };
+  } catch (error) {
+    console.error("Error updating planned quantity:", error);
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible actualizar la cantidad necesaria." };
   }
 }
 
@@ -195,54 +251,25 @@ export async function updateReturnedQuantityAction(
   returnedOpenQuantity = 0,
 ): Promise<ActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     if (!Number.isFinite(returnedQuantity) || !Number.isFinite(damagedQuantity) || !Number.isFinite(returnedOpenQuantity) || returnedQuantity < 0 || damagedQuantity < 0 || returnedOpenQuantity < 0) {
       return { success: false, error: "Las cantidades no pueden ser negativas." };
     }
 
-    const item = await prisma.serviceEventItem.findUnique({
-      where: { id: itemId },
-      select: {
-        sentQuantity: true,
-        plannedQuantity: true,
-        contentPerUnit: true,
-        contentUnit: true,
-      },
-    });
-
-    if (!item) {
-      return { success: false, error: "Producto no encontrado en el evento." };
-    }
-
-    const sent =
-      item.sentQuantity !== null
-        ? Number(item.sentQuantity)
-        : Number(item.plannedQuantity);
-    if (returnedQuantity > sent) return { success: false, error: "Lo regresado no puede superar lo que salió." };
-    const content = item.contentPerUnit ? Number(item.contentPerUnit) : null;
-    const contentBase =
-      content === null
-        ? null
-        : item.contentUnit === "L" || item.contentUnit === "KG"
-          ? content * 1000
-          : content;
-    if (returnedOpenQuantity > 0 && (!contentBase || returnedOpenQuantity >= contentBase)) {
-      return {
-        success: false,
-        error: "El remanente debe ser menor al contenido de la presentación.",
-      };
-    }
-    const lostQuantity = Math.max(sent - returnedQuantity - damagedQuantity, 0);
-
-    await prisma.serviceEventItem.update({
-      where: { id: itemId },
-      data: {
-        returnedQuantity,
-        damagedQuantity,
-        lostQuantity,
-        checkedIn: true,
-        returnedOpenQuantity,
-        returnStatus: returnedQuantity === sent && !returnedOpenQuantity ? "COMPLETO" : "REVISADO",
-      },
+    await prisma.$transaction(async (tx) => {
+      const event = await lockEvent(tx, eventId);
+      if (!event.checkoutConfirmedAt) throw new Error("Confirma la salida antes de registrar el regreso.");
+      if (event.returnConfirmedAt) throw new Error("El regreso ya fue confirmado.");
+      const item = await tx.serviceEventItem.findFirst({ where: { id: itemId, eventId } });
+      if (!item) throw new Error("El artículo no pertenece a este evento.");
+      const sent = Number(item.sentQuantity ?? item.plannedQuantity);
+      const content = item.contentPerUnit ? Number(item.contentPerUnit) : null;
+      const contentBase = content === null ? null : ["L", "KG"].includes(item.contentUnit ?? "") ? content * 1000 : content;
+      if (returnedOpenQuantity > 0 && (!contentBase || returnedOpenQuantity >= contentBase)) throw new Error("El remanente debe ser menor al contenido de la presentación.");
+      const openUnits = contentBase ? returnedOpenQuantity / contentBase : 0;
+      if (returnedQuantity + damagedQuantity + openUnits > sent + 0.000001) throw new Error("Lo regresado y dañado no puede superar lo que salió.");
+      const lostQuantity = Math.round(Math.max(sent - returnedQuantity - damagedQuantity - openUnits, 0) * 1000) / 1000;
+      await tx.serviceEventItem.update({ where: { id: itemId }, data: { returnedQuantity, damagedQuantity, lostQuantity, checkedIn: true, returnedOpenQuantity, returnStatus: returnedQuantity === sent && !returnedOpenQuantity ? "COMPLETO" : "REVISADO" } });
     });
 
     revalidatePath(`/administration/inventory/events/${eventId}`);
@@ -250,24 +277,74 @@ export async function updateReturnedQuantityAction(
     return { success: true, message: "Regreso registrado." };
   } catch (error) {
     console.error("Error updating returned quantity:", error);
-    return { success: false, error: "No fue posible registrar el regreso." };
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible registrar el regreso." };
   }
 }
 
 export async function confirmEventCheckoutAction(eventId: string): Promise<ActionResult> {
-  const user = await getCurrentUser(); if (!user) return { success: false, error: "Tu sesión terminó." };
-  try { await prisma.$transaction(async (tx) => { const event = await tx.serviceEvent.findUnique({ where: { id: eventId }, include: { items: true } }); if (!event) throw new Error("Evento no encontrado."); if (event.checkoutConfirmedAt) return; if (event.items.some((item) => !item.checkedOut)) throw new Error("Revisa todos los productos antes de confirmar."); await tx.serviceEvent.update({ where: { id: eventId }, data: { checkoutConfirmedAt: new Date(), checkoutConfirmedById: user.id, status: "READY" } }); }); revalidatePath(`/administration/inventory/events/${eventId}`); return { success: true, message: "Salida confirmada." }; } catch (error) { return { success: false, error: error instanceof Error ? error.message : "No fue posible confirmar la salida." }; }
+  const user = await getEventActor(); if (!user) return { success: false, error: "No tienes permiso para administrar eventos." };
+  try { await prisma.$transaction(async (tx) => { await lockEvent(tx, eventId); const event = await tx.serviceEvent.findUniqueOrThrow({ where: { id: eventId }, include: { items: true } }); if (event.checkoutConfirmedAt) return; if (!event.items.length || event.items.some((item) => !item.checkedOut)) throw new Error("Revisa todos los productos antes de confirmar."); await tx.serviceEvent.update({ where: { id: eventId }, data: { checkoutConfirmedAt: new Date(), checkoutConfirmedById: user.id, status: "READY" } }); }); revalidatePath(`/administration/inventory/events/${eventId}`); return { success: true, message: "Salida confirmada." }; } catch (error) { return { success: false, error: error instanceof Error ? error.message : "No fue posible confirmar la salida." }; }
 }
 
 export async function confirmEventReturnAction(eventId: string): Promise<ActionResult> {
-  const user = await getCurrentUser(); if (!user) return { success: false, error: "Tu sesión terminó." };
-  try { await prisma.$transaction(async (tx) => { const event = await tx.serviceEvent.findUnique({ where: { id: eventId }, include: { items: true } }); if (!event) throw new Error("Evento no encontrado."); if (event.returnConfirmedAt) return; if (!event.checkoutConfirmedAt || event.items.some((item) => !item.checkedIn)) throw new Error("Registra y revisa todos los productos antes de confirmar."); await tx.serviceEvent.update({ where: { id: eventId }, data: { returnConfirmedAt: new Date(), returnConfirmedById: user.id, status: "COMPLETED" } }); }); revalidatePath(`/administration/inventory/events/${eventId}`); return { success: true, message: "Regreso confirmado." }; } catch (error) { return { success: false, error: error instanceof Error ? error.message : "No fue posible confirmar el regreso." }; }
+  const user = await getEventActor();
+  if (!user) return { success: false, error: "No tienes permiso para administrar eventos." };
+  try {
+    await prisma.$transaction(async (tx) => {
+      await lockEvent(tx, eventId);
+      const event = await tx.serviceEvent.findUniqueOrThrow({
+        where: { id: eventId },
+        include: {
+          items: true,
+          addedProducts: { where: { status: "ACTIVO", sourceType: "ENVIO_SUCURSAL" }, include: { product: true } },
+        },
+      });
+      if (event.returnConfirmedAt) return;
+      if (!event.checkoutConfirmedAt || !event.items.length || event.items.some((item) => !item.checkedIn)) {
+        throw new Error("Registra y revisa todos los productos antes de confirmar.");
+      }
+      if (event.addedProducts.some((addition) => !addition.returnBranchId)) {
+        throw new Error("Captura el regreso de todas las cargas adicionales, incluso si regresaron 0.");
+      }
+      const operationId = generateOperationId();
+      if (event.stockDeductedAt) {
+        const cut = await tx.cashCut.findFirst({ where: { eventId }, orderBy: { createdAt: "asc" } });
+        if (!cut) throw new Error("No se encontró la sucursal de salida del evento.");
+        if (user.role !== "ADMIN" && !await tx.userBranch.findFirst({ where: { userId: user.id, branchId: cut.branchId } })) {
+          throw new Error("No tienes acceso a la sucursal de regreso.");
+        }
+        for (const item of [...event.items].sort((a, b) => a.productId.localeCompare(b.productId))) {
+          await applyEventInventoryMovement(tx, { item, branchId: cut.branchId, actorId: user.id, operationId, eventId, returning: true });
+        }
+      }
+      for (const addition of [...event.addedProducts].sort((a, b) => (a.productId ?? "").localeCompare(b.productId ?? ""))) {
+        if (!addition.product || !addition.returnBranchId) throw new Error("Falta el producto o la sucursal de regreso de una carga adicional.");
+        if (user.role !== "ADMIN" && !await tx.userBranch.findFirst({ where: { userId: user.id, branchId: addition.returnBranchId } })) {
+          throw new Error("No tienes acceso a la sucursal de regreso de una carga adicional.");
+        }
+        const movementId = await recordEventAdditionalMovement(tx, {
+          addition, product: addition.product, branchId: addition.returnBranchId,
+          actorId: user.id, operationId, returning: true,
+        });
+        await tx.eventAddedProduct.update({ where: { id: addition.id }, data: { returnMovementId: movementId } });
+      }
+      await tx.serviceEvent.update({
+        where: { id: eventId },
+        data: { returnConfirmedAt: new Date(), returnConfirmedById: user.id, status: "COMPLETED" },
+      });
+    });
+    revalidatePath(`/administration/inventory/events/${eventId}`);
+    return { success: true, message: "Regreso confirmado." };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible confirmar el regreso." };
+  }
 }
 
 export async function addCustomEventItemAction(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     const eventId = formData.get("eventId")?.toString() ?? "";
     const productId = formData.get("productId")?.toString() ?? "";
     const plannedQuantity = readOptionalNumber(formData.get("plannedQuantity"));
@@ -280,29 +357,32 @@ export async function addCustomEventItemAction(
       return { success: false, error: "La cantidad debe ser mayor a cero." };
     }
 
-    const existing = await prisma.serviceEventItem.findFirst({
+    await prisma.$transaction(async (tx) => {
+      const event = await lockEvent(tx, eventId);
+      if (event.checkoutConfirmedAt || event.stockDeductedAt || event.returnConfirmedAt) throw new Error("La salida ya fue confirmada; no puedes cambiar el checklist.");
+    const existing = await tx.serviceEventItem.findFirst({
       where: { eventId, productId },
       select: { id: true },
     });
 
     if (existing) {
-      return { success: false, error: "Ese producto ya está en el checklist de este evento." };
+      throw new Error("Ese producto ya está en el checklist de este evento.");
     }
 
-    const product = await prisma.inventoryProduct.findUnique({
+    const product = await tx.inventoryProduct.findUnique({
       where: { id: productId },
     });
 
-    if (!product) {
-      return { success: false, error: "Producto no encontrado." };
+    if (!product || product.archivedAt || !product.isActive) {
+      throw new Error("Producto no encontrado.");
     }
 
-    const maxSort = await prisma.serviceEventItem.aggregate({
+    const maxSort = await tx.serviceEventItem.aggregate({
       where: { eventId },
       _max: { sortOrder: true },
     });
 
-    await prisma.serviceEventItem.create({
+    await tx.serviceEventItem.create({
       data: {
         eventId,
         productId,
@@ -319,12 +399,14 @@ export async function addCustomEventItemAction(
       },
     });
 
+    });
+
     revalidatePath(`/administration/inventory/events/${eventId}`);
 
     return { success: true, message: "Producto agregado al evento." };
   } catch (error) {
     console.error("Error adding custom event item:", error);
-    return { success: false, error: "No fue posible agregar el producto." };
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible agregar el producto." };
   }
 }
 
@@ -333,14 +415,21 @@ export async function removeEventItemAction(
   eventId: string,
 ): Promise<ActionResult> {
   try {
-    await prisma.serviceEventItem.delete({ where: { id: itemId } });
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
+    await prisma.$transaction(async (tx) => {
+      const event = await lockEvent(tx, eventId);
+      if (event.checkoutConfirmedAt || event.stockDeductedAt || event.returnConfirmedAt) throw new Error("La salida ya fue confirmada; no puedes quitar artículos.");
+      const item = await tx.serviceEventItem.findFirst({ where: { id: itemId, eventId } });
+      if (!item) throw new Error("El artículo no pertenece a este evento.");
+      await tx.serviceEventItem.delete({ where: { id: itemId } });
+    });
 
     revalidatePath(`/administration/inventory/events/${eventId}`);
 
     return { success: true, message: "Producto quitado del evento." };
   } catch (error) {
     console.error("Error removing event item:", error);
-    return { success: false, error: "No fue posible quitar el producto." };
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible quitar el producto." };
   }
 }
 
@@ -349,9 +438,16 @@ export async function updateEventStatusAction(
   status: ServiceEventStatus,
 ): Promise<ActionResult> {
   try {
-    await prisma.serviceEvent.update({
-      where: { id: eventId },
-      data: { status },
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
+    if (!Object.values(ServiceEventStatus).includes(status)) throw new Error("Estado inválido.");
+    await prisma.$transaction(async (tx) => {
+      const event = await lockEvent(tx, eventId);
+      if (event.status === status) return;
+      if (event.returnConfirmedAt) throw new Error("El regreso ya fue confirmado; no puedes reabrir el evento.");
+      if (status === "COMPLETED") throw new Error("Confirma el regreso para completar el evento.");
+      if (["READY", "IN_PROGRESS", "RETURN_PENDING"].includes(status) && !event.checkoutConfirmedAt) throw new Error("Confirma la salida antes de avanzar el evento.");
+      if (event.checkoutConfirmedAt && ["DRAFT", "PREPARING", "CANCELLED"].includes(status)) throw new Error("Registra y confirma el regreso del evento antes de cambiar este estado.");
+      await tx.serviceEvent.update({ where: { id: eventId }, data: { status } });
     });
 
     revalidatePath(`/administration/inventory/events/${eventId}`);
@@ -360,7 +456,7 @@ export async function updateEventStatusAction(
     return { success: true, message: "Estado actualizado." };
   } catch (error) {
     console.error("Error updating event status:", error);
-    return { success: false, error: "No fue posible actualizar el estado." };
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible actualizar el estado." };
   }
 }
 
@@ -378,6 +474,7 @@ export async function createRecountAction(
   formData: FormData,
 ): Promise<RecountActionResult> {
   try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
     const eventId = formData.get("eventId")?.toString() ?? "";
 
     if (!eventId) {
@@ -413,8 +510,11 @@ export async function createRecountAction(
     });
 
     const itemMap = new Map(items.map((item) => [item.id, item]));
+    if (itemMap.size !== entries.length) throw new Error("Los artículos no pertenecen al evento o están repetidos.");
 
     const recount = await prisma.$transaction(async (tx) => {
+      const event = await lockEvent(tx, eventId);
+      if (!event.checkoutConfirmedAt || event.returnConfirmedAt) throw new Error("El evento no está abierto para reconteos.");
       const lastRecount = await tx.eventRecount.aggregate({
         where: { eventId },
         _max: { dayNumber: true },
@@ -462,9 +562,13 @@ export async function markRecountFulfilledAction(
   eventId: string,
 ): Promise<ActionResult> {
   try {
-    await prisma.eventRecount.update({
-      where: { id: recountId },
-      data: { status: "SURTIDO", fulfilledAt: new Date() },
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
+    await prisma.$transaction(async (tx) => {
+      await lockEvent(tx, eventId);
+      const recount = await tx.eventRecount.findFirst({ where: { id: recountId, eventId } });
+      if (!recount) throw new Error("El reconteo no pertenece a este evento.");
+      if (recount.status === "SURTIDO") return;
+      await tx.eventRecount.update({ where: { id: recountId }, data: { status: "SURTIDO", fulfilledAt: new Date() } });
     });
 
     revalidatePath(`/administration/inventory/events/${eventId}`);
@@ -473,6 +577,6 @@ export async function markRecountFulfilledAction(
     return { success: true, message: "Marcado como surtido." };
   } catch (error) {
     console.error("Error marking recount fulfilled:", error);
-    return { success: false, error: "No fue posible actualizar el estado." };
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible actualizar el estado." };
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PlusIcon } from "@/components/ui/icons";
 import {
@@ -12,9 +12,9 @@ import {
 } from "@/components/ui/CompactUI";
 
 /*
- * Tablero de historial para ADMIN, GERENTE y CONSULTA.
- * El Server Component solo monta este componente para roles con
- * historial; un ENCARGADO nunca recibe este arbol ni sus datos.
+ * Tablero de cortes para ADMIN, GERENTE y CONSULTA.
+ * El alcance de sucursal y semana ya viene fijado por el servidor;
+ * este componente solo filtra y ordena lo que recibió.
  *
  * La busqueda, el orden y la paginacion son sobre la lista que ya
  * llego acotada por el servidor. Los indicadores se derivan de esa
@@ -66,34 +66,83 @@ function colorDiferencia(d: number | null) {
   return "text-secondary";
 }
 
+function SortableHeader({
+  campo,
+  sort,
+  onSort,
+  className = "",
+  children,
+}: {
+  campo?: Orden["campo"];
+  sort: Orden;
+  onSort: (campo: Orden["campo"]) => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <th className={`sticky top-0 z-10 bg-surface-container-high px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant ${className}`}>
+      {campo ? (
+        <button
+          type="button"
+          onClick={() => onSort(campo)}
+          className="inline-flex items-center gap-1 hover:text-on-surface"
+        >
+          {children}
+          {sort.campo === campo && <span aria-hidden="true">{sort.asc ? "↑" : "↓"}</span>}
+        </button>
+      ) : (
+        children
+      )}
+    </th>
+  );
+}
+
 export default function TableroCortes({
   branches,
   canCreate,
+  canArchive,
+  currentWeek,
 }: {
   branches: Branch[];
   canCreate: boolean;
+  canArchive: boolean;
+  currentWeek: { startDate: string; endDate: string };
 }) {
-  const [branchId, setBranchId] = useState("");
   const [status, setStatus] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [cortes, setCortes] = useState<Corte[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [orden, setOrden] = useState<Orden>({ campo: "date", asc: false });
   const [pagina, setPagina] = useState(1);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+
+  async function archiveCut(cut: Corte) {
+    if (!confirm(`¿Archivar el corte ${cut.code}? Seguirá disponible en Historial.`)) return;
+    setArchivingId(cut.id);
+    setError(null);
+    try {
+      const response = await fetch(`/api/cash-cuts/${cut.id}/archive`, { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "No se pudo archivar el corte.");
+      setCortes((previous) => previous.filter((item) => item.id !== cut.id));
+      setPagina(1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo archivar el corte.");
+    } finally {
+      setArchivingId(null);
+    }
+  }
 
   useEffect(() => {
     const params = new URLSearchParams();
-    if (branchId) params.set("branchId", branchId);
     if (status) params.set("status", status);
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
 
     const controller = new AbortController();
-    setCargando(true);
-    setError(null);
+    startTransition(() => {
+      setCargando(true);
+      setError(null);
+    });
 
     fetch(`/api/cash-cuts?${params.toString()}`, { signal: controller.signal })
       .then(async (res) => {
@@ -113,9 +162,7 @@ export default function TableroCortes({
       });
 
     return () => controller.abort();
-  }, [branchId, status, from, to]);
-
-  useEffect(() => setPagina(1), [branchId, status, from, to, busqueda, orden]);
+  }, [status]);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -159,40 +206,23 @@ export default function TableroCortes({
   const visibles = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
   const limpiar = () => {
-    setBranchId("");
+    setPagina(1);
     setStatus("");
-    setFrom("");
-    setTo("");
     setBusqueda("");
   };
 
-  const hayFiltros = Boolean(branchId || status || from || to || busqueda);
+  const hayFiltros = Boolean(status || busqueda);
 
-  const ordenarPor = (campo: Orden["campo"]) =>
+  const ordenarPor = (campo: Orden["campo"]) => {
+    setPagina(1);
     setOrden((o) => (o.campo === campo ? { campo, asc: !o.asc } : { campo, asc: false }));
-
-  const Th = ({ campo, children, className = "" }: { campo?: Orden["campo"]; children: React.ReactNode; className?: string }) => (
-    <th className={`sticky top-0 z-10 bg-surface-container-high px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant ${className}`}>
-      {campo ? (
-        <button
-          type="button"
-          onClick={() => ordenarPor(campo)}
-          className="inline-flex items-center gap-1 hover:text-on-surface"
-        >
-          {children}
-          {orden.campo === campo && <span aria-hidden="true">{orden.asc ? "↑" : "↓"}</span>}
-        </button>
-      ) : (
-        children
-      )}
-    </th>
-  );
+  };
 
   return (
     <main className="page-frame max-w-7xl space-y-4">
       <PageHeader
         title="Cortes de caja"
-        description="Historial y control de los cortes de tus sucursales."
+        description={`Sucursal de trabajo: ${branches[0]?.name ?? "sin definir"} · Semana actual: ${currentWeek.startDate} al ${currentWeek.endDate}.`}
         actions={
           canCreate ? (
             <Link
@@ -205,6 +235,11 @@ export default function TableroCortes({
           ) : undefined
         }
       />
+
+      <nav aria-label="Vistas de cortes" className="flex gap-2 border-b border-outline-variant pb-2 text-sm font-bold">
+        <span aria-current="page" className="rounded-lg bg-primary px-4 py-2 text-on-primary">Cortes actuales</span>
+        {canArchive && <Link href="/cash-cuts/history" className="rounded-lg px-4 py-2 text-on-surface-variant hover:bg-surface-container">Historial</Link>}
+      </nav>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
         <MetricCard label="Cortes abiertos" value={String(indicadores.abiertos)} />
@@ -222,30 +257,14 @@ export default function TableroCortes({
           <input
             id="q"
             value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+            onChange={(e) => {
+              setPagina(1);
+              setBusqueda(e.target.value);
+            }}
             placeholder="Código o responsable"
             className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
           />
         </div>
-
-        {branches.length > 1 && (
-          <div>
-            <label htmlFor="suc" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
-              Sucursal
-            </label>
-            <select
-              id="suc"
-              value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
-              className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
-            >
-              <option value="">Todas</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
 
         <div>
           <label htmlFor="est" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
@@ -254,7 +273,10 @@ export default function TableroCortes({
           <select
             id="est"
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) => {
+              setPagina(1);
+              setStatus(e.target.value);
+            }}
             className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary"
           >
             <option value="">Todos</option>
@@ -262,22 +284,6 @@ export default function TableroCortes({
             <option value="CERRADO">Cerrado</option>
             <option value="AUDITADO">Auditado</option>
           </select>
-        </div>
-
-        <div>
-          <label htmlFor="d1" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
-            Desde
-          </label>
-          <input id="d1" type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-            className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary" />
-        </div>
-
-        <div>
-          <label htmlFor="d2" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
-            Hasta
-          </label>
-          <input id="d2" type="date" value={to} onChange={(e) => setTo(e.target.value)}
-            className="compact-field w-full border border-outline-variant bg-surface-container-high text-on-surface outline-none transition focus:border-primary" />
         </div>
 
         {hayFiltros && (
@@ -295,7 +301,9 @@ export default function TableroCortes({
 
       {!cargando && !error && filtrados.length === 0 && (
         <EmptyState>
-          {hayFiltros
+          {!branches.length
+            ? "No hay una sucursal de trabajo definida. Inicia un corte o pide que te asignen una única sucursal."
+            : hayFiltros
             ? "No hay cortes que coincidan con esos filtros."
             : "Todavía no hay cortes registrados."}
         </EmptyState>
@@ -308,16 +316,16 @@ export default function TableroCortes({
             <table className="w-full border-collapse text-[13px]">
               <thead>
                 <tr>
-                  <Th campo="date">Fecha</Th>
-                  <Th campo="code">Código</Th>
-                  <Th campo="branch">Sucursal</Th>
-                  <Th>Responsable</Th>
-                  <Th>Apertura</Th>
-                  <Th>Cierre</Th>
-                  <Th campo="totalSales" className="text-right">Venta</Th>
-                  <Th campo="difference" className="text-right">Diferencia</Th>
-                  <Th>Estado</Th>
-                  <Th>Acción</Th>
+                  <SortableHeader campo="date" sort={orden} onSort={ordenarPor}>Fecha</SortableHeader>
+                  <SortableHeader campo="code" sort={orden} onSort={ordenarPor}>Código</SortableHeader>
+                  <SortableHeader campo="branch" sort={orden} onSort={ordenarPor}>Sucursal</SortableHeader>
+                  <SortableHeader sort={orden} onSort={ordenarPor}>Responsable</SortableHeader>
+                  <SortableHeader sort={orden} onSort={ordenarPor}>Apertura</SortableHeader>
+                  <SortableHeader sort={orden} onSort={ordenarPor}>Cierre</SortableHeader>
+                  <SortableHeader campo="totalSales" sort={orden} onSort={ordenarPor} className="text-right">Venta</SortableHeader>
+                  <SortableHeader campo="difference" sort={orden} onSort={ordenarPor} className="text-right">Diferencia</SortableHeader>
+                  <SortableHeader sort={orden} onSort={ordenarPor}>Estado</SortableHeader>
+                  <SortableHeader sort={orden} onSort={ordenarPor}>Acción</SortableHeader>
                 </tr>
               </thead>
               <tbody>
@@ -340,6 +348,11 @@ export default function TableroCortes({
                         <Link href={`/cash-cuts/daily/${c.id}`} className="font-semibold text-on-surface underline-offset-2 hover:underline">
                           Ver
                         </Link>
+                        {canArchive && c.status !== "ABIERTO" && (
+                          <button type="button" onClick={() => void archiveCut(c)} disabled={archivingId === c.id} className="ml-3 font-semibold text-primary hover:underline disabled:opacity-50">
+                            {archivingId === c.id ? "Archivando..." : "Archivar"}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -378,6 +391,11 @@ export default function TableroCortes({
                     className="mt-4 flex min-h-11 items-center justify-center rounded-lg border border-outline-variant text-sm font-semibold text-on-surface transition hover:bg-surface-container">
                     Ver detalle
                   </Link>
+                  {canArchive && c.status !== "ABIERTO" && (
+                    <button type="button" onClick={() => void archiveCut(c)} disabled={archivingId === c.id} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-lg border border-outline-variant text-sm font-semibold text-primary disabled:opacity-50">
+                      {archivingId === c.id ? "Archivando..." : "Archivar"}
+                    </button>
+                  )}
                 </div>
               );
             })}

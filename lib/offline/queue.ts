@@ -64,3 +64,24 @@ export async function removeOperation(id: string) {
   await transactStore("readwrite", (store) => store.delete(id));
   window.dispatchEvent(new Event("maestro:queue-changed"));
 }
+
+/** Cancela una operación POS pendiente sin borrar su rastro local. */
+export async function cancelQueuedOperation(id: string, reason?: string) {
+  const operations = await listOperations();
+  const operation = operations.find((item) => item.id === id);
+  if (!operation || operation.kind !== "pos.sale.create" || operation.status === "syncing") return false;
+  await updateOperation({
+    ...operation,
+    status: "cancelled",
+    lastError: reason?.trim() || "Cancelada en el dispositivo antes de sincronizar.",
+  });
+  return true;
+}
+
+export async function retryQueuedOperation(id: string) {
+  const operations = await listOperations();
+  const operation = operations.find((item) => item.id === id);
+  if (!operation || operation.status === "syncing" || operation.status === "cancelled") return false;
+  await updateOperation({ ...operation, status: "pending", lastError: undefined });
+  return true;
+}

@@ -17,6 +17,16 @@ import {
   InventoryFlowChart,
   InventoryShareChart,
 } from "./InventoryCharts";
+import { formatBusinessDateTime } from "@/lib/dateTime";
+import { getAccessibleBranchIds } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { getUserModuleKeys } from "@/app/actions/permissions";
+import {
+  canAccessModule,
+  getModuleKeyForPath,
+  isInventoryManagerReadPath,
+} from "@/lib/permission-modules";
+import { redirect } from "next/navigation";
 
 const sections = [
   {
@@ -28,7 +38,7 @@ const sections = [
   },
   {
     title: "Inventario de sucursales",
-    description: "Stock por sucursal, entradas, traspasos y conteos semanales.",
+    description: "Stock por sucursal, entradas, traspasos y conteos semanales o mensuales.",
     href: "/administration/inventory/sucursales",
     icon: <StoreIcon className="h-6 w-6 text-on-surface-variant" />,
   },
@@ -53,21 +63,30 @@ const units = (value: number) =>
 
 const formatDate = (iso: string | null) =>
   iso
-    ? new Date(iso).toLocaleDateString("es-MX", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
+    ? formatBusinessDateTime(iso)
     : "Nunca";
 
 export default async function InventoryPage() {
-  const analytics = await getInventoryAnalytics();
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const [analytics, moduleKeys] = await Promise.all([
+    getInventoryAnalytics(30, await getAccessibleBranchIds()),
+    user.role === "ADMIN" ? Promise.resolve([]) : getUserModuleKeys(user.id),
+  ]);
   const { totals, topProducts, categories, branches, movementTypes, daily, lowStock, stale } =
     analytics;
 
+  const visibleSections = sections.filter((section) => {
+    if (user.role === "ADMIN") return true;
+    if (user.role === "GERENTE" && isInventoryManagerReadPath(section.href)) return true;
+    const moduleKey = getModuleKeyForPath(section.href);
+    return moduleKey ? canAccessModule(user.role, moduleKeys, moduleKey) : false;
+  });
+
   const shortcuts = (
     <section className="grid gap-5 md:grid-cols-3">
-      {sections.map((section) => (
+      {visibleSections.map((section) => (
         <Link
           key={section.href}
           href={section.href}

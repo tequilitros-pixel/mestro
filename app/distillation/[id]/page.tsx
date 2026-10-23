@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 import {
   PrinterIcon,
   ClipboardIcon,
@@ -20,12 +20,8 @@ import {
   DistillationStatus,
   EquipmentStatus,
   LotStage,
-  RawMaterialMovementType,
 } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
-import { randomUUID } from "crypto";
-import { advanceLotStage } from "@/lib/lotStage";
-import { applyMovement } from "@/app/actions/rawMaterials";
 import {
   getCurrentAlcohol,
   getCurrentTemperature,
@@ -33,13 +29,18 @@ import {
   getHeartLiters,
   getHeadsLiters,
   getTailLiters,
-  getCorrectedAlcohol,
   getAbsoluteAlcohol,
+  getTotalLAA,
   getYield,
   getDistillationStatus,
 } from "@/lib/services/distillation";
 import { getMasterAdvice } from "@/lib/services/maestroDistillation";
 import { Suspense } from "react";
+import { formatBusinessDateTime } from "@/lib/dateTime";
+import ProcessSwitcher from "@/components/production/ProcessSwitcher";
+import { cancelDistillationRun, reconcileLotDistillationStage } from "@/lib/distillation/operations";
+import ProcessBoilerUsage from "@/components/boiler/ProcessBoilerUsage";
+import { finishProductionLot } from "@/lib/lots/finishProductionLot";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -56,6 +57,12 @@ export default async function DistillationDetailPage({
       lot: true,
       equipment: true,
       finishedBy: true,
+      sourceFermentation: {
+        include: { distillations: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true } } },
+      },
+      sourceDistillation: {
+        include: { sourceFermentation: { select: { tank: true } }, derivedDistillations: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true } } },
+      },
       events: {
         orderBy: {
           createdAt: "asc",
@@ -66,13 +73,31 @@ export default async function DistillationDetailPage({
 
   if (!distillation) notFound();
 
+  const siblingDistillations = await prisma.distillation.findMany({
+    where: { lotId: distillation.lotId, type: distillation.type },
+    include: {
+      equipment: { select: { name: true } },
+      sourceFermentation: { select: { tank: true } },
+      sourceDistillation: { include: { sourceFermentation: { select: { tank: true } } } },
+    },
+    orderBy: { startedAt: "asc" },
+  });
+
   const distillationEquipmentId = distillation.equipmentId;
   const distillationLotId = distillation.lotId;
-  const distillationLotCode = distillation.lot.code;
   const distillationType = distillation.type;
+  const sourceName = distillation.sourceFermentation?.tank ?? distillation.sourceDistillation?.sourceFermentation?.tank ?? "Fuente histórica";
+  const sourceVolume = distillation.sourceFermentation?.mustLiters
+    ?? (distillation.sourceDistillation?.finalHeartLiters && distillation.sourceDistillation.finalHeartLiters > 0
+      ? distillation.sourceDistillation.finalHeartLiters
+      : distillation.sourceDistillation?.finalLiters)
+    ?? distillation.loadedLiters;
+  const sourceAllocated = distillation.sourceFermentation?.distillations.reduce((sum, run) => sum + run.loadedLiters, 0)
+    ?? distillation.sourceDistillation?.derivedDistillations.reduce((sum, run) => sum + run.loadedLiters, 0)
+    ?? distillation.loadedLiters;
+  const sourceRemaining = Math.max(0, sourceVolume - sourceAllocated);
 
-  const hasFinished =
-    distillation.status === DistillationStatus.TERMINADA;
+  const hasFinished = distillation.status !== DistillationStatus.ACTIVA;
 
   const lastTemperature = getCurrentTemperature(
     distillation.events
@@ -96,15 +121,10 @@ export default async function DistillationDetailPage({
         (event) => event.alcoholCorrected !== null
       )?.alcoholCorrected ?? null;
 
-  const calculatedCorrectedAlcohol =
-    getCorrectedAlcohol(
-      lastAlcohol,
-      lastOutputTemperature
-    );
-
-  const lastAlcoholCorrected =
-    lastRegisteredCorrectedAlcohol ??
-    calculatedCorrectedAlcohol;
+  // Sólo una lectura capturada ya corregida a 20 °C puede respaldar LAA.
+  // La corrección legal/técnica requiere las tablas alcoholométricas, no una
+  // fórmula lineal aproximada aplicada en la interfaz.
+  const lastAlcoholCorrected = lastRegisteredCorrectedAlcohol;
 
   const totalLiters = getTotalLiters(
     distillation.events
@@ -122,10 +142,12 @@ export default async function DistillationDetailPage({
     distillation.events
   );
 
-  const absoluteAlcohol = getAbsoluteAlcohol(
+  const fallbackAbsoluteAlcohol = getAbsoluteAlcohol(
     totalLiters,
     lastAlcoholCorrected
   );
+  const calculatedLAA = getTotalLAA(distillation.events);
+  const absoluteAlcohol = calculatedLAA ?? fallbackAbsoluteAlcohol;
 
   const distillationYield = getYield(
     distillation.loadedLiters,
@@ -144,8 +166,20 @@ export default async function DistillationDetailPage({
     lastAlcoholCorrected
   );
 
+  async function cancelRun(formData: FormData) {
+    "use server";
+    const user = await requireModuleActionAccess("/distillation");
+    await cancelDistillationRun({
+      id,
+      actorId: user.id,
+      reason: String(formData.get("reason") ?? ""),
+    });
+    redirect("/distillation?cancelled=1");
+  }
+
   async function addEvent(formData: FormData) {
     "use server";
+    await requireModuleActionAccess("/distillation");
 
     const currentDistillation =
       await prisma.distillation.findUnique({
@@ -158,8 +192,8 @@ export default async function DistillationDetailPage({
 
     if (
       !currentDistillation ||
-      currentDistillation.status ===
-        DistillationStatus.TERMINADA ||
+      currentDistillation.status !==
+        DistillationStatus.ACTIVA ||
       currentDistillation.closureCode
     ) {
       redirect(`/distillation/${id}`);
@@ -286,11 +320,7 @@ export default async function DistillationDetailPage({
   ) {
     "use server";
 
-    const user = await getCurrentUser();
-
-    if (!user) {
-      redirect("/login");
-    }
+    const user = await requireModuleActionAccess("/distillation");
 
     const finalLiters = parseRequiredNumber(
       formData.get("finalLiters")
@@ -342,8 +372,8 @@ export default async function DistillationDetailPage({
     }
 
     if (
-      currentDistillation.status ===
-        DistillationStatus.TERMINADA ||
+      currentDistillation.status !==
+        DistillationStatus.ACTIVA ||
       currentDistillation.closureCode
     ) {
       redirect(`/distillation/${id}`);
@@ -423,13 +453,12 @@ export default async function DistillationDetailPage({
           },
         });
 
-        await advanceLotStage(
-          transaction,
-          distillationLotId,
-          distillationType === "RECTIFICACION"
-            ? LotStage.TERMINADO
-            : LotStage.RECTIFICACION
-        );
+        await transaction.boilerProcessLink.updateMany({
+          where: { processType: "DESTILACION", processId: id, endedAt: null },
+          data: { endedAt: finishedAt },
+        });
+
+        await reconcileLotDistillationStage(transaction, distillationLotId, distillationType);
 
         return updated;
       }
@@ -442,76 +471,12 @@ export default async function DistillationDetailPage({
     redirect(`/distillation/${id}?finished=1`);
   }
 
-  async function finishLot(formData: FormData) {
+  async function finishLot(_formData: FormData) {
     "use server";
+    void _formData;
 
-    const user = await getCurrentUser();
-
-    if (!user) {
-      redirect("/login");
-    }
-
-    const totalLiters = parseRequiredNumber(
-      formData.get("totalLiters")
-    );
-
-    if (totalLiters === null || totalLiters <= 0) {
-      redirect(`/distillation/${id}`);
-    }
-
-    const lot = await prisma.lot.findUnique({
-      where: { id: distillationLotId },
-      select: {
-        stage: true,
-        totalLitersObtained: true,
-        qrToken: true,
-      },
-    });
-
-    if (
-      !lot ||
-      lot.stage !== LotStage.TERMINADO ||
-      lot.totalLitersObtained !== null
-    ) {
-      redirect(`/distillation/${id}`);
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.lot.update({
-        where: { id: distillationLotId },
-        data: {
-          finishedAt: new Date(),
-          totalLitersObtained: totalLiters,
-          qrToken: lot.qrToken ?? randomUUID(),
-        },
-      });
-
-      /*
-       * El destilado terminado entra al almacén de materia prima, al
-       * material marcado como receptor de lotes (típicamente "Tequila
-       * blanco a granel"). Queda registrado de qué lote vino, así que
-       * el stock es a granel pero con historial rastreable.
-       *
-       * Si nadie ha marcado un material receptor, el lote se cierra
-       * igual: no se bloquea la producción por una configuración
-       * pendiente, pero tampoco se inventa el destino.
-       */
-      const target = await tx.rawMaterial.findFirst({
-        where: { receivesLotOutput: true, active: true },
-        select: { id: true },
-      });
-
-      if (target) {
-        await applyMovement(tx, {
-          rawMaterialId: target.id,
-          type: RawMaterialMovementType.PRODUCCION,
-          amount: totalLiters,
-          lotId: distillationLotId,
-          createdById: user.id,
-          notes: `Destilado obtenido del lote ${distillationLotCode}.`,
-        });
-      }
-    });
+    const user = await requireModuleActionAccess("/distillation");
+    await finishProductionLot({ lotId: distillationLotId, actorId: user.id });
 
     redirect(`/distillation/${id}?lotFinished=1`);
   }
@@ -604,7 +569,7 @@ export default async function DistillationDetailPage({
           value={`${formatNumber(
             distillation.loadedLiters
           )} L`}
-          detail="Volumen inicial"
+          detail={`${distillation.fillPercent ? `${formatNumber(distillation.fillPercent)}% del alambique · ` : ""}${sourceName} · quedan ${formatNumber(sourceRemaining)} L`}
         />
 
         <Card
@@ -738,7 +703,7 @@ export default async function DistillationDetailPage({
         />
       </section>
 
-      {hasFinished && (
+      {distillation.status === DistillationStatus.TERMINADA && (
         <DistillationClosureAct
           closureCode={
             distillation.closureCode
@@ -791,6 +756,7 @@ export default async function DistillationDetailPage({
 
   const registrarTabContent = (
     <>
+      {distillation.status === DistillationStatus.ACTIVA && <ProcessBoilerUsage processType="DESTILACION" processId={id} />}
       {lotReadyToFinish && (
         <FinishLotSection
           lotId={distillation.lot.id}
@@ -1063,7 +1029,27 @@ export default async function DistillationDetailPage({
         </header>
 
         <div className="mt-8">
+          <ProcessSwitcher
+            title="Alambiques de este lote"
+            basePath="/distillation"
+            currentId={id}
+            items={siblingDistillations.map((item) => ({
+              id: item.id,
+              label: item.equipment.name,
+              detail: `${item.sourceFermentation?.tank ?? item.sourceDistillation?.sourceFermentation?.tank ?? "Sin tina"} · ${formatNumber(item.loadedLiters)} L`,
+              status: item.status === DistillationStatus.TERMINADA ? "Terminada" : item.status === DistillationStatus.CANCELADA ? "Cancelada" : "Activa",
+            }))}
+          />
           <PageTabs tabs={tabs} />
+          {distillation.status === DistillationStatus.ACTIVA && (
+            <form action={cancelRun} className="mt-6 flex flex-col gap-3 rounded-2xl border border-error/30 bg-error/5 p-5 sm:flex-row sm:items-end">
+              <label className="flex-1 text-sm font-semibold">
+                Cancelar corrida y devolver el volumen a la tina
+                <input name="reason" required placeholder="Motivo obligatorio" className="mt-2 w-full rounded-xl border border-outline-variant bg-surface-container px-4 py-3" />
+              </label>
+              <button className="rounded-xl border border-error px-5 py-3 font-bold text-error">Cancelar corrida</button>
+            </form>
+          )}
         </div>
       </div>
     </main>
@@ -1415,24 +1401,13 @@ function FinishLotSection({
       </h2>
 
       <p className="mt-2 text-on-surface-variant">
-        Registra el total de litros obtenidos en todo el proceso
-        para cerrar el lote y generar su código QR de
-        trazabilidad.
+        El total se sumará automáticamente de todas las rectificaciones terminadas. No se puede cerrar mientras exista una corrida activa.
       </p>
 
       <form
         action={onConfirm}
-        className="mt-6 grid gap-4 sm:grid-cols-[1fr_auto]"
+        className="mt-6"
       >
-        <NumberField
-          name="totalLiters"
-          label="Litros totales obtenidos"
-          placeholder="Ej. 480"
-          suffix="L"
-          step="0.01"
-          min="0"
-        />
-
         <button
           type="submit"
           className="h-fit self-end rounded-xl bg-primary px-6 py-3 font-bold text-on-primary transition hover:opacity-90"
@@ -1720,10 +1695,7 @@ function formatNumber(
 }
 
 function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatBusinessDateTime(date);
 }
 
 function formatDuration(

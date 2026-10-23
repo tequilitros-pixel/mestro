@@ -1,12 +1,21 @@
 import { getCurrentUser } from "@/lib/auth";
 import { changePasswordAction } from "@/app/actions/changePassword";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 const ERROR_MESSAGES: Record<string, string> = {
   campos: "Completa todos los campos.",
   actual: "La contraseña actual no es correcta.",
   confirmacion: "La nueva contraseña y la confirmación no coinciden.",
   corta: "La nueva contraseña debe tener al menos 6 caracteres.",
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: "Administrador",
+  GERENTE: "Gerente",
+  OPERATOR: "Operador",
+  ENCARGADO: "Encargado",
+  CONSULTA: "Consulta",
 };
 
 export default async function ProfilePage({
@@ -36,7 +45,7 @@ export default async function ProfilePage({
       <section className="rounded-xl border border-outline-variant bg-surface-container p-6">
         <p className="text-lg font-semibold text-primary">{user.name}</p>
         <p className="text-sm text-on-surface-variant">
-          {user.role === "ADMIN" ? "Administrador" : "Operador"}
+          {ROLE_LABELS[user.role] ?? user.role}
         </p>
       </section>
 
@@ -96,6 +105,27 @@ export default async function ProfilePage({
             Actualizar contraseña
           </button>
         </form>
+      </section>
+
+      <section className="rounded-xl border border-outline-variant bg-surface-container p-6 space-y-3">
+        <h2 className="text-lg font-semibold text-primary">Gestión de la cuenta</h2>
+        <p className="text-xs leading-relaxed text-on-surface-variant">
+          Las cuentas de Maestro son administradas por Destiladora del Norte para su personal y operadores autorizados. Si necesitas solicitar la baja de tu usuario o la eliminación de tus datos personales, puedes gestionarlo directamente a través del área de administración o soporte técnico.
+        </p>
+        <div className="pt-2 flex flex-col sm:flex-row gap-3">
+          <Link
+            href="/support"
+            className="text-xs font-semibold text-primary hover:underline"
+          >
+            Centro de ayuda y soporte →
+          </Link>
+          <a
+            href="mailto:support@maestro-destiladora.space?subject=Solicitud%20de%20eliminación%20de%20cuenta"
+            className="text-xs font-semibold text-error hover:underline"
+          >
+            Solicitar eliminación de datos personales
+          </a>
+        </div>
       </section>
     </main>
   );

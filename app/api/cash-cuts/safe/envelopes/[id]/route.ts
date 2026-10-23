@@ -1,15 +1,16 @@
 // PENDIENTE DE SCHEMA -- ver lib/cash-cuts/safeEnvelopes.ts
 // Destino: app/api/cash-cuts/safe/envelopes/[id]/route.ts
 import { NextResponse } from "next/server";
-import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { getEnvelopeWithMovements } from "@/lib/cash-cuts/safeEnvelopes";
+import { canAccessSafeEnvelopeDate } from "@/lib/cash-cuts/safeWeek";
 
 /** GET: detalle de un sobre con su historial completo de movimientos. */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/cash-cuts/safe"]);
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -19,11 +20,17 @@ export async function GET(
   if (!envelope) {
     return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
   }
+  if (!canAccessSafeEnvelopeDate(user.role, envelope.cutDate)) {
+    return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
+  }
 
   const allowedBranchIds = await getAccessibleBranchIds();
   if (allowedBranchIds && !allowedBranchIds.includes(envelope.branch.id)) {
-    return NextResponse.json({ error: "No tienes acceso a esta sucursal" }, { status: 403 });
+    return NextResponse.json({ error: "Sobre no encontrado" }, { status: 404 });
   }
 
+  if (user.role !== "ADMIN") {
+    return NextResponse.json({ ...envelope, movements: undefined });
+  }
   return NextResponse.json(envelope);
 }

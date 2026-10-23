@@ -6,11 +6,10 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import type { UserRole } from "@prisma/client";
 import { normalizeMexicanPhone } from "@/lib/phone";
-import { changeIdentityState } from "@/lib/workforce/identity/service";
-import { IdentityChangeError } from "@/lib/workforce/identity/operations";
 
-export async function getPersonnel() {
+export async function getPersonnel(includeArchived = false) {
   return prisma.user.findMany({
+    where: includeArchived ? undefined : { active: true },
     select: {
       id: true,
       name: true,
@@ -26,6 +25,8 @@ export async function getPersonnel() {
 }
 
 export async function getPersonnelById(userId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || currentUser.role !== "ADMIN") return null;
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -37,6 +38,10 @@ export async function getPersonnelById(userId: string) {
       role: true,
       active: true,
       hourlyRate: true,
+      salaryRates: {
+        where: { scheme: "HORA", branchId: { not: null }, effectiveTo: null },
+        select: { branchId: true, amount: true },
+      },
       pinHash: true,
       branches: { include: { branch: { select: { id: true, name: true } } } },
     },
@@ -51,6 +56,7 @@ export async function getPersonnelById(userId: string) {
 
 export async function getBranchesForAssignment() {
   return prisma.branch.findMany({
+    where: { active: true },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
@@ -184,8 +190,8 @@ export async function updateHourlyRate(userId: string, hourlyRate: number | null
     return { error: "No tienes permiso" };
   }
 
-  if (hourlyRate !== null && hourlyRate < 0) {
-    return { error: "La tarifa no puede ser negativa" };
+  if (hourlyRate !== null && (!Number.isFinite(hourlyRate) || hourlyRate < 0 || hourlyRate > 99999999.99 || Math.abs(Math.round(hourlyRate * 100) - hourlyRate * 100) > 0.000001)) {
+    return { error: "Captura una tarifa válida con máximo dos decimales" };
   }
 
   const now = new Date();
@@ -200,7 +206,7 @@ export async function updateHourlyRate(userId: string, hourlyRate: number | null
     // para que la nómina de semanas pasadas siga usando lo que se
     // pagaba entonces aunque el sueldo cambie hoy.
     await tx.salaryRate.updateMany({
-      where: { userId, scheme: "HORA", effectiveTo: null },
+      where: { userId, branchId: null, scheme: "HORA", effectiveTo: null },
       data: { effectiveTo: now },
     });
 
@@ -223,17 +229,44 @@ export async function updateHourlyRate(userId: string, hourlyRate: number | null
   return { success: true };
 }
 
+export async function updateBranchHourlyRate(userId: string, branchId: string, hourlyRate: number | null) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || currentUser.role !== "ADMIN") return { error: "No tienes permiso" };
+  if (hourlyRate !== null && (!Number.isFinite(hourlyRate) || hourlyRate < 0 || hourlyRate > 99999999.99 || Math.abs(Math.round(hourlyRate * 100) - hourlyRate * 100) > 0.000001)) {
+    return { error: "Captura una tarifa válida con máximo dos decimales" };
+  }
+
+  const [employee, branch] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { id: true } }),
+    prisma.branch.findUnique({ where: { id: branchId }, select: { id: true, active: true } }),
+  ]);
+  if (!employee || !branch?.active) return { error: "Trabajador o sucursal no disponible" };
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.salaryRate.updateMany({
+      where: { userId, branchId, scheme: "HORA", effectiveTo: null },
+      data: { effectiveTo: now },
+    });
+    if (hourlyRate !== null) {
+      await tx.salaryRate.create({
+        data: { userId, branchId, scheme: "HORA", amount: hourlyRate, effectiveFrom: now, createdById: currentUser.id },
+      });
+    }
+  });
+
+  revalidatePath(`/administration/personnel/${userId}`);
+  revalidatePath("/timeclock/payroll");
+  return { success: true };
+}
+
 export async function updatePersonnelActive(userId: string, active: boolean) {
   const currentUser = await getCurrentUser();
   if (!currentUser || currentUser.role !== "ADMIN") {
     return { error: "No tienes permiso" };
   }
 
-  try {
-    await changeIdentityState(currentUser, { target: "USER", userId, active });
-  } catch (error) {
-    return { error: error instanceof IdentityChangeError ? error.message : "No se pudo actualizar el acceso." };
-  }
+  await prisma.user.update({ where: { id: userId }, data: { active } });
   revalidatePath("/administration/personnel");
   return { success: true };
 }

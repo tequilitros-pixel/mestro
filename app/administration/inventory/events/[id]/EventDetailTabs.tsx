@@ -7,12 +7,14 @@ import {
   ClipboardIcon,
   RefreshIcon,
   ListChecksIcon,
+  ChartLineIcon,
 } from "@/components/ui/icons";
 import { AppIconBadge } from "@/components/ui/AppIcon";
 
-type TabKey = "datos" | "salida" | "regreso" | "reconteo";
+type TabKey = "resumen" | "datos" | "salida" | "regreso" | "reconteo";
 
 export default function EventDetailTabs({
+  resumen,
   datos,
   salida,
   regreso,
@@ -20,6 +22,7 @@ export default function EventDetailTabs({
   pendingReturns,
   pendingRecounts,
 }: {
+  resumen: ReactNode;
   datos: ReactNode;
   salida: ReactNode;
   regreso: ReactNode;
@@ -27,7 +30,7 @@ export default function EventDetailTabs({
   pendingReturns: number;
   pendingRecounts: number;
 }) {
-  const [tab, setTab] = useState<TabKey>("datos");
+  const [tab, setTab] = useState<TabKey>("resumen");
 
   const tabs: {
     key: TabKey;
@@ -35,6 +38,7 @@ export default function EventDetailTabs({
     icon: ComponentType<IconProps>;
     badge?: number;
   }[] = [
+    { key: "resumen", label: "Resumen", icon: ChartLineIcon },
     { key: "datos", label: "Datos del evento", icon: InfoIcon },
     { key: "salida", label: "Lista para llevar", icon: ClipboardIcon },
     { key: "regreso", label: "Lista de regreso", icon: RefreshIcon, badge: pendingReturns },
@@ -80,6 +84,7 @@ export default function EventDetailTabs({
       </div>
 
       <div className="mt-6">
+        {tab === "resumen" && <Fragment key="resumen">{resumen}</Fragment>}
         {tab === "datos" && <Fragment key="datos">{datos}</Fragment>}
         {tab === "salida" && <Fragment key="salida">{salida}</Fragment>}
         {tab === "regreso" && <Fragment key="regreso">{regreso}</Fragment>}

@@ -6,13 +6,12 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   decideCorrection,
-  applyAdminClockCorrection,
   recordClockEvent,
   requestCorrection,
   resolveOwnActiveEmployment,
 } from "@/lib/workforce/clock/service";
 import type { ClockType } from "@/lib/workforce/clock/effectiveStream";
-import { parseLocalDateTimeInZone } from "@/lib/workforce/clock/localDateTime";
+import type { LocationInput } from "@/lib/workforce/geofence";
 
 const value = (form: FormData, key: string) =>
   String(form.get(key) ?? "").trim();
@@ -31,24 +30,15 @@ function done(path: string, key: "saved" | "error", message: string): never {
   const separator = destination.includes("?") ? "&" : "?";
   redirect(`${destination}${separator}${key}=${encodeURIComponent(message)}`);
 }
-async function correctionTimezone(form: FormData) {
-  const branchId = value(form, "branchId");
-  if (branchId) {
-    const branch = await prisma.branch.findUnique({
-      where: { id: branchId },
-      select: { timezone: true },
-    });
-    if (branch?.timezone) return branch.timezone;
+function location(form: FormData): LocationInput {
+  const raw = value(form, "location");
+  if (!raw) return { failure: "UNAVAILABLE" };
+  try {
+    const parsed = JSON.parse(raw) as LocationInput;
+    return parsed ?? { failure: "UNAVAILABLE" };
+  } catch {
+    return { failure: "UNAVAILABLE" };
   }
-  const targetClockEventId = value(form, "targetClockEventId");
-  if (targetClockEventId) {
-    const event = await prisma.clockEvent.findUnique({
-      where: { id: targetClockEventId },
-      select: { timezone: true },
-    });
-    if (event?.timezone) return event.timezone;
-  }
-  return "America/Mexico_City";
 }
 export async function workforceClockAction(form: FormData) {
   const current = await actor();
@@ -61,6 +51,7 @@ export async function workforceClockAction(form: FormData) {
       type: value(form, "type") as ClockType,
       source: "PERSONAL",
       idempotencyKey: value(form, "idempotencyKey"),
+      location: location(form),
     });
     revalidatePath("/workforce/clock");
     done(
@@ -81,7 +72,6 @@ export async function workforceCorrectionRequestAction(form: FormData) {
   const current = await actor();
   const back = value(form, "returnTo");
   try {
-    const proposedOccurredAt = value(form, "proposedOccurredAt");
     await requestCorrection(current, {
       type: value(form, "type") as
         "MODIFY_OCCURRED_TIME" | "ADD_MISSING_EVENT" | "VOID_EVENT",
@@ -90,8 +80,8 @@ export async function workforceCorrectionRequestAction(form: FormData) {
       branchId: value(form, "branchId") || null,
       proposedEventType: (value(form, "proposedEventType") ||
         null) as ClockType | null,
-      proposedOccurredAt: proposedOccurredAt
-        ? parseLocalDateTimeInZone(proposedOccurredAt, await correctionTimezone(form))
+      proposedOccurredAt: value(form, "proposedOccurredAt")
+        ? new Date(value(form, "proposedOccurredAt"))
         : null,
       reason: value(form, "reason"),
     });
@@ -105,32 +95,6 @@ export async function workforceCorrectionRequestAction(form: FormData) {
     );
   }
 }
-
-export async function workforceAdminClockCorrectionAction(form: FormData) {
-  const current = await actor();
-  const back = value(form, "returnTo");
-  try {
-    const proposedOccurredAt = value(form, "proposedOccurredAt");
-    await applyAdminClockCorrection(current, {
-      employmentId: value(form, "employmentId"),
-      type: value(form, "type") as "MODIFY_OCCURRED_TIME" | "ADD_MISSING_EVENT" | "VOID_EVENT",
-      targetClockEventId: value(form, "targetClockEventId") || null,
-      branchId: value(form, "branchId") || null,
-      proposedEventType: (value(form, "proposedEventType") || null) as ClockType | null,
-      proposedOccurredAt: proposedOccurredAt
-        ? parseLocalDateTimeInZone(proposedOccurredAt, await correctionTimezone(form))
-        : null,
-      reason: value(form, "reason"),
-    });
-    revalidatePath("/administration/workforce/timesheets");
-    revalidatePath("/administration/workforce/attendance");
-    done(back, "saved", "Corrección aplicada y enviada al cálculo de horas.");
-  } catch (error) {
-    unstable_rethrow(error);
-    done(back, "error", error instanceof Error ? error.message : "No se pudo aplicar la corrección.");
-  }
-}
-
 export async function workforceCorrectionDecisionAction(form: FormData) {
   const current = await actor();
   const back = value(form, "returnTo");
@@ -203,6 +167,7 @@ export async function workforceKioskClockAction(form: FormData) {
         type,
         source: "KIOSK",
         idempotencyKey: value(form, "idempotencyKey"),
+        location: location(form),
       },
     );
     done(

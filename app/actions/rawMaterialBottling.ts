@@ -8,8 +8,8 @@ import {
   RawMaterialMovementType,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
-import { applyMovement } from "./rawMaterials";
+import { requireModuleActionAccess } from "@/lib/auth";
+import { applyRawMaterialMovement } from "@/lib/liquors/rawMaterialMovements";
 
 /**
  * ==========================================================
@@ -38,9 +38,12 @@ const ROLES_QUE_PUEDEN_EMBOTELLAR = ["ADMIN", "GERENTE"];
 export async function bottleFromRawMaterialAction(
   formData: FormData,
 ): Promise<ActionResult> {
-  const user = await getCurrentUser();
-
-  if (!user) return { success: false, error: "No autorizado" };
+  let user;
+  try {
+    user = await requireModuleActionAccess("/liquors/bottling");
+  } catch {
+    return { success: false, error: "No autorizado" };
+  }
 
   if (!ROLES_QUE_PUEDEN_EMBOTELLAR.includes(user.role)) {
     return {
@@ -196,7 +199,7 @@ export async function bottleFromRawMaterialAction(
       await tx.liquorBottle.createMany({ data: bottles });
 
       // Sale del granel: lo embotellado más la merma declarada.
-      await applyMovement(tx, {
+      await applyRawMaterialMovement(tx, {
         rawMaterialId: material.id,
         type: RawMaterialMovementType.CONSUMO_RECETA,
         amount: litersUsed,

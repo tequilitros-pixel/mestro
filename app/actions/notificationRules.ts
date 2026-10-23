@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, requireAdminAction } from "@/lib/auth";
 import type { NotificationTriggerType, UserRole } from "@prisma/client";
 
 export type ActionResult =
@@ -20,12 +20,14 @@ const VALID_TRIGGER_TYPES: NotificationTriggerType[] = [
 const VALID_ROLES: UserRole[] = ["ADMIN", "OPERATOR", "GERENTE", "ENCARGADO", "CONSULTA"];
 
 export async function getNotificationRules() {
+  await requireAdminAction();
   return prisma.notificationRule.findMany({
     orderBy: { createdAt: "asc" },
   });
 }
 
 export async function getNotificationRuleById(id: string) {
+  await requireAdminAction();
   return prisma.notificationRule.findUnique({ where: { id } });
 }
 

@@ -1,12 +1,12 @@
 import { get } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
-import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { getCashCutScope, withCashCutReadScope } from "@/lib/cash-cuts/access";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string; evidenceId: string }> },
 ) {
-  const scope = await getCashCutScope();
+  const scope = await getCashCutScope(["/cash-cuts/daily"]);
   if (!scope) return Response.json({ error: "No autorizado" }, { status: 401 });
 
   const { id, evidenceId } = await params;
@@ -18,7 +18,7 @@ export async function GET(
     where: {
       id: evidenceId,
       cashCutId: id,
-      cashCut: withCashCutScope(scope),
+      cashCut: withCashCutReadScope(scope),
     },
     select: { url: true },
   });

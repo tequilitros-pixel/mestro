@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
 import { MANAGER_ROLES, getDiscountLimitsByRole } from "@/lib/pos/discountLimits";
 
 const ROLES_QUE_PUEDEN_VENDER = ["ADMIN", "GERENTE", "ENCARGADO"];
@@ -13,7 +13,7 @@ const ROLES_QUE_PUEDEN_VENDER = ["ADMIN", "GERENTE", "ENCARGADO"];
  * descuento que lo supere.
  */
 export async function GET() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/pos"]);
 
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });

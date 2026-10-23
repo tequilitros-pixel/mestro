@@ -2,8 +2,16 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { parseDateOnly, addDaysToDateOnly, formatDateOnly } from "@/lib/dateOnly";
-import { withRlsContext } from "@/lib/rls";
+import {
+  parseDateOnly,
+  addDaysToDateOnly,
+  businessDayStart,
+  formatBusinessDateOnly,
+  formatDateOnly,
+} from "@/lib/dateOnly";
+import { formatCivilDate } from "@/lib/dateTime";
+import { resolveBranchHourlyRate } from "@/lib/payroll/branchRates";
+import { unstable_cache } from "next/cache";
 
 /**
  * Analítica de nómina para dirección: costo real de mano de obra,
@@ -11,10 +19,8 @@ import { withRlsContext } from "@/lib/rls";
  * abierto por sucursal, por persona y por día.
  *
  * Notas importantes sobre los datos disponibles:
- * - El costo se calcula al vuelo como `horas × User.hourlyRate`. No
- *   existe un campo de costo guardado en el turno, ni historial de
- *   tarifas: si cambias la tarifa de alguien, los periodos pasados se
- *   recalculan con la tarifa nueva.
+ * - El costo se calcula al vuelo por checada con la tarifa específica
+ *   de sucursal vigente entonces, o la tarifa general si no la hay.
  * - Quien no tiene `hourlyRate` capturado aporta horas pero no costo.
  *   Por eso se reporta aparte `hoursWithoutRate` y `peopleWithoutRate`:
  *   sin eso, el costo total se vería artificialmente bajo.
@@ -73,6 +79,8 @@ export type PayrollAnalytics = {
     id: string;
     name: string;
     hourlyRate: number | null;
+    variableRate: boolean;
+    missingRate: boolean;
     cost: number;
     baseCost: number;
     overtimeCost: number;
@@ -163,347 +171,362 @@ function scheduledHoursOf(startTime: string, endTime: string) {
   return minutes / 60;
 }
 
-export async function getPayrollAnalytics(
-  from: string,
-  to: string,
-): Promise<{ error: string } | { success: true; data: PayrollAnalytics }> {
-  const currentUser = await getCurrentUser();
+/**
+ * Función interna cacheada que realiza todas las consultas costosas a la
+ * base de datos. No contiene lógica de autenticación (las cookies no son
+ * accesibles dentro de `unstable_cache`). El caché se invalida
+ * automáticamente cuando cambia cualquier dato de nómina mediante
+ * `revalidateTag('payroll-analytics')`.
+ */
+const fetchPayrollAnalyticsData = unstable_cache(
+  async (from: string, to: string): Promise<PayrollAnalytics> => {
+    const start = parseDateOnly(from);
+    const end = parseDateOnly(addDaysToDateOnly(to, 1));
+    const instantStart = businessDayStart(from);
+    const instantEnd = businessDayStart(addDaysToDateOnly(to, 1));
 
-  if (!currentUser) {
-    return { error: "No autorizado" };
-  }
+    const days = Math.round(hoursBetween(start, end) / 24);
 
-  if (currentUser.role !== "ADMIN") {
-    return { error: "Solo un administrador puede ver la nómina" };
-  }
+    const [entries, openEntries, scheduled, sales, branchList, overtime] = await Promise.all([
+      prisma.timeClockEntry.findMany({
+        where: {
+          clockIn: { gte: instantStart, lt: instantEnd },
+          clockOut: { not: null },
+        },
+        select: {
+          userId: true,
+          branchId: true,
+          clockIn: true,
+          clockOut: true,
+          user: { select: { id: true, name: true, hourlyRate: true } },
+          branch: { select: { id: true, name: true } },
+        },
+      }),
 
-  const start = parseDateOnly(from);
-  const end = parseDateOnly(addDaysToDateOnly(to, 1));
+      prisma.timeClockEntry.count({
+        where: { clockIn: { gte: instantStart, lt: instantEnd }, clockOut: null },
+      }),
 
-  if (!(start < end)) {
-    return { error: "El rango de fechas no es válido." };
-  }
+      // DESCANSO (día libre) no tiene sucursal ni horas: no cuenta como
+      // turno programado para comparar contra lo trabajado.
+      prisma.scheduledShift.findMany({
+        where: { date: { gte: start, lt: end }, type: "TURNO" },
+        select: {
+          userId: true,
+          branchId: true,
+          date: true,
+          startTime: true,
+          endTime: true,
+          branch: { select: { id: true, name: true } },
+        },
+      }),
 
-  const days = Math.round(hoursBetween(start, end) / 24);
+      // Sin RLS: estos datos son solo para administradores y se sirven
+      // desde caché. El acceso está protegido por la guardia de rol en
+      // getPayrollAnalytics antes de llamar a esta función.
+      prisma.posSale.findMany({
+        where: {
+          createdAt: { gte: instantStart, lt: instantEnd },
+          status: "COMPLETADA",
+        },
+        select: { total: true, createdAt: true, branchId: true },
+      }),
 
-  const [entries, openEntries, scheduled, sales, branchList, overtime] = await Promise.all([
-    prisma.timeClockEntry.findMany({
-      where: {
-        clockIn: { gte: start, lt: end },
-        clockOut: { not: null },
-      },
-      select: {
-        userId: true,
-        branchId: true,
-        clockIn: true,
-        clockOut: true,
-        user: { select: { id: true, name: true, hourlyRate: true } },
-        branch: { select: { id: true, name: true } },
-      },
-    }),
+      prisma.branch.findMany({
+        where: { active: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
 
-    prisma.timeClockEntry.count({
-      where: { clockIn: { gte: start, lt: end }, clockOut: null },
-    }),
+      /*
+       * El tiempo extra se guarda por semana completa (lunes a domingo).
+       * Solo se cuentan las semanas que INICIAN dentro del rango: contar
+       * una semana que empezó antes inflaría el periodo con horas que no
+       * le corresponden.
+       *
+       * Va tolerante a fallos a propósito: si la tabla todavía no existe
+       * (falta correr `prisma db push`), el resto del tablero de nómina
+       * debe seguir funcionando en vez de tirar la página entera.
+       */
+      fetchOvertimeSafely(start, end),
+    ]);
 
-    // DESCANSO (día libre) no tiene sucursal ni horas: no cuenta como
-    // turno programado para comparar contra lo trabajado.
-    prisma.scheduledShift.findMany({
-      where: { date: { gte: start, lt: end }, type: "TURNO" },
-      select: {
-        userId: true,
-        branchId: true,
-        date: true,
-        startTime: true,
-        endTime: true,
-        branch: { select: { id: true, name: true } },
-      },
-    }),
-
-    withRlsContext(currentUser, (tx) => tx.posSale.findMany({
-      where: {
-        createdAt: { gte: start, lt: end },
-        status: "COMPLETADA",
-      },
-      select: { total: true, createdAt: true, branchId: true },
-    })),
-
-    prisma.branch.findMany({
-      where: { active: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-
-    /*
-     * El tiempo extra se guarda por semana completa (lunes a domingo).
-     * Solo se cuentan las semanas que INICIAN dentro del rango: contar
-     * una semana que empezó antes inflaría el periodo con horas que no
-     * le corresponden.
-     *
-     * Va tolerante a fallos a propósito: si la tabla todavía no existe
-     * (falta correr `prisma db push`), el resto del tablero de nómina
-     * debe seguir funcionando en vez de tirar la página entera.
-     */
-    fetchOvertimeSafely(start, end),
-  ]);
-
-  const branchNames = new Map(branchList.map((b) => [b.id, b.name]));
-
-  type BranchAcc = {
-    id: string;
-    name: string;
-    cost: number;
-    overtimeCost: number;
-    hours: number;
-    shifts: number;
-    people: Set<string>;
-    sales: number;
-    scheduledHours: number;
-    missedShifts: number;
-  };
-
-  type PersonAcc = {
-    id: string;
-    name: string;
-    hourlyRate: number | null;
-    cost: number;
-    overtimeCost: number;
-    overtimeHours: number;
-    hours: number;
-    shifts: number;
-    branches: Set<string>;
-  };
-
-  const branchAcc = new Map<string, BranchAcc>();
-  const personAcc = new Map<string, PersonAcc>();
-  const dailyAcc = new Map<string, { cost: number; hours: number; sales: number }>();
-
-  function branchOf(id: string, fallbackName?: string): BranchAcc {
-    const existing = branchAcc.get(id);
-    if (existing) return existing;
-
-    const created: BranchAcc = {
-      id,
-      name: branchNames.get(id) ?? fallbackName ?? "Sucursal",
-      cost: 0,
-      overtimeCost: 0,
-      hours: 0,
-      shifts: 0,
-      people: new Set(),
-      sales: 0,
-      scheduledHours: 0,
-      missedShifts: 0,
-    };
-    branchAcc.set(id, created);
-    return created;
-  }
-
-  function dayOf(date: Date) {
-    const key = formatDateOnly(date);
-    const existing = dailyAcc.get(key);
-    if (existing) return existing;
-
-    const created = { cost: 0, hours: 0, sales: 0 };
-    dailyAcc.set(key, created);
-    return created;
-  }
-
-  let totalCost = 0;
-  let totalHours = 0;
-  let hoursWithoutRate = 0;
-  const peopleWithoutRate = new Set<string>();
-
-  for (const entry of entries) {
-    if (!entry.clockOut) continue;
-
-    const hours = hoursBetween(entry.clockIn, entry.clockOut);
-    if (!(hours > 0)) continue;
-
-    const rate =
-      entry.user.hourlyRate !== null ? Number(entry.user.hourlyRate) : null;
-    const cost = rate !== null ? hours * rate : 0;
-
-    if (rate === null) {
-      hoursWithoutRate += hours;
-      peopleWithoutRate.add(entry.userId);
+    const branchNames = new Map(branchList.map((b) => [b.id, b.name]));
+    const salaryRates = await prisma.salaryRate.findMany({
+      where: { scheme: "HORA", userId: { in: [...new Set(entries.map((entry) => entry.userId))] } },
+      select: { userId: true, branchId: true, amount: true, effectiveFrom: true, effectiveTo: true },
+      orderBy: { effectiveFrom: "desc" },
+    });
+    const ratesByUser = new Map<string, typeof salaryRates>();
+    for (const rate of salaryRates) {
+      const list = ratesByUser.get(rate.userId) ?? [];
+      list.push(rate);
+      ratesByUser.set(rate.userId, list);
     }
 
-    totalHours += hours;
-    totalCost += cost;
+    type BranchAcc = {
+      id: string;
+      name: string;
+      cost: number;
+      overtimeCost: number;
+      hours: number;
+      shifts: number;
+      people: Set<string>;
+      sales: number;
+      scheduledHours: number;
+      missedShifts: number;
+    };
 
-    const branch = branchOf(entry.branchId, entry.branch.name);
-    branch.hours += hours;
-    branch.cost += cost;
-    branch.shifts += 1;
-    branch.people.add(entry.userId);
+    type PersonAcc = {
+      id: string;
+      name: string;
+      hourlyRate: number | null;
+      variableRate: boolean;
+      missingRate: boolean;
+      cost: number;
+      overtimeCost: number;
+      overtimeHours: number;
+      hours: number;
+      shifts: number;
+      branches: Set<string>;
+    };
 
-    const person =
-      personAcc.get(entry.userId) ??
-      {
-        id: entry.userId,
-        name: entry.user.name,
-        hourlyRate: rate,
+    const branchAcc = new Map<string, BranchAcc>();
+    const personAcc = new Map<string, PersonAcc>();
+    const dailyAcc = new Map<string, { cost: number; hours: number; sales: number }>();
+
+    function branchOf(id: string, fallbackName?: string): BranchAcc {
+      const existing = branchAcc.get(id);
+      if (existing) return existing;
+
+      const created: BranchAcc = {
+        id,
+        name: branchNames.get(id) ?? fallbackName ?? "Sucursal",
         cost: 0,
         overtimeCost: 0,
-        overtimeHours: 0,
         hours: 0,
         shifts: 0,
-        branches: new Set<string>(),
+        people: new Set(),
+        sales: 0,
+        scheduledHours: 0,
+        missedShifts: 0,
       };
-
-    person.hours += hours;
-    person.cost += cost;
-    person.shifts += 1;
-    person.branches.add(entry.branch.name);
-    personAcc.set(entry.userId, person);
-
-    const day = dayOf(entry.clockIn);
-    day.hours += hours;
-    day.cost += cost;
-  }
-
-  /*
-   * Turnos programados: horas planeadas y ausencias. No hay relación
-   * directa entre ScheduledShift y TimeClockEntry, así que una
-   * ausencia se infiere como "había turno programado ese día para esa
-   * persona en esa sucursal y no existe ninguna checada que empate".
-   */
-  const workedKeys = new Set(
-    entries.map(
-      (e) => `${e.userId}-${e.branchId}-${formatDateOnly(e.clockIn)}`,
-    ),
-  );
-
-  let totalScheduledHours = 0;
-  let totalMissedShifts = 0;
-
-  for (const shift of scheduled) {
-    // Defensivo: la consulta ya filtra type TURNO, pero branchId y las
-    // horas son opcionales a nivel de schema (por DESCANSO).
-    if (!shift.branchId || !shift.startTime || !shift.endTime || !shift.branch) continue;
-
-    const hours = scheduledHoursOf(shift.startTime, shift.endTime);
-    totalScheduledHours += hours;
-
-    const branch = branchOf(shift.branchId, shift.branch.name);
-    branch.scheduledHours += hours;
-
-    const key = `${shift.userId}-${shift.branchId}-${formatDateOnly(shift.date)}`;
-    if (!workedKeys.has(key)) {
-      totalMissedShifts += 1;
-      branch.missedShifts += 1;
-    }
-  }
-
-  /*
-   * Tiempo extra: solo el APROBADO suma al costo. El pendiente se
-   * reporta aparte para que dirección sepa cuánto dinero está por
-   * autorizarse, sin inflar el costo del periodo.
-   */
-  let overtimeCost = 0;
-  let overtimeHours = 0;
-  let pendingOvertimeCost = 0;
-  let pendingOvertimeCount = 0;
-
-  for (const record of overtime.records) {
-    const amount = record.amount !== null ? Number(record.amount) : 0;
-
-    if (record.status === "PENDIENTE") {
-      pendingOvertimeCost += amount;
-      pendingOvertimeCount += 1;
-      continue;
+      branchAcc.set(id, created);
+      return created;
     }
 
-    if (record.status !== "APROBADO") continue;
+    function dayOf(date: Date) {
+      const key = formatBusinessDateOnly(date);
+      const existing = dailyAcc.get(key);
+      if (existing) return existing;
 
-    const recordHours = Number(record.overtimeHours);
-
-    overtimeCost += amount;
-    overtimeHours += recordHours;
-    totalCost += amount;
-
-    const branch = branchAcc.get(record.branchId);
-    if (branch) {
-      branch.cost += amount;
-      branch.overtimeCost += amount;
+      const created = { cost: 0, hours: 0, sales: 0 };
+      dailyAcc.set(key, created);
+      return created;
     }
 
-    const person = personAcc.get(record.userId);
-    if (person) {
-      person.cost += amount;
-      person.overtimeCost += amount;
-      person.overtimeHours += recordHours;
+    let totalCost = 0;
+    let totalHours = 0;
+    let hoursWithoutRate = 0;
+    const peopleWithoutRate = new Set<string>();
+
+    for (const entry of entries) {
+      if (!entry.clockOut) continue;
+
+      const hours = hoursBetween(entry.clockIn, entry.clockOut);
+      if (!(hours > 0)) continue;
+
+      const rate = resolveBranchHourlyRate(
+        (ratesByUser.get(entry.userId) ?? []).map((item) => ({ ...item, amount: Number(item.amount) })),
+        entry.branchId, entry.clockIn,
+        entry.user.hourlyRate !== null ? Number(entry.user.hourlyRate) : null,
+      );
+      const cost = rate !== null ? hours * rate : 0;
+
+      if (rate === null) {
+        hoursWithoutRate += hours;
+        peopleWithoutRate.add(entry.userId);
+      }
+
+      totalHours += hours;
+      totalCost += cost;
+
+      const branch = branchOf(entry.branchId, entry.branch.name);
+      branch.hours += hours;
+      branch.cost += cost;
+      branch.shifts += 1;
+      branch.people.add(entry.userId);
+
+      const person =
+        personAcc.get(entry.userId) ??
+        {
+          id: entry.userId,
+          name: entry.user.name,
+          hourlyRate: rate,
+          variableRate: false,
+          missingRate: rate === null,
+          cost: 0,
+          overtimeCost: 0,
+          overtimeHours: 0,
+          hours: 0,
+          shifts: 0,
+          branches: new Set<string>(),
+        };
+
+      if (rate === null) person.missingRate = true;
+      else if (person.hourlyRate !== null && person.hourlyRate !== rate) person.variableRate = true;
+      else if (person.hourlyRate === null && !person.missingRate) person.hourlyRate = rate;
+
+      person.hours += hours;
+      person.cost += cost;
+      person.shifts += 1;
+      person.branches.add(entry.branch.name);
+      personAcc.set(entry.userId, person);
+
+      const day = dayOf(entry.clockIn);
+      day.hours += hours;
+      day.cost += cost;
     }
-  }
 
-  let totalSales = 0;
+    /*
+     * Turnos programados: horas planeadas y ausencias. No hay relación
+     * directa entre ScheduledShift y TimeClockEntry, así que una
+     * ausencia se infiere como "había turno programado ese día para esa
+     * persona en esa sucursal y no existe ninguna checada que empate".
+     */
+    const workedKeys = new Set(
+      entries.map(
+        (e) => `${e.userId}-${e.branchId}-${formatBusinessDateOnly(e.clockIn)}`,
+      ),
+    );
 
-  for (const sale of sales) {
-    totalSales += sale.total;
+    let totalScheduledHours = 0;
+    let totalMissedShifts = 0;
 
-    const branch = branchOf(sale.branchId);
-    branch.sales += sale.total;
+    for (const shift of scheduled) {
+      // Defensivo: la consulta ya filtra type TURNO, pero branchId y las
+      // horas son opcionales a nivel de schema (por DESCANSO).
+      if (!shift.branchId || !shift.startTime || !shift.endTime || !shift.branch) continue;
 
-    dayOf(sale.createdAt).sales += sale.total;
-  }
+      const hours = scheduledHoursOf(shift.startTime, shift.endTime);
+      totalScheduledHours += hours;
 
-  const weeks = Math.max(days / 7, 1);
+      const branch = branchOf(shift.branchId, shift.branch.name);
+      branch.scheduledHours += hours;
 
-  const people = Array.from(personAcc.values())
-    .map((p) => {
-      const weeklyHours = p.hours / weeks;
+      const key = `${shift.userId}-${shift.branchId}-${formatDateOnly(shift.date)}`;
+      if (!workedKeys.has(key)) {
+        totalMissedShifts += 1;
+        branch.missedShifts += 1;
+      }
+    }
 
-      return {
-        id: p.id,
-        name: p.name,
-        hourlyRate: p.hourlyRate,
-        cost: p.cost,
-        baseCost: p.cost - p.overtimeCost,
-        overtimeCost: p.overtimeCost,
-        overtimeHours: p.overtimeHours,
-        hours: p.hours,
-        shifts: p.shifts,
-        branches: Array.from(p.branches).sort((a, b) => a.localeCompare(b, "es")),
-        averageShiftHours: p.shifts > 0 ? p.hours / p.shifts : 0,
-        weeklyHours,
-        overLegalLimit: weeklyHours > MEXICAN_WEEKLY_HOUR_LIMIT,
-      };
-    })
-    .sort((a, b) => b.hours - a.hours);
+    /*
+     * Tiempo extra: solo el APROBADO suma al costo. El pendiente se
+     * reporta aparte para que dirección sepa cuánto dinero está por
+     * autorizarse, sin inflar el costo del periodo.
+     */
+    let overtimeCost = 0;
+    let overtimeHours = 0;
+    let pendingOvertimeCost = 0;
+    let pendingOvertimeCount = 0;
 
-  const branches = Array.from(branchAcc.values())
-    .map((b) => ({
-      id: b.id,
-      name: b.name,
-      cost: b.cost,
-      baseCost: b.cost - b.overtimeCost,
-      overtimeCost: b.overtimeCost,
-      hours: b.hours,
-      people: b.people.size,
-      shifts: b.shifts,
-      sales: b.sales,
-      laborShare: b.sales > 0 ? (b.cost / b.sales) * 100 : null,
-      scheduledHours: b.scheduledHours,
-      missedShifts: b.missedShifts,
-    }))
-    .sort((a, b) => b.cost - a.cost);
+    for (const record of overtime.records) {
+      const amount = record.amount !== null ? Number(record.amount) : 0;
 
-  const daily = Array.from(dailyAcc.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, value]) => ({
-      date,
-      label: new Date(`${date}T12:00:00`).toLocaleDateString("es-MX", {
-        day: "2-digit",
-        month: "short",
-      }),
-      cost: Math.round(value.cost),
-      hours: Math.round(value.hours * 10) / 10,
-      sales: Math.round(value.sales),
-    }));
+      if (record.status === "PENDIENTE") {
+        pendingOvertimeCost += amount;
+        pendingOvertimeCount += 1;
+        continue;
+      }
 
-  return {
-    success: true,
-    data: {
+      if (record.status !== "APROBADO") continue;
+
+      const recordHours = Number(record.overtimeHours);
+
+      overtimeCost += amount;
+      overtimeHours += recordHours;
+      totalCost += amount;
+
+      const branch = branchAcc.get(record.branchId);
+      if (branch) {
+        branch.cost += amount;
+        branch.overtimeCost += amount;
+      }
+
+      const person = personAcc.get(record.userId);
+      if (person) {
+        person.cost += amount;
+        person.overtimeCost += amount;
+        person.overtimeHours += recordHours;
+      }
+    }
+
+    let totalSales = 0;
+
+    for (const sale of sales) {
+      totalSales += sale.total;
+
+      const branch = branchOf(sale.branchId);
+      branch.sales += sale.total;
+
+      dayOf(sale.createdAt).sales += sale.total;
+    }
+
+    const weeks = Math.max(days / 7, 1);
+
+    const people = Array.from(personAcc.values())
+      .map((p) => {
+        const weeklyHours = p.hours / weeks;
+
+        return {
+          id: p.id,
+          name: p.name,
+          hourlyRate: p.hourlyRate,
+          variableRate: p.variableRate,
+          missingRate: p.missingRate,
+          cost: p.cost,
+          baseCost: p.cost - p.overtimeCost,
+          overtimeCost: p.overtimeCost,
+          overtimeHours: p.overtimeHours,
+          hours: p.hours,
+          shifts: p.shifts,
+          branches: Array.from(p.branches).sort((a, b) => a.localeCompare(b, "es")),
+          averageShiftHours: p.shifts > 0 ? p.hours / p.shifts : 0,
+          weeklyHours,
+          overLegalLimit: weeklyHours > MEXICAN_WEEKLY_HOUR_LIMIT,
+        };
+      })
+      .sort((a, b) => b.hours - a.hours);
+
+    const branches = Array.from(branchAcc.values())
+      .map((b) => ({
+        id: b.id,
+        name: b.name,
+        cost: b.cost,
+        baseCost: b.cost - b.overtimeCost,
+        overtimeCost: b.overtimeCost,
+        hours: b.hours,
+        people: b.people.size,
+        shifts: b.shifts,
+        sales: b.sales,
+        laborShare: b.sales > 0 ? (b.cost / b.sales) * 100 : null,
+        scheduledHours: b.scheduledHours,
+        missedShifts: b.missedShifts,
+      }))
+      .sort((a, b) => b.cost - a.cost);
+
+    const daily = Array.from(dailyAcc.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, value]) => ({
+        date,
+        label: formatCivilDate(`${date}T00:00:00.000Z`, { day: "2-digit", month: "short" }),
+        cost: Math.round(value.cost),
+        hours: Math.round(value.hours * 10) / 10,
+        sales: Math.round(value.sales),
+      }));
+
+    return {
       from,
       to,
       days,
@@ -533,6 +556,33 @@ export async function getPayrollAnalytics(
       branches,
       people,
       daily,
-    },
-  };
+    };
+  },
+  ["payroll-analytics"],
+  { tags: ["payroll-analytics"], revalidate: 300 }, // 5 min TTL
+);
+
+export async function getPayrollAnalytics(
+  from: string,
+  to: string,
+): Promise<{ error: string } | { success: true; data: PayrollAnalytics }> {
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) {
+    return { error: "No autorizado" };
+  }
+
+  if (currentUser.role !== "ADMIN") {
+    return { error: "Solo un administrador puede ver la nómina" };
+  }
+
+  const start = parseDateOnly(from);
+  const end = parseDateOnly(addDaysToDateOnly(to, 1));
+
+  if (!(start < end)) {
+    return { error: "El rango de fechas no es válido." };
+  }
+
+  const data = await fetchPayrollAnalyticsData(from, to);
+  return { success: true, data };
 }

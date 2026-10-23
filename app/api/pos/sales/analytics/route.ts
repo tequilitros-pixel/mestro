@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { addDaysToDateOnly, businessDayStart } from "@/lib/dateOnly";
 import { withRlsContext } from "@/lib/rls";
 
@@ -13,7 +13,7 @@ const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
  * acceso.
  */
 export async function GET(request: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/pos", "/pos/sales"]);
 
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -46,19 +46,23 @@ export async function GET(request: NextRequest) {
     },
     select: {
       id: true,
+      code: true,
       total: true,
       createdAt: true,
       branch: { select: { id: true, name: true } },
+      soldBy: { select: { id: true, name: true } },
       payments: { select: { method: true, amount: true } },
       items: {
         select: {
           name: true,
           quantity: true,
           lineTotal: true,
+          isCustom: true,
           variant: {
             select: {
               product: {
                 select: {
+                  id: true,
                   name: true,
                   category: { select: { name: true } },
                 },
@@ -74,14 +78,18 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(
     sales.map((s) => ({
       id: s.id,
+      code: s.code,
       total: s.total,
       createdAt: s.createdAt.toISOString(),
       branch: s.branch,
+      soldBy: s.soldBy,
       payments: s.payments.map((p) => ({ method: p.method, amount: p.amount })),
       items: s.items.map((i) => ({
         name: i.name,
         quantity: i.quantity,
         lineTotal: i.lineTotal,
+        isCustom: i.isCustom,
+        productId: i.variant?.product.id ?? null,
         productName: i.variant?.product.name ?? null,
         categoryName: i.variant?.product.category.name ?? null,
       })),

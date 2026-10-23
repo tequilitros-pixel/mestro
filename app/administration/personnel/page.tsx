@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, startTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, startTransition } from "react";
 import Link from "next/link";
 import {
   getPersonnel,
@@ -42,6 +42,7 @@ export default function PersonnelPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<PersonnelRole | "TODOS">(
@@ -58,10 +59,10 @@ export default function PersonnelPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  async function loadAll() {
+  const loadAll = useCallback(async (includeArchived = showArchived) => {
     try {
       const [usersData, branchesData] = await Promise.all([
-        getPersonnel(),
+        getPersonnel(includeArchived),
         getBranchesForAssignment(),
       ]);
       startTransition(() => {
@@ -75,11 +76,11 @@ export default function PersonnelPage() {
         setLoading(false);
       });
     }
-  }
+  }, [showArchived]);
 
   useEffect(() => {
     loadAll();
-  }, []);
+  }, [loadAll]);
 
   function toggleBranch(branchId: string) {
     setBranchIds((prev) =>
@@ -226,6 +227,17 @@ export default function PersonnelPage() {
 
                               <div className="flex flex-wrap gap-2">
                                 <button
+                                  onClick={() => setShowArchived((current) => !current)}
+                                  className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition ${
+                                    showArchived
+                                      ? "bg-secondary text-on-secondary"
+                                      : "border border-outline-variant text-on-surface-variant hover:border-primary/40 hover:text-on-surface"
+                                  }`}
+                                >
+                                  {showArchived ? "Ocultar archivados" : "Ver archivados"}
+                                </button>
+
+                                <button
                                   onClick={() => setRoleFilter("TODOS")}
                                   className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition ${
                                     roleFilter === "TODOS"
@@ -284,7 +296,9 @@ export default function PersonnelPage() {
                                       <tr>
                                         <td colSpan={5} className="px-4 py-10 text-center text-outline">
                                           {users.length === 0
-                                            ? "Sin usuarios registrados."
+                                            ? showArchived
+                                              ? "Sin usuarios registrados."
+                                              : "Sin usuarios activos."
                                             : "Ningún usuario coincide con la búsqueda."}
                                         </td>
                                       </tr>

@@ -7,7 +7,7 @@ export default async function EventPackagesPage() {
   const [packages, products] = await Promise.all([prisma.eventPackage.findMany({
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { items: true } } },
-  }), prisma.inventoryProduct.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, code: true, name: true, category: true, unit: true } })]);
+  }), prisma.inventoryProduct.findMany({ where: { isActive: true, archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, code: true, name: true, category: true, unit: true } })]);
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">

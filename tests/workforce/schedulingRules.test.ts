@@ -91,18 +91,20 @@ test("inactive employment blocks", () =>
       periodStart: date("2026-09-01"),
       periodEnd: date("2026-09-07"),
       employmentStatus: "INACTIVE",
+      branchAuthorized: true,
       overlaps: false,
     }).blockers.includes("INACTIVE_EMPLOYMENT"),
   ));
-test("active employment needs no branch assignment", () =>
+test("unauthorized branch blocks", () =>
   assert.ok(
     validateShiftFacts({
       shift: window("2026-09-01T10:00:00Z", "2026-09-01T12:00:00Z"),
       periodStart: date("2026-09-01"),
       periodEnd: date("2026-09-07"),
       employmentStatus: "ACTIVE",
+      branchAuthorized: false,
       overlaps: false,
-    }).blockers.length === 0,
+    }).blockers.includes("UNAUTHORIZED_BRANCH"),
   ));
 test("outside period blocks", () =>
   assert.ok(
@@ -114,6 +116,7 @@ test("outside period blocks", () =>
       periodStart: date("2026-09-01"),
       periodEnd: date("2026-09-07"),
       employmentStatus: "ACTIVE",
+      branchAuthorized: true,
       overlaps: false,
     }).blockers.includes("OUTSIDE_PERIOD"),
   ));

@@ -31,7 +31,12 @@ export default function EventStatusSelector({
   function handleChange(newStatus: ServiceEventStatus) {
     setStatus(newStatus);
     startTransition(async () => {
-      await updateEventStatusAction(eventId, newStatus);
+      const result = await updateEventStatusAction(eventId, newStatus);
+      if (!result.success) {
+        setStatus(currentStatus);
+        showToast(result.error);
+        return;
+      }
       router.refresh();
       showToast(`Estado actualizado a "${statusLabels[newStatus]}".`);
     });

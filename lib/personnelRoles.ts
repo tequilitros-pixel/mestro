@@ -38,7 +38,7 @@ export const ROLE_LABELS: Record<PersonnelRole, string> = {
   CONSULTA: "Consulta",
 };
 
-export const ROLES_CON_SUCURSAL: PersonnelRole[] = ["GERENTE", "ENCARGADO"];
+export const ROLES_CON_SUCURSAL: PersonnelRole[] = ["ADMIN", "GERENTE", "ENCARGADO"];
 
 export const ROLE_ICON: Record<PersonnelRole, ComponentType<IconProps>> = {
   ADMIN: CrownIcon,

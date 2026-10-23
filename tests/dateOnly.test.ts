@@ -4,6 +4,7 @@ import {
   businessDayStart,
   formatBusinessDateOnly,
   lastSalesDayOfMonth,
+  parseDateOnly,
 } from "../lib/dateOnly";
 
 test("el periodo mensual termina el dia 30 y respeta meses mas cortos", () => {
@@ -17,4 +18,9 @@ test("el inicio del dia de negocio es medianoche de Ciudad de Mexico", () => {
   const start = businessDayStart("2026-08-13");
   assert.equal(start.toISOString(), "2026-08-13T06:00:00.000Z");
   assert.equal(formatBusinessDateOnly(start), "2026-08-13");
+});
+
+test("las fechas civiles inválidas se rechazan", () => {
+  assert.throws(() => parseDateOnly("2026-02-30"));
+  assert.throws(() => parseDateOnly("08/13/2026"));
 });

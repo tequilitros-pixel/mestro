@@ -1,3 +1,5 @@
+import { formatBusinessDateTime } from "@/lib/dateTime";
+
 export type CookingTemperatureReading = {
   temperatureTop: number | null;
   temperatureMiddle: number | null;
@@ -68,8 +70,8 @@ export function buildCookingMessages({
 
   const messages = [
     hasStartedVapor
-      ? "El inicio de vapor quedó registrado correctamente."
-      : "El vapor aún no ha sido iniciado. El proceso permanece pendiente de calentamiento.",
+      ? "El vapor está en marcha; el inicio quedó registrado en MAESTRO."
+      : "El vapor está por iniciar y el horno permanece en preparación.",
   ];
 
   if (!lastTemperature) {
@@ -168,10 +170,7 @@ export function formatNumber(
 }
 
 export function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatBusinessDateTime(date);
 }
 
 export function formatDuration(start: Date, end: Date) {

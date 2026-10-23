@@ -3,7 +3,7 @@
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export type CreateLiquorRecipeState = {
@@ -14,11 +14,7 @@ export async function createLiquorRecipeAction(
   _previousState: CreateLiquorRecipeState,
   formData: FormData
 ): Promise<CreateLiquorRecipeState> {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const user = await requireModuleActionAccess("/liquors/recipes");
 
   const productId = String(formData.get("productId") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();

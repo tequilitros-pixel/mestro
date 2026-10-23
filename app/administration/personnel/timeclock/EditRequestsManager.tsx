@@ -4,6 +4,7 @@ import { useState } from "react";
 import { reviewTimeClockEditRequestAction } from "@/app/actions/timeclock";
 import { useToast } from "@/components/ui/Toast";
 import { CheckIcon, XIcon } from "@/components/ui/icons";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 type EditRequest = {
   id: string;
@@ -17,10 +18,7 @@ type EditRequest = {
 };
 
 function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return formatBusinessDateTime(iso);
 }
 
 export default function EditRequestsManager({

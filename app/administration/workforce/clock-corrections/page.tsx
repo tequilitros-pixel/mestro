@@ -3,12 +3,6 @@ import { requireAdmin } from "@/lib/auth";
 import { listPendingCorrections } from "@/lib/workforce/clock/service";
 import { workforceCorrectionDecisionAction } from "@/app/actions/workforceClock";
 
-const correctionTypeLabels: Record<string, string> = {
-  MODIFY_OCCURRED_TIME: "Editar hora",
-  ADD_MISSING_EVENT: "Agregar evento faltante",
-  VOID_EVENT: "Anular registro",
-};
-
 export default async function CorrectionsPage({
   searchParams,
 }: {
@@ -42,7 +36,7 @@ export default async function CorrectionsPage({
         items.map((item) => (
           <Card key={item.id}>
             <h3 className="font-bold">
-              {item.employment.employee.displayName} · {correctionTypeLabels[item.type] ?? item.type}
+              {item.employment.employee.displayName} · {item.type}
             </h3>
             <p className="text-sm">{item.reason}</p>
             <p className="text-xs text-on-surface-variant">

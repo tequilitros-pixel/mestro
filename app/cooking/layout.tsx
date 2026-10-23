@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { requireModuleAccess } from "@/lib/auth";
+import { requireUserModuleAccess } from "@/lib/moduleAccess";
 import { getModuleKeyForPath } from "@/lib/permission-modules";
 
 export default async function ModuleLayout({
@@ -13,7 +13,7 @@ export default async function ModuleLayout({
   const moduleKey = getModuleKeyForPath(pathname);
 
   if (moduleKey) {
-    await requireModuleAccess(moduleKey);
+    await requireUserModuleAccess(moduleKey);
   }
 
   return <>{children}</>;

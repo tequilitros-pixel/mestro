@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import { LiquorBottleStatus } from "@prisma/client";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { formatBusinessDate } from "@/lib/dateTime";
 import {
   type IconProps,
   PackageIcon,
@@ -742,11 +743,11 @@ function formatDate(value: DateTimeValue) {
     return "—";
   }
 
-  return new Intl.DateTimeFormat("es-MX", {
+  return formatBusinessDate(value, {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  }).format(value);
+  });
 }
 
 function formatNumber(

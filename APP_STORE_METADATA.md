@@ -199,37 +199,25 @@ https://maestro-destiladora.space/terms-of-service
 
 ---
 
-## 🎯 RATING CLASIFICACIÓN
+## 🎯 RATING CLASIFICACIÓN (CLASIFICACIÓN DE EDAD)
 
-### Age Rating
+### Age Rating Estimado
 ```
-4+
+17+ (o 12+ según país)
 ```
 
-**Categorías (Todas NO aplicable):**
-- [ ] Frequent/Intense Violence
-- [ ] Infrequent/Mild Violence
-- [ ] Frequent/Intense Mature/Suggestive Themes
-- [ ] Infrequent/Mild Mature/Suggestive Themes
-- [ ] Frequent/Intense Profanity or Crude Humor
-- [ ] Infrequent/Mild Profanity or Crude Humor
-- [ ] Frequent/Intense Alcohol, Tobacco, or Drug Use or References
-- [ ] Infrequent/Mild Alcohol, Tobacco, or Drug Use or References
-- [ ] Frequent/Intense Medical/Treatment Information
-- [ ] Infrequent/Mild Medical/Treatment Information
-- [ ] Gambling
-- [ ] Simulated Gambling
-- [ ] Horror/Fear Themes
-- [ ] Prolonged Graphic or Sadistic Violence
-- [ ] Graphic Sexual Content and Nudity
-- [ ] Frequent/Intense Offensive Language
-- [ ] Frequent/Intense Sexual Content
+**Cuestionario de Contenido en App Store Connect:**
+- [ ] Frequent/Intense Violence: **No**
+- [ ] Frequent/Intense Mature/Suggestive Themes: **No**
+- [ ] Frequent/Intense Profanity or Crude Humor: **No**
+- [x] **Alcohol, Tobacco, or Drug Use or References: SÍ (Infrequent/Mild)** ⚠️ CRÍTICO: Debe marcarse SÍ porque Maestro gestiona operaciones de una destiladora de tequila (milling, fermentación, destilación, licores y Tequilitros). Si se marca "No", Apple rechazará la app por clasificación de edad inexacta (Guideline 2.3.8).
+- [ ] Gambling / Simulated Gambling: **No**
+- [ ] Contenido Sexual o Desnudez: **No**
 
-**Notas:** 
-- Es una app empresarial sin contenido objetable
-- No hay violencia, lenguaje ofensivo, contenido sexual
-- Es segura para todos los públicos
-- Rating 4+ es correcto
+**Notas para el Cuestionario:** 
+- Es una app empresarial para la operación de una destilería de tequila ("Destiladora del Norte").
+- No contiene juegos de azar, violencia ni lenguaje explícito.
+- Al declarar las referencias a alcohol, Apple asignará automáticamente la clasificación 17+ requerida para bebidas alcohólicas.
 
 ---
 
@@ -307,20 +295,31 @@ Spanish (Spain) - Si quieres otro español
 
 ---
 
-## 📊 DEMO ACCOUNT (Para Review)
+## 📊 REVIEW INFORMATION & NOTAS PARA APPLE REVIEW (CRÍTICO)
 
-**Si App Store pide demo account:**
-
+### Sign-In Information (Obligatorio en App Store Connect)
 ```
-Usuario: demo@destiladora.space
-Contraseña: [GENERA UNA SEGURA]
-Rol: OPERATOR (acceso limitado para demostración)
+Sign-in required: [✓] Marcar casilla
+User Name: demo@destiladora.space (o usuario demo activo)
+Password: [Contraseña del usuario demo]
+```
+⚠️ **IMPORTANTE:** El usuario demo debe poder entrar usando el formulario de usuario/contraseña directo, **sin exigir código 2FA por SMS** (los revisores de Apple están en EE.UU. o Irlanda y no tienen acceso a teléfonos locales).
 
-Notas para Reviewer:
-- Usuario demo tiene permisos básicos
-- Puede ver dashboard, inventario, crear ventas
-- No puede cambiar usuarios ni permisos
-- Datos se resetean diariamente
+### Notes for App Reviewer (Copiar en inglés en el campo "Notes"):
+```text
+Dear Apple Review Team,
+
+Maestro is a dedicated enterprise operational management application for authorized employees and field operators of Destiladora del Norte (a Mexican artisanal tequila distillery).
+
+Key native device features utilized in this app:
+1. Camera & Photo Library (NSCameraUsageDescription & NSPhotoLibraryUsageDescription): Used by operators to take and upload photographic evidence of cash registers, inventory receipts, and quality inspection stages.
+2. Geolocation (NSLocationWhenInUseUsageDescription): Used by the employee Timeclock feature to verify that the employee is physically present within the designated branch coordinates when clocking in or out.
+3. Persistent Local Storage: Used by the point of sale (POS) for offline order drafting and local tab management.
+
+Account notes:
+- The demo credentials provided above allow immediate access without requiring SMS verification.
+- User accounts are provisioned internally by the company's management; there is no open public self-registration.
+- Account deletion and data removal requests can be initiated from the user's profile screen or via support@maestro-destiladora.space.
 ```
 
 ---
@@ -331,13 +330,14 @@ Notas para Reviewer:
 - [ ] App Name: "Maestro"
 - [ ] Subtitle: "Sistema Operacional"
 - [ ] Category: Business / Productivity
-- [ ] Age Rating: 4+
+- [ ] Age Rating: 17+ (debido a mención/industria de destilería de tequila)
 
 ### Descripción
 - [ ] Description completa (copiar exactamente)
 - [ ] Keywords (copiar exactamente)
-- [ ] Support URL válida
-- [ ] Privacy Policy URL válida
+- [ ] Support URL válida: https://maestro-destiladora.space/support
+- [ ] Privacy Policy URL válida: https://maestro-destiladora.space/privacy-policy
+- [ ] Terms URL válida: https://maestro-destiladora.space/terms-of-service
 
 ### Imágenes
 - [ ] Preview video (30 seg)

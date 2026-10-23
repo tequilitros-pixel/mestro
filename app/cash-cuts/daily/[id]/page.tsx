@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/icons";
  import { useEffect, useState, useCallback, startTransition } from "react";
 import { enqueueOperation } from "@/lib/offline/queue";
+import { formatBusinessDateTime } from "@/lib/dateTime";
+import { envelopeNumberForClose } from "@/lib/cash-cuts/envelopeNumber";
 
 function localCutKey(id: string) { return `maestro:cash-cut:${id}`; }
 function saveLocalCut(cut: CashCut) { localStorage.setItem(localCutKey(cut.id), JSON.stringify(cut)); }
@@ -36,6 +38,8 @@ interface Outflow {
   id: string;
   concept: string;
   category: string;
+  categoryId?: string;
+  categoryRef?: { name: string } | null;
   amount: number;
   occurredAt?: string;
   notes?: string | null;
@@ -44,6 +48,9 @@ interface Outflow {
 interface Inflow {
   id: string;
   type: string;
+  categoryId?: string;
+  categoryNameSnapshot?: string | null;
+  categoryRef?: { name: string } | null;
   amount: number;
   occurredAt?: string;
   notes?: string | null;
@@ -143,16 +150,6 @@ const METODOS = [
   { key: "OTRO", label: "Otro" },
 ];
 
-const CATEGORIAS_SALIDA = [
-  "Insumos de barra",
-  "Hielo",
-  "Limpieza",
-  "Mantenimiento",
-  "Transporte",
-  "Cambio",
-  "Otro",
-];
-
 const TIPOS_EVIDENCIA = [
   { key: "DINERO_CONTADO", label: "Dinero contado" },
   { key: "SOBRE", label: "Sobre" },
@@ -181,16 +178,13 @@ const formatMoney = (value: number | null | undefined) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value ?? 0);
 
 const formatDateTime = (value: string | null | undefined) =>
-  value
-    ? new Intl.DateTimeFormat("es-MX", {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: "America/Mexico_City",
-      }).format(new Date(value))
-    : "Sin registrar";
+  value ? formatBusinessDateTime(value) : "Sin registrar";
 
 function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
   const posSales = cashCut.posSales ?? [];
+  const aperturaBreakdown = cashCut.denominations.filter((d) => d.context === "APERTURA");
+  const cierreBreakdown = cashCut.denominations.filter((d) => d.context === "CIERRE");
+  const siguienteTurnoBreakdown = cashCut.denominations.filter((d) => d.context === "SIGUIENTE_TURNO");
   const products = new Map<string, { name: string; quantity: number; total: number }>();
   for (const sale of posSales) {
     for (const item of sale.items) {
@@ -262,6 +256,26 @@ function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
             {cashCut.envelopeNotes && <p className="text-sm text-on-surface-variant">{cashCut.envelopeNotes}</p>}
           </Card>
         )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-base font-bold text-on-surface">Denominaciones registradas</h2>
+        <div className="space-y-3">
+          {aperturaBreakdown.length > 0 && (
+            <DenominationBreakdownView title="Fondo registrado al abrir" rows={aperturaBreakdown} />
+          )}
+          {cierreBreakdown.length > 0 && (
+            <DenominationBreakdownView title="Efectivo contado al cerrar" rows={cierreBreakdown} />
+          )}
+          {siguienteTurnoBreakdown.length > 0 && (
+            <DenominationBreakdownView title="Fondo dejado para el siguiente turno" rows={siguienteTurnoBreakdown} />
+          )}
+          {aperturaBreakdown.length === 0 && cierreBreakdown.length === 0 && siguienteTurnoBreakdown.length === 0 && (
+            <Card>
+              <p className="text-sm text-on-surface-variant">Este corte no tiene desglose de billetes y monedas registrado.</p>
+            </Card>
+          )}
+        </div>
       </section>
 
       <section>
@@ -540,6 +554,8 @@ const load = useCallback(async () => {
         )}
       </div>
 
+      <OpenCashSummary cashCut={cashCut} />
+
       <Stepper current={step} cashCut={cashCut} onSelect={setStep} />
 
       {step === "ventas" && (
@@ -560,6 +576,40 @@ const load = useCallback(async () => {
 
       <StepFooterNav current={step} onSelect={setStep} />
     </div>
+  );
+}
+
+function OpenCashSummary({ cashCut }: { cashCut: CashCut }) {
+  const cashSales = cashCut.salesByMethod.find((sale) => sale.method === "EFECTIVO")?.amount ?? 0;
+  const totalInflows = cashCut.inflows.reduce((sum, inflow) => sum + inflow.amount, 0);
+  const totalOutflows = cashCut.outflows.reduce((sum, outflow) => sum + outflow.amount, 0);
+  const expectedCash = cashCut.startingFund + cashSales + totalInflows - totalOutflows;
+  const openingBreakdown = cashCut.denominations.filter((d) => d.context === "APERTURA");
+
+  return (
+    <section className="mb-6 space-y-3" aria-label="Efectivo registrado del corte">
+      <div>
+        <h2 className="text-base font-bold text-on-surface">Efectivo registrado</h2>
+        <p className="mt-1 text-xs text-on-surface-variant">
+          El efectivo esperado se calcula con el fondo, ventas en efectivo, entradas y salidas. El conteo físico se confirma al cerrar.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Card><CardLabel>Fondo inicial</CardLabel><CardValue>{formatMoney(cashCut.startingFund)}</CardValue></Card>
+        <Card><CardLabel>Ventas en efectivo</CardLabel><CardValue>{formatMoney(cashSales)}</CardValue></Card>
+        <Card><CardLabel>Entradas</CardLabel><CardValue>{formatMoney(totalInflows)}</CardValue></Card>
+        <Card><CardLabel>Salidas</CardLabel><CardValue>{formatMoney(totalOutflows)}</CardValue></Card>
+        <Card highlight className="col-span-2 sm:col-span-1"><CardLabel>Efectivo esperado en caja</CardLabel><CardValue>{formatMoney(expectedCash)}</CardValue></Card>
+      </div>
+      {openingBreakdown.length > 0 ? (
+        <DenominationBreakdownView title="Desglose registrado al abrir" rows={openingBreakdown} />
+      ) : (
+        <Card>
+          <CardLabel>Desglose de apertura</CardLabel>
+          <p className="mt-1 text-sm text-on-surface-variant">No hay billetes o monedas desglosados para este corte.</p>
+        </Card>
+      )}
+    </section>
   );
 }
 
@@ -653,25 +703,31 @@ function VentasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
 
 function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
   const [concept, setConcept] = useState("");
-  const [category, setCategory] = useState(CATEGORIAS_SALIDA[0]);
+  const [categories, setCategories] = useState<Array<{ id: string; name: string; requiresReason: boolean; requiresReceipt: boolean }>>([]);
+  const [categoryId, setCategoryId] = useState("");
   const [amount, setAmount] = useState("");
+  const [notes, setNotes] = useState("");
+  const [receiptPhotoUrl, setReceiptPhotoUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  useEffect(() => { fetch("/api/financial-movement-categories?direction=EXPENSE&scope=CASH").then((r) => r.ok ? r.json() : []).then((rows: Array<{ id: string; name: string; requiresReason: boolean; requiresReceipt: boolean }>) => { setCategories(rows); setCategoryId(rows[0]?.id ?? ""); }).catch(() => setCategories([])); }, []);
+  const selected = categories.find((item) => item.id === categoryId);
 
   async function addSalida(e: React.FormEvent) {
     e.preventDefault();
-    if (!concept || !category || !amount) return;
+    if (!concept || !categoryId || !amount || (selected?.requiresReason && !notes.trim()) || (selected?.requiresReceipt && !receiptPhotoUrl.trim())) return;
     setSaving(true);
     if (!navigator.onLine) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      await enqueueOperation({ id, kind: "cash-cut.outflow.create", createdAt, payload: { cashCutId, concept, category, amount: Number(amount) } });
-      saveLocalCut({ ...cashCut, outflows: [...cashCut.outflows, { id, concept, category, amount: Number(amount) }] });
+      const category = categories.find((item) => item.id === categoryId);
+      await enqueueOperation({ id, kind: "cash-cut.outflow.create", createdAt, payload: { cashCutId, concept, categoryId, category: category?.name ?? "", amount: Number(amount), notes, receiptPhotoUrl } });
+      saveLocalCut({ ...cashCut, outflows: [...cashCut.outflows, { id, concept, category: category?.name ?? "", categoryId, amount: Number(amount) }] });
       setConcept(""); setAmount(""); setSaving(false); onSaved(); return;
     }
     await fetch(`/api/cash-cuts/${cashCutId}/salidas`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ concept, category, amount: Number(amount) }),
+      body: JSON.stringify({ concept, categoryId, category: categories.find((item) => item.id === categoryId)?.name, amount: Number(amount), notes, receiptPhotoUrl }),
     });
     setConcept("");
     setAmount("");
@@ -697,13 +753,13 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
           <Card>
             <CardLabel>Categoría</CardLabel>
             <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             >
-              {CATEGORIAS_SALIDA.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
                 </option>
               ))}
             </select>
@@ -718,6 +774,8 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             />
           </Card>
+          {selected?.requiresReason && <Card><CardLabel>Motivo (obligatorio)</CardLabel><input value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface" required /></Card>}
+          {selected?.requiresReceipt && <Card><CardLabel>Comprobante (URL)</CardLabel><input value={receiptPhotoUrl} onChange={(e) => setReceiptPhotoUrl(e.target.value)} placeholder="URL del comprobante" className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface" required /></Card>}
           <Button type="submit" className="w-full" disabled={saving}>
             {saving ? "Guardando..." : "Agregar salida"}
           </Button>
@@ -730,7 +788,7 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
             <div className="flex justify-between">
               <div>
                 <p className="text-on-surface font-semibold">{o.concept}</p>
-                <p className="text-on-surface-variant text-xs">{o.category}</p>
+              <p className="text-on-surface-variant text-xs">{o.categoryRef?.name ?? o.category}</p>
               </div>
               <p className="text-on-surface font-bold">${o.amount.toFixed(2)}</p>
             </div>
@@ -747,33 +805,31 @@ function SalidasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
 }
 
 function EntradasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
-  const [type, setType] = useState("CAMBIO_RECIBIDO");
+  const [categories, setCategories] = useState<Array<{ id: string; name: string; requiresReason: boolean; requiresReceipt: boolean }>>([]);
+  const [categoryId, setCategoryId] = useState("");
   const [amount, setAmount] = useState("");
+  const [notes, setNotes] = useState("");
+  const [receiptPhotoUrl, setReceiptPhotoUrl] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const TIPOS = [
-    { key: "CAMBIO_RECIBIDO", label: "Cambio recibido" },
-    { key: "REEMBOLSO", label: "Reembolso" },
-    { key: "AJUSTE", label: "Ajuste" },
-    { key: "PRESTAMO", label: "Préstamo" },
-    { key: "OTRO", label: "Otro" },
-  ];
+  useEffect(() => { fetch("/api/financial-movement-categories?direction=INCOME&scope=CASH").then((r) => r.ok ? r.json() : []).then((rows: Array<{ id: string; name: string; requiresReason: boolean; requiresReceipt: boolean }>) => { setCategories(rows); setCategoryId(rows[0]?.id ?? ""); }).catch(() => setCategories([])); }, []);
+  const selected = categories.find((item) => item.id === categoryId);
 
   async function addEntrada(e: React.FormEvent) {
     e.preventDefault();
-    if (!amount) return;
+    if (!amount || !categoryId || (selected?.requiresReason && !notes.trim()) || (selected?.requiresReceipt && !receiptPhotoUrl.trim())) return;
     setSaving(true);
     if (!navigator.onLine) {
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      await enqueueOperation({ id, kind: "cash-cut.inflow.create", createdAt, payload: { cashCutId, type, amount: Number(amount) } });
-      saveLocalCut({ ...cashCut, inflows: [...cashCut.inflows, { id, type, amount: Number(amount) }] });
+      await enqueueOperation({ id, kind: "cash-cut.inflow.create", createdAt, payload: { cashCutId, type: "OTRO", categoryId, amount: Number(amount), notes, receiptPhotoUrl } });
+      saveLocalCut({ ...cashCut, inflows: [...cashCut.inflows, { id, type: "OTRO", categoryId, categoryNameSnapshot: categories.find((item) => item.id === categoryId)?.name, amount: Number(amount) }] });
       setAmount(""); setSaving(false); onSaved(); return;
     }
     await fetch(`/api/cash-cuts/${cashCutId}/entradas`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, amount: Number(amount) }),
+      body: JSON.stringify({ type: "OTRO", categoryId, amount: Number(amount), notes, receiptPhotoUrl }),
     });
     setAmount("");
     setSaving(false);
@@ -787,19 +843,21 @@ function EntradasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
       {!disabled && (
         <form onSubmit={addEntrada} className="space-y-3">
           <Card>
-            <CardLabel>Tipo</CardLabel>
+            <CardLabel>Categoría</CardLabel>
             <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             >
-              {TIPOS.map((t) => (
-                <option key={t.key} value={t.key}>
-                  {t.label}
+              {categories.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
                 </option>
               ))}
             </select>
           </Card>
+          {selected?.requiresReason && <Card><CardLabel>Motivo (obligatorio)</CardLabel><input value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface" required /></Card>}
+          {selected?.requiresReceipt && <Card><CardLabel>Comprobante (URL)</CardLabel><input value={receiptPhotoUrl} onChange={(e) => setReceiptPhotoUrl(e.target.value)} placeholder="URL del comprobante" className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface" required /></Card>}
           <Card>
             <CardLabel>Monto</CardLabel>
             <input
@@ -820,7 +878,7 @@ function EntradasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
         {cashCut.inflows.map((i) => (
           <Card key={i.id}>
             <div className="flex justify-between">
-              <p className="text-on-surface font-semibold">{i.type}</p>
+              <p className="text-on-surface font-semibold">{i.categoryRef?.name ?? i.categoryNameSnapshot ?? i.type}</p>
               <p className="text-on-surface font-bold">${i.amount.toFixed(2)}</p>
             </div>
           </Card>
@@ -983,7 +1041,7 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
   const [cashCounted, setCashCounted] = useState<number | null>(null);
   const [cashCountedBreakdown, setCashCountedBreakdown] = useState<CashDenominationCount[]>([]);
   const [envelopeAmount, setEnvelopeAmount] = useState("");
-  const [envelopeNumber, setEnvelopeNumber] = useState(cashCut.envelopeNumber ?? "");
+  const [envelopePreview, setEnvelopePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<CloseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1023,12 +1081,12 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
       cashCounted,
       cashCountedDenominations: cashCountedBreakdown,
       envelopeAmount: envelope,
-      envelopeNumber: envelopeNumber || undefined,
     };
     if (!navigator.onLine) {
       const createdAt = new Date().toISOString();
+      const offlineEnvelopeNumber = envelope > 0 ? envelopeNumberForClose(createdAt) : null;
       await enqueueOperation({ id: crypto.randomUUID(), kind: "cash-cut.close", createdAt, payload: closePayload });
-      saveLocalCut({ ...cashCut, status: "CERRADO", cashCounted, cashExpected: expectedCash, difference: cashCounted - expectedCash, envelopeAmount: envelope, envelopeNumber: envelopeNumber || null, nextFund: cashCounted - envelope });
+      saveLocalCut({ ...cashCut, status: "CERRADO", cashCounted, cashExpected: expectedCash, difference: cashCounted - expectedCash, envelopeAmount: envelope, envelopeNumber: offlineEnvelopeNumber, nextFund: cashCounted - envelope });
       localStorage.removeItem(`maestro:open-cash-cut:${cashCut.branch.id}`);
       setResult({
         assignmentWarning: "Cierre guardado en el dispositivo y pendiente de sincronización.",
@@ -1038,7 +1096,7 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
           difference: cashCounted - expectedCash,
           envelopeAmount: envelope,
           nextFund: cashCounted - envelope,
-          envelopeNumber: envelopeNumber || null,
+          envelopeNumber: offlineEnvelopeNumber,
         },
       });
       setSaving(false);
@@ -1242,18 +1300,19 @@ function CierreStep({ cashCutId, cashCut, onSaved }: StepProps) {
               max={cashCounted}
               step="0.01"
               value={envelopeAmount}
-              onChange={(event) => setEnvelopeAmount(event.target.value)}
+              onChange={(event) => {
+                const amount = event.target.value;
+                setEnvelopeAmount(amount);
+                setEnvelopePreview(Number(amount) > 0 ? envelopeNumberForClose(new Date()) : null);
+              }}
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-lg font-bold text-on-surface outline-none focus:border-primary"
               placeholder="0.00"
             />
           </Card>
           <Card>
-            <CardLabel>Número de sobre (opcional)</CardLabel>
-            <input
-              value={envelopeNumber}
-              onChange={(event) => setEnvelopeNumber(event.target.value)}
-              className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none focus:border-primary"
-            />
+            <CardLabel>Número de sobre</CardLabel>
+            <p className="text-lg font-bold text-on-surface">{envelopePreview ?? "Se asignará al indicar un monto"}</p>
+            {envelopePreview && <p className="mt-1 text-xs text-on-surface-variant">Se confirma con la fecha del cierre.</p>}
           </Card>
           <Card highlight>
             <CardLabel>Fondo que queda en caja</CardLabel>

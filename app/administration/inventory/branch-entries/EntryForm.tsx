@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
+import { generateClientOperationId } from "@/lib/pos2/offline/canonical";
 import { createInventoryEntryAction, type ActionResult } from "./actions";
 
 type Branch = { id: string; name: string };
@@ -16,6 +17,7 @@ export default function EntryForm({
   canViewTransfers: boolean;
 }) {
   const [result, setResult] = useState<ActionResult | null>(null);
+  const operationId = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [type, setType] = useState("COMPRA");
   const [productSearch, setProductSearch] = useState("");
@@ -39,15 +41,21 @@ export default function EntryForm({
     setSaving(true);
     setResult(null);
 
-    const response = await createInventoryEntryAction(formData);
-
-    setResult(response);
-    setSaving(false);
-
-    if (response.success) {
-      const form = document.getElementById("entry-form") as HTMLFormElement | null;
-      form?.reset();
+    operationId.current ??= generateClientOperationId();
+    formData.set("operationId", operationId.current);
+    try {
+      const response = await createInventoryEntryAction(formData);
+      setResult(response);
+      if (response.success) {
+        operationId.current = null;
+        const form = document.getElementById("entry-form") as HTMLFormElement | null;
+        form?.reset();
       setProductId("");
+      }
+    } catch {
+      setResult({ success: false, error: "No se pudo confirmar el movimiento. Reintenta para verificarlo sin duplicarlo." });
+    } finally {
+      setSaving(false);
     }
   }
 

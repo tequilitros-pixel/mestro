@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
+import { addDaysToDateOnly, parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
+import { getCashCutScope, withCashCutReadScope } from "@/lib/cash-cuts/access";
+import { getBranchSafeSummary } from "@/lib/cash-cuts/safeEnvelopes";
 
 export async function GET(req: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/cash-cuts/dashboard"]);
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+
+  const scope = await getCashCutScope(["/cash-cuts/dashboard"]);
+  if (!scope) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const allowedBranchIds = await getAccessibleBranchIds();
 
@@ -37,22 +43,21 @@ export async function GET(req: NextRequest) {
     branchFilter = { in: allowedBranchIds };
   }
 
-  const defaultFrom = new Date();
-  defaultFrom.setDate(defaultFrom.getDate() - 7);
+  const defaultFrom = parseDateOnly(addDaysToDateOnly(todayDateOnly(), -7));
 
   const dateFrom = searchParams.get("dateFrom")
-    ? new Date(searchParams.get("dateFrom")!)
+    ? parseDateOnly(searchParams.get("dateFrom")!)
     : defaultFrom;
   const dateTo = searchParams.get("dateTo")
-    ? new Date(searchParams.get("dateTo")!)
+    ? parseDateOnly(searchParams.get("dateTo")!)
     : new Date();
 
   const cuts = await prisma.cashCut.findMany({
-    where: {
+    where: withCashCutReadScope(scope, {
       status: "CERRADO",
       date: { gte: dateFrom, lte: dateTo },
       ...(branchFilter ? { branchId: branchFilter } : {}),
-    },
+    }),
     include: { branch: true },
     orderBy: { date: "desc" },
   });
@@ -88,24 +93,16 @@ export async function GET(req: NextRequest) {
 
   const branches = await prisma.branch.findMany({
     where: {
-      ...(requestedBranchId ? { id: requestedBranchId } : {}),
-      ...(allowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
+      active: true,
+      ...(branchFilter ? { id: branchFilter } : {}),
     },
     select: { id: true, name: true },
   });
 
   const safeBalances = await Promise.all(
     branches.map(async (branch) => {
-      const movements = await prisma.cashSafeMovement.findMany({
-        where: { branchId: branch.id },
-      });
-      const deposits = movements
-        .filter((m) => m.type === "DEPOSITO_SOBRE")
-        .reduce((sum, m) => sum + m.amount, 0);
-      const withdrawals = movements
-        .filter((m) => m.type === "RETIRO")
-        .reduce((sum, m) => sum + m.amount, 0);
-      return { branch: branch.name, balance: deposits - withdrawals };
+      const summary = await getBranchSafeSummary(branch.id);
+      return { branch: branch.name, balance: summary.balance };
     })
   );
 

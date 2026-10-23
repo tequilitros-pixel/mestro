@@ -1,6 +1,10 @@
+import { getProductionVolume } from "@/lib/lots/productionVolume";
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import LotMenu from "@/components/LotMenu";
+import { requireModuleActionAccess } from "@/lib/auth";
+import LotCostCharts from "@/components/costs/LotCostCharts";
+import { calculateStageCostsAndWIP } from "@/lib/processCalculations";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -16,7 +20,7 @@ export default async function LotCostsPage({ params }: Props) {
       cookings: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
       millings: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
       fermentations: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
-      distillations: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
+      distillations: { orderBy: { createdAt: "desc" } },
     },
   });
 
@@ -24,16 +28,18 @@ export default async function LotCostsPage({ params }: Props) {
 
   const totalCost = lot.expenses.reduce((sum, e) => sum + e.amount, 0);
 
-  // Igual que en el Centro de Costos: usamos el total autoritativo
-  // fijado en "Finalizar lote", no la suma de lecturas intermedias
-  // de litros registradas durante la destilación.
-  const totalLiters = lot.totalLitersObtained ?? 0;
-  const isFinished = lot.totalLitersObtained !== null;
+  // Prioriza el volumen fijado al finalizar. Para lotes históricos
+  // terminados, usa únicamente rectificaciones completas.
+  const totalLiters = getProductionVolume(lot) ?? 0;
+  const isFinished = getProductionVolume(lot) !== null;
 
   const costPerLiter = totalLiters > 0 ? totalCost / totalLiters : 0;
+  const abcCosts = calculateStageCostsAndWIP(lot.expenses, lot.stage);
 
   async function addExpense(formData: FormData) {
     "use server";
+
+    await requireModuleActionAccess("/lots");
 
     const category = formData.get("category") as string;
     const concept = formData.get("concept") as string;
@@ -87,6 +93,72 @@ export default async function LotCostsPage({ params }: Props) {
             title="Costo por litro"
             value={costPerLiter > 0 ? `$${costPerLiter.toFixed(2)}` : "-"}
           />
+        </section>
+
+        <LotCostCharts expenses={lot.expenses} />
+
+        <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-6 sm:p-8">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-on-surface">Costeo Basado en Actividades (ABC)</h2>
+              <p className="mt-1 text-xs text-on-surface-variant">
+                Acumulación de costos a lo largo de la cadena productiva del tequila y valoración del inventario en proceso.
+              </p>
+            </div>
+            <span className="rounded-lg bg-surface-container-high px-3 py-1 font-mono text-xs font-semibold text-primary">
+              Etapa: {lot.stage}
+            </span>
+          </div>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-xl border border-outline-variant/60 bg-surface-container-high p-4">
+              <p className="text-xs text-on-surface-variant">1. Recepción y Agave</p>
+              <p className="mt-1 text-xl font-bold text-emerald-500">
+                ${abcCosts.stageTotals.RECEPCION.toLocaleString("es-MX", { maximumFractionDigits: 2 })}
+              </p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">Materia prima y fletes</p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant/60 bg-surface-container-high p-4">
+              <p className="text-xs text-on-surface-variant">2. Cocción / Horno</p>
+              <p className="mt-1 text-xl font-bold text-amber-500">
+                ${abcCosts.stageTotals.COCCION.toLocaleString("es-MX", { maximumFractionDigits: 2 })}
+              </p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">Vapor y energéticos</p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant/60 bg-surface-container-high p-4">
+              <p className="text-xs text-on-surface-variant">3. Molienda y Extracción</p>
+              <p className="mt-1 text-xl font-bold text-yellow-500">
+                ${abcCosts.stageTotals.MOLIENDA.toLocaleString("es-MX", { maximumFractionDigits: 2 })}
+              </p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">Prensas y desgarradora</p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant/60 bg-surface-container-high p-4">
+              <p className="text-xs text-on-surface-variant">4. Fermentación</p>
+              <p className="mt-1 text-xl font-bold text-cyan-500">
+                ${abcCosts.stageTotals.FERMENTACION.toLocaleString("es-MX", { maximumFractionDigits: 2 })}
+              </p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">Levaduras y correctores</p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant/60 bg-surface-container-high p-4">
+              <p className="text-xs text-on-surface-variant">5. Destilación</p>
+              <p className="mt-1 text-xl font-bold text-purple-500">
+                ${abcCosts.stageTotals.DESTILACION.toLocaleString("es-MX", { maximumFractionDigits: 2 })}
+              </p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">Destrozado y rectificación</p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant/60 bg-surface-container-high p-4">
+              <p className="text-xs text-on-surface-variant">Mano de Obra y Generales</p>
+              <p className="mt-1 text-xl font-bold text-blue-500">
+                ${abcCosts.stageTotals.GENERAL.toLocaleString("es-MX", { maximumFractionDigits: 2 })}
+              </p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">Jornadas e indirectos</p>
+            </div>
+          </div>
         </section>
 
         <section className="mt-8 rounded-2xl bg-surface-container p-8">

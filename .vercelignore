@@ -9,3 +9,10 @@ coverage
 *.db
 *.sqlite
 _to_delete/
+.tmp-*/
+android/
+ios/
+docs/
+tests/
+coverage/
+*.tsbuildinfo

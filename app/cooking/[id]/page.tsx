@@ -1,24 +1,24 @@
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 import {
   CookingEventType,
   CookingStatus,
   EquipmentStatus,
   LotStage,
 } from "@prisma/client";
+import { startSteamAction, changeSteamPressureAction, stopSteamAction, createSweetHoneyRecoveryAction } from "../actions";
 import { notFound, redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
+import { businessDayStart, formatBusinessDateOnly } from "@/lib/dateTime";
 
 import CookingCharts from "@/components/CookingCharts";
 import FinishCookingModal from "@/components/FinishCookingModal";
 import PageTabs from "@/components/ui/PageTabs";
 import OfflineCookingForm from "@/components/offline/OfflineCookingForm";
+import OfflineBoilerForm from "@/components/offline/OfflineBoilerForm";
 import SuccessToast from "@/components/ui/SuccessToast";
 import {
   FlameIcon,
-  ArrowUpIcon,
-  ArrowDownIcon,
-  PauseIcon,
   ClipboardIcon,
   HomeIcon,
   ChartLineIcon,
@@ -38,6 +38,7 @@ import {
   getTemperatureStatus,
   isTemperatureWarning,
 } from "@/lib/cooking/cookingMetrics";
+import { calculateSteamEnergyMetrics } from "@/lib/processCalculations";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -59,6 +60,8 @@ export default async function CookingDetailPage({
           createdAt: "asc",
         },
       },
+      steamIntervals: { orderBy: { startedAt: "asc" }, include: { pressureReadings: { orderBy: { occurredAt: "asc" } } } },
+      sweetHoneyRecoveries: { orderBy: { recoveredAt: "asc" } },
     },
   });
 
@@ -67,10 +70,10 @@ export default async function CookingDetailPage({
   const cookingEquipmentId = cooking.equipmentId;
   const cookingLotId = cooking.lotId;
 
-  const hasStartedVapor = cooking.events.some(
-    (event) =>
-      event.type === CookingEventType.INICIO_VAPOR
-  );
+  const activeBoilers = await prisma.boilerSession.findMany({ where: { endedAt: null, equipment: { type: "CALDERA", active: true } }, orderBy: { startedAt: "asc" }, include: { equipment: true } });
+
+  const currentSteam = cooking.steamIntervals.find((interval) => !interval.endedAt) ?? null;
+  const hasStartedVapor = cooking.steamIntervals.some((interval) => interval.state === "INYECTANDO") || cooking.events.some((event) => event.type === CookingEventType.INICIO_VAPOR);
 
   const hasFinished =
     cooking.status === CookingStatus.TERMINADA;
@@ -135,10 +138,14 @@ export default async function CookingDetailPage({
     lastTemperature,
   });
 
+  const steamMetrics = calculateSteamEnergyMetrics(cooking.steamIntervals, cooking.agaveKg);
+
   async function addSimpleEvent(
     formData: FormData
   ) {
     "use server";
+
+    await requireModuleActionAccess("/cooking");
 
     const currentCooking =
       await prisma.cooking.findUnique({
@@ -241,6 +248,8 @@ export default async function CookingDetailPage({
   ) {
     "use server";
 
+    await requireModuleActionAccess("/cooking");
+
     const currentCooking =
       await prisma.cooking.findUnique({
         where: { id },
@@ -316,25 +325,14 @@ export default async function CookingDetailPage({
   ) {
     "use server";
 
-    const user = await getCurrentUser();
-
-    if (!user) {
-      redirect("/login");
-    }
+    const user = await requireModuleActionAccess("/cooking");
 
     const finalAgaveKg = parseRequiredNumber(
       formData.get("finalAgaveKg")
     );
 
-    const finalSweetHoneyLiters =
-      parseRequiredNumber(
-        formData.get("finalSweetHoneyLiters")
-      );
-
-    const finalSweetHoneyBrix =
-      parseRequiredNumber(
-        formData.get("finalSweetHoneyBrix")
-      );
+    const finalSweetHoneyLiters = parseOptionalNumber(formData.get("finalSweetHoneyLiters"));
+    const finalSweetHoneyBrix = parseOptionalNumber(formData.get("finalSweetHoneyBrix"));
 
     const finalNotesValue =
       formData.get("finalNotes");
@@ -345,18 +343,14 @@ export default async function CookingDetailPage({
         ? finalNotesValue.trim()
         : null;
 
-    if (
-      finalAgaveKg === null ||
-      finalSweetHoneyLiters === null ||
-      finalSweetHoneyBrix === null
-    ) {
+    if (finalAgaveKg === null) {
       redirect(`/cooking/${id}`);
     }
 
     if (
       finalAgaveKg < 0 ||
-      finalSweetHoneyLiters < 0 ||
-      finalSweetHoneyBrix < 0
+      (finalSweetHoneyLiters !== null && finalSweetHoneyLiters < 0) ||
+      (finalSweetHoneyBrix !== null && finalSweetHoneyBrix < 0)
     ) {
       redirect(`/cooking/${id}`);
     }
@@ -484,13 +478,13 @@ export default async function CookingDetailPage({
             title="Vapor"
             value={
               hasStartedVapor
-                ? "Iniciado"
-                : "Pendiente"
+                ? "Vapor en marcha"
+                : "Vapor por iniciar"
             }
             detail={
               hasStartedVapor
-                ? "Existe registro de inicio"
-                : "Aún no ha comenzado"
+                ? "Inicio registrado en MAESTRO"
+                : "Listo para registrar el arranque"
             }
           />
         </section>
@@ -552,8 +546,8 @@ export default async function CookingDetailPage({
               title="Vapor"
               value={
                 hasStartedVapor
-                  ? "INICIADO"
-                  : "PENDIENTE"
+                  ? "EN MARCHA"
+                  : "POR INICIAR"
               }
               warning={!hasStartedVapor}
             />
@@ -563,6 +557,37 @@ export default async function CookingDetailPage({
               value={formatStatus(cooking.status)}
               warning={false}
             />
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-6">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="font-mono text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+              Trazabilidad y Balance Energético de Vapor
+            </h3>
+            <span className="font-mono text-xs text-primary">
+              {steamMetrics.agaveTons} Toneladas de Agave
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-outline-variant/60 bg-surface-container-high p-4">
+              <p className="text-xs text-on-surface-variant">Inyección neta de vapor</p>
+              <p className="mt-1 text-2xl font-bold text-primary">{steamMetrics.injectionHours} hrs</p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">Tiempo activo de caldera</p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant/60 bg-surface-container-high p-4">
+              <p className="text-xs text-on-surface-variant">Reposo / Enfriamiento</p>
+              <p className="mt-1 text-2xl font-bold text-on-surface">{steamMetrics.restHours} hrs</p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">Cocción por inercia térmica</p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant/60 bg-surface-container-high p-4">
+              <p className="text-xs text-on-surface-variant">Ratio vapor / tonelada</p>
+              <p className="mt-1 text-2xl font-bold text-secondary">{steamMetrics.hoursPerTon} h/Ton</p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">Eficiencia energética del horno</p>
+            </div>
           </div>
         </section>
 
@@ -743,6 +768,7 @@ export default async function CookingDetailPage({
         </section>
 
         {hasFinished && (
+          <>
           <CookingClosureAct
             closureCode={cooking.closureCode}
             lotCode={cooking.lot.code}
@@ -770,6 +796,8 @@ export default async function CookingDetailPage({
             }
             eventsCount={cooking.events.length}
           />
+          <div className="mt-6"><SweetHoneyRecoveryForm cookingId={id} lotId={cooking.lotId} action={createSweetHoneyRecoveryAction.bind(null, id)} /></div>
+          </>
         )}
     </>
   );
@@ -789,22 +817,7 @@ export default async function CookingDetailPage({
               </p>
             </div>
 
-            {!hasStartedVapor ? (
-              <OfflineCookingForm cookingId={id} fallbackAction={addSimpleEvent}>
-                <input
-                  type="hidden"
-                  name="type"
-                  value={
-                    CookingEventType.INICIO_VAPOR
-                  }
-                />
-
-                <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 text-lg font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]">
-                  <FlameIcon className="h-5 w-5" />
-                  Iniciar vapor
-                </button>
-              </OfflineCookingForm>
-            ) : (
+            {!hasStartedVapor ? <SteamActionPanel cookingId={id} intervals={cooking.steamIntervals} currentSteam={currentSteam} activeBoilers={activeBoilers} /> : (
               <div className="space-y-8">
                 <OfflineCookingForm
                   cookingId={id}
@@ -861,34 +874,11 @@ export default async function CookingDetailPage({
                 </OfflineCookingForm>
 
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  <SimpleActionForm
-                    action={addSimpleEvent}
+                  <SteamActionPanel
                     cookingId={id}
-                    type={
-                      CookingEventType.AUMENTAR_VAPOR
-                    }
-                    icon={ArrowUpIcon}
-                    label="Aumentar vapor"
-                  />
-
-                  <SimpleActionForm
-                    action={addSimpleEvent}
-                    cookingId={id}
-                    type={
-                      CookingEventType.BAJAR_VAPOR
-                    }
-                    icon={ArrowDownIcon}
-                    label="Disminuir vapor"
-                  />
-
-                  <SimpleActionForm
-                    action={addSimpleEvent}
-                    cookingId={id}
-                    type={
-                      CookingEventType.SUSPENDER_VAPOR
-                    }
-                    icon={PauseIcon}
-                    label="Suspender vapor"
+                    intervals={cooking.steamIntervals}
+                    currentSteam={currentSteam}
+                    activeBoilers={activeBoilers}
                   />
 
                   <HoneyActionForm
@@ -901,15 +891,7 @@ export default async function CookingDetailPage({
                     label="Extraer mieles amargas"
                   />
 
-                  <HoneyActionForm
-                    action={addSimpleEvent}
-                    cookingId={id}
-                    type={
-                      CookingEventType.MIELES_DULCES
-                    }
-                    icon={FlameIcon}
-                    label="Extraer mieles dulces"
-                  />
+                  <SweetHoneyRecoveryForm cookingId={id} lotId={cooking.lotId} action={createSweetHoneyRecoveryAction.bind(null, id)} />
 
                   <SimpleActionForm
                     action={addSimpleEvent}
@@ -975,7 +957,11 @@ export default async function CookingDetailPage({
   );
 
   const graficasTabContent = (
-    <CookingCharts events={cooking.events} />
+    <CookingCharts
+      events={cooking.events}
+      steamIntervals={cooking.steamIntervals}
+      sweetHoneyRecoveries={cooking.sweetHoneyRecoveries}
+    />
   );
 
   const bitacoraTabContent = (
@@ -1183,7 +1169,7 @@ export default async function CookingDetailPage({
           </div>
         </header>
 
-        <div className="mt-8">
+        <div className="caldera-cocimiento-tabs mt-8">
           <PageTabs tabs={tabs} />
         </div>
       </div>
@@ -1580,6 +1566,18 @@ function SimpleActionForm({
   );
 }
 
+function SteamActionPanel({ cookingId, currentSteam, activeBoilers }: { cookingId: string; intervals: Array<{ id: string; state: string }>; currentSteam: { id: string; state: string; boilerSessionId: string } | null; activeBoilers: Array<{ id: string; equipment: { name: string } }> }) {
+  const starting = startSteamAction.bind(null, cookingId);
+  const changing = changeSteamPressureAction.bind(null, cookingId);
+  const stopping = stopSteamAction.bind(null, cookingId);
+  const injecting = currentSteam?.state === "INYECTANDO";
+  return <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 md:col-span-2 lg:col-span-3"><h3 className="text-lg font-bold">Vapor por intervalo</h3><p className="mt-1 text-sm text-on-surface-variant">Cada cambio conserva hora, unidad original y presión canónica PSI; al refrescar se reconstruye el estado.</p>{!injecting ? <OfflineBoilerForm kind="steam.interval.start" entityField="cookingId" entityId={cookingId} fallbackAction={starting} className="mt-4 grid gap-3 sm:grid-cols-4"><label className="grid gap-1 text-sm font-semibold">Caldera<select name="boilerSessionId" required className="rounded-xl border border-outline-variant bg-surface px-3 py-2">{activeBoilers.map((boiler) => <option key={boiler.id} value={boiler.id}>{boiler.equipment.name}</option>)}</select></label><label className="grid gap-1 text-sm font-semibold">Presión<input name="pressureValue" type="number" min="0" step="0.001" required className="rounded-xl border border-outline-variant bg-surface px-3 py-2" /></label><label className="grid gap-1 text-sm font-semibold">Unidad<select name="pressureUnit" className="rounded-xl border border-outline-variant bg-surface px-3 py-2"><option value="PSI">PSI</option><option value="KG_CM2">kg/cm²</option></select></label><button className="self-end rounded-xl bg-primary px-4 py-2 font-bold text-on-primary">Iniciar inyección</button></OfflineBoilerForm> : <div className="mt-4 grid gap-3 sm:grid-cols-3"><OfflineBoilerForm kind="steam.pressure.create" entityField="cookingId" entityId={cookingId} fallbackAction={changing} className="grid gap-2 sm:col-span-2 sm:grid-cols-3"><input type="hidden" name="boilerSessionId" value={currentSteam.boilerSessionId} /><input type="hidden" name="intervalId" value={currentSteam.id} /><input name="pressureValue" type="number" min="0" step="0.001" required placeholder="Nueva presión" className="rounded-xl border border-outline-variant bg-surface px-3 py-2" /><select name="pressureUnit" className="rounded-xl border border-outline-variant bg-surface px-3 py-2"><option value="PSI">PSI</option><option value="KG_CM2">kg/cm²</option></select><button className="rounded-xl border border-primary px-4 py-2 font-bold text-primary">Registrar cambio</button></OfflineBoilerForm><OfflineBoilerForm kind="steam.interval.stop" entityField="cookingId" entityId={cookingId} fallbackAction={stopping}><button className="w-full rounded-xl bg-surface-container-highest px-4 py-2 font-bold">Detener vapor</button></OfflineBoilerForm></div>}</div>;
+}
+
+function SweetHoneyRecoveryForm({ cookingId, lotId, action }: { cookingId: string; lotId: string; action: (formData: FormData) => Promise<void> }) {
+  return <OfflineBoilerForm kind="sweet-honey.recovery.create" entityField="sourceCookingId" entityId={cookingId} fallbackAction={action} className="rounded-2xl border border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/5 p-4"><h3 className="font-bold">Recuperar miel dulce</h3><p className="mt-1 text-xs text-on-surface-variant">Registro independiente; no crea un evento histórico de Cocimiento ni una descarga de Molienda.</p><input type="hidden" name="lotId" value={lotId} /><div className="mt-3 grid gap-3 sm:grid-cols-3"><input name="liters" type="number" min="0.001" step="0.001" required placeholder="Litros" className="rounded-xl border border-outline-variant bg-surface px-3 py-2" /><input name="brix" type="number" min="0" step="0.001" placeholder="°Brix opcional" className="rounded-xl border border-outline-variant bg-surface px-3 py-2" /><button className="rounded-xl bg-primary px-4 py-2 font-bold text-on-primary">Guardar recuperación</button></div></OfflineBoilerForm>;
+}
+
 function HoneyActionForm({
   action,
   cookingId,
@@ -1745,19 +1743,9 @@ function ActValue({
 async function createCookingClosureCode(
   date: Date
 ) {
-  const year = date.getFullYear();
-
-  const startOfYear = new Date(
-    year,
-    0,
-    1
-  );
-
-  const startOfNextYear = new Date(
-    year + 1,
-    0,
-    1
-  );
+  const year = Number(formatBusinessDateOnly(date).slice(0, 4));
+  const startOfYear = businessDayStart(`${year}-01-01`);
+  const startOfNextYear = businessDayStart(`${year + 1}-01-01`);
 
   const closuresThisYear =
     await prisma.cooking.count({

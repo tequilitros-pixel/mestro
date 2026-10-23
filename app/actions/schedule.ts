@@ -16,42 +16,28 @@ import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/perio
 import { availabilityConflict, getAvailabilityMatrix, getEffectiveAvailability } from "@/lib/availability";
 
 /**
- * Si la semana de `dateStr` todavía no tiene ninguna fila en
- * ScheduleWeek Y todavía no tiene ningún turno registrado, se crea
- * como BORRADOR antes de meter el primer turno. Así toda semana nueva
- * arranca oculta para los empleados hasta que el admin la publique.
- *
- * Las semanas que ya tenían turnos antes de que existiera este
- * concepto de publicación (o cualquier semana donde el admin nunca
- * publicó/despublicó) se quedan sin fila — y por default se siguen
- * mostrando como visibles (ver getMyScheduleForWeeks), para no
- * esconderle de golpe a nadie algo que ya podía ver.
+ * Granularidad individual por turno (estilo Connecteam):
+ * Modificar un turno de lunes o martes ya no despublica los demás días
+ * de la semana del trabajador. Únicamente el turno que se crea, edita o
+ * mueve pasa a DRAFT, conservando publicados los días no modificados.
  */
-export async function ensureWeekStartsAsDraftIfEmpty(
-  tx: Prisma.TransactionClient,
-  dateStr: string,
+export async function ensureEmployeeStartsAsDraft(
+  _tx: Prisma.TransactionClient,
+  _dateStr: string,
+  _userId: string,
 ) {
-  const weekStartStr = mondayOfWeek(dateStr);
-  const weekStart = parseDateOnly(weekStartStr);
-
-  const existingWeekRow = await tx.scheduleWeek.findUnique({ where: { weekStart } });
-  if (existingWeekRow) return;
-
-  const weekEnd = parseDateOnly(addDaysToDateOnly(weekStartStr, 7));
-  const anyShiftThisWeek = await tx.scheduledShift.count({
-    where: { date: { gte: weekStart, lt: weekEnd } },
-  });
-
-  if (anyShiftThisWeek === 0) {
-    await tx.scheduleWeek.create({ data: { weekStart, status: "DRAFT" } });
-  }
+  void _tx;
+  void _dateStr;
+  void _userId;
+  // No-op intencional: se preserva la firma para compatibilidad, pero ya
+  // no se despublican masivamente los turnos no modificados de la semana.
 }
 
 /**
  * Datos completos para la cuadrícula semanal de Horario: empleados
  * (con su costo por hora), sucursales (con su color), turnos y
  * descansos de la semana, plantillas para autocompletar horas, y el
- * estado de publicación de la semana.
+ * estado de publicación individual de cada turno.
  */
 export async function getScheduleGridForWeek(weekStart: string) {
   const admin = await getCurrentUser();
@@ -88,12 +74,13 @@ export async function getScheduleGridForWeek(weekStart: string) {
     getPayrollSettings(),
   ]);
   const availability = await getAvailabilityMatrix(employees.map((employee) => employee.id), start, end);
+  const allShiftsPublished = shifts.length > 0 && shifts.every((shift) => shift.publicationStatus === "PUBLISHED");
 
   return {
     success: true,
     weekStart: start,
     weekEnd: end,
-    status: weekRow?.status ?? "PUBLISHED",
+    status: allShiftsPublished ? "PUBLISHED" : "DRAFT",
     publishedAt: weekRow?.publishedAt ?? null,
     weeklyHourThreshold: payrollSettings.weeklyHourThreshold,
     employees: employees.map((e) => ({
@@ -137,7 +124,7 @@ export async function upsertScheduledShiftAction(input: UpsertShiftInput) {
   }
 
   const originalShift = input.id
-    ? await prisma.scheduledShift.findUnique({ where: { id: input.id }, select: { date: true } })
+    ? await prisma.scheduledShift.findUnique({ where: { id: input.id }, select: { date: true, userId: true } })
     : null;
   if (
     (originalShift && await isPayrollDateLocked(originalShift.date)) ||
@@ -171,12 +158,17 @@ export async function upsertScheduledShiftAction(input: UpsertShiftInput) {
     endTime: type === "TURNO" ? input.endTime! : null,
     position: input.position?.trim() || null,
     notes: input.notes?.trim() || null,
+    publicationStatus: "DRAFT" as const,
   };
 
   await prisma.$transaction(async (tx) => {
+    if (input.id && originalShift) {
+      await ensureEmployeeStartsAsDraft(tx, formatDateOnly(originalShift.date), originalShift.userId);
+    }
+    await ensureEmployeeStartsAsDraft(tx, input.date, input.userId);
+
     let shiftId: string;
     if (!input.id) {
-      await ensureWeekStartsAsDraftIfEmpty(tx, input.date);
       const shift = await tx.scheduledShift.create({ data });
       shiftId = shift.id;
     } else {
@@ -231,7 +223,7 @@ export async function duplicateShiftAction(shiftId: string, targetDates: string[
 
   await prisma.$transaction(async (tx) => {
     for (const dateStr of dates) {
-      await ensureWeekStartsAsDraftIfEmpty(tx, dateStr);
+      await ensureEmployeeStartsAsDraft(tx, dateStr, source.userId);
     }
 
     for (const dateStr of dates) {
@@ -245,6 +237,7 @@ export async function duplicateShiftAction(shiftId: string, targetDates: string[
           endTime: source.endTime,
           position: source.position,
           notes: source.notes,
+          publicationStatus: "DRAFT",
         },
       });
     }
@@ -349,10 +342,11 @@ export async function moveScheduledShiftAction(
   }
 
   await prisma.$transaction(async (tx) => {
-    await ensureWeekStartsAsDraftIfEmpty(tx, newDateStr);
+    await ensureEmployeeStartsAsDraft(tx, sourceDateStr, source.userId);
+    await ensureEmployeeStartsAsDraft(tx, newDateStr, newUserId);
     await tx.scheduledShift.update({
       where: { id: shiftId },
-      data: { userId: newUserId, date: parseDateOnly(newDateStr) },
+      data: { userId: newUserId, date: parseDateOnly(newDateStr), publicationStatus: "DRAFT" },
     });
   });
 
@@ -433,9 +427,10 @@ export async function multiDuplicateShiftAction(
   }
 
   await prisma.$transaction(async (tx) => {
-    const uniqueDates = Array.from(new Set(toCreate.map((t) => t.date)));
-    for (const dateStr of uniqueDates) {
-      await ensureWeekStartsAsDraftIfEmpty(tx, dateStr);
+    const employeeDates = new Set(toCreate.map((t) => `${t.userId}|${t.date}`));
+    for (const employeeDate of employeeDates) {
+      const [userId, dateStr] = employeeDate.split("|");
+      await ensureEmployeeStartsAsDraft(tx, dateStr, userId);
     }
 
     await tx.scheduledShift.createMany({
@@ -448,6 +443,7 @@ export async function multiDuplicateShiftAction(
         endTime: source.endTime,
         position: source.position,
         notes: source.notes,
+        publicationStatus: "DRAFT",
       })),
     });
   });
@@ -458,7 +454,20 @@ export async function multiDuplicateShiftAction(
   return { success: true, created: toCreate.length, skipped };
 }
 
-/** Marca la semana como oficial: los empleados pueden verla. */
+/** Duplica un turno directamente hacia otro colaborador y/o fecha (para arrastrar con Alt). */
+export async function copyShiftToCellAction(
+  shiftId: string,
+  targetUserId: string,
+  targetDate: string,
+) {
+  const result = await multiDuplicateShiftAction(shiftId, [
+    { userId: targetUserId, date: targetDate },
+  ]);
+  if ("error" in result) return { error: result.error };
+  return { success: true, createdCount: result.created };
+}
+
+/** Publica todos los turnos de la semana como acción administrativa global. */
 export async function publishWeekAction(weekStart: string) {
   const admin = await getCurrentUser();
   if (!admin || admin.role !== "ADMIN") {
@@ -466,6 +475,12 @@ export async function publishWeekAction(weekStart: string) {
   }
 
   const start = parseDateOnly(mondayOfWeek(weekStart));
+  const end = parseDateOnly(addDaysToDateOnly(mondayOfWeek(weekStart), 7));
+
+  await prisma.scheduledShift.updateMany({
+    where: { date: { gte: start, lt: end } },
+    data: { publicationStatus: "PUBLISHED" },
+  });
 
   await prisma.scheduleWeek.upsert({
     where: { weekStart: start },
@@ -479,7 +494,30 @@ export async function publishWeekAction(weekStart: string) {
   return { success: true };
 }
 
-/** Regresa la semana a borrador (por si hay que corregir algo antes de que la vea el equipo). */
+/** Publica todos los turnos de un trabajador, sin tocar a los demás. */
+export async function publishEmployeeScheduleAction(weekStart: string, userId: string) {
+  const admin = await getCurrentUser();
+  if (!admin || admin.role !== "ADMIN") {
+    return { error: "No tienes permiso" };
+  }
+
+  if (!userId) return { error: "Empleado no válido" };
+
+  const mondayStr = mondayOfWeek(weekStart);
+  const start = parseDateOnly(mondayStr);
+  const end = parseDateOnly(addDaysToDateOnly(mondayStr, 7));
+  const result = await prisma.scheduledShift.updateMany({
+    where: { userId, date: { gte: start, lt: end } },
+    data: { publicationStatus: "PUBLISHED" },
+  });
+
+  revalidatePath("/administration/schedule");
+  revalidatePath("/timeclock/calendar");
+
+  return { success: true, count: result.count };
+}
+
+/** Regresa todos los turnos de la semana a borrador. */
 export async function unpublishWeekAction(weekStart: string) {
   const admin = await getCurrentUser();
   if (!admin || admin.role !== "ADMIN") {
@@ -487,6 +525,12 @@ export async function unpublishWeekAction(weekStart: string) {
   }
 
   const start = parseDateOnly(mondayOfWeek(weekStart));
+  const end = parseDateOnly(addDaysToDateOnly(mondayOfWeek(weekStart), 7));
+
+  await prisma.scheduledShift.updateMany({
+    where: { date: { gte: start, lt: end } },
+    data: { publicationStatus: "DRAFT" },
+  });
 
   await prisma.scheduleWeek.upsert({
     where: { weekStart: start },
@@ -506,11 +550,14 @@ export async function deleteScheduledShiftAction(shiftId: string) {
     return { error: "No tienes permiso" };
   }
 
-  const shift = await prisma.scheduledShift.findUnique({ where: { id: shiftId }, select: { date: true } });
+  const shift = await prisma.scheduledShift.findUnique({ where: { id: shiftId }, select: { date: true, userId: true } });
   if (!shift) return { error: "Turno no encontrado" };
   if (await isPayrollDateLocked(shift.date)) return { error: PAYROLL_LOCKED_MESSAGE };
 
-  await prisma.scheduledShift.delete({ where: { id: shiftId } });
+  await prisma.$transaction(async (tx) => {
+    await ensureEmployeeStartsAsDraft(tx, formatDateOnly(shift.date), shift.userId);
+    await tx.scheduledShift.delete({ where: { id: shiftId } });
+  });
 
   revalidatePath("/administration/schedule");
   revalidatePath("/timeclock/calendar");
@@ -539,7 +586,10 @@ export async function copyPreviousWeekAction(weekStart: string) {
   }
 
   await prisma.$transaction(async (tx) => {
-    await ensureWeekStartsAsDraftIfEmpty(tx, currentMondayStr);
+    const employeeIds = new Set(previousShifts.map((shift) => shift.userId));
+    for (const userId of employeeIds) {
+      await ensureEmployeeStartsAsDraft(tx, currentMondayStr, userId);
+    }
 
     await tx.scheduledShift.createMany({
       data: previousShifts.map((shift) => {
@@ -555,6 +605,7 @@ export async function copyPreviousWeekAction(weekStart: string) {
           endTime: shift.endTime,
           position: shift.position,
           notes: shift.notes,
+          publicationStatus: "DRAFT",
         };
       }),
     });
@@ -655,11 +706,7 @@ export async function clearBranchScheduleTemplateAction(input: {
 
 /**
  * Turnos del propio empleado para su calendario. Solo se muestran
- * turnos de tipo TURNO (no DESCANSO, que aún no se despliega ahí) y
- * cuya semana esté publicada. Si una semana no tiene fila en
- * ScheduleWeek todavía (turnos creados antes de este feature, o el
- * admin nunca la marcó como borrador), se trata como publicada para
- * no ocultarle a nadie algo que ya podía ver.
+ * turnos de tipo TURNO que estén publicados individualmente.
  */
 export async function getMyScheduleForWeeks(weeksAhead: number = 3) {
   const user = await getCurrentUser();
@@ -669,40 +716,29 @@ export async function getMyScheduleForWeeks(weeksAhead: number = 3) {
   const today = parseDateOnly(todayStr);
   const end = parseDateOnly(addDaysToDateOnly(todayStr, weeksAhead * 7));
 
-  const [shifts, weeks] = await Promise.all([
-    prisma.scheduledShift.findMany({
-      where: {
-        userId: user.id,
-        type: "TURNO",
-        date: { gte: today, lt: end },
+  const shifts = await prisma.scheduledShift.findMany({
+    where: {
+      userId: user.id,
+      publicationStatus: "PUBLISHED",
+      date: { gte: today, lt: end },
+    },
+    include: {
+      branch: { select: { id: true, name: true } },
+      event: {
+        select: { id: true, name: true, description: true, location: true, instructions: true },
       },
-      include: {
-        branch: { select: { id: true, name: true } },
-        event: {
-          select: { id: true, name: true, description: true, location: true, instructions: true },
-        },
-      },
-      orderBy: { date: "asc" },
-    }),
-    prisma.scheduleWeek.findMany({
-      where: { weekStart: { gte: parseDateOnly(mondayOfWeek(todayStr)), lt: end } },
-      select: { weekStart: true, status: true },
-    }),
-  ]);
-
-  const weekStatus = new Map(
-    weeks.map((w) => [formatDateOnly(w.weekStart), w.status]),
-  );
+    },
+    orderBy: { date: "asc" },
+  });
 
   // Un turno normal necesita sucursal; un turno de evento puede no
   // tener sucursal responsable y aun así debe verse (la info viene
   // del evento).
   const visible = shifts.filter((s) => {
+    if (s.type === "DESCANSO") return true;
     if (!s.startTime || !s.endTime) return false;
     if (!s.branch && !s.event) return false;
-    const monday = mondayOfWeek(formatDateOnly(s.date));
-    const status = weekStatus.get(monday);
-    return status !== "DRAFT";
+    return s.publicationStatus === "PUBLISHED";
   });
 
   return {
@@ -710,8 +746,9 @@ export async function getMyScheduleForWeeks(weeksAhead: number = 3) {
     shifts: visible.map((s) => ({
       id: s.id,
       date: s.date,
-      startTime: s.startTime as string,
-      endTime: s.endTime as string,
+      type: s.type,
+      startTime: s.startTime,
+      endTime: s.endTime,
       notes: s.notes,
       position: s.position,
       branch: s.branch as { id: string; name: string } | null,

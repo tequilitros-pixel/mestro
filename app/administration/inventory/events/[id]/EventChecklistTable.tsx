@@ -14,11 +14,15 @@ export default function EventChecklistTable({
   phase,
   items,
   confirmed,
+  isAdmin,
+  additionalPendingReturns = 0,
 }: {
   eventId: string;
   phase: "salida" | "regreso";
   items: Item[];
   confirmed: boolean;
+  isAdmin: boolean;
+  additionalPendingReturns?: number;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -30,7 +34,7 @@ export default function EventChecklistTable({
   const storageKey = `maestro:evento:${eventId}:${phase}:categoria`;
   useEffect(() => {
     const guardada = sessionStorage.getItem(storageKey);
-    if (guardada) setCategoria(guardada);
+    if (guardada) queueMicrotask(() => setCategoria(guardada));
   }, [storageKey]);
   useEffect(() => {
     sessionStorage.setItem(storageKey, categoria);
@@ -204,19 +208,19 @@ export default function EventChecklistTable({
            * lo que el usuario acaba de capturar y no ha guardado.
            */}
           <div className={`overflow-hidden rounded-xl border border-outline-variant bg-surface-container ${visibles === 0 ? "hidden" : ""}`}>
-            <div className="hidden grid-cols-[2.5rem_minmax(13rem,1.8fr)_minmax(9rem,1fr)_7rem_12rem_8rem_7rem_6.5rem_2rem] gap-2 border-b border-outline-variant px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant md:grid">
-              <span>Verif.</span><span>Producto</span><span>Presentación</span><span>{isReturn ? "Salió" : "Planeado"}</span><span>{isReturn ? "Regresan cerradas" : "Cargado"}</span><span>{isReturn ? "Remanente" : "Diferencia"}</span><span>{isReturn ? "Consumo" : "Estado"}</span><span>{isReturn ? "Estado" : ""}</span><span>Acc.</span>
+            <div className="hidden grid-cols-[2.5rem_minmax(13rem,1.8fr)_minmax(9rem,1fr)_8.5rem_12rem_8rem_7rem_6.5rem_2rem] gap-2 border-b border-outline-variant px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant md:grid">
+              <span>Verif.</span><span>Producto</span><span>Presentación</span><span>{isReturn ? "Salió" : "Necesario"}</span><span>{isReturn ? "Regresan cerradas" : "Cargado al remolque"}</span><span>{isReturn ? "Remanente" : "Diferencia"}</span><span>{isReturn ? "Consumo" : "Estado"}</span><span>{isReturn ? "Estado" : ""}</span><span>Acc.</span>
             </div>
             {items.map((item) => (
               <div key={item.id} hidden={!esVisible(item)}>
-                <ChecklistItemRow item={item} eventId={eventId} phase={phase} locked={confirmed} />
+                <ChecklistItemRow item={item} eventId={eventId} phase={phase} locked={confirmed} isAdmin={isAdmin} />
               </div>
             ))}
           </div>
         </>
       )}
 
-      <EventPhaseConfirm eventId={eventId} phase={phase} disabled={reviewedCount !== items.length || confirmed} />
+      <EventPhaseConfirm eventId={eventId} phase={phase} disabled={reviewedCount !== items.length || additionalPendingReturns > 0 || confirmed} />
     </section>
   );
 }

@@ -3,6 +3,8 @@ import { Card } from "@/components/ui/Card";
 import { requireAdmin } from "@/lib/auth";
 import { getAttendanceCenter } from "@/lib/workforce/attendance/queries";
 import { workforceAttendanceDecisionAction } from "@/app/actions/workforceAttendance";
+import { addDaysToDateOnly, parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 const types = [
   "LATE_ARRIVAL",
@@ -16,15 +18,12 @@ const types = [
 ];
 const date = (value: Date | null) =>
   value
-    ? value.toLocaleString("es-MX", {
-        dateStyle: "short",
-        timeStyle: "short",
-      })
+    ? formatBusinessDateTime(value)
     : "—";
 const dateInput = (value: Date) => value.toISOString().slice(0, 10);
 const startOfDay = (value: string | undefined, fallback: Date) => {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return fallback;
-  return new Date(`${value}T00:00:00.000Z`);
+  return parseDateOnly(value);
 };
 const recommendation: Record<string, string> = {
   LATE_ARRIVAL: "Revisar contexto o solicitar corrección de reloj.",
@@ -43,13 +42,9 @@ export default async function AttendancePage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const [user, query] = await Promise.all([requireAdmin(), searchParams]);
-  const today = new Date();
-  const defaultStart = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 7),
-  );
-  const defaultEnd = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1),
-  );
+  const today = todayDateOnly();
+  const defaultStart = parseDateOnly(addDaysToDateOnly(today, -7));
+  const defaultEnd = parseDateOnly(addDaysToDateOnly(today, 1));
   const start = startOfDay(query.start, defaultStart);
   const end = startOfDay(query.end, defaultEnd);
   const selectedStatus = ["OPEN", "RESOLVED", "DISMISSED"].includes(

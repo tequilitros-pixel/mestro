@@ -1,10 +1,12 @@
 // Al actualizar la interfaz, la versión invalida los recursos estáticos de
 // versiones anteriores antes de volver a servirlos desde caché.
-const CACHE_NAME = "maestro-shell-v2";
+const IS_DEVELOPMENT_HOST = ["localhost", "127.0.0.1"].includes(self.location.hostname);
+const CACHE_NAME = IS_DEVELOPMENT_HOST ? "maestro-shell-dev-v10" : "maestro-shell-v10";
 const STATIC_ASSETS = [
   "/manifest.json",
   "/icon-192.png",
   "/icon-512.png",
+  "/offline.html",
 ];
 
 self.addEventListener("install", (event) => {
@@ -28,6 +30,8 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  if (IS_DEVELOPMENT_HOST) return;
+
   const request = event.request;
   if (request.method !== "GET") return;
 
@@ -37,16 +41,7 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(async () => {
-          return (await caches.match(request)) || (await caches.match("/")) || Response.error();
-        }),
+        .catch(async () => (await caches.match("/offline.html")) || Response.error()),
     );
     return;
   }

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
 import { isBranchAllowed } from "@/lib/branches/access";
 import { getAccessibleBranchIds } from "@/lib/auth";
 import { getActiveDiscountRules } from "@/lib/pos/discountRules";
 
 export async function GET(request: Request) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/pos"]);
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const branchId = new URL(request.url).searchParams.get("branchId");
   if (!branchId) return NextResponse.json({ error: "Selecciona una sucursal" }, { status: 400 });

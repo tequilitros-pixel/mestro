@@ -1,5 +1,6 @@
 import { getMyScheduleForWeeks } from "@/app/actions/schedule";
 import { getMyOpenShift } from "@/app/actions/timeclock";
+import { todayDateOnly } from "@/lib/dateOnly";
 import CalendarView from "./CalendarView";
 
 export default async function CalendarPage() {
@@ -13,6 +14,7 @@ export default async function CalendarPage() {
   const serializedShifts = shifts.map((shift) => ({
     id: shift.id,
     date: new Date(shift.date).toISOString(),
+    type: shift.type,
     startTime: shift.startTime,
     endTime: shift.endTime,
     notes: shift.notes,
@@ -33,6 +35,7 @@ export default async function CalendarPage() {
     <CalendarView
       shifts={serializedShifts}
       openShift={serializedOpenShift}
+      todayKey={todayDateOnly()}
     />
   );
 }

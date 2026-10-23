@@ -4,6 +4,12 @@ import {
   PlusIcon,
   CalendarIcon,
 } from "@/components/ui/icons";
+import {
+  addBusinessDays,
+  businessDayStart,
+  formatBusinessDate,
+  formatBusinessDateOnly,
+} from "@/lib/dateTime";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(
@@ -21,8 +27,10 @@ const statusLabels: Record<string, string> = {
 };
 
 export default async function EventosInventoryPage() {
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const now = new Date();
+  const recentStart = businessDayStart(
+    addBusinessDays(formatBusinessDateOnly(now), -30),
+  );
 
   const [
     activeEventsCount,
@@ -37,12 +45,12 @@ export default async function EventosInventoryPage() {
     prisma.serviceEvent.count({ where: { status: "RETURN_PENDING" } }),
     prisma.eventPackage.count({ where: { isActive: true } }),
     prisma.serviceEvent.findMany({
-      where: { eventDate: { gte: thirtyDaysAgo } },
+      where: { eventDate: { gte: recentStart } },
       include: { items: true },
     }),
     prisma.serviceEvent.findMany({
       where: {
-        eventDate: { gte: new Date() },
+        eventDate: { gte: now },
         status: { notIn: ["COMPLETED", "CANCELLED"] },
       },
       orderBy: { eventDate: "asc" },
@@ -165,7 +173,11 @@ export default async function EventosInventoryPage() {
                   </p>
                   <p className="text-sm text-on-surface-variant">
                     {event.location} ·{" "}
-                    {new Date(event.eventDate).toLocaleDateString("es-MX")}
+                    {formatBusinessDate(event.eventDate, {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                    })}
                     {event.package ? ` · ${event.package.name}` : ""}
                   </p>
                 </div>

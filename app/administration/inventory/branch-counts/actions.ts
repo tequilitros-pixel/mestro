@@ -2,9 +2,36 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getAccessibleBranchIds, requireAdminAction, requireInventoryCountCaptureActionAccess } from "@/lib/auth";
+import { isBranchAllowed } from "@/lib/branches/access";
+import { parseDateOnly } from "@/lib/dateOnly";
+import { executeIdempotent } from "@/lib/pos2/idempotency";
+import { reconcileWeeklyCountCutover } from "@/lib/inventory/weeklyCountCutover";
+import {
+  normalizeInventoryCountCapture,
+} from "@/lib/inventory/countCapture";
+import type { InventoryCaptureUnit } from "@/lib/inventory/units";
+import {
+  isInventoryCountType,
+  isProductIncludedInInventoryCount,
+  inventoryCountTypeLabel,
+} from "@/lib/inventory/countScope";
+
+async function authorizeCountBranch(branchId: string) {
+  const user = await requireInventoryCountCaptureActionAccess();
+  const allowedBranchIds = await getAccessibleBranchIds();
+  if (!isBranchAllowed(allowedBranchIds, branchId)) throw new Error("PERMISSION_DENIED");
+  return user;
+}
 
 export type ActionResult =
-  | { success: true; message: string; id?: string }
+  | {
+      success: true;
+      message: string;
+      id?: string;
+      baseQuantity?: string;
+      captureUnit?: InventoryCaptureUnit;
+    }
   | { success: false; error: string };
 
 export async function createInventoryCountAction(
@@ -13,23 +40,29 @@ export async function createInventoryCountAction(
   try {
     const branchId = formData.get("branchId")?.toString() ?? "";
     const countDateRaw = formData.get("countDate")?.toString() ?? "";
+    const countTypeRaw = formData.get("countType")?.toString() ?? "WEEKLY";
 
     if (!branchId) {
       return { success: false, error: "Selecciona una sucursal." };
     }
+    if (!isInventoryCountType(countTypeRaw)) {
+      return { success: false, error: "Selecciona un tipo de conteo válido." };
+    }
+    const currentUser = await authorizeCountBranch(branchId);
 
     if (!countDateRaw) {
       return { success: false, error: "La fecha del conteo es obligatoria." };
     }
 
-    const countDate = new Date(countDateRaw);
-
-    if (Number.isNaN(countDate.getTime())) {
+    let countDate: Date;
+    try {
+      countDate = parseDateOnly(countDateRaw);
+    } catch {
       return { success: false, error: "La fecha no es válida." };
     }
 
     const openCount = await prisma.inventoryCount.findFirst({
-      where: { branchId, status: "BORRADOR" },
+      where: { branchId, status: "BORRADOR", countType: countTypeRaw },
       select: { id: true },
     });
 
@@ -41,21 +74,28 @@ export async function createInventoryCountAction(
     }
 
     const previousCount = await prisma.inventoryCount.findFirst({
-      where: { branchId, status: "CERRADO" },
+      where: { branchId, status: "CERRADO", countType: countTypeRaw },
       orderBy: { countDate: "desc" },
       include: { items: true },
     });
 
-    const products = await prisma.inventoryProduct.findMany({
-      where: { isActive: true, trackStock: true },
+    const products = (await prisma.inventoryProduct.findMany({
+      where: {
+        isActive: true,
+        archivedAt: null,
+        trackStock: true,
+        ...(countTypeRaw === "WEEKLY" ? { countFrequency: "WEEKLY" } : {}),
+      },
       orderBy: { name: "asc" },
-    });
+    })).filter((product) =>
+      isProductIncludedInInventoryCount(product, countTypeRaw),
+    );
 
     const code = `CNT-${Date.now()}`;
 
     const count = await prisma.$transaction(async (tx) => {
       const created = await tx.inventoryCount.create({
-        data: { code, branchId, countDate, status: "BORRADOR" },
+        data: { code, branchId, countDate, countType: countTypeRaw, status: "BORRADOR", createdById: currentUser.id },
         select: { id: true },
       });
 
@@ -63,13 +103,14 @@ export async function createInventoryCountAction(
         const previousItem = previousCount?.items.find(
           (i) => i.productId === product.id,
         );
-        const previousQuantity = previousItem ? previousItem.quantityCounted : 0;
+        const previousQuantity = previousItem?.quantityCounted ?? 0;
 
         await tx.inventoryCountItem.create({
           data: {
             countId: created.id,
             productId: product.id,
-            quantityCounted: 0,
+            quantityCounted: null,
+            countedAt: null,
             previousQuantity,
           },
         });
@@ -80,102 +121,231 @@ export async function createInventoryCountAction(
 
     revalidatePath("/administration/inventory/branch-counts");
 
-    return { success: true, message: "Conteo creado.", id: count.id };
+    return {
+      success: true,
+      message: `${inventoryCountTypeLabel(countTypeRaw)} creado.`,
+      id: count.id,
+    };
   } catch (error) {
     console.error("Error creating inventory count:", error);
     return { success: false, error: "No fue posible crear el conteo." };
   }
 }
 
-export async function updateCountItemQuantityAction(
-  itemId: string,
+export async function addInventoryCountProductAction(
   countId: string,
-  quantityCounted: number,
+  productId: string,
 ): Promise<ActionResult> {
   try {
-    if (quantityCounted < 0) {
-      return { success: false, error: "La cantidad no puede ser negativa." };
+    if (!countId || !productId) {
+      return { success: false, error: "Selecciona un producto válido." };
     }
 
-    await prisma.inventoryCountItem.update({
-      where: { id: itemId },
-      data: { quantityCounted },
+    const scope = await prisma.inventoryCount.findUnique({
+      where: { id: countId },
+      select: { branchId: true },
+    });
+    if (!scope) return { success: false, error: "Conteo no encontrado." };
+    await authorizeCountBranch(scope.branchId);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>`SELECT "id", "status"::text FROM "InventoryCount" WHERE "id"=${countId} FOR UPDATE`;
+      if (!locked[0]) throw new Error("COUNT_NOT_FOUND");
+      if (locked[0].status !== "BORRADOR") throw new Error("COUNT_ALREADY_CLOSED");
+
+      const count = await tx.inventoryCount.findUnique({
+        where: { id: countId },
+        select: { branchId: true, countType: true },
+      });
+      if (!count || count.branchId !== scope.branchId) throw new Error("COUNT_NOT_FOUND");
+
+      const product = await tx.inventoryProduct.findUnique({ where: { id: productId } });
+      if (!product || !isProductIncludedInInventoryCount(product, count.countType)) {
+        throw new Error("PRODUCT_NOT_COUNTABLE");
+      }
+
+      const existing = await tx.inventoryCountItem.findUnique({
+        where: { countId_productId: { countId, productId } },
+        select: { id: true },
+      });
+      if (existing) return "already-added" as const;
+
+      const previousCount = await tx.inventoryCount.findFirst({
+        where: { branchId: count.branchId, status: "CERRADO", countType: count.countType },
+        orderBy: { countDate: "desc" },
+        select: { items: { where: { productId }, select: { quantityCounted: true } } },
+      });
+      await tx.inventoryCountItem.create({
+        data: {
+          countId,
+          productId,
+          quantityCounted: null,
+          countedAt: null,
+          previousQuantity: previousCount?.items[0]?.quantityCounted ?? 0,
+        },
+      });
+      return "added" as const;
     });
 
     revalidatePath(`/administration/inventory/branch-counts/${countId}`);
+    return {
+      success: true,
+      message: result === "added" ? "Producto agregado al conteo; falta capturar su cantidad." : "El producto ya está en el conteo.",
+    };
+  } catch (error) {
+    console.error("Error adding product to inventory count:", error);
+    if (error instanceof Error && error.message === "COUNT_ALREADY_CLOSED") {
+      return { success: false, error: "Este conteo ya está cerrado." };
+    }
+    if (error instanceof Error && error.message === "PRODUCT_NOT_COUNTABLE") {
+      return { success: false, error: "El producto ya no pertenece al alcance de este conteo." };
+    }
+    return { success: false, error: "No fue posible agregar el producto al conteo." };
+  }
+}
 
-    return { success: true, message: "Cantidad guardada." };
+export async function updateCountItemQuantityAction(
+  input: {
+    itemId: string;
+    countId: string;
+    quantity: string;
+    loosePieces?: string;
+    captureUnit: InventoryCaptureUnit;
+    notes?: string;
+  },
+): Promise<ActionResult> {
+  try {
+    const scopedItem = await prisma.inventoryCountItem.findUnique({
+      where: { id: input.itemId },
+      select: { countId: true, count: { select: { branchId: true } } },
+    });
+    if (!scopedItem || scopedItem.countId !== input.countId) throw new Error("PERMISSION_DENIED");
+    await authorizeCountBranch(scopedItem.count.branchId);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const lockedCount = await tx.$queryRaw<Array<{ id: string; status: string }>>`SELECT "id", "status"::text FROM "InventoryCount" WHERE "id"=${input.countId} FOR UPDATE`;
+      if (!lockedCount[0]) throw new Error("COUNT_NOT_FOUND");
+      if (lockedCount[0].status !== "BORRADOR") throw new Error("COUNT_ALREADY_CLOSED");
+
+      const item = await tx.inventoryCountItem.findUnique({
+        where: { id: input.itemId },
+        include: { product: true },
+      });
+      if (!item || item.countId !== input.countId) throw new Error("PERMISSION_DENIED");
+
+      const normalized = normalizeInventoryCountCapture({
+        quantity: input.quantity,
+        loosePieces: input.loosePieces,
+        captureUnit: input.captureUnit,
+        product: item.product,
+      });
+
+      const updatedNotes = input.notes !== undefined ? (input.notes.trim() || null) : item.notes;
+
+      await tx.inventoryCountItem.update({
+        where: { id: item.id },
+        data: {
+          quantityCounted: normalized.baseQuantity,
+          countedAt: new Date(),
+          notes: updatedNotes,
+        },
+      });
+
+      return normalized;
+    });
+
+    revalidatePath(`/administration/inventory/branch-counts/${input.countId}`);
+
+    return {
+      success: true,
+      message: "Cantidad guardada.",
+      baseQuantity: result.baseQuantity.toFixed(3),
+      captureUnit: result.captureUnit,
+    };
   } catch (error) {
     console.error("Error updating count item:", error);
+    if (error instanceof Error && error.message === "COUNT_ALREADY_CLOSED") {
+      return { success: false, error: "Este conteo ya está cerrado." };
+    }
+    if (error instanceof Error && error.message === "COUNT_QUANTITY_REQUIRED") {
+      return { success: false, error: "Captura una cantidad antes de guardar." };
+    }
+    if (error instanceof Error && error.message === "COUNT_QUANTITY_PRECISION") {
+      return { success: false, error: "La cantidad admite hasta 3 decimales." };
+    }
+    if (error instanceof Error && error.message === "COUNT_PACKAGES_WHOLE") {
+      return { success: false, error: "Los paquetes completos deben ser un número entero." };
+    }
+    if (error instanceof Error && error.message === "COUNT_LOOSE_PIECES_WHOLE") {
+      return { success: false, error: "Las piezas sueltas deben ser un número entero." };
+    }
+    if (error instanceof Error && error.message === "COUNT_LOOSE_PIECES_LIMIT") {
+      return { success: false, error: "Las piezas sueltas deben ser menores a las que contiene un paquete." };
+    }
+    if (error instanceof Error && error.message === "COUNT_LOOSE_PIECES_NOT_ALLOWED") {
+      return { success: false, error: "Este producto no está configurado como paquete de piezas." };
+    }
+    if (error instanceof Error && error.message === "PRESENTATION_NOT_CONFIGURED") {
+      return { success: false, error: "La presentación comercial no está configurada." };
+    }
+    if (error instanceof Error && ["COUNT_QUANTITY_INVALID", "COUNT_CAPTURE_UNIT_INVALID"].includes(error.message)) {
+      return { success: false, error: "La cantidad o unidad de captura no es válida." };
+    }
     return { success: false, error: "No fue posible guardar la cantidad." };
+  }
+}
+
+export async function updateCountItemNotesAction(
+  countId: string,
+  itemId: string,
+  notes: string,
+): Promise<ActionResult> {
+  try {
+    const scopedItem = await prisma.inventoryCountItem.findUnique({
+      where: { id: itemId },
+      select: { countId: true, count: { select: { branchId: true } } },
+    });
+    if (!scopedItem || scopedItem.countId !== countId) throw new Error("PERMISSION_DENIED");
+    await authorizeCountBranch(scopedItem.count.branchId);
+
+    await prisma.$transaction(async (tx) => {
+      const lockedCount = await tx.$queryRaw<Array<{ id: string; status: string }>>`SELECT "id", "status"::text FROM "InventoryCount" WHERE "id"=${countId} FOR UPDATE`;
+      if (!lockedCount[0]) throw new Error("COUNT_NOT_FOUND");
+      if (lockedCount[0].status !== "BORRADOR") throw new Error("COUNT_ALREADY_CLOSED");
+
+      await tx.inventoryCountItem.update({
+        where: { id: itemId },
+        data: { notes: notes.trim() || null },
+      });
+    });
+
+    revalidatePath(`/administration/inventory/branch-counts/${countId}`);
+    return { success: true, message: "Justificación guardada." };
+  } catch (error) {
+    console.error("Error updating count item notes:", error);
+    if (error instanceof Error && error.message === "COUNT_ALREADY_CLOSED") {
+      return { success: false, error: "Este conteo ya está cerrado." };
+    }
+    return { success: false, error: "No fue posible guardar la justificación." };
   }
 }
 
 export async function closeInventoryCountAction(
   countId: string,
+  operationId: string,
 ): Promise<ActionResult> {
   try {
-    const count = await prisma.inventoryCount.findUnique({
-      where: { id: countId },
-      include: { items: { include: { product: true } } },
-    });
-
-    if (!count) {
-      return { success: false, error: "Conteo no encontrado." };
-    }
-
-    if (count.status === "CERRADO") {
-      return { success: false, error: "Este conteo ya está cerrado." };
-    }
-
-    const previousCount = await prisma.inventoryCount.findFirst({
-      where: {
-        branchId: count.branchId,
-        status: "CERRADO",
-        countDate: { lt: count.countDate },
+    const actor = await requireAdminAction();
+    const scopedCount = await prisma.inventoryCount.findUnique({ where: { id: countId }, select: { branchId: true } });
+    if (!scopedCount) return { success: false, error: "Conteo no encontrado." };
+    await executeIdempotent({
+      operationId,
+      command: "CloseInventoryCountV2",
+      payload: { countId },
+      receiptContext: { actorId: actor.id, branchId: scopedCount.branchId },
+      execute: async (tx) => {
+        return reconcileWeeklyCountCutover(tx, { countId, actorId: actor.id, operationId });
       },
-      orderBy: { countDate: "desc" },
-      select: { countDate: true },
-    });
-
-    const periodStart = previousCount?.countDate ?? new Date(0);
-
-    await prisma.$transaction(async (tx) => {
-      for (const item of count.items) {
-        const entries = await tx.inventoryEntry.aggregate({
-          where: {
-            branchId: count.branchId,
-            productId: item.productId,
-            entryDate: { gt: periodStart, lte: count.countDate },
-          },
-          _sum: { quantity: true },
-        });
-
-        const entriesQuantity = entries._sum.quantity
-          ? Number(entries._sum.quantity)
-          : 0;
-        const previous = Number(item.previousQuantity ?? 0);
-        const counted = Number(item.quantityCounted);
-        const consumed = Math.max(previous + entriesQuantity - counted, 0);
-        const unitCost =
-          item.product.unitCost !== null ? Number(item.product.unitCost) : null;
-        const costTotal = unitCost !== null ? consumed * unitCost : null;
-
-        await tx.inventoryCountItem.update({
-          where: { id: item.id },
-          data: {
-            entriesQuantity,
-            quantityConsumed: consumed,
-            unitCostAtTime: unitCost,
-            costTotal,
-          },
-        });
-      }
-
-      await tx.inventoryCount.update({
-        where: { id: countId },
-        data: { status: "CERRADO" },
-      });
     });
 
     revalidatePath(`/administration/inventory/branch-counts/${countId}`);
@@ -184,6 +354,28 @@ export async function closeInventoryCountAction(
     return { success: true, message: "Conteo cerrado y consumo calculado." };
   } catch (error) {
     console.error("Error closing inventory count:", error);
+    if (error instanceof Error && error.message === "COUNT_ALREADY_CLOSED") {
+      return { success: false, error: "Este conteo ya está cerrado." };
+    }
+    const missingProductsMatch = error instanceof Error
+      ? /^COUNT_PRODUCTS_MISSING:(\d+)$/.exec(error.message)
+      : null;
+    if (missingProductsMatch) {
+      return {
+        success: false,
+        error: `Faltan ${missingProductsMatch[1]} productos en el conteo. Agrégalos y captura su cantidad antes de cerrar.`,
+      };
+    }
+    const pendingMatch = error instanceof Error
+      ? /^COUNT_ITEMS_PENDING:(\d+)$/.exec(error.message)
+      : null;
+    if (pendingMatch) {
+      const pendingCount = Number(pendingMatch[1]);
+      return {
+        success: false,
+        error: `Faltan ${pendingCount} productos por contar. Captura cada producto antes de cerrar.`,
+      };
+    }
     return { success: false, error: "No fue posible cerrar el conteo." };
   }
 }

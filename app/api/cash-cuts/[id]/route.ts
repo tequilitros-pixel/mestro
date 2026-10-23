@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { canWriteCashCut, getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { canWriteCashCut, getCashCutScope, withCashCutReadScope, withCashCutScope } from "@/lib/cash-cuts/access";
 
 const ROLES_QUE_PUEDEN_EDITAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -9,7 +9,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const scope = await getCashCutScope();
+  const scope = await getCashCutScope(["/cash-cuts/daily"]);
   if (!scope) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -24,15 +24,17 @@ export async function GET(
   let cashCut;
   try {
     cashCut = await prisma.cashCut.findFirst({
-      where: withCashCutScope(scope, { id }),
+      where: scope.user.role === "ADMIN"
+        ? withCashCutScope(scope, { id })
+        : withCashCutReadScope(scope, { id, archivedAt: null }),
       include: {
         branch: true,
         responsible: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true } },
         updatedBy: { select: { id: true, name: true } },
         salesByMethod: true,
-        outflows: { orderBy: { occurredAt: "asc" } },
-        inflows: { orderBy: { occurredAt: "asc" } },
+        outflows: { orderBy: { occurredAt: "asc" }, include: { categoryRef: { select: { id: true, name: true, group: true } } } },
+        inflows: { orderBy: { occurredAt: "asc" }, include: { categoryRef: { select: { id: true, name: true, group: true } } } },
         evidences: true,
         auditEntries: { orderBy: { createdAt: "desc" }, take: 20 },
         denominations: { orderBy: { value: "desc" } },
@@ -110,7 +112,7 @@ export async function PATCH(
 
   const { id } = await params;
 
-  const scope = await getCashCutScope();
+  const scope = await getCashCutScope(["/cash-cuts/daily"]);
   if (!scope) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

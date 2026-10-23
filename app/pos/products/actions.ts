@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireAdminAction } from "@/lib/auth";
 import { withRlsContext } from "@/lib/rls";
 
 export type PosActionResult =
@@ -93,6 +93,7 @@ export async function createProductAction(
   formData: FormData,
 ): Promise<PosActionResult> {
   try {
+    await requireAdminAction();
     const categoryId = formData.get("categoryId")?.toString().trim() ?? "";
     const name = formData.get("name")?.toString().trim() ?? "";
     const icon = formData.get("icon")?.toString().trim() || null;
@@ -180,6 +181,7 @@ export async function updateProductAction(
   formData: FormData,
 ): Promise<PosActionResult> {
   try {
+    await requireAdminAction();
     const categoryId = formData.get("categoryId")?.toString().trim() ?? "";
     const name = formData.get("name")?.toString().trim() ?? "";
     const icon = formData.get("icon")?.toString().trim() || null;
@@ -244,6 +246,7 @@ export async function toggleProductActiveAction(
   active: boolean,
 ): Promise<PosActionResult> {
   try {
+    await requireAdminAction();
     await prisma.posProduct.update({ where: { id: productId }, data: { active } });
 
     revalidatePath("/pos/products");
@@ -260,6 +263,7 @@ export async function toggleVariantActiveAction(
   active: boolean,
 ): Promise<PosActionResult> {
   try {
+    await requireAdminAction();
     await prisma.posProductVariant.update({ where: { id: variantId }, data: { active } });
 
     revalidatePath("/pos/products");

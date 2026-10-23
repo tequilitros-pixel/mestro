@@ -8,6 +8,7 @@ import {
   type CreateInventoryProductResult,
 } from "../actions";
 import { PRODUCT_CATEGORIES } from "../categories";
+import { formatCommercialPresentation } from "@/lib/inventory/units";
 
 const units = [
   "Pieza", "Botella", "Caja", "Bolsa", "Litro", "Mililitro",
@@ -22,6 +23,7 @@ type Product = {
   category: string;
   unit: string;
   itemType: string;
+  countFrequency: "UNCLASSIFIED" | "WEEKLY" | "MONTHLY_ONLY";
   unitCost: number | null;
   minimumStock: number;
   trackStock: boolean;
@@ -29,7 +31,8 @@ type Product = {
   trackExpiration: boolean;
   canBeSold: boolean;
   mustReturn: boolean;
-  contentPerUnit: number | null; contentUnit: string | null;
+  contentPerUnit: number | null; contentUnit: string | null; handlingUnit: string | null; normalizedContentPerUnit: number | null;
+  archivedAt: string | null;
 };
 
 export default function EditProductForm({ product }: { product: Product }) {
@@ -128,7 +131,7 @@ export default function EditProductForm({ product }: { product: Product }) {
             </select>
           </label>
 
-          <div className="space-y-2 md:col-span-2"><span className="text-sm font-semibold text-on-surface-variant">Contenido de cada unidad</span><div className="grid gap-3 sm:grid-cols-2"><input name="contentPerUnit" type="number" min="0.001" step="0.001" value={content} onChange={(event) => setContent(event.target.value)} placeholder="Ej. 600, 1800 o 1.8" className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm" /><select name="contentUnit" value={contentUnit} onChange={(event) => setContentUnit(event.target.value)} className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm"><option value="ML">ml</option><option value="L">L</option><option value="G">g</option><option value="KG">kg</option><option value="PIEZAS">piezas</option></select></div><p className="text-xs text-on-surface-variant">{content ? `1 ${unit.toLowerCase()} contiene ${content} ${contentUnit === "PIEZAS" ? "piezas" : contentUnit.toLowerCase()}${contentUnit === "L" ? ` (${Number(content) * 1000} ml)` : ""}` : "Presentación sin configurar"}</p></div>
+          <div className="space-y-2 md:col-span-2"><span className="text-sm font-semibold text-on-surface-variant">Contenido de cada presentación</span><div className="grid gap-3 sm:grid-cols-2"><input name="contentPerUnit" type="number" min="0.001" step="0.001" value={content} onChange={(event) => setContent(event.target.value)} placeholder="Ej. 600, 1800 o 1.8" className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm" /><select name="contentUnit" value={contentUnit} onChange={(event) => setContentUnit(event.target.value)} className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm"><option value="ML">ml</option><option value="L">L</option><option value="G">g</option><option value="KG">kg</option><option value="PIEZAS">piezas</option></select></div><p className="text-xs text-on-surface-variant">{formatCommercialPresentation({ productName: product.name, handlingUnit: product.handlingUnit, contentPerUnit: content ? Number(content) : null, contentUnit }) ?? "Presentación sin configurar"}</p></div>
 
           <label className="space-y-2">
             <span className="text-sm font-semibold text-on-surface-variant">Tipo de producto</span>
@@ -142,6 +145,23 @@ export default function EditProductForm({ product }: { product: Product }) {
               <option value="RETURNABLE">Retornable</option>
               <option value="EQUIPMENT">Equipo</option>
             </select>
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-semibold text-on-surface-variant">Alcance del conteo</span>
+            <select
+              name="countFrequency"
+              required
+              defaultValue={product.countFrequency}
+              className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
+            >
+              <option value="UNCLASSIFIED">Pendiente de clasificar</option>
+              <option value="WEEKLY">Incluir en conteo semanal</option>
+              <option value="MONTHLY_ONLY">Sólo conteo mensual</option>
+            </select>
+            <span className="block text-xs text-on-surface-variant">
+              El conteo mensual incluye todos los productos activos con seguimiento de stock.
+            </span>
           </label>
 
           <label className="space-y-2">
@@ -212,18 +232,20 @@ export default function EditProductForm({ product }: { product: Product }) {
       </form>
 
       <div className="rounded-2xl border border-error/40 bg-error/10 p-6">
-        <h3 className="font-bold text-error">Eliminar producto</h3>
+        <h3 className="font-bold text-error">{product.archivedAt ? "Producto archivado" : "Eliminar producto"}</h3>
         <p className="mt-1 text-sm text-error/70">
-          Solo se puede eliminar si nunca se ha usado en paquetes, eventos, kits o movimientos.
+          {product.archivedAt
+            ? "El archivado conserva existencias e historial. Restáuralo desde el catálogo si necesitas operar con él."
+            : "Solo se puede eliminar si nunca se ha usado en paquetes, eventos, kits o movimientos."}
         </p>
 
-        {deleteError && (
+        {!product.archivedAt && deleteError && (
           <div className="mt-3 rounded-xl border border-error/40 bg-error/10 p-3 text-sm text-error">
             {deleteError}
           </div>
         )}
 
-        {!confirmingDelete ? (
+        {!product.archivedAt && (!confirmingDelete ? (
           <button
             onClick={() => setConfirmingDelete(true)}
             className="mt-4 rounded-xl border border-error/40 px-4 py-2 text-sm font-semibold text-error transition duration-150 ease-out hover:scale-[1.04] hover:bg-error/10 active:scale-[0.97]"
@@ -247,7 +269,7 @@ export default function EditProductForm({ product }: { product: Product }) {
               Cancelar
             </button>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );

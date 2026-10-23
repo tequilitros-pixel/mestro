@@ -2,7 +2,7 @@
 
 import { useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
-import { updatePersonnel, updateHourlyRate } from "@/app/actions/personnel";
+import { updatePersonnel, updateHourlyRate, updateBranchHourlyRate } from "@/app/actions/personnel";
 import { setEmployeePinAction, clearEmployeePinAction } from "@/app/actions/kiosk";
 import {
   ROLE_LABELS,
@@ -34,6 +34,7 @@ interface UserData {
   phone: string | null;
   role: UserRole;
   hourlyRate: number | null;
+  salaryRates: { branchId: string; amount: number }[];
   hasPin: boolean;
   branches: { branch: Branch }[];
 }
@@ -59,6 +60,11 @@ export default function EditPersonnelForm({
   const [hourlyRate, setHourlyRate] = useState(user.hourlyRate?.toString() ?? "");
   const [savingRate, setSavingRate] = useState(false);
   const [rateMessage, setRateMessage] = useState<string | null>(null);
+  const [branchRates, setBranchRates] = useState<Record<string, string>>(
+    Object.fromEntries(user.salaryRates.map((rate) => [rate.branchId, String(rate.amount)])),
+  );
+  const [savingBranchId, setSavingBranchId] = useState<string | null>(null);
+  const [branchRateMessage, setBranchRateMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -92,6 +98,16 @@ export default function EditPersonnelForm({
 
     setRateMessage("Tarifa guardada.");
     router.refresh();
+  }
+
+  async function handleSaveBranchRate(branchId: string) {
+    setSavingBranchId(branchId);
+    setBranchRateMessage(null);
+    const raw = (branchRates[branchId] ?? "").trim();
+    const result = await updateBranchHourlyRate(user.id, branchId, raw === "" ? null : Number(raw));
+    setSavingBranchId(null);
+    setBranchRateMessage(result.error ?? "Tarifa de sucursal guardada.");
+    if (!result.error) router.refresh();
   }
 
   async function handleSetPin() {
@@ -306,7 +322,7 @@ export default function EditPersonnelForm({
         <SectionHeader icon={DollarIcon} title="Pago por hora" />
 
         <p className="text-sm text-on-surface-variant">
-          Se usa para calcular la nómina desde el checador.
+          Tarifa general por hora. Se aplica cuando la sucursal no tiene una tarifa específica.
         </p>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -331,6 +347,30 @@ export default function EditPersonnelForm({
         {rateMessage && (
           <p className="text-xs text-on-surface-variant">{rateMessage}</p>
         )}
+
+        <div className="border-t border-outline-variant pt-4">
+          <p className="mb-3 text-sm font-semibold text-on-surface">Tarifa por sucursal</p>
+          <p className="mb-3 text-xs text-on-surface-variant">Deja el campo vacío para usar la tarifa general. Los cambios aplican a las entradas posteriores y conservan el historial anterior.</p>
+          <div className="space-y-2">
+            {allBranches.map((branch) => (
+              <div key={branch.id} className="flex flex-wrap items-center gap-2">
+                <label htmlFor={`rate-${branch.id}`} className="w-40 text-sm text-on-surface">{branch.name}</label>
+                <input
+                  id={`rate-${branch.id}`}
+                  type="number" min="0" step="0.01" placeholder={hourlyRate || "Tarifa general"}
+                  value={branchRates[branch.id] ?? ""}
+                  onChange={(event) => setBranchRates((current) => ({ ...current, [branch.id]: event.target.value }))}
+                  className="w-40 rounded-xl border border-outline-variant bg-background px-4 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                />
+                <button type="button" onClick={() => handleSaveBranchRate(branch.id)} disabled={savingBranchId !== null}
+                  className="rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface hover:border-primary disabled:opacity-60">
+                  {savingBranchId === branch.id ? "Guardando..." : "Guardar"}
+                </button>
+              </div>
+            ))}
+          </div>
+          {branchRateMessage && <p className="mt-2 text-xs text-on-surface-variant">{branchRateMessage}</p>}
+        </div>
       </section>
 
       <section className="compact-form-panel space-y-4 rounded-xl border border-outline-variant bg-surface-container">

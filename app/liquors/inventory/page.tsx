@@ -15,6 +15,8 @@ import {
   CalendarIcon,
 } from "@/components/ui/icons";
 import PageTabs from "@/components/ui/PageTabs";
+import { parseDateOnly } from "@/lib/dateOnly";
+import { formatBusinessDateOnly } from "@/lib/dateTime";
 
 type InventoryGroup = {
   key: string;
@@ -836,14 +838,11 @@ const safeRedAlertDays =
   redAlertDays !== null && redAlertDays > 0
     ? redAlertDays
     : 7;
-  const today = startOfDay(new Date());
-  const expiration = startOfDay(expirationDate);
-
-  const millisecondsPerDay = 1000 * 60 * 60 * 24;
-
-  const daysRemaining = Math.ceil(
-    (expiration.getTime() - today.getTime()) /
-      millisecondsPerDay
+  const today = formatBusinessDateOnly(new Date());
+  const expiration = formatBusinessDateOnly(expirationDate);
+  const daysRemaining = Math.round(
+    (parseDateOnly(expiration).getTime() - parseDateOnly(today).getTime()) /
+      (24 * 60 * 60 * 1000),
   );
 
   if (daysRemaining < 0) {
@@ -861,13 +860,6 @@ if (daysRemaining <= safeYellowAlertDays) {
   return "HEALTHY";
 }
 
-function startOfDay(date: Date) {
-  const result = new Date(date);
-
-  result.setHours(0, 0, 0, 0);
-
-  return result;
-}
 function formatBottleSize(sizeMl: number) {
   if (sizeMl >= 1000) {
     const liters = sizeMl / 1000;

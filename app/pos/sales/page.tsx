@@ -1,11 +1,13 @@
-import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { getAccessibleBranchIds, getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import SalesDashboardClient from "@/components/pos/SalesDashboardClient";
 import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
 import { withRlsContext } from "@/lib/rls";
 
 export default async function PosSalesPage() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/pos", "/pos/sales"]);
+  if (!user) redirect("/profile");
   const allowedBranchIds = await getAccessibleBranchIds();
 
   const branches = await prisma.branch.findMany({
@@ -22,8 +24,6 @@ export default async function PosSalesPage() {
   const startOfTomorrow = businessDayStart(addDaysToDateOnly(today, 1));
 
   const branchFilter = allowedBranchIds ? { in: allowedBranchIds } : undefined;
-
-  if (!user) return null;
 
   const [sales, analyticsSales] = await withRlsContext(user, (tx) => Promise.all([
     tx.posSale.findMany({
@@ -53,19 +53,23 @@ export default async function PosSalesPage() {
       },
       select: {
         id: true,
+        code: true,
         total: true,
         createdAt: true,
         branch: { select: { id: true, name: true } },
+        soldBy: { select: { id: true, name: true } },
         payments: { select: { method: true, amount: true } },
         items: {
           select: {
             name: true,
             quantity: true,
             lineTotal: true,
+            isCustom: true,
             variant: {
               select: {
                 product: {
                   select: {
+                    id: true,
                     name: true,
                     category: { select: { name: true } },
                   },
@@ -84,14 +88,18 @@ export default async function PosSalesPage() {
       branches={branches}
       analytics={analyticsSales.map((s) => ({
         id: s.id,
+        code: s.code,
         total: s.total,
         createdAt: s.createdAt.toISOString(),
         branch: s.branch,
+        soldBy: s.soldBy,
         payments: s.payments.map((p) => ({ method: p.method, amount: p.amount })),
         items: s.items.map((i) => ({
           name: i.name,
           quantity: i.quantity,
           lineTotal: i.lineTotal,
+          isCustom: i.isCustom,
+          productId: i.variant?.product.id ?? null,
           productName: i.variant?.product.name ?? null,
           categoryName: i.variant?.product.category.name ?? null,
         })),

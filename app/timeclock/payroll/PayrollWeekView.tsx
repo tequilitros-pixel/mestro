@@ -15,11 +15,14 @@ import {
 } from "@/components/ui/icons";
 import {
   getPayrollWeekTable,
+  getPayrollWeekHistoryAction,
   getEmployeePayrollDetail,
   createPayrollAdjustmentAction,
   deletePayrollAdjustmentAction,
   submitPayrollPeriodAction,
-  approvePayrollPeriodAction,
+  approvePayrollEntryAction,
+  reopenPayrollEntryAction,
+  closePayrollReviewAction,
   markPayrollPeriodPaidAction,
   reopenPayrollPeriodAction,
   justifyIncidentAction,
@@ -27,7 +30,13 @@ import {
   type PayrollWeekTable,
   type PayrollEmployeeDetail,
   type PayrollPeriodInfo,
+  type PayrollWeekHistoryItem,
 } from "@/app/actions/payroll";
+import {
+  createManualTimeClockEntryAction,
+  updateManualTimeClockEntryAction,
+  deleteManualTimeClockEntryAction,
+} from "@/app/actions/timeclock";
 import {
   addDaysToDateOnly,
   mondayOfWeek,
@@ -35,6 +44,7 @@ import {
   todayDateOnly,
 } from "@/lib/dateOnly";
 import { useToast } from "@/components/ui/Toast";
+import { payrollApprovalProgress } from "@/lib/payroll/approvalProgress";
 
 const STATUS_LABELS: Record<PayrollPeriodInfo["status"], string> = {
   BORRADOR: "Borrador",
@@ -92,6 +102,12 @@ function formatPaymentDate(weekStart: string) {
   return new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(paymentDate);
 }
 
+function initialPayrollWeek() {
+  const today = todayDateOnly();
+  const currentMonday = mondayOfWeek(today);
+  return today === currentMonday ? addDaysToDateOnly(currentMonday, -7) : currentMonday;
+}
+
 function formatDayLabel(dateStr: string) {
   const fmt = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "UTC" });
   return fmt.format(parseDateOnly(dateStr));
@@ -117,13 +133,35 @@ function formatDateTime(iso: string) {
   }).format(new Date(iso));
 }
 
+function toDateTimeLocalInput(dateTime: string) {
+  const date = new Date(dateTime);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function buildDateTimeFromDay(date: string, hour: string) {
+  const [hh, mm] = hour.split(":");
+  const parsedDate = new Date(`${date}T${hh}:${mm}`);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate.toISOString();
+}
+
+type EditableEntryDraft = {
+  entryId: string;
+  date: string;
+  branchId: string;
+  clockIn: string;
+  clockOut: string;
+};
+
 export default function PayrollWeekView() {
   const { showToast } = useToast();
-  const [weekStart, setWeekStart] = useState(() => mondayOfWeek(todayDateOnly()));
+  const [weekStart, setWeekStart] = useState(() => initialPayrollWeek());
   const [table, setTable] = useState<PayrollWeekTable | null>(null);
+  const [history, setHistory] = useState<PayrollWeekHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [reviewUserIds, setReviewUserIds] = useState<string[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [actionBusy, setActionBusy] = useState(false);
   const [search, setSearch] = useState("");
@@ -150,29 +188,30 @@ export default function PayrollWeekView() {
     };
   }, [weekStart, refreshKey]);
 
+  useEffect(() => {
+    getPayrollWeekHistoryAction().then((result) => {
+      if ("success" in result) setHistory(result.data);
+    });
+  }, [refreshKey]);
+
   async function handlePeriodAction(
     action: (weekStart: string) => Promise<{ error?: string; success?: boolean }>,
     successMessage: string,
   ) {
     setActionBusy(true);
-    const result = await action(weekStart);
-    setActionBusy(false);
-
-    if (result?.error) {
-      showToast(result.error, "error");
-    } else {
-      showToast(successMessage, "success");
-      setRefreshKey((k) => k + 1);
+    try {
+      const result = await action(weekStart);
+      if (result?.error) {
+        showToast(result.error, "error");
+      } else {
+        showToast(successMessage, "success");
+        setRefreshKey((k) => k + 1);
+      }
+    } catch (actionError) {
+      showToast(actionError instanceof Error ? actionError.message : "No se pudo completar la acción", "error");
+    } finally {
+      setActionBusy(false);
     }
-  }
-
-  async function approveWeek() {
-    if (!table) return;
-    const accepted = confirm(
-      `Estás a punto de aprobar la nómina del ${formatWeekRange(table.weekStart)}.\n\nUna vez aprobada, los registros de esta semana quedarán bloqueados.`,
-    );
-    if (!accepted) return;
-    await handlePeriodAction(approvePayrollPeriodAction, "Nómina semanal aprobada");
   }
 
   async function reopenWeek() {
@@ -182,12 +221,17 @@ export default function PayrollWeekView() {
       return;
     }
     setActionBusy(true);
-    const result = await reopenPayrollPeriodAction(weekStart, reason.trim());
-    setActionBusy(false);
-    if (result?.error) showToast(result.error, "error");
-    else {
-      showToast("Semana reabierta", "success");
-      setRefreshKey((key) => key + 1);
+    try {
+      const result = await reopenPayrollPeriodAction(weekStart, reason.trim());
+      if (result?.error) showToast(result.error, "error");
+      else {
+        showToast("Semana reabierta", "success");
+        setRefreshKey((key) => key + 1);
+      }
+    } catch (actionError) {
+      showToast(actionError instanceof Error ? actionError.message : "No se pudo reabrir la semana", "error");
+    } finally {
+      setActionBusy(false);
     }
   }
 
@@ -198,12 +242,32 @@ export default function PayrollWeekView() {
       ? table.employees.filter((employee) => employee.name.toLocaleLowerCase("es-MX").includes(query))
       : table.employees;
   }, [search, table]);
+  const approvalAmounts = table ? payrollApprovalProgress(table.employees) : null;
+  const selectedReviewIndex = reviewUserIds.findIndex((id) => id === selectedUserId);
+
+  function openEmployeeReview(userId: string) {
+    setReviewUserIds(visibleEmployees.map((employee) => employee.id));
+    setSelectedUserId(userId);
+  }
+
+  const historyOptions = useMemo(() => {
+    const options = new Map<string, PayrollWeekHistoryItem>();
+    options.set(weekStart, {
+      weekStart,
+      paymentDate: addDaysToDateOnly(weekStart, 7),
+      status: table?.period.status ?? "BORRADOR",
+    });
+    for (const item of history) options.set(item.weekStart, item);
+    return Array.from(options.values()).sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+  }, [history, table, weekStart]);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex items-center gap-2 rounded-2xl border border-outline-variant bg-surface-container p-1.5">
           <button
+            type="button"
+            title="Semana anterior"
             onClick={() => setWeekStart((w) => addDaysToDateOnly(w, -7))}
             className="rounded-xl p-2 text-on-surface-variant hover:bg-surface-container-high"
           >
@@ -213,6 +277,8 @@ export default function PayrollWeekView() {
             {formatWeekRange(weekStart)}
           </span>
           <button
+            type="button"
+            title="Semana siguiente"
             onClick={() => setWeekStart((w) => addDaysToDateOnly(w, 7))}
             className="rounded-xl p-2 text-on-surface-variant hover:bg-surface-container-high"
           >
@@ -220,11 +286,26 @@ export default function PayrollWeekView() {
           </button>
         </div>
         <button
-          onClick={() => setWeekStart(mondayOfWeek(todayDateOnly()))}
+          type="button"
+          onClick={() => setWeekStart(initialPayrollWeek())}
           className="rounded-xl border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high"
         >
           Semana actual
         </button>
+        <label className="flex min-w-56 flex-1 flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-outline sm:flex-none">
+          Lunes de pago
+          <select
+            value={weekStart}
+            onChange={(event) => setWeekStart(event.target.value)}
+            className="rounded-xl border border-outline-variant bg-surface px-3 py-2 text-xs font-semibold normal-case tracking-normal text-on-surface"
+          >
+            {historyOptions.map((item) => (
+              <option key={item.weekStart} value={item.weekStart}>
+                {formatDayLabel(item.paymentDate)} · {STATUS_LABELS[item.status]}
+              </option>
+            ))}
+          </select>
+        </label>
         {loading && <span className="text-xs text-on-surface-variant">Cargando...</span>}
       </div>
 
@@ -247,7 +328,7 @@ export default function PayrollWeekView() {
                 {table.period.status === "BORRADOR" &&
                   "Se calcula en vivo con el checador. Envíala a revisión para congelar los números."}
                 {table.period.status === "REVISION" &&
-                  `Enviada por ${table.period.submittedByName ?? "—"} · ${
+                  `${table.period.approvedEntries} de ${table.period.totalEntries} empleados aprobados · Enviada por ${table.period.submittedByName ?? "—"} · ${
                     table.period.submittedAt ? formatDateTime(table.period.submittedAt) : ""
                   }`}
                 {table.period.status === "APROBADA" &&
@@ -276,28 +357,15 @@ export default function PayrollWeekView() {
               )}
 
               {table.period.status === "REVISION" && (
-                <>
+                table.period.totalEntries > 0 && table.period.approvedEntries === table.period.totalEntries ? (
                   <button
                     disabled={actionBusy}
-                    onClick={() =>
-                      approveWeek()
-                    }
+                    onClick={() => handlePeriodAction(closePayrollReviewAction, "Revisión cerrada sin cambios")}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:opacity-50"
                   >
-                    <CheckIcon className="h-3.5 w-3.5" />
-                    Aprobar
+                    <CheckIcon className="h-3.5 w-3.5" /> Cerrar revisión sin cambios
                   </button>
-                  <button
-                    disabled={actionBusy}
-                    onClick={() =>
-                      reopenWeek()
-                    }
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high disabled:opacity-50"
-                  >
-                    <RefreshIcon className="h-3.5 w-3.5" />
-                    Reabrir
-                  </button>
-                </>
+                ) : null
               )}
 
               {table.period.status === "APROBADA" && (
@@ -335,11 +403,10 @@ export default function PayrollWeekView() {
           </Card>
 
           <section className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container" aria-label="Resumen semanal">
-            <div className="grid grid-cols-2 divide-x divide-y divide-outline-variant sm:grid-cols-5 sm:divide-y-0">
+            <div className="grid grid-cols-2 divide-x divide-y divide-outline-variant sm:grid-cols-4 sm:divide-y-0">
               {[
-                ["Empleados", String(table.totals.employeesWorked)],
-                ["Horas totales", hours(table.totals.totalHours)],
-                ["Horas extra", hours(table.totals.overtimeHours)],
+                ["Usuarios activos", String(table.totals.activeEmployees)],
+                ["Horas trabajadas", hours(table.totals.totalHours)],
                 ["Total nómina", money(table.totals.finalPay)],
                 ["Pago", formatPaymentDate(table.weekStart)],
               ].map(([label, value]) => (
@@ -351,11 +418,32 @@ export default function PayrollWeekView() {
             </div>
           </section>
 
+          <Card className="border-primary/30 bg-primary/[0.04]">
+            <CardLabel>Total a pagar este lunes</CardLabel>
+            <p className="mt-1 text-3xl font-black tabular-nums text-on-surface">{money(table.totals.finalPay)}</p>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              Semana trabajada: {formatWeekRange(table.weekStart)} · pago: {formatPaymentDate(table.weekStart)}
+            </p>
+          </Card>
+
+          {table.period.status !== "BORRADOR" && (
+            <section className="grid gap-3 sm:grid-cols-2" aria-label="Avance de aprobación de nómina">
+              <Card className="border-secondary/30 bg-secondary/[0.05]">
+                <CardLabel>Pendiente por aprobar</CardLabel>
+                <p className="mt-1 text-2xl font-black tabular-nums text-on-surface">{money(approvalAmounts?.remaining ?? 0)}</p>
+              </Card>
+              <Card className="border-tertiary-fixed-dim/30 bg-tertiary-fixed-dim/[0.05]">
+                <CardLabel>Aprobado para pago</CardLabel>
+                <p className="mt-1 text-2xl font-black tabular-nums text-on-surface">{money(approvalAmounts?.approved ?? 0)}</p>
+              </Card>
+            </section>
+          )}
+
           <section className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest">
             <div className="flex flex-wrap items-end justify-between gap-3 border-b border-outline-variant bg-surface-container px-4 py-3">
               <div>
                 <h2 className="font-bold text-on-surface">Planilla semanal</h2>
-                <p className="text-xs text-on-surface-variant">Horas reales del checador · lunes a domingo</p>
+                <p className="text-xs text-on-surface-variant">Todos los usuarios activos · horas reales por día · lunes a domingo</p>
               </div>
               <label className="relative block w-full sm:w-64">
                 <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-outline" />
@@ -369,7 +457,7 @@ export default function PayrollWeekView() {
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-sm">
+                <table className="w-full min-w-[1220px] border-separate border-spacing-0 text-sm">
                   <thead className="bg-surface-container-high">
                     <tr className="text-left text-[11px] uppercase tracking-wide text-outline">
                       <th className="sticky left-0 z-20 w-56 border-b border-r border-outline-variant bg-surface-container-high px-4 py-3 font-bold">Empleado</th>
@@ -379,6 +467,7 @@ export default function PayrollWeekView() {
                         </th>
                       ))}
                       <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Total horas</th>
+                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Pago por hora</th>
                       <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Pago total</th>
                       <th className="border-b border-outline-variant px-3 py-3 text-center font-bold">Estado</th>
                     </tr>
@@ -387,14 +476,19 @@ export default function PayrollWeekView() {
                     {visibleEmployees.map((employee) => (
                       <tr key={employee.id} className="group hover:bg-primary/[0.025]">
                         <td className="sticky left-0 z-10 border-b border-r border-outline-variant bg-surface-container-lowest px-4 py-2.5 group-hover:bg-surface-container font-semibold text-on-surface">
-                          <button onClick={() => setSelectedUserId(employee.id)} className="text-left hover:text-primary hover:underline">{employee.name}</button>
+                          <div className="flex flex-col items-start gap-1">
+                            <button type="button" onClick={() => openEmployeeReview(employee.id)} className="text-left hover:text-primary hover:underline">{employee.name}</button>
+                            <button type="button" onClick={() => openEmployeeReview(employee.id)} className="text-[10px] font-bold text-primary hover:underline">
+                              {table.period.status === "BORRADOR" ? "Editar horas y turnos" : "Revisar detalle"}
+                            </button>
+                          </div>
                           {employee.missingRate && (
                             <span className="ml-2 rounded-full bg-error/15 px-2 py-0.5 text-[9px] font-bold text-error">Sin tarifa</span>
                           )}
                         </td>
                         {employee.hoursByDay.map((h, i) => (
                           <td key={i} className="border-b border-r border-outline-variant p-1.5 text-center">
-                            <button onClick={() => setSelectedUserId(employee.id)} className={`w-full rounded-md px-2 py-2 font-mono text-xs font-bold tabular-nums ${h > 0 ? "bg-tertiary-fixed-dim/12 text-tertiary-fixed-dim hover:bg-tertiary-fixed-dim/20" : "bg-surface-container text-outline"}`}>
+                            <button onClick={() => openEmployeeReview(employee.id)} className={`w-full rounded-md px-2 py-2 font-mono text-xs font-bold tabular-nums ${h > 0 ? "bg-tertiary-fixed-dim/12 text-tertiary-fixed-dim hover:bg-tertiary-fixed-dim/20" : "bg-surface-container text-outline"}`}>
                               {h > 0 ? hours(h) : "—"}
                             </button>
                           </td>
@@ -402,14 +496,22 @@ export default function PayrollWeekView() {
                         <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-mono font-black tabular-nums text-on-surface">
                           {hours(employee.totalHours)}
                         </td>
+                        <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-semibold tabular-nums text-on-surface">
+                          {employee.variableRate ? "Varias" : employee.hourlyRate === null ? "—" : money(employee.hourlyRate)}
+                        </td>
                         <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-black tabular-nums text-on-surface">
                           {employee.missingRate && employee.adjustmentsTotal === 0
                             ? "—"
                             : money(employee.finalPay)}
                         </td>
                         <td className="border-b border-outline-variant px-3 py-2.5 text-center">
-                          <button onClick={() => setSelectedUserId(employee.id)} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${table.period.status === "APROBADA" || table.period.status === "PAGADA" ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim" : "bg-secondary/15 text-secondary"}`}>
-                            {table.period.status === "APROBADA" || table.period.status === "PAGADA" ? "Aprobado" : "Pendiente"}
+                          <button onClick={() => openEmployeeReview(employee.id)} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${employee.approval.status === "APROBADA" || employee.approval.status === "PAGADA" ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim" : "bg-secondary/15 text-secondary"}`}>
+                            {employee.approval.status === "PAGADA"
+                              ? "Pagado"
+                              : employee.approval.status === "APROBADA"
+                                ? (employee.approval.history?.length ?? 0) > 1 ? "Reaprobado" : "Aprobado"
+                                : employee.approval.status === "BORRADOR" ? "Sin expediente"
+                                : (employee.approval.history?.length ?? 0) > 0 ? "Por reaprobación" : "Pendiente"}
                           </button>
                         </td>
                       </tr>
@@ -425,8 +527,14 @@ export default function PayrollWeekView() {
 
       {selectedUserId && (
         <EmployeeDetailModal
+          key={selectedUserId}
           userId={selectedUserId}
           weekStart={weekStart}
+          reviewPosition={selectedReviewIndex + 1}
+          reviewTotal={reviewUserIds.length}
+          previousUserId={selectedReviewIndex > 0 ? reviewUserIds[selectedReviewIndex - 1] : null}
+          nextUserId={selectedReviewIndex >= 0 ? reviewUserIds[selectedReviewIndex + 1] ?? null : null}
+          onNavigate={setSelectedUserId}
           onClose={() => setSelectedUserId(null)}
           onDataChanged={() => setRefreshKey((k) => k + 1)}
         />
@@ -438,11 +546,21 @@ export default function PayrollWeekView() {
 function EmployeeDetailModal({
   userId,
   weekStart,
+  reviewPosition,
+  reviewTotal,
+  previousUserId,
+  nextUserId,
+  onNavigate,
   onClose,
   onDataChanged,
 }: {
   userId: string;
   weekStart: string;
+  reviewPosition: number;
+  reviewTotal: number;
+  previousUserId: string | null;
+  nextUserId: string | null;
+  onNavigate: (userId: string) => void;
   onClose: () => void;
   onDataChanged: () => void;
 }) {
@@ -453,7 +571,25 @@ function EmployeeDetailModal({
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAdjustForm, setShowAdjustForm] = useState(false);
   const [justifyingDate, setJustifyingDate] = useState<string | null>(null);
-  const locked = detail ? detail.period.status !== "BORRADOR" : false;
+  const [draftEntryDate, setDraftEntryDate] = useState<string | null>(null);
+  const [editingEntry, setEditingEntry] = useState<EditableEntryDraft | null>(null);
+  const [entryBranchId, setEntryBranchId] = useState("");
+  const [entryClockIn, setEntryClockIn] = useState("");
+  const [entryClockOut, setEntryClockOut] = useState("");
+  const [savingEntry, setSavingEntry] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const locked = detail
+    ? detail.period.status === "APROBADA" || detail.period.status === "PAGADA" ||
+      (detail.period.status === "REVISION" && detail.approval.status !== "REVISION")
+    : false;
+  const branchOptions = detail?.branches ?? [];
+
+  function navigateToEmployee(nextUserId: string) {
+    if (editingEntry || showAdjustForm || justifyingDate) {
+      if (!confirm("Hay un formulario abierto. ¿Continuar y descartar los cambios sin guardar?")) return;
+    }
+    onNavigate(nextUserId);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -501,6 +637,159 @@ function EmployeeDetailModal({
     }
   }
 
+  async function handleDeleteEntry(entryId: string) {
+    if (!confirm("¿Eliminar este turno?")) return;
+    const result = await deleteManualTimeClockEntryAction(entryId);
+    if (result?.error) {
+      showToast(result.error, "error");
+    } else {
+      showToast("Turno eliminado", "success");
+      setRefreshKey((k) => k + 1);
+      onDataChanged();
+      setEditingEntry(null);
+      setDraftEntryDate(null);
+    }
+  }
+
+  function openAddEntry(date: string) {
+    if (!detail) return;
+    const defaultBranch = branchOptions[0]?.id ?? "";
+    const start = buildDateTimeFromDay(date, "09:00") ?? new Date().toISOString();
+    const end = buildDateTimeFromDay(date, "18:00") ?? new Date().toISOString();
+    setDraftEntryDate(date);
+    setEntryBranchId(defaultBranch);
+    setEntryClockIn(toDateTimeLocalInput(start));
+    setEntryClockOut(toDateTimeLocalInput(end));
+    setEditingEntry({
+      entryId: "new",
+      date,
+      branchId: defaultBranch,
+      clockIn: toDateTimeLocalInput(start),
+      clockOut: toDateTimeLocalInput(end),
+    });
+    setJustifyingDate(null);
+  }
+
+  function startEditingEntry(entry: {
+    id: string;
+    branchId: string;
+    branchName: string;
+    clockIn: string;
+    clockOut: string | null;
+    source: "CHECADOR" | "MANUAL";
+  }) {
+    setDraftEntryDate(null);
+    setEditingEntry({
+      entryId: entry.id,
+      date: detail ? detail.weekStart : "",
+      branchId: entry.branchId,
+      clockIn: toDateTimeLocalInput(entry.clockIn),
+      clockOut: entry.clockOut ? toDateTimeLocalInput(entry.clockOut) : "",
+    });
+    setEntryBranchId(entry.branchId);
+    setEntryClockIn(toDateTimeLocalInput(entry.clockIn));
+    setEntryClockOut(entry.clockOut ? toDateTimeLocalInput(entry.clockOut) : "");
+  }
+
+  async function handleSaveEntry() {
+    if (locked || !detail) return;
+    if (!entryBranchId) {
+      showToast("Selecciona una sucursal", "error");
+      return;
+    }
+    const dateFromForm = new Date(entryClockIn);
+    const outDate = new Date(entryClockOut);
+    if (Number.isNaN(dateFromForm.getTime()) || Number.isNaN(outDate.getTime())) {
+      showToast("Formato de hora inválido", "error");
+      return;
+    }
+    if (outDate <= dateFromForm) {
+      showToast("La salida debe ser después de la entrada", "error");
+      return;
+    }
+
+    setSavingEntry(true);
+    try {
+      const result = editingEntry?.entryId === "new"
+        ? await createManualTimeClockEntryAction({
+            userId: detail.employee.id,
+            branchId: entryBranchId,
+            clockIn: new Date(entryClockIn).toISOString(),
+            clockOut: new Date(entryClockOut).toISOString(),
+          })
+        : await updateManualTimeClockEntryAction({
+            entryId: editingEntry?.entryId ?? "",
+            branchId: entryBranchId,
+            clockIn: new Date(entryClockIn).toISOString(),
+            clockOut: new Date(entryClockOut).toISOString(),
+          });
+
+      if (result?.error) {
+        showToast(result.error, "error");
+        return;
+      }
+
+      showToast(editingEntry?.entryId === "new" ? "Turno creado" : "Turno actualizado", "success");
+      setEditingEntry(null);
+      setDraftEntryDate(null);
+      setRefreshKey((k) => k + 1);
+      onDataChanged();
+    } catch (actionError) {
+      showToast(actionError instanceof Error ? actionError.message : "No se pudo guardar el turno", "error");
+    } finally {
+      setSavingEntry(false);
+    }
+  }
+
+  function cancelEntryEdit() {
+    setEditingEntry(null);
+    setDraftEntryDate(null);
+  }
+
+  async function approveEmployee() {
+    if (!detail || detail.period.status !== "REVISION" || detail.approval.status !== "REVISION") return;
+    if (!confirm(`¿Aprobar únicamente la nómina de ${detail.employee.name}?`)) return;
+
+    setApproving(true);
+    try {
+      const result = await approvePayrollEntryAction(detail.weekStart, detail.employee.id);
+      if ("error" in result) {
+        showToast(result.error ?? "No se pudo aprobar al empleado", "error");
+        return;
+      }
+      showToast(
+        result.completed
+          ? `${detail.employee.name} aprobado. La semana quedó completamente aprobada.`
+          : `${detail.employee.name} ${(result.revision ?? 0) > 1 ? "reaprobado" : "aprobado"}`,
+        "success",
+      );
+      setRefreshKey((key) => key + 1);
+      onDataChanged();
+    } catch (actionError) {
+      showToast(actionError instanceof Error ? actionError.message : "No se pudo aprobar al empleado", "error");
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function reopenEmployee() {
+    if (!detail || detail.period.status !== "REVISION" || detail.approval.status !== "APROBADA") return;
+    if (!confirm(`¿Abrir la nómina de ${detail.employee.name} para corregirla? Tendrás que aprobarla otra vez.`)) return;
+    setApproving(true);
+    try {
+      const result = await reopenPayrollEntryAction(detail.weekStart, detail.employee.id);
+      if ("error" in result) {
+        showToast(result.error ?? "No se pudo abrir al empleado", "error");
+        return;
+      }
+      showToast(`${detail.employee.name} abierto para corrección`, "success");
+      setRefreshKey((key) => key + 1);
+      onDataChanged();
+    } finally {
+      setApproving(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -530,17 +819,43 @@ function EmployeeDetailModal({
               </button>
             </div>
 
+            <div className="mt-3 flex items-center justify-between gap-2 border-b border-outline-variant pb-3">
+              <button
+                type="button"
+                onClick={() => previousUserId && navigateToEmployee(previousUserId)}
+                disabled={!previousUserId || approving || savingEntry}
+                className="inline-flex items-center gap-1 rounded-lg border border-outline-variant px-2.5 py-1.5 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeftIcon className="h-3.5 w-3.5" /> Anterior
+              </button>
+              <span className="text-center text-xs font-semibold tabular-nums text-on-surface-variant">
+                {reviewPosition} de {reviewTotal}
+              </span>
+              <button
+                type="button"
+                onClick={() => nextUserId && navigateToEmployee(nextUserId)}
+                disabled={!nextUserId || approving || savingEntry}
+                className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-bold text-on-primary hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Siguiente <ChevronRightIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Card className="p-3">
-                <CardLabel>Horas</CardLabel>
+                <CardLabel>Horas trabajadas</CardLabel>
                 <p className="text-lg font-bold text-on-surface">{hours(detail.totalHours)}</p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Extra</CardLabel>
-                <p className="text-lg font-bold text-on-surface">{hours(detail.overtimeHours)}</p>
+                <CardLabel>Pago por hora</CardLabel>
+                <p className="text-lg font-bold text-on-surface">
+                  {new Set(detail.days.flatMap((day) => day.entries.filter((entry) => entry.clockOut && entry.hourlyRate !== undefined).map((entry) => entry.hourlyRate))).size > 1
+                    ? "Varias tarifas"
+                    : detail.employee.hourlyRate === null ? "—" : money(detail.employee.hourlyRate)}
+                </p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Base</CardLabel>
+                <CardLabel>Pago por horas</CardLabel>
                 <p className="text-lg font-bold text-on-surface">{money(detail.basePay)}</p>
               </Card>
               <Card className="p-3">
@@ -555,6 +870,68 @@ function EmployeeDetailModal({
                 )}
               </Card>
             </div>
+
+            {detail.period.status !== "BORRADOR" && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant bg-surface-container p-3">
+                <div>
+                  <p className="text-sm font-bold text-on-surface">
+                    {detail.approval.status === "BORRADOR"
+                      ? "Sin expediente de revisión"
+                      : detail.approval.status === "PAGADA"
+                      ? "Nómina individual pagada"
+                      : detail.approval.status === "APROBADA"
+                      ? (detail.approval.history?.length ?? 0) > 1 ? "Nómina individual reaprobada" : "Nómina individual aprobada"
+                      : (detail.approval.history?.length ?? 0) > 0 ? "Pendiente de reaprobación" : "Aprobación individual pendiente"}
+                  </p>
+                  <p className="text-xs text-on-surface-variant">
+                    {detail.approval.status === "BORRADOR"
+                      ? "Este empleado no formó parte de la semana enviada a revisión."
+                      : detail.approval.status === "APROBADA" || detail.approval.status === "PAGADA"
+                      ? `Aprobada por ${detail.approval.approvedByName ?? "—"}${detail.approval.approvedAt ? ` · ${formatDateTime(detail.approval.approvedAt)}` : ""}`
+                      : "Revisa las horas y el pago de este empleado antes de aprobarlo."}
+                  </p>
+                </div>
+                {detail.period.status === "REVISION" && detail.approval.status === "APROBADA" && (
+                  <button
+                    type="button"
+                    onClick={reopenEmployee}
+                    disabled={approving}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface disabled:opacity-50"
+                  >
+                    <RefreshIcon className="h-3.5 w-3.5" /> Modificar este empleado
+                  </button>
+                )}
+                {detail.period.status === "REVISION" && detail.approval.status === "REVISION" && (
+                  <button
+                    type="button"
+                    onClick={approveEmployee}
+                    disabled={approving}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:opacity-50"
+                  >
+                    <CheckIcon className="h-3.5 w-3.5" />
+                    {approving ? "Aprobando..." : `Aprobar solo a ${detail.employee.name}`}
+                  </button>
+                )}
+                {(detail.approval.status === "APROBADA" || detail.approval.status === "PAGADA") && (
+                  <a
+                    href={`/api/timeclock/payroll/statement?userId=${encodeURIComponent(detail.employee.id)}&weekStart=${encodeURIComponent(detail.weekStart)}&download=1`}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-primary/40 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10"
+                  >
+                    Descargar resumen PDF
+                  </a>
+                )}
+                {(detail.approval.history?.length ?? 0) > 0 && (
+                  <div className="w-full border-t border-outline-variant pt-2 text-xs text-on-surface-variant">
+                    <p className="font-semibold">Aprobaciones anteriores</p>
+                    {detail.approval.history?.map((approval) => (
+                      <p key={approval.revision}>
+                        {approval.revision}. {money(approval.totalPay)} · {approval.approvedByName} · {formatDateTime(approval.approvedAt)}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-4 space-y-2">
               {detail.days.map((day) => (
@@ -571,7 +948,7 @@ function EmployeeDetailModal({
                     </span>
                   </div>
 
-                  <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
+                  <div className="mt-2 space-y-3 text-xs">
                     <div>
                       <p className="font-semibold text-outline">Programado</p>
                       {day.scheduled ? (
@@ -583,21 +960,210 @@ function EmployeeDetailModal({
                         <p className="text-outline">Sin turno</p>
                       )}
                     </div>
-                    <div>
-                      <p className="font-semibold text-outline">Real (checador)</p>
-                      {day.actual ? (
-                        <p className="text-on-surface-variant">
-                          {day.actual.branchName} · {formatTime(day.actual.clockIn)}–
-                          {day.actual.clockOut ? formatTime(day.actual.clockOut) : "abierto"}
-                          {day.actual.source === "MANUAL" && (
-                            <span className="ml-1 text-[10px] text-secondary">(manual)</span>
-                          )}
-                        </p>
+                    <div className="rounded-lg bg-surface-container px-2 py-2">
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold text-outline">Horas y turnos registrados</p>
+                        {!locked && (
+                          <button
+                            type="button"
+                            onClick={() => openAddEntry(day.date)}
+                            className="rounded-lg border border-outline-variant px-2 py-0.5 text-[10px] font-bold text-on-surface-variant hover:bg-surface-container-high"
+                          >
+                            <PlusIcon className="inline h-3.5 w-3.5" /> Agregar
+                          </button>
+                        )}
+                      </div>
+                      {day.entries.length === 0 ? (
+                        <p className="mt-1.5 text-outline">Sin turnos</p>
                       ) : (
-                        <p className="text-outline">Sin checada</p>
+                        <div className="mt-1.5 space-y-1.5">
+                          {day.entries.map((entry) => (
+                            <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-surface-container-lowest px-2 py-1.5">
+                              <span className="text-on-surface">
+                                {entry.branchName} · {formatTime(entry.clockIn)}–
+                                {entry.clockOut ? formatTime(entry.clockOut) : "abierto"}
+                                {entry.clockOut && entry.hourlyRate !== undefined && (
+                                  <span className="ml-1 text-[10px] text-on-surface-variant">
+                                    · {entry.hourlyRate === null ? "Sin tarifa" : `${money(entry.hourlyRate)}/h · ${money(entry.pay ?? 0)}`}
+                                  </span>
+                                )}
+                                <span className="ml-1 text-[10px] text-outline">
+                                  {entry.source === "MANUAL" ? "(manual)" : "(checador)"}
+                                </span>
+                              </span>
+                              {!locked && (
+                                <span className="flex gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      startEditingEntry({
+                                        id: entry.id,
+                                        branchId: entry.branchId,
+                                        branchName: entry.branchName,
+                                        clockIn: entry.clockIn,
+                                        clockOut: entry.clockOut,
+                                        source: entry.source,
+                                      })
+                                    }
+                                    title="Editar turno"
+                                    className="rounded-md border border-outline-variant px-2 py-1 text-[10px] font-bold hover:bg-surface-container-high"
+                                  >
+                                    Editar
+                                  </button>
+                                  {entry.source === "MANUAL" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteEntry(entry.id)}
+                                      aria-label="Quitar turno manual"
+                                      title="Quitar turno manual"
+                                      className="rounded-md p-1.5 text-outline hover:bg-error/10 hover:text-error"
+                                    >
+                                      <TrashIcon className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                  {!entry.clockOut && (
+                                    <span className="rounded-md bg-error/10 px-2 py-1 text-[10px] text-error">Abierto</span>
+                                  )}
+                                </span>
+                              )}
+                              {locked && (
+                                <span className="rounded-md bg-surface-container px-2 py-1 text-[10px] text-outline">
+                                  {entry.clockOut ? "Cerrado" : "Abierto"}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
+
+                  {editingEntry && editingEntry.entryId === "new" && draftEntryDate === day.date && (
+                    <div className="mt-2 rounded-lg border border-outline-variant bg-surface p-2.5">
+                      <p className="mb-2 text-xs font-bold text-on-surface">Agregar turno ({day.date})</p>
+                      <label className="mb-2 block">
+                        <span className="mb-1 block text-[11px] font-semibold text-outline">
+                          Sucursal
+                        </span>
+                        <select
+                          value={entryBranchId}
+                          onChange={(event) => setEntryBranchId(event.target.value)}
+                          className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                        >
+                          {branchOptions.length === 0 && (
+                            <option value="">Sin sucursales para este empleado</option>
+                          )}
+                          {branchOptions.map((branch) => (
+                            <option key={branch.id} value={branch.id}>
+                              {branch.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="mb-2 block">
+                        <span className="mb-1 block text-[11px] font-semibold text-outline">
+                          Entrada
+                        </span>
+                        <input
+                          type="datetime-local"
+                          value={entryClockIn}
+                          onChange={(event) => setEntryClockIn(event.target.value)}
+                          className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                        />
+                      </label>
+                      <label className="mb-2 block">
+                        <span className="mb-1 block text-[11px] font-semibold text-outline">
+                          Salida
+                        </span>
+                        <input
+                          type="datetime-local"
+                          value={entryClockOut}
+                          onChange={(event) => setEntryClockOut(event.target.value)}
+                          className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                        />
+                      </label>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={cancelEntryEdit}
+                          className="rounded-lg border border-outline-variant px-2.5 py-1 text-[11px] font-bold text-on-surface-variant hover:bg-surface-container-high"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveEntry}
+                          disabled={savingEntry}
+                          className="rounded-lg bg-primary px-2.5 py-1 text-[11px] font-bold text-on-primary disabled:opacity-50"
+                        >
+                          {savingEntry ? "Guardando..." : "Guardar turno"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {editingEntry &&
+                    editingEntry.entryId !== "new" &&
+                    editingEntry.entryId &&
+                    (() => {
+                      const entry = day.entries.find((item) => item.id === editingEntry.entryId);
+                      if (!entry) return null;
+                      return (
+                        <div className="mt-2 rounded-lg border border-outline-variant bg-surface p-2.5">
+                          <p className="mb-2 text-xs font-bold text-on-surface">Editar turno</p>
+                          <label className="mb-2 block">
+                            <span className="mb-1 block text-[11px] font-semibold text-outline">Sucursal</span>
+                            <select
+                              value={entryBranchId}
+                              onChange={(event) => setEntryBranchId(event.target.value)}
+                              className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                            >
+                              {branchOptions.map((branch) => (
+                                <option key={branch.id} value={branch.id}>
+                                  {branch.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="mb-2 block">
+                            <span className="mb-1 block text-[11px] font-semibold text-outline">Entrada</span>
+                            <input
+                              type="datetime-local"
+                              value={entryClockIn}
+                              onChange={(event) => setEntryClockIn(event.target.value)}
+                              className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                            />
+                          </label>
+                          <label className="mb-2 block">
+                            <span className="mb-1 block text-[11px] font-semibold text-outline">Salida</span>
+                            <input
+                              type="datetime-local"
+                              value={entryClockOut}
+                              onChange={(event) => setEntryClockOut(event.target.value)}
+                              className="w-full rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs"
+                            />
+                          </label>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={cancelEntryEdit}
+                              className="rounded-lg border border-outline-variant px-2.5 py-1 text-[11px] font-bold text-on-surface-variant hover:bg-surface-container-high"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSaveEntry}
+                              disabled={savingEntry}
+                              className="rounded-lg bg-primary px-2.5 py-1 text-[11px] font-bold text-on-primary disabled:opacity-50"
+                            >
+                              {savingEntry ? "Guardando..." : "Actualizar"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  }
 
                   {day.incident && (
                     <div className="mt-2 space-y-1.5">
@@ -669,7 +1235,9 @@ function EmployeeDetailModal({
               {locked && (
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-outline">
                   <LockIcon className="h-3.5 w-3.5" />
-                  Semana {STATUS_LABELS[detail.period.status].toLowerCase()} — reábrela para modificar ajustes.
+                  {detail.period.status === "REVISION"
+                    ? "Este empleado ya está aprobado. Ábrelo para corrección antes de modificar ajustes."
+                    : `Semana ${STATUS_LABELS[detail.period.status].toLowerCase()} — reábrela para modificar ajustes.`}
                 </p>
               )}
 

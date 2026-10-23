@@ -1,17 +1,20 @@
+import { applyEventInventoryMovement } from "@/lib/inventory/eventMovements";
+import { generateOperationId } from "@/lib/pos2/operationId";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
-import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
+import { getAccessibleBranchIds } from "@/lib/auth";
+import { getCashCutScope, withCashCutReadScope, withCashCutScope } from "@/lib/cash-cuts/access";
 import { isBranchAllowed } from "@/lib/branches/access";
 import { denominationTotal, validDenominationRows } from "@/lib/cash-cuts/denominations";
 import { parseDateOnly } from "@/lib/dateOnly";
+import { getCurrentCashCutWeek } from "@/lib/cash-cuts/readScope";
 
 const ROLES_QUE_PUEDEN_ABRIR_CORTE = ["ADMIN", "GERENTE", "ENCARGADO"];
 const CASH_CUT_STATUSES = ["ABIERTO", "CERRADO", "AUDITADO"] as const;
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET(request: Request) {
-  const scope = await getCashCutScope();
+  const scope = await getCashCutScope(["/cash-cuts", "/cash-cuts/daily"]);
 
   if (!scope) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -22,6 +25,14 @@ export async function GET(request: Request) {
   const status = searchParams.get("status") ?? undefined;
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+  const view = searchParams.get("view") ?? "current";
+
+  if (view !== "current" && view !== "history") {
+    return NextResponse.json({ error: "Vista inválida." }, { status: 400 });
+  }
+  if (view === "history" && scope.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
 
   if (status && !CASH_CUT_STATUSES.includes(status as (typeof CASH_CUT_STATUSES)[number])) {
     return NextResponse.json({ error: "Estado inválido." }, { status: 400 });
@@ -29,9 +40,54 @@ export async function GET(request: Request) {
   if ((from && !DATE_ONLY_PATTERN.test(from)) || (to && !DATE_ONLY_PATTERN.test(to))) {
     return NextResponse.json({ error: "Fecha inválida." }, { status: 400 });
   }
+  let fromDate: Date | undefined;
+  let toDate: Date | undefined;
+  try {
+    fromDate = from ? parseDateOnly(from) : undefined;
+    toDate = to ? parseDateOnly(to) : undefined;
+  } catch {
+    return NextResponse.json({ error: "Fecha inválida." }, { status: 400 });
+  }
+  if (fromDate && toDate && fromDate > toDate) {
+    return NextResponse.json({ error: "Rango de fechas inválido." }, { status: 400 });
+  }
 
   if (requestedBranchId && !isBranchAllowed(scope.branchIds, requestedBranchId)) {
     return NextResponse.json({ error: "No tienes acceso a esa sucursal." }, { status: 403 });
+  }
+
+  if (view === "history") {
+    const employee = searchParams.get("employee")?.trim() ?? "";
+    const pageValue = Number(searchParams.get("page") ?? "1");
+    if (!Number.isInteger(pageValue) || pageValue < 1 || pageValue > 10000 || employee.length > 100) {
+      return NextResponse.json({ error: "Filtro inválido." }, { status: 400 });
+    }
+    const pageSize = 50;
+    const week = getCurrentCashCutWeek();
+    const where = withCashCutScope(scope, {
+      status: { in: ["CERRADO", "AUDITADO"] },
+      OR: [{ archivedAt: { not: null } }, { date: { lt: week.from } }],
+      ...(requestedBranchId ? { branchId: requestedBranchId } : {}),
+      ...(employee ? { responsible: { name: { contains: employee, mode: "insensitive" } } } : {}),
+      ...(fromDate || toDate ? { date: { gte: fromDate, lte: toDate } } : {}),
+    });
+    const [items, total, branches] = await Promise.all([
+      prisma.cashCut.findMany({
+        where,
+        select: {
+          id: true, code: true, status: true, date: true, closedAt: true,
+          totalSales: true, difference: true, archivedAt: true,
+          branch: { select: { id: true, name: true } },
+          responsible: { select: { id: true, name: true } },
+        },
+        orderBy: [{ date: "desc" }, { closedAt: "desc" }],
+        skip: (pageValue - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.cashCut.count({ where }),
+      prisma.branch.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    ]);
+    return NextResponse.json({ items, total, page: pageValue, pageSize, branches });
   }
 
   /*
@@ -41,12 +97,13 @@ export async function GET(request: Request) {
    * y el filtro del querystring no puede sobreescribirlo.
    */
   const cashCuts = await prisma.cashCut.findMany({
-    where: withCashCutScope(scope, {
+    where: withCashCutReadScope(scope, {
+      archivedAt: null,
       branchId: requestedBranchId,
       status: status as (typeof CASH_CUT_STATUSES)[number] | undefined,
       date: {
-        gte: from ? parseDateOnly(from) : undefined,
-        lte: to ? parseDateOnly(to) : undefined,
+        gte: fromDate,
+        lte: toDate,
       },
     }),
     include: {
@@ -60,7 +117,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
+  const scope = await getCashCutScope(["/cash-cuts", "/cash-cuts/daily"]);
+  const user = scope?.user;
 
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -107,7 +165,7 @@ export async function POST(request: Request) {
      * a un ENCARGADO confirmar la existencia de un corte cerrado o ajeno
      * de su misma sucursal, y recibir sus datos.
      */
-    const scopeForReuse = await getCashCutScope();
+    const scopeForReuse = await getCashCutScope(["/cash-cuts", "/cash-cuts/daily"]);
     const existing = scopeForReuse
       ? await prisma.cashCut.findFirst({
           where: withCashCutScope(scopeForReuse, { id: clientOperationId }),
@@ -165,7 +223,19 @@ export async function POST(request: Request) {
   const openedAt = clientCreatedAt ? new Date(clientCreatedAt) : new Date();
   if (Number.isNaN(openedAt.getTime())) return NextResponse.json({ error: "Fecha de apertura inválida" }, { status: 400 });
 
+  try {
   const cashCut = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Branch" WHERE "id"=${branchId} FOR UPDATE`;
+    if (clientOperationId) {
+      const existing = await tx.cashCut.findUnique({ where: { id: clientOperationId } });
+      if (existing) {
+        if (existing.branchId !== branchId || existing.createdById !== user.id) throw new Error("La operación pertenece a otro corte.");
+        return existing;
+      }
+    }
+    if (eventId) await tx.$queryRaw`SELECT "id" FROM "ServiceEvent" WHERE "id"=${eventId} FOR UPDATE`;
+    const lockedEvent = eventId ? await tx.serviceEvent.findUnique({ where: { id: eventId }, include: { items: { orderBy: { productId: "asc" } } } }) : null;
+    if (eventId && (!lockedEvent || lockedEvent.stockDeductedAt || !lockedEvent.checkoutConfirmedAt || lockedEvent.returnConfirmedAt || lockedEvent.status === "CANCELLED")) throw new Error("Confirma la salida de un evento que no tenga inventario descontado antes de vincularlo al corte.");
     const created = await tx.cashCut.create({
       data: {
         ...(clientOperationId ? { id: clientOperationId } : {}),
@@ -194,31 +264,17 @@ export async function POST(request: Request) {
     // Si se vinculó un evento, descuenta del inventario de esta
     // sucursal lo que se cargó a ese evento (lo enviado, o lo
     // planeado si aún no se registró envío).
-    if (event) {
-      for (const item of event.items) {
-        const quantity = Number(item.sentQuantity ?? item.plannedQuantity);
-
-        if (!(quantity > 0)) continue;
-
-        await tx.inventoryEntry.create({
-          data: {
-            branchId,
-            productId: item.productId,
-            type: "SALIDA_EVENTO",
-            quantity: -quantity,
-            notes: `Evento ${event.code} — ${event.clientName}`,
-          },
-        });
-      }
-
-      await tx.serviceEvent.update({
-        where: { id: event.id },
-        data: { stockDeductedAt: new Date() },
-      });
+    if (lockedEvent) {
+      const operationId = generateOperationId();
+      for (const item of lockedEvent.items) await applyEventInventoryMovement(tx, { item, branchId, actorId: user.id, operationId, eventId: lockedEvent.id, returning: false });
+      await tx.serviceEvent.update({ where: { id: lockedEvent.id }, data: { stockDeductedAt: new Date() } });
     }
 
     return created;
   });
 
   return NextResponse.json(cashCut, { status: 201 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "No fue posible abrir el corte." }, { status: 409 });
+  }
 }

@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
 import { withRlsContext } from "@/lib/rls";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/pos", "/pos/sales"]);
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

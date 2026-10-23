@@ -2,8 +2,11 @@ import type { ComponentType } from "react";
 import type { AppIconVariant } from "@/components/ui/AppIcon";
 import {
   getModuleKeyForPath,
+  isConfigurablePermissionKey,
+  isInventoryManagerReadPath,
   isAdminOnlyPath,
   isAlwaysAvailablePath,
+  isInventoryCountCaptureRole,
 } from "@/lib/permission-modules";
 import {
   type IconProps,
@@ -28,6 +31,7 @@ import {
   CalendarIcon,
   ChartLineIcon,
   ChartBarIcon,
+  ReceiptIcon,
   StoreIcon,
   UploadIcon,
   MailIcon,
@@ -42,7 +46,7 @@ import {
   ListChecksIcon,
   ArrowsRangeIcon,
   CashRegisterIcon,
-  GridIcon,
+  PrinterIcon,
 } from "@/components/ui/icons";
 
 export type AppModule =
@@ -50,6 +54,7 @@ export type AppModule =
   | "production"
   | "liquors"
   | "cash-cuts"
+  | "accounting"
   | "pos"
   | "administration"
   | "timeclock"
@@ -72,6 +77,8 @@ export type SubMenuItem = {
   operatorAllowed?: boolean;
   /** Permiso que controla este enlace cuando su ruta comparte acceso con otra sección. */
   permissionKey?: string;
+  /** Cualquiera de estos permisos permite mostrar el enlace. */
+  permissionKeys?: string[];
   /**
    * Agrupa visualmente los tabs de un submenú bajo un encabezado
    * corto (ej. "Inventario de eventos"). Los items sin `group`
@@ -85,6 +92,11 @@ export type SubMenuItem = {
    * convención apunta al primer hijo.
    */
   children?: SubMenuItem[];
+  /**
+   * Historical permission-route compatibility. These entries keep existing
+   * grants resolvable while the visible destination is POSpress.
+   */
+  legacyAlias?: boolean;
 };
 
 export const MAIN_MODULES: MainModule[] = [
@@ -121,6 +133,14 @@ export const MAIN_MODULES: MainModule[] = [
     module: "cash-cuts",
   },
   {
+    href: "/accounting",
+    label: "Contabilidad",
+    shortLabel: "Contabilidad",
+    icon: ReceiptIcon,
+    iconVariant: "amber",
+    module: "accounting",
+  },
+  {
     href: "/administration",
     label: "Inventario",
     shortLabel: "Inventario",
@@ -129,17 +149,17 @@ export const MAIN_MODULES: MainModule[] = [
     module: "administration",
   },
   {
-    href: "/pos",
-    label: "Punto de Venta",
+    href: "/pospress",
+    label: "Ventas",
     shortLabel: "Ventas",
     icon: CashRegisterIcon,
     iconVariant: "cyan",
     module: "pos",
   },
   {
-    href: "/workforce",
-    label: "Workforce",
-    shortLabel: "Workforce",
+    href: "/timeclock",
+    label: "Checador y horario",
+    shortLabel: "Checador",
     icon: ClockIcon,
     iconVariant: "blue",
     module: "timeclock",
@@ -155,6 +175,9 @@ export const MAIN_MODULES: MainModule[] = [
 ];
 
 export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
+  accounting: [
+    { href: "/accounting", label: "Contabilidad", icon: ReceiptIcon, iconVariant: "amber" },
+  ],
   production: [
     {
       href: "/plant",
@@ -171,6 +194,13 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
     {
       href: "/cooking",
       label: "Cocción",
+      icon: FlameIcon,
+      iconVariant: "orange",
+      operatorAllowed: true,
+    },
+    {
+      href: "/boiler",
+      label: "Caldera",
       icon: FlameIcon,
       iconVariant: "orange",
       operatorAllowed: true,
@@ -240,6 +270,19 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "Producción",
       icon: MartiniIcon,
       iconVariant: "purple",
+      children: [
+        {
+          href: "/liquors/production",
+          label: "Proceso de elaboración",
+          icon: MartiniIcon,
+        },
+        {
+          href: "/liquors/production/labels",
+          label: "Crear etiquetas",
+          icon: PrinterIcon,
+          permissionKey: "/liquors/qr",
+        },
+      ],
     },
     {
       href: "/liquors/bottling",
@@ -328,60 +371,60 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
 
   pos: [
     {
-      href: "/pos",
-      label: "Vender",
+      href: "/pospress",
+      label: "Punto de Venta",
       icon: CashRegisterIcon,
       iconVariant: "cyan",
+      permissionKey: "/pos",
     },
     {
       href: "/pos/sales",
-      label: "Ventas",
+      label: "Ventas resumen",
       icon: ChartLineIcon,
       iconVariant: "green",
+      permissionKeys: ["/pos", "/pos/sales"],
     },
     {
-      href: "/pos/discounts/courtesies",
-      label: "Descuentos",
-      icon: TagIcon,
-      iconVariant: "blue",
-      children: [
-        {
-          href: "/pos/discounts/rules",
-          label: "Administrar",
-          icon: GearIcon,
-          iconVariant: "blue",
-        },
-        {
-          href: "/pos/discounts/courtesies",
-          label: "Cortesías",
-          icon: PartyIcon,
-          iconVariant: "purple",
-        },
-        {
-          href: "/pos/discounts/employees",
-          label: "Trabajadores",
-          icon: UsersIcon,
-          iconVariant: "blue",
-        },
-        {
-          href: "/pos/discounts/products",
-          label: "Productos",
-          icon: PackageIcon,
-          iconVariant: "orange",
-        },
-      ],
+      href: "/pospress/transactions",
+      label: "Transacciones",
+      icon: ReceiptIcon,
+      iconVariant: "green",
+      permissionKey: "/pos/sales",
     },
     {
-      href: "/pos/categories",
-      label: "Categorías",
-      icon: GridIcon,
+      href: "/pospress/tables",
+      label: "Mesas",
+      icon: StoreIcon,
       iconVariant: "purple",
+      permissionKey: "/pos",
     },
     {
-      href: "/pos/products",
-      label: "Productos",
+      href: "/pospress/pending-tabs",
+      label: "Cuentas pendientes",
+      icon: ClockIcon,
+      iconVariant: "amber",
+      permissionKey: "/pos",
+    },
+    {
+      href: "/pospress/catalog",
+      label: "Editor de productos",
       icon: PackageIcon,
       iconVariant: "orange",
+      permissionKey: "/pos",
+    },
+    {
+      href: "/pospress/recipes",
+      label: "Recetas POS",
+      icon: BookIcon,
+      iconVariant: "purple",
+      permissionKey: "/pos",
+    },
+    {
+      href: "/pospress/discounts",
+      label: "Editor de descuentos",
+      icon: TagIcon,
+      iconVariant: "blue",
+      permissionKey: "/pos",
     },
   ],
 
@@ -399,8 +442,14 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       iconVariant: "orange",
     },
     {
+      href: "/administration/inventory/branch-counts/statistics",
+      label: "Dashboard de conteos semanales",
+      icon: ChartLineIcon,
+      iconVariant: "blueDeep",
+    },
+    {
       href: "/administration/inventory/eventos",
-      label: "Inventario de eventos",
+      label: "Eventos",
       icon: PartyIcon,
       iconVariant: "purple",
       children: [
@@ -428,7 +477,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
     },
     {
       href: "/administration/inventory/sucursales",
-      label: "Inventario de sucursales",
+      label: "Sucursales",
       icon: StoreIcon,
       iconVariant: "orange",
       children: [
@@ -457,93 +506,74 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
           label: "Conteos semanales",
           icon: ListChecksIcon,
         },
+        {
+          href: "/administration/inventory/branch-counts/statistics",
+          label: "Resumen de conteos",
+          icon: ChartLineIcon,
+        },
       ],
     },
   ],
 
   timeclock: [
     {
-      href: "/workforce",
-      label: "Mi horario",
-      icon: ClockIcon,
-      iconVariant: "blue",
-      operatorAllowed: true,
-    },
-    {
-      href: "/workforce/availability",
-      label: "Mi disponibilidad",
-      icon: CalendarIcon,
-      iconVariant: "amber",
-      operatorAllowed: true,
-    },
-    {
-      href: "/workforce/clock",
+      href: "/timeclock",
       label: "Checador",
       icon: CalendarIcon,
       iconVariant: "green",
       operatorAllowed: true,
     },
     {
-      href: "/workforce/timesheet",
-      label: "Mis horas",
-      icon: CalendarIcon,
-      iconVariant: "purple",
+      href: "/timeclock/calendar",
+      label: "Mi horario",
+      icon: ClockIcon,
+      iconVariant: "blue",
       operatorAllowed: true,
     },
     {
-      href: "/workforce/payroll",
+      href: "/timeclock/availability",
+      label: "Mi disponibilidad",
+      icon: CalendarIcon,
+      iconVariant: "amber",
+      operatorAllowed: true,
+    },
+    {
+      href: "/timeclock/hours",
       label: "Mi nómina",
       icon: CalendarIcon,
       iconVariant: "green",
       operatorAllowed: true,
     },
     {
-      href: "/administration/workforce",
+      href: "/administration/personnel",
       label: "Empleados",
       icon: UsersIcon,
       iconVariant: "purple",
     },
     {
-      href: "/administration/workforce/schedule",
-      label: "Programar horarios",
+      href: "/administration/schedule",
+      label: "Horarios",
       icon: CalendarIcon,
       iconVariant: "purple",
     },
     {
-      href: "/administration/workforce/attendance",
-      label: "Asistencia",
+      href: "/administration/personnel/timeclock",
+      label: "Asistencia y correcciones",
       icon: ListChecksIcon,
       iconVariant: "amber",
     },
     {
-      href: "/administration/workforce/clock-corrections",
-      label: "Correcciones",
-      icon: ClockIcon,
-      iconVariant: "blue",
-    },
-    {
-      href: "/administration/workforce/timesheets",
-      label: "Timesheets",
-      icon: ListChecksIcon,
-      iconVariant: "cyan",
-    },
-    {
-      href: "/administration/workforce/overtime",
-      label: "Horas extra",
-      icon: ClockIcon,
-      iconVariant: "orange",
-    },
-    {
-      href: "/administration/workforce/payroll",
-      label: "Nómina operativa",
+      href: "/timeclock/payroll",
+      label: "Pagos",
       icon: DollarIcon,
       iconVariant: "green",
+      operatorAllowed: true,
     },
     {
-      href: "/administration/workforce/settings",
-      label: "Configuración",
+      href: "/timeclock/geofences",
+      label: "Geozonas",
       icon: MapPinIcon,
-      iconVariant: "slate",
+      iconVariant: "cyan",
     },
   ],
 
@@ -572,6 +602,9 @@ export function matchesRoute(pathname: string, href: string) {
 }
 
 export function getCurrentModule(pathname: string): AppModule {
+  if (matchesRoute(pathname, "/accounting")) {
+    return "accounting";
+  }
   if (matchesRoute(pathname, "/liquors")) {
     return "liquors";
   }
@@ -580,7 +613,11 @@ export function getCurrentModule(pathname: string): AppModule {
     return "cash-cuts";
   }
 
-  if (matchesRoute(pathname, "/pos")) {
+  if (
+    matchesRoute(pathname, "/pospress") ||
+    matchesRoute(pathname, "/pos2") ||
+    matchesRoute(pathname, "/pos")
+  ) {
     return "pos";
   }
 
@@ -611,6 +648,7 @@ export function getCurrentModule(pathname: string): AppModule {
     "/plant",
     "/lots",
     "/cooking",
+    "/boiler",
     "/milling",
     "/fermentation",
     "/distillation",
@@ -657,10 +695,15 @@ export function isSubmenuItemVisible(
 ): boolean {
   if (role === "ADMIN") return true;
 
+  if (item.href === "/administration/inventory/branch-counts") {
+    return isInventoryCountCaptureRole(role);
+  }
+
   // Compatibilidad con operadores antiguos: si todavía no tienen permisos
   // configurados conservan su acceso fijo de producción. En cuanto el admin
   // les asigna permisos, se respeta exactamente esa configuración.
-  if (role === "OPERATOR" && moduleKeys.length === 0) {
+  const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);
+  if (role === "OPERATOR" && !hasConfiguredPermissions) {
     return item.href === "/" || item.operatorAllowed === true;
   }
 
@@ -677,16 +720,18 @@ export function isSubmenuItemVisible(
 
   if (isAlwaysAvailablePath(item.href)) return true;
   if (isAdminOnlyPath(item.href)) return false;
+  if (role === "GERENTE" && isInventoryManagerReadPath(item.href)) return true;
 
   const permissionHref = item.permissionKey ?? item.href;
-  const requiredKey = item.permissionKey
-    ? item.permissionKey
-    : (getModuleKeyForPath(permissionHref) ?? permissionHref);
+  const requiredKeys = item.permissionKeys ?? [
+    item.permissionKey
+      ? item.permissionKey
+      : (getModuleKeyForPath(permissionHref) ?? permissionHref),
+  ];
 
-  // Se compara el permiso resuelto de forma exacta. Así `/pos` (Vender)
-  // no concede accidentalmente `/pos/sales` (Ventas), mientras que las
-  // rutas sin permiso propio siguen heredando el módulo padre correcto.
-  return moduleKeys.includes(requiredKey);
+  // Se compara el permiso resuelto de forma exacta para que cada módulo
+  // herede únicamente el permiso que le corresponde.
+  return requiredKeys.some((requiredKey) => moduleKeys.includes(requiredKey));
 }
 
 export function isMainModuleVisible(
@@ -696,7 +741,8 @@ export function isMainModuleVisible(
 ): boolean {
   if (role === "ADMIN") return true;
 
-  if (role === "OPERATOR" && moduleKeys.length === 0) {
+  const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);
+  if (role === "OPERATOR" && !hasConfiguredPermissions) {
     // El operador conserva su acceso fijo de siempre: solo Producción.
     return module.module === "production";
   }
@@ -721,4 +767,16 @@ export function getSubmenuItemDestination(
     item.children.find((child) => isSubmenuItemVisible(role, moduleKeys, child))
       ?.href ?? item.href
   );
+}
+
+/** Abre el primer destino visible del módulo sin conceder rutas hermanas. */
+export function getMainModuleDestination(
+  role: string,
+  moduleKeys: string[],
+  module: MainModule,
+): string {
+  if (module.module === "home" || role === "ADMIN") return module.href;
+  const items = SUBMENUS[module.module as Exclude<AppModule, "home">] ?? [];
+  const visible = items.find((item) => isSubmenuItemVisible(role, moduleKeys, item));
+  return visible ? getSubmenuItemDestination(role, moduleKeys, visible) : module.href;
 }

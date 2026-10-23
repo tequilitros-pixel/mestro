@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import TransferForm from "./TransferForm";
 import { getAccessibleBranchIds } from "@/lib/auth";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 export default async function TraspasosPage() {
   const allowedBranchIds = await getAccessibleBranchIds();
@@ -15,7 +16,7 @@ export default async function TraspasosPage() {
       select: { id: true, name: true },
     }),
     prisma.inventoryProduct.findMany({
-      where: { isActive: true, trackStock: true },
+      where: { isActive: true, archivedAt: null, trackStock: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, unit: true },
     }),
@@ -66,7 +67,7 @@ export default async function TraspasosPage() {
                     {entry.product.name} · {entry.branch.name}
                   </p>
                   <p className="text-sm text-on-surface-variant">
-                    {entry.notes} · {new Date(entry.entryDate).toLocaleDateString("es-MX")}
+                    Traspaso entre sucursales · {formatBusinessDateTime(entry.entryDate)}
                   </p>
                 </div>
                 <span

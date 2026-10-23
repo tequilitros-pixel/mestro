@@ -5,7 +5,6 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import {
   deleteLiquorRecipeIngredientAction,
-  initialLiquorRecipeIngredientState,
   moveLiquorRecipeIngredientDownAction,
   moveLiquorRecipeIngredientUpAction,
   saveLiquorRecipeIngredientAction,
@@ -37,6 +36,11 @@ type RawMaterialOption = {
   code: string;
   baseUnit: string;
   category: string | null;
+};
+
+const initialLiquorRecipeIngredientState = {
+  success: false,
+  error: null,
 };
 
 type Props = {

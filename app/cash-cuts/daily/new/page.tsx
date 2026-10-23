@@ -8,6 +8,7 @@ import DenominationWizard from "@/components/cash-cuts/DenominationWizard";
 import type { CashDenominationCount } from "@/lib/cash-cuts/denominations";
 import { enqueueOperation } from "@/lib/offline/queue";
 import { todayDateOnly } from "@/lib/dateOnly";
+import { formatBusinessDate } from "@/lib/dateTime";
 
 interface Branch {
   id: string;
@@ -27,10 +28,7 @@ interface EligibleEvent {
 }
 
 const formatEventDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("es-MX", {
-    day: "numeric",
-    month: "short",
-  });
+  formatBusinessDate(iso, { day: "numeric", month: "short" });
 
 export default function NuevoCortePage() {
   const router = useRouter();

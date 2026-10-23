@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import dotenv from 'dotenv';
+import {spawnSync} from 'node:child_process';
+const source=dotenv.parse(fs.readFileSync('/Users/joseadansanchez/Documents/maestro/.env.local'));
+const owner=new URL(source.DATABASE_URL_DEV);
+if(owner.hostname!=='ep-red-lake-ats4n9i7.c-9.us-east-1.aws.neon.tech')throw Error('DEV_ONLY');
+owner.searchParams.set('sslmode','verify-full');
+const runtime=new URL(owner);runtime.searchParams.set('options','-c role=maestro_runtime');
+const args=process.argv.slice(2);
+const r=spawnSync(args[0],args.slice(1),{stdio:'inherit',env:{...process.env,DATABASE_URL:runtime.href,DATABASE_URL_UNPOOLED:owner.href,MIGRATION_DATABASE_URL:owner.href,WORKFORCE_V1_ENABLED:'true',RESEND_API_KEY:process.env.RESEND_API_KEY||'re_local_build_placeholder'}});
+process.exit(r.status??1);

@@ -11,12 +11,21 @@ import {
   AlertIcon,
   CheckIcon,
   GearIcon,
+  TagIcon,
   ReceiptIcon,
+  ChartLineIcon,
+  ClockIcon,
 } from "@/components/ui/icons";
 import { getProductVisual } from "@/lib/pos/productVisual";
 import { useToast } from "@/components/ui/Toast";
 import { enqueueOperation } from "@/lib/offline/queue";
-import { syncOfflineQueue } from "@/lib/offline/sync";
+import {
+  saveLocalPendingTab,
+  type PendingTab,
+  type PendingTabLine,
+} from "@/lib/offline/pending-tabs";
+import PostSaleModal from "./PostSaleModal";
+import type { ReceiptData } from "./ReceiptTicket";
 
 type Variant = {
   id: string;
@@ -137,11 +146,21 @@ const formatCurrency = (value: number) =>
 export default function PosSellClient({
   branchOptions,
   canManageCatalog,
+  initialBranchId,
+  title = "Punto de Venta",
+  inventoryMode = "legacy",
 }: {
   branchOptions: BranchOption[];
   canManageCatalog: boolean;
+  initialBranchId?: string;
+  title?: string;
+  inventoryMode?: "legacy" | "v2";
 }) {
-  const [branchId, setBranchId] = useState(branchOptions[0]?.id ?? "");
+  const [branchId, setBranchId] = useState(
+    initialBranchId && branchOptions.some((branch) => branch.id === initialBranchId)
+      ? initialBranchId
+      : branchOptions[0]?.id ?? "",
+  );
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
@@ -166,12 +185,29 @@ export default function PosSellClient({
   const [configuredDiscounts, setConfiguredDiscounts] = useState<Array<{ id: string; name: string; percent: number }>>([]);
   const [discountBlockedBy, setDiscountBlockedBy] = useState<string | null>(null);
   const [localOpenBranches, setLocalOpenBranches] = useState<Set<string>>(new Set());
+  const [isOnline, setIsOnline] = useState(true);
+  const [completedReceipt, setCompletedReceipt] = useState<ReceiptData | null>(null);
+  const [showPendingTabModal, setShowPendingTabModal] = useState(false);
+  const [pendingCustomerName, setPendingCustomerName] = useState("");
+  const [pendingCustomerNotes, setPendingCustomerNotes] = useState("");
+  const [pendingCustomerPhone, setPendingCustomerPhone] = useState("");
   const { showToast } = useToast();
 
   useEffect(() => {
     let cancelled = false;
+    const syncConnectionState = () => setIsOnline(navigator.onLine);
+    syncConnectionState();
+    window.addEventListener("online", syncConnectionState);
+    window.addEventListener("offline", syncConnectionState);
+
     window.setTimeout(() => {
-      const open = new Set(branchOptions.filter((branch) => localStorage.getItem(`maestro:open-cash-cut:${branch.id}`)).map((branch) => branch.id));
+      const open = navigator.onLine
+        ? new Set<string>()
+        : new Set(
+            branchOptions
+              .filter((branch) => localStorage.getItem(`maestro:open-cash-cut:${branch.id}`))
+              .map((branch) => branch.id),
+          );
       if (!cancelled) setLocalOpenBranches(open);
     }, 0);
     const cachedCatalog = localStorage.getItem("maestro:pos-catalog");
@@ -227,6 +263,8 @@ export default function PosSellClient({
 
     return () => {
       cancelled = true;
+      window.removeEventListener("online", syncConnectionState);
+      window.removeEventListener("offline", syncConnectionState);
     };
   }, [branchOptions]);
 
@@ -242,7 +280,7 @@ export default function PosSellClient({
   }, [branchId]);
 
   const branch = branchOptions.find((b) => b.id === branchId) ?? null;
-  const hasOpenCut = Boolean(branch?.openCashCutId) || localOpenBranches.has(branchId);
+  const hasOpenCut = Boolean(branch?.openCashCutId) || (!isOnline && localOpenBranches.has(branchId));
 
   const activeCategory = categories?.find((c) => c.id === activeCategoryId) ?? null;
 
@@ -359,13 +397,62 @@ export default function PosSellClient({
     setEmployeeBuyerId("");
   }
 
+  async function handleSavePendingTab() {
+    if (!pendingCustomerName.trim() || !branchId || cart.length === 0) return;
+
+    const lines: PendingTabLine[] = cart.map((line) => {
+      if (line.isCustom) {
+        return {
+          key: line.key,
+          variantId: "custom",
+          productName: line.description,
+          variantName: "Personalizado",
+          unitPrice: line.amount,
+          quantity: 1,
+        };
+      }
+      return {
+        key: line.key,
+        variantId: line.variantId,
+        productName: line.productName,
+        variantName: line.variantName,
+        unitPrice: line.unitPrice,
+        quantity: line.quantity,
+      };
+    });
+
+    const newTab: PendingTab = {
+      id: crypto.randomUUID(),
+      branchId,
+      customerName: pendingCustomerName.trim(),
+      phone: pendingCustomerPhone.trim() || undefined,
+      notes: pendingCustomerNotes.trim() || undefined,
+      status: "PENDIENTE",
+      lines,
+      total,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await saveLocalPendingTab(newTab);
+    showToast(`Cuenta pendiente guardada para "${pendingCustomerName.trim()}".`, "success");
+    setCart([]);
+    setDiscountAmount(0);
+    setDiscountReasonCode("");
+    setDiscountReasonNote("");
+    setShowPendingTabModal(false);
+    setPendingCustomerName("");
+    setPendingCustomerNotes("");
+    setPendingCustomerPhone("");
+  }
+
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col lg:flex-row">
       <div className="flex flex-1 flex-col overflow-hidden border-b border-outline-variant lg:border-b-0 lg:border-r">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant p-4">
           <div className="flex items-center gap-2">
             <CashRegisterIcon className="h-5 w-5 text-primary" />
-            <h1 className="text-lg font-bold text-on-surface">Punto de Venta</h1>
+            <h1 className="text-lg font-bold text-on-surface">{title}</h1>
           </div>
 
           <div className="flex items-center gap-2">
@@ -382,36 +469,65 @@ export default function PosSellClient({
             </select>
 
             {canManageCatalog && (
-              <Link
-                href="/pos/products"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
-              >
-                <GearIcon className="h-4 w-4" />
-                Catálogo
-              </Link>
-            )}
-
-            {canManageCatalog && (
-              <Link
-                href="/pos/settings"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
-              >
-                Configuración
-              </Link>
+              <>
+                <Link
+                  href="/pospress/catalog"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+                >
+                  <GearIcon className="h-4 w-4" />
+                  Editar productos
+                </Link>
+                <Link
+                  href="/pospress/discounts"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+                >
+                  <TagIcon className="h-4 w-4" />
+                  Editar descuentos
+                </Link>
+              </>
             )}
 
             <Link
               href="/pos/sales"
               className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
             >
-              <ReceiptIcon className="h-4 w-4" />
-              Ventas
+              <ChartLineIcon className="h-4 w-4" />
+              Ventas resumen
             </Link>
+
             <Link
-              href="/pos/discounts/courtesies"
+              href="/pospress/transactions"
               className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
             >
-              Descuentos
+              <ReceiptIcon className="h-4 w-4" />
+              Transacciones
+            </Link>
+            <Link
+              href="/pospress/tables"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+            >
+              <GridIcon className="h-4 w-4" />
+              Mesas
+            </Link>
+            <Link
+              href="/pospress/pending-tabs"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-600 dark:text-amber-400 transition hover:bg-amber-500/20"
+            >
+              <ClockIcon className="h-4 w-4" />
+              Cuentas pendientes
+            </Link>
+            <Link
+              href="/pospress/recipes"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+            >
+              <TagIcon className="h-4 w-4" />
+              Recetas y catálogo
+            </Link>
+            <Link
+              href="/cash-cuts"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+            >
+              Corte de caja
             </Link>
           </div>
         </div>
@@ -469,7 +585,7 @@ export default function PosSellClient({
               </p>
               {canManageCatalog && (
                 <Link
-                  href="/pos/categories"
+                  href="/administration/inventory/products"
                   className="text-sm font-semibold text-primary hover:underline"
                 >
                   Crear la primera categoría
@@ -734,6 +850,16 @@ export default function PosSellClient({
           >
             Cobrar {cart.length > 0 ? formatCurrency(total) : ""}
           </button>
+          {cart.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowPendingTabModal(true)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 py-2.5 text-xs font-bold text-amber-600 dark:text-amber-400 transition hover:bg-amber-500/20"
+            >
+              <ClockIcon className="h-4 w-4" />
+              Guardar como cuenta pendiente
+            </button>
+          )}
           {employeeMode && !employeeBuyerId && (
             <p className="text-center text-xs text-secondary">
               Selecciona qué empleado está comprando.
@@ -804,7 +930,8 @@ export default function PosSellClient({
       {showPayment && branch && (
         <PaymentModal
           total={total}
-          branchId={branch.id}
+          subtotal={subtotal}
+          branch={branch}
           cart={cart}
           discountAmount={clampedDiscount}
           discountReasonCode={discountReasonCode}
@@ -812,13 +939,105 @@ export default function PosSellClient({
           employeeBuyerId={employeeMode ? employeeBuyerId : ""}
           needsAuthorization={needsAuthorization}
           managers={managers}
+          inventoryMode={inventoryMode}
           onClose={() => setShowPayment(false)}
-          onSuccess={() => {
+          onSuccess={(receipt) => {
             setShowPayment(false);
-            resetSale();
-            showToast("Venta registrada correctamente.");
+            setCompletedReceipt(receipt);
           }}
         />
+      )}
+
+      {completedReceipt && (
+        <PostSaleModal
+          receipt={completedReceipt}
+          onClose={() => {
+            setCompletedReceipt(null);
+            resetSale();
+            showToast("Venta completada.");
+          }}
+        />
+      )}
+
+      {showPendingTabModal && (
+        <ModalShell title="Guardar cuenta pendiente" onClose={() => setShowPendingTabModal(false)}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleSavePendingTab();
+            }}
+            className="space-y-4"
+          >
+            <p className="text-xs text-on-surface-variant">
+              Guarda los productos actuales a nombre de la persona para que puedan regresar a pagar más tarde o mañana.
+            </p>
+
+            <div>
+              <label className="text-xs font-semibold text-on-surface-variant">
+                Nombre de la persona <span className="text-error">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="ej. Don Beto, Juan Pérez, Amigo de la mesa 3..."
+                value={pendingCustomerName}
+                onChange={(e) => setPendingCustomerName(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2.5 text-sm text-on-surface"
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-on-surface-variant">
+                Teléfono de contacto (opcional)
+              </label>
+              <input
+                type="tel"
+                placeholder="ej. 33 1234 5678"
+                value={pendingCustomerPhone}
+                onChange={(e) => setPendingCustomerPhone(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-on-surface-variant">
+                Notas / Compromiso (opcional)
+              </label>
+              <textarea
+                rows={2}
+                placeholder="ej. Regresa en un rato con efectivo / Viene mañana temprano"
+                value={pendingCustomerNotes}
+                onChange={(e) => setPendingCustomerNotes(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface"
+              />
+            </div>
+
+            <div className="rounded-xl bg-surface-container p-3 text-xs">
+              <div className="flex justify-between font-semibold text-on-surface">
+                <span>{cart.length} {cart.length === 1 ? "artículo" : "artículos"} a guardar</span>
+                <span>Total a deber: {formatCurrency(total)}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowPendingTabModal(false)}
+                className="flex-1 rounded-xl border border-outline-variant px-3 py-2.5 text-xs font-bold text-on-surface-variant hover:bg-surface"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={!pendingCustomerName.trim()}
+                className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-xs font-bold text-on-primary transition hover:scale-[1.02] disabled:opacity-40"
+              >
+                Guardar cuenta pendiente
+              </button>
+            </div>
+          </form>
+        </ModalShell>
       )}
     </div>
   );
@@ -1229,7 +1448,8 @@ function ItemDiscountModal({
 
 function PaymentModal({
   total,
-  branchId,
+  subtotal,
+  branch,
   cart,
   discountAmount,
   discountReasonCode,
@@ -1237,11 +1457,13 @@ function PaymentModal({
   employeeBuyerId,
   needsAuthorization,
   managers,
+  inventoryMode,
   onClose,
   onSuccess,
 }: {
   total: number;
-  branchId: string;
+  subtotal: number;
+  branch: BranchOption;
   cart: CartLine[];
   discountAmount: number;
   discountReasonCode: string;
@@ -1249,8 +1471,9 @@ function PaymentModal({
   employeeBuyerId: string;
   needsAuthorization: boolean;
   managers: Employee[];
+  inventoryMode: "legacy" | "v2";
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (receipt: ReceiptData) => void;
 }) {
   const isFree = total <= 0;
   const [rows, setRows] = useState<{ method: string; amount: number }[]>(
@@ -1260,10 +1483,20 @@ function PaymentModal({
   const [error, setError] = useState<string | null>(null);
   const [authManagerId, setAuthManagerId] = useState("");
   const [authPin, setAuthPin] = useState("");
+  const [clientOperationId] = useState(() => crypto.randomUUID());
+  const [clientCreatedAt] = useState(() => new Date().toISOString());
+  const [cashTendered, setCashTendered] = useState<number | "">("");
   const authReady = !needsAuthorization || (Boolean(authManagerId) && authPin.length === 4);
 
   const paid = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
   const remaining = Math.round((total - paid) * 100) / 100;
+
+  const hasCash = rows.some((r) => r.method === "EFECTIVO");
+  const cashAmount = rows
+    .filter((r) => r.method === "EFECTIVO")
+    .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  const tenderedVal = typeof cashTendered === "number" ? cashTendered : cashAmount;
+  const change = hasCash && tenderedVal > cashAmount ? Math.round((tenderedVal - cashAmount) * 100) / 100 : 0;
 
   function updateRow(index: number, patch: Partial<{ method: string; amount: number }>) {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
@@ -1280,16 +1513,73 @@ function PaymentModal({
     setRows((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function buildReceipt(serverData?: { id?: string; code?: string }): ReceiptData {
+    return {
+      saleId: serverData?.id ?? clientOperationId,
+      saleCode: serverData?.code ?? `LOCAL-${clientOperationId.slice(0, 8).toUpperCase()}`,
+      branchName: branch.name,
+      branchAddress: null,
+      date: new Date().toLocaleTimeString("es-MX", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      cashierName: null,
+      items: cart.map((line) => {
+        if (line.isCustom) {
+          return {
+            name: line.description || "Cobro personalizado",
+            quantity: 1,
+            unitPrice: line.amount,
+            lineTotal: line.amount,
+          };
+        }
+        const name =
+          line.variantName && line.variantName !== "Único"
+            ? `${line.productName} (${line.variantName})`
+            : line.productName;
+        return {
+          name,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          lineTotal: line.quantity * line.unitPrice,
+        };
+      }),
+      subtotal,
+      discountAmount,
+      total,
+      payments: isFree ? [] : rows.map((r) => ({ method: r.method, amount: Number(r.amount) })),
+      cashReceived: hasCash && typeof cashTendered === "number" && cashTendered > 0 ? cashTendered : undefined,
+      change: change > 0 ? change : undefined,
+      isOffline: !navigator.onLine,
+    };
+  }
+
   async function submit() {
+    if (
+      hasCash &&
+      typeof cashTendered === "number" &&
+      (!Number.isFinite(cashTendered) || cashTendered < cashAmount)
+    ) {
+      setError("El efectivo recibido no puede ser menor al importe cobrado en efectivo.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
     const salePayload = {
-      branchId,
+      clientOperationId,
+      clientCreatedAt,
+      displayTotal: total,
+      branchId: branch.id,
       discountAmount,
       discountReasonCode,
       discountReason: discountReasonNote,
       employeeBuyerId: employeeBuyerId || undefined,
+      inventoryMode,
       ...(needsAuthorization ? { authorization: { managerId: authManagerId, pin: authPin } } : {}),
       items: cart.map((line) =>
         line.isCustom
@@ -1309,13 +1599,17 @@ function PaymentModal({
         setSubmitting(false);
         return;
       }
-      await enqueueOperation({
-        id: crypto.randomUUID(),
-        kind: "pos.sale.create",
-        payload: salePayload,
-        createdAt: new Date().toISOString(),
-      });
-      onSuccess();
+      try {
+        await enqueueOperation({
+          id: clientOperationId,
+          kind: "pos.sale.create",
+          payload: salePayload,
+          createdAt: clientCreatedAt,
+        });
+        onSuccess(buildReceipt());
+      } catch {
+        setError("No fue posible guardar la venta en este dispositivo. Conserva esta pantalla y reintenta.");
+      }
       setSubmitting(false);
       return;
     }
@@ -1330,19 +1624,22 @@ function PaymentModal({
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error ?? "No fue posible completar el cobro.");
+        setError(typeof data.error === "string" ? data.error : data.error?.message ?? "No fue posible completar el cobro.");
         setSubmitting(false);
         return;
       }
 
-      onSuccess();
+      onSuccess(buildReceipt(data));
     } catch {
       if (needsAuthorization) {
         setError("No fue posible verificar la autorización. Revisa tu conexión.");
       } else {
-        await enqueueOperation({ id: crypto.randomUUID(), kind: "pos.sale.create", payload: salePayload, createdAt: new Date().toISOString() });
-        await syncOfflineQueue();
-        onSuccess();
+        try {
+          await enqueueOperation({ id: clientOperationId, kind: "pos.sale.create", payload: salePayload, createdAt: clientCreatedAt });
+          onSuccess(buildReceipt());
+        } catch {
+          setError("No fue posible guardar el cobro por confirmar. Conserva esta pantalla y reintenta la misma operación.");
+        }
       }
       setSubmitting(false);
     }
@@ -1432,6 +1729,49 @@ function PaymentModal({
               <PlusIcon className="h-3.5 w-3.5" />
               Dividir pago
             </button>
+
+            {hasCash && (
+              <div className="space-y-1.5 rounded-xl border border-outline-variant bg-surface-container p-3">
+                <div className="flex items-center justify-between text-xs font-bold text-on-surface-variant">
+                  <span>Efectivo recibido</span>
+                  {change > 0 && (
+                    <span className="text-emerald-500 font-extrabold text-xs">
+                      Cambio: {formatCurrency(change)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={cashAmount}
+                    step="1"
+                    value={cashTendered === "" ? "" : cashTendered}
+                    placeholder={`$${cashAmount}`}
+                    onChange={(e) => setCashTendered(e.target.value === "" ? "" : Number(e.target.value))}
+                    className="flex-1 rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface font-mono outline-none focus:border-primary"
+                  />
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setCashTendered(cashAmount)}
+                      className="rounded-lg border border-outline-variant px-2 py-1 text-xs font-semibold text-on-surface hover:bg-surface-container-high transition"
+                    >
+                      Exacto
+                    </button>
+                    {[50, 100, 200, 500].filter((val) => val >= cashAmount).slice(0, 3).map((val) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setCashTendered(val)}
+                        className="rounded-lg border border-outline-variant px-2 py-1 text-xs font-semibold text-on-surface hover:bg-surface-container-high transition"
+                      >
+                        ${val}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div
               className={`flex items-center justify-between rounded-xl p-3 text-sm font-semibold ${

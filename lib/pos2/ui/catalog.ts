@@ -1,0 +1,3 @@
+import type { CatalogCategoryDto, CatalogProductDto } from "./types";
+export function filterCatalogProducts(categories:CatalogCategoryDto[],categoryId:string,query:string){const needle=query.trim().toLocaleLowerCase("es-MX");const products:CatalogProductDto[]=[];for(const category of categories){if(categoryId!=="ALL"&&category.id!==categoryId)continue;for(const product of category.products){if(!needle||`${product.name} ${product.sku??""} ${product.internalCode??""} ${product.barcode??""}`.toLocaleLowerCase("es-MX").includes(needle))products.push(product);}}return products;}
+export function nextCatalogLimit(current:number,total:number,pageSize=48){return Math.min(total,current+pageSize)}

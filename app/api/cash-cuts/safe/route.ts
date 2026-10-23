@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
+import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 
 const ROLES_QUE_PUEDEN_RETIRAR = ["ADMIN", "GERENTE"];
 
 export async function GET(req: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/cash-cuts/safe"]);
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
 
   const branches = await prisma.branch.findMany({
     where: {
+      active: true,
       ...(requestedBranchId ? { id: requestedBranchId } : {}),
       ...(allowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
     },
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUserWithAnyModuleAccess(["/cash-cuts/safe"]);
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

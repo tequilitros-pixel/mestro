@@ -1,8 +1,15 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { getMyTimeClockSummary } from "@/app/actions/timeclock";
+import { getMyApprovedPayrollHistory } from "@/app/actions/employeePayrollHistory";
+import EmployeePayrollView from "./EmployeePayrollView";
 import PayrollDashboard from "./PayrollDashboard";
 
-export default async function PayrollPage() {
+export default async function PayrollPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+}) {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -10,7 +17,25 @@ export default async function PayrollPage() {
   }
 
   if (user.role !== "ADMIN") {
-    redirect("/timeclock");
+    const [summary, historyResult, query] = await Promise.all([
+      getMyTimeClockSummary(),
+      getMyApprovedPayrollHistory(),
+      searchParams,
+    ]);
+    const history = "error" in historyResult ? historyResult : historyResult.data;
+    const initialTab =
+      query?.tab === "PAGOS" || query?.tab === "SEMANA" || query?.tab === "RESUMEN"
+        ? query.tab
+        : undefined;
+
+    return (
+      <EmployeePayrollView
+        userName={user.name}
+        summary={summary}
+        history={history}
+        initialTab={initialTab}
+      />
+    );
   }
 
   return (

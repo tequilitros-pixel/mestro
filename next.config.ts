@@ -1,9 +1,26 @@
 import type { NextConfig } from "next";
 
+const isDevelopment = process.env.NODE_ENV !== "production";
+
 const nextConfig: NextConfig = {
   reactCompiler: true,
   async redirects() {
     return [
+      {
+        source: "/pos",
+        destination: "/pospress",
+        permanent: true,
+      },
+      {
+        source: "/pos2/:path*",
+        destination: "/pospress",
+        permanent: true,
+      },
+      {
+        source: "/administration/pos2/:path*",
+        destination: "/pospress",
+        permanent: true,
+      },
       {
         source: "/workforce-v1/:path*",
         destination: "/workforce/:path*",
@@ -12,61 +29,6 @@ const nextConfig: NextConfig = {
       {
         source: "/administration/workforce-v1/:path*",
         destination: "/administration/workforce/:path*",
-        permanent: true,
-      },
-      {
-        source: "/timeclock",
-        destination: "/workforce/clock",
-        permanent: true,
-      },
-      {
-        source: "/timeclock/calendar",
-        destination: "/workforce",
-        permanent: true,
-      },
-      {
-        source: "/timeclock/availability",
-        destination: "/workforce/availability",
-        permanent: true,
-      },
-      {
-        source: "/timeclock/hours",
-        destination: "/workforce/timesheet",
-        permanent: true,
-      },
-      {
-        source: "/timeclock/history",
-        destination: "/workforce/timesheet",
-        permanent: true,
-      },
-      {
-        source: "/timeclock/requests",
-        destination: "/workforce/clock",
-        permanent: true,
-      },
-      {
-        source: "/timeclock/payroll",
-        destination: "/workforce/payroll",
-        permanent: true,
-      },
-      {
-        source: "/timeclock/kiosk",
-        destination: "/workforce/kiosk",
-        permanent: true,
-      },
-      {
-        source: "/timeclock/geofences",
-        destination: "/administration/workforce/settings",
-        permanent: true,
-      },
-      {
-        source: "/administration/schedule",
-        destination: "/administration/workforce/schedule",
-        permanent: true,
-      },
-      {
-        source: "/administration/personnel/timeclock",
-        destination: "/administration/workforce/clock-corrections",
         permanent: true,
       },
     ];
@@ -88,6 +50,17 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           // No manda la URL completa como referrer a otros sitios.
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // Aísla ventanas abiertas por este origen para reducir filtraciones
+          // entre contextos de navegación.
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          // Evita que otros sitios reutilicen recursos privados de la app.
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+          // Mantiene este origen en un proceso aislado del agente del navegador.
+          { key: "Origin-Agent-Cluster", value: "?1" },
+          // Evita consultas DNS automáticas que no fueron solicitadas por la app.
+          { key: "X-DNS-Prefetch-Control", value: "off" },
+          // No permite políticas heredadas para contenido de Adobe/Microsoft.
+          { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
           {
             key: "Content-Security-Policy",
             value: [
@@ -98,8 +71,8 @@ const nextConfig: NextConfig = {
               "form-action 'self'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "style-src 'self' 'unsafe-inline'",
-              "script-src 'self' 'unsafe-inline'",
+              "style-src 'self' 'unsafe-inline' https://unpkg.com",
+              `script-src 'self' 'unsafe-inline' https://unpkg.com${isDevelopment ? " 'unsafe-eval'" : ""}`,
               "connect-src 'self' https:",
               "upgrade-insecure-requests",
             ].join("; "),

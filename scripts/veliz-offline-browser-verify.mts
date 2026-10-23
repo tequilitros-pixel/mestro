@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+const url=process.env.DATABASE_URL!;
+if(new URL(url).hostname!=='127.0.0.1'||!url.endsWith('/veliz_audit'))throw Error('LOCAL_TEST_DATABASE_REQUIRED');
+const id=process.argv[2];assert.ok(id,'Supply the operation ID observed in the local browser harness');
+const db=new PrismaClient({adapter:new PrismaPg({connectionString:url})});
+const sale=await db.posSale.findUniqueOrThrow({where:{id},include:{payments:true,items:true}});
+assert.equal(sale.branchId,'veliz');assert.equal(sale.soldById,'qa-admin');assert.equal(Number(sale.total),30);assert.equal(sale.payments.length,1);assert.equal(sale.items.length,1);
+assert.equal(await db.outboxEvent.count({where:{aggregate:'PosSale',aggregateId:id}}),1);
+const ledger=await db.inventoryMovement.findMany({where:{operationId:id}});assert.equal(ledger.length,1);assert.equal(ledger[0].quantityDelta.toNumber(),-1000);
+console.log('PASS Browser operation '+id+' has one sale one payment one stock deduction and one outbox event');
+await db.$disconnect();

@@ -4,6 +4,8 @@ import MainNavigation from "@/components/layout/MainNavigation";
 import ModuleNavigation from "@/components/layout/ModuleNavigation";
 import { OfflineProvider } from "@/components/offline/OfflineProvider";
 import SyncStatus from "@/components/offline/SyncStatus";
+import { getAccessibleBranchIds } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 type AppShellUser = {
   name: string;
@@ -16,11 +18,21 @@ type AppShellProps = {
   children: ReactNode;
 };
 
-export default function AppShell({
+export default async function AppShell({
   user,
   moduleKeys,
   children,
 }: AppShellProps) {
+  const accessibleBranchIds = await getAccessibleBranchIds();
+  const accountingBranches = await prisma.branch.findMany({
+    where: {
+      active: true,
+      ...(accessibleBranchIds === null ? {} : { id: { in: accessibleBranchIds } }),
+    },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+
   return (
     <OfflineProvider>
       <div className="flex min-h-screen flex-col bg-background text-on-surface">
@@ -30,7 +42,11 @@ export default function AppShell({
           <SyncStatus />
         </header>
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          <ModuleNavigation role={user.role} moduleKeys={moduleKeys} />
+          <ModuleNavigation
+            role={user.role}
+            moduleKeys={moduleKeys}
+            accountingBranches={accountingBranches}
+          />
           <div className="app-content min-w-0 flex-1">{children}</div>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import EntryForm from "./EntryForm";
 import { InventoryEntryType } from "@prisma/client";
+import { formatBusinessDate } from "@/lib/dateTime";
 
 const typeLabels: Record<string, string> = {
   COMPRA: "Compra",
@@ -38,7 +39,7 @@ export default async function BranchEntriesPage() {
       select: { id: true, name: true },
     }),
     prisma.inventoryProduct.findMany({
-      where: { isActive: true, trackStock: true },
+      where: { isActive: true, archivedAt: null, trackStock: true },
       orderBy: { name: "asc" },
       select: { id: true, code: true, name: true, category: true, unit: true },
     }),
@@ -60,10 +61,20 @@ export default async function BranchEntriesPage() {
           >
             ← Inventario de sucursales
           </a>
-          <h1 className="text-3xl font-bold">Entradas de inventario</h1>
-          <p className="mt-3 text-on-surface-variant">
-            Compras y ajustes (mermas, pérdidas, correcciones) por sucursal.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold">Entradas de inventario</h1>
+              <p className="mt-3 text-on-surface-variant">
+                Compras y ajustes (mermas, pérdidas, correcciones) por sucursal.
+              </p>
+            </div>
+            <a
+              href="/administration/inventory/branch-entries/weekly"
+              className="inline-flex items-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary transition hover:opacity-90"
+            >
+              Entrada semanal en lote
+            </a>
+          </div>
         </div>
 
         {branches.length > 0 ? (
@@ -98,7 +109,7 @@ export default async function BranchEntriesPage() {
                       {quantity > 0 ? "+" : ""}
                       {quantity} {entry.product.unit}
                     </span>{" "}
-                    · {new Date(entry.entryDate).toLocaleDateString("es-MX")}
+                    · {formatBusinessDate(entry.entryDate)}
                   </p>
                 </div>
               </div>

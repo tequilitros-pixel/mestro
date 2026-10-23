@@ -1,13 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import EventStatusSelector from "./EventStatusSelector";
 import AddCustomItemForm from "./AddCustomItemForm";
 import EventDetailTabs from "./EventDetailTabs";
 import RecountForm from "./RecountForm";
 import MarkFulfilledButton from "./MarkFulfilledButton";
 import EventChecklistTable from "./EventChecklistTable";
+import AdditionalSupplyForm from "./AdditionalSupplyForm";
+import AdditionalReturns from "./AdditionalReturns";
+import EventSummary from "./EventSummary";
 import { ListChecksIcon } from "@/components/ui/icons";
+import { formatBusinessDate, formatBusinessDateTime } from "@/lib/dateTime";
+import { buildEventConsumption, type EventConsumptionItem } from "@/lib/inventory/eventAnalytics";
+import { generateOperationId } from "@/lib/pos2/operationId";
 
 export default async function EventDetailPage({
   params,
@@ -15,6 +22,8 @@ export default async function EventDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const currentUser = await getCurrentUser();
+  const isAdmin = currentUser?.role === "ADMIN";
 
   const event = await prisma.serviceEvent.findUnique({
     where: { id },
@@ -29,6 +38,13 @@ export default async function EventDetailPage({
         orderBy: { dayNumber: "desc" },
         include: { items: true },
       },
+      addedProducts: {
+        orderBy: { addedAt: "asc" },
+        include: {
+          product: { select: { name: true, category: true, unit: true, itemType: true } },
+          sourceBranch: { select: { name: true } },
+        },
+      },
     },
   });
 
@@ -36,33 +52,66 @@ export default async function EventDetailPage({
     notFound();
   }
 
-  const products = await prisma.inventoryProduct.findMany({
-    where: { isActive: true },
+  const [products, allowedBranchIds] = await Promise.all([
+    prisma.inventoryProduct.findMany({
+    where: { isActive: true, archivedAt: null },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, unit: true, itemType: true },
+    select: { id: true, name: true, unit: true, itemType: true, trackStock: true },
+    }),
+    getAccessibleBranchIds(),
+  ]);
+  const sourceBranches = await prisma.branch.findMany({
+    where: { active: true, ...(allowedBranchIds === null ? {} : { id: { in: allowedBranchIds } }) },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
   });
 
   const consumableProducts = products.filter((p) => p.itemType !== "EQUIPMENT");
   const equipmentProducts = products.filter((p) => p.itemType === "EQUIPMENT");
 
-  const totalItems = event.items.length;
   const sentCount = event.items.filter((i) => i.checkedOut).length;
   const returnedCount = event.items.filter((i) => i.checkedIn).length;
-  const pendingReturns = Math.max(sentCount - returnedCount, 0);
+  const activeAdditions = event.addedProducts.filter((addition) => addition.status === "ACTIVO");
+  const additionalPendingReturns = activeAdditions.filter((addition) => addition.sourceType === "ENVIO_SUCURSAL" && !addition.returnBranchId).length;
+  const pendingReturns = Math.max(sentCount - returnedCount, 0) + additionalPendingReturns;
 
-  const totalConsumedCost = event.items.reduce((sum, item) => {
-    if (item.itemType === "EQUIPMENT") return sum;
-    const sent =
-      item.sentQuantity !== null ? Number(item.sentQuantity) : Number(item.plannedQuantity);
-    const returned = item.returnedQuantity !== null ? Number(item.returnedQuantity) : 0;
-    const damaged = Number(item.damagedQuantity);
-    const consumed = Math.max(sent - returned - damaged, 0);
-    const cost = item.unitCost !== null ? consumed * Number(item.unitCost) : 0;
-    return sum + cost;
-  }, 0);
+  const consumptionItems: EventConsumptionItem[] = [
+    ...event.items.filter((item) => item.checkedOut && item.checkedIn).map((item) => ({
+      productId: item.productId,
+      name: item.productName,
+      category: item.product.category,
+      unit: item.unit,
+      itemType: item.itemType,
+      sent: Number(item.sentQuantity ?? item.plannedQuantity),
+      returned: item.checkedIn ? Number(item.returnedQuantity ?? 0) : 0,
+      damaged: item.checkedIn ? Number(item.damagedQuantity) : 0,
+      returnedOpenBase: item.checkedIn ? Number(item.returnedOpenQuantity ?? 0) : 0,
+      contentPerUnit: item.contentPerUnit === null ? null : Number(item.contentPerUnit),
+      contentUnit: item.contentUnit,
+      unitCost: item.unitCost === null ? null : Number(item.unitCost),
+    })),
+    ...activeAdditions.filter((addition) => addition.returnBranchId || (event.returnConfirmedAt && addition.sourceType !== "ENVIO_SUCURSAL")).map((addition) => ({
+      productId: addition.productId ?? addition.id,
+      name: addition.product?.name ?? addition.temporaryName ?? "Producto adicional",
+      category: addition.product?.category ?? addition.temporaryCategory ?? "Sin categoría",
+      unit: addition.product?.unit ?? addition.handlingUnit?.toLocaleLowerCase("es-MX") ?? "unidades",
+      itemType: addition.product?.itemType ?? "CONSUMABLE",
+      sent: Number(addition.quantityOriginal),
+      returned: addition.returnBranchId ? Number(addition.returnedQuantity) : 0,
+      damaged: 0,
+      returnedOpenBase: addition.returnBranchId ? Number(addition.returnedOpenQuantity ?? 0) : 0,
+      contentPerUnit: addition.contentPerUnit === null ? null : Number(addition.contentPerUnit),
+      contentUnit: addition.contentUnit,
+      unitCost: addition.totalCost === null ? null : Number(addition.totalCost) / Number(addition.quantityOriginal),
+    })),
+  ];
+  const consumption = buildEventConsumption(consumptionItems);
+
+  const totalConsumedCost = consumption.reduce((sum, item) => sum + item.consumedCost, 0);
+  const costComplete = consumption.every((item) => item.costKnown);
 
   const saleAmount = event.saleAmount !== null ? Number(event.saleAmount) : null;
-  const utility = saleAmount !== null ? saleAmount - totalConsumedCost : null;
+  const utility = saleAmount !== null && event.returnConfirmedAt && costComplete ? saleAmount - totalConsumedCost : null;
 
   function toRowItem(item: NonNullable<typeof event>["items"][number]) {
     return {
@@ -107,7 +156,7 @@ export default async function EventDetailPage({
               <p className="mt-1 text-sm text-on-surface-variant">{event.clientPhone}</p>
             )}
             <p className="mt-2 text-on-surface-variant">
-              {event.location} · {new Date(event.eventDate).toLocaleString("es-MX")} ·{" "}
+              {event.location} · {formatBusinessDateTime(event.eventDate)} ·{" "}
               {event.guestCount} invitados
             </p>
             <p className="mt-1 text-sm text-outline">
@@ -132,14 +181,14 @@ export default async function EventDetailPage({
         </div>
 
         <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-          <p className="text-xs text-on-surface-variant">Costo consumido</p>
+          <p className="text-xs text-on-surface-variant">Costo estimado de insumos con regreso capturado</p>
           <p className="mt-1 text-2xl font-bold text-on-surface">
             ${totalConsumedCost.toFixed(2)}
           </p>
         </div>
 
         <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-          <p className="text-xs text-on-surface-variant">Utilidad</p>
+          <p className="text-xs text-on-surface-variant">Venta menos insumos</p>
           <p
             className={`mt-1 text-2xl font-bold ${
               utility !== null && utility < 0 ? "text-error" : "text-tertiary-fixed-dim"
@@ -159,7 +208,31 @@ export default async function EventDetailPage({
         phase="salida"
         items={event.items.map(toRowItem)}
         confirmed={Boolean(event.checkoutConfirmedAt)}
+        isAdmin={isAdmin}
       />
+
+      {activeAdditions.length > 0 && (
+        <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+          <h3 className="font-semibold text-on-surface">Cargas adicionales</h3>
+          <div className="mt-3 divide-y divide-outline-variant">
+            {activeAdditions.map((addition) => (
+              <div key={addition.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm">
+                <span className="font-medium text-on-surface">{addition.product?.name ?? addition.temporaryName ?? "Producto adicional"}</span>
+                <span className="text-on-surface-variant">+{Number(addition.quantityOriginal)} {addition.product?.unit ?? "unidades"} · {addition.sourceBranch?.name ?? "Origen externo"} · {formatBusinessDateTime(addition.addedAt)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {event.checkoutConfirmedAt && !event.returnConfirmedAt && (
+        <AdditionalSupplyForm
+          eventId={event.id}
+          operationId={generateOperationId()}
+          products={products.filter((product) => product.itemType !== "EQUIPMENT" && product.trackStock).map(({ id, name, unit }) => ({ id, name, unit }))}
+          branches={sourceBranches}
+        />
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <AddCustomItemForm
@@ -177,12 +250,33 @@ export default async function EventDetailPage({
   );
 
   const regresoTab = (
-    <EventChecklistTable
-      eventId={event.id}
-      phase="regreso"
-      items={event.items.map(toRowItem)}
-      confirmed={Boolean(event.returnConfirmedAt)}
-    />
+    <section className="space-y-4">
+      <AdditionalReturns
+        eventId={event.id}
+        locked={Boolean(event.returnConfirmedAt)}
+        rows={activeAdditions.filter((addition) => addition.sourceType === "ENVIO_SUCURSAL").map((addition) => ({
+          id: addition.id,
+          productName: addition.product?.name ?? addition.temporaryName ?? "Producto adicional",
+          unit: addition.product?.unit ?? "unidades",
+          sourceBranchName: addition.sourceBranch?.name ?? "Sucursal no disponible",
+          quantity: Number(addition.quantityOriginal),
+          returned: Number(addition.returnedQuantity),
+          returnedOpen: Number(addition.returnedOpenQuantity ?? 0),
+          contentPerUnit: addition.contentPerUnit === null ? null : Number(addition.contentPerUnit),
+          contentUnit: addition.contentUnit,
+          captured: Boolean(addition.returnBranchId),
+          operationId: generateOperationId(),
+        }))}
+      />
+      <EventChecklistTable
+        eventId={event.id}
+        phase="regreso"
+        items={event.items.map(toRowItem)}
+        confirmed={Boolean(event.returnConfirmedAt)}
+        isAdmin={isAdmin}
+        additionalPendingReturns={additionalPendingReturns}
+      />
+    </section>
   );
 
   const reconteoTab = (
@@ -222,7 +316,7 @@ export default async function EventDetailPage({
                   <div>
                     <p className="font-medium text-on-surface">Día {recount.dayNumber}</p>
                     <p className="text-sm text-on-surface-variant">
-                      {new Date(recount.countDate).toLocaleDateString("es-MX")} · {missingCount}{" "}
+                      {formatBusinessDate(recount.countDate)} · {missingCount}{" "}
                       producto{missingCount === 1 ? "" : "s"} por traer
                     </p>
                   </div>
@@ -269,6 +363,7 @@ export default async function EventDetailPage({
         </Link>
 
         <EventDetailTabs
+          resumen={<EventSummary rows={consumption} saleAmount={saleAmount} complete={Boolean(event.returnConfirmedAt)} pendingReturns={pendingReturns} />}
           datos={datosTab}
           salida={salidaTab}
           regreso={regresoTab}

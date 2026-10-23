@@ -3,11 +3,6 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { aggregateWeek, dateKey, mondayOf, sundayOf, timesheetReadiness } from "./rules";
-import {
-  isSyntheticWorkforceRecord,
-  normalizeEmploymentStatusFilter,
-  type EmploymentStatusFilter,
-} from "./visibility";
 
 type Tx = Prisma.TransactionClient;
 export type TimesheetActor = {
@@ -225,16 +220,7 @@ export async function ensureAndRecomputeTimesheet(employmentId: string, inputDat
           include: {
             adjustments: true,
             workSessionLinks: {
-              include: {
-                workSession: {
-                  include: {
-                    branch: true,
-                    shift: true,
-                    attendanceExceptions: true,
-                    clockEventLinks: { include: { clockEvent: true }, orderBy: { sequence: "asc" } },
-                  },
-                },
-              },
+              include: { workSession: { include: { branch: true, shift: true, attendanceExceptions: true } } },
             },
           },
           orderBy: { businessDate: "asc" },
@@ -346,7 +332,6 @@ export async function getTimesheetBoard(
   search?: string,
   status?: string,
   branchId?: string,
-  employmentStatus?: EmploymentStatusFilter,
 ) {
   if (actor.role !== "ADMIN") throw new Error("No autorizado.");
   if (
@@ -356,16 +341,8 @@ export async function getTimesheetBoard(
   )
     throw new Error("Sucursal no autorizada.");
   const start = mondayOf(inputDate), end = sundayOf(start);
-  const employmentFilter = normalizeEmploymentStatusFilter(employmentStatus);
   const where: Prisma.EmploymentWhereInput = {
     AND: [
-      ...(employmentFilter === "ALL"
-        ? []
-        : [
-            {
-              status: employmentFilter as "ACTIVE" | "INACTIVE" | "TERMINATED",
-            },
-          ]),
       { OR: [{ startedAt: null }, { startedAt: { lte: end } }] },
       { OR: [{ endedAt: null }, { endedAt: { gte: start } }] },
       ...(search
@@ -401,12 +378,7 @@ export async function getTimesheetBoard(
     include: { employee: true }, orderBy: { employee: { displayName: "asc" } },
   });
   const sheets = [];
-  const visibleEmployments = employments.filter(
-    (employment) =>
-      employmentFilter !== "ACTIVE" ||
-      !isSyntheticWorkforceRecord(employment.employee.displayName),
-  );
-  for (const employment of visibleEmployments) {
+  for (const employment of employments) {
     const sheet = await ensureAndRecomputeTimesheet(employment.id, start);
     if (!status || sheet.status === status) sheets.push(sheet);
   }

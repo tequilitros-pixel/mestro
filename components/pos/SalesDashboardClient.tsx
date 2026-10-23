@@ -12,6 +12,8 @@ import {
   GridIcon,
   WalletIcon,
   SearchIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "@/components/ui/icons";
 import PageTabs from "@/components/ui/PageTabs";
 import { DateRangeCalendar } from "@/components/ui/DateRangeCalendar";
@@ -23,12 +25,15 @@ import {
 } from "./SalesCharts";
 import {
   todayDateOnly,
-  mondayOfWeek,
-  addDaysToDateOnly,
-  firstDayOfMonth,
-  lastSalesDayOfMonth,
   formatBusinessDateOnly,
 } from "@/lib/dateOnly";
+import { formatBusinessDate, formatBusinessTime } from "@/lib/dateTime";
+import { aggregateProductSales } from "@/lib/pos/salesAnalytics";
+import {
+  salesPeriodDateRange,
+  shiftSalesPeriodRange,
+  type SalesPeriod,
+} from "@/lib/pos/salesPeriod";
 
 type SaleItem = { id: string; name: string; quantity: number; lineTotal: number };
 type SalePayment = { method: string; amount: number };
@@ -50,14 +55,18 @@ type Sale = {
 
 type AnalyticsSale = {
   id: string;
+  code: string;
   total: number;
   createdAt: string;
   branch: { id: string; name: string };
+  soldBy: { id: string; name: string };
   payments: SalePayment[];
   items: Array<{
     name: string;
     quantity: number;
     lineTotal: number;
+    isCustom: boolean;
+    productId: string | null;
     productName: string | null;
     categoryName: string | null;
   }>;
@@ -65,27 +74,12 @@ type AnalyticsSale = {
 
 type BranchOption = { id: string; name: string };
 
-type Period = "day" | "week" | "month" | "custom";
-
-const PERIOD_LABELS: Record<Period, string> = {
+const PERIOD_LABELS: Record<SalesPeriod, string> = {
   day: "Día",
   week: "Semana",
   month: "Mes",
   custom: "Calendario",
 };
-
-/** Rango de fechas (calendario, sin hora) del periodo elegido. */
-function periodDateRange(period: Period): { from: string; to: string } {
-  const today = todayDateOnly();
-  if (period === "week") {
-    const monday = mondayOfWeek(today);
-    return { from: monday, to: addDaysToDateOnly(monday, 6) };
-  }
-  if (period === "month") {
-    return { from: firstDayOfMonth(today), to: lastSalesDayOfMonth(today) };
-  }
-  return { from: today, to: today };
-}
 
 const PAYMENT_LABELS: Record<string, string> = {
   EFECTIVO: "Efectivo",
@@ -102,10 +96,10 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
 
 const formatTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  formatBusinessTime(iso);
 
 const formatDayLabel = (iso: string) =>
-  new Date(`${iso}T12:00:00`).toLocaleDateString("es-MX", {
+  formatBusinessDate(`${iso}T12:00:00.000Z`, {
     day: "2-digit",
     month: "short",
   });
@@ -143,7 +137,7 @@ export default function SalesDashboardClient({
   const [loading, setLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [analyticsBranchId, setAnalyticsBranchId] = useState("");
-  const [period, setPeriod] = useState<Period>("day");
+  const [period, setPeriod] = useState<SalesPeriod>("day");
   const [analyticsFrom, setAnalyticsFrom] = useState(todayDateOnly());
   const [analyticsTo, setAnalyticsTo] = useState(todayDateOnly());
   const [analytics, setAnalytics] = useState<AnalyticsSale[]>(initialAnalytics);
@@ -187,9 +181,20 @@ export default function SalesDashboardClient({
     }
   }
 
-  function handlePeriodChange(nextPeriod: Exclude<Period, "custom">) {
-    const range = periodDateRange(nextPeriod);
+  function handlePeriodChange(nextPeriod: Exclude<SalesPeriod, "custom">) {
+    const range = salesPeriodDateRange(nextPeriod);
     setPeriod(nextPeriod);
+    setAnalyticsFrom(range.from);
+    setAnalyticsTo(range.to);
+    void loadAnalytics(range.from, range.to);
+  }
+
+  function handlePeriodStep(direction: -1 | 1) {
+    const range = shiftSalesPeriodRange(
+      period,
+      { from: analyticsFrom, to: analyticsTo },
+      direction,
+    );
     setAnalyticsFrom(range.from);
     setAnalyticsTo(range.to);
     void loadAnalytics(range.from, range.to);
@@ -262,6 +267,31 @@ export default function SalesDashboardClient({
     };
   }, [scopedAnalytics]);
 
+  const branchSalesSummary = useMemo(() => {
+    const totals = new Map(
+      branches.map((branch) => [
+        branch.id,
+        { id: branch.id, name: branch.name, total: 0 },
+      ]),
+    );
+
+    for (const sale of scopedAnalytics) {
+      const current = totals.get(sale.branch.id) ?? {
+        id: sale.branch.id,
+        name: sale.branch.name,
+        total: 0,
+      };
+      current.total += sale.total;
+      totals.set(sale.branch.id, current);
+    }
+
+    return Array.from(totals.values())
+      .filter((branch) => !analyticsBranchId || branch.id === analyticsBranchId)
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, "es"));
+  }, [analyticsBranchId, branches, scopedAnalytics]);
+
+  const highestBranchTotal = Math.max(0, ...branchSalesSummary.map((branch) => branch.total));
+
   /** Serie diaria: una columna por sucursal para comparar. */
   const dailyByBranch = useMemo(() => {
     const branchNames = Array.from(
@@ -307,20 +337,17 @@ export default function SalesDashboardClient({
   }, [analytics]);
 
   const productRanking = useMemo(() => {
-    const totals = new Map<string, { total: number; units: number }>();
-    for (const sale of scopedAnalytics) {
-      for (const item of sale.items) {
-        const name = item.productName ?? item.name;
-        const current = totals.get(name) ?? { total: 0, units: 0 };
-        current.total += item.lineTotal;
-        current.units += item.quantity;
-        totals.set(name, current);
-      }
-    }
-    return Array.from(totals.entries())
-      .map(([name, v]) => ({ name, ...v }))
-      .sort((a, b) => b.total - a.total);
+    return aggregateProductSales(scopedAnalytics);
   }, [scopedAnalytics]);
+
+  const productTotals = useMemo(
+    () => ({
+      units: productRanking.reduce((sum, product) => sum + product.units, 0),
+      products: productRanking.length,
+      total: productRanking.reduce((sum, product) => sum + product.total, 0),
+    }),
+    [productRanking],
+  );
 
   const categoryRanking = useMemo(() => {
     const totals = new Map<string, { total: number; units: number }>();
@@ -351,15 +378,139 @@ export default function SalesDashboardClient({
       .sort((a, b) => b.value - a.value);
   }, [scopedAnalytics]);
 
+  /** Serie diaria de cobros con tarjeta, separada por sucursal. */
+  const cardPaymentDailyByBranch = useMemo(() => {
+    const branchNames = new Set<string>();
+    const byDay = new Map<string, Record<string, number>>();
+    const detail = new Map<
+      string,
+      { day: string; branchId: string; branchName: string; amount: number; count: number }
+    >();
+
+    for (const sale of scopedAnalytics) {
+      const cardAmount = sale.payments
+        .filter((payment) => payment.method === "TARJETA")
+        .reduce((sum, payment) => sum + payment.amount, 0);
+
+      if (cardAmount <= 0) continue;
+
+      const day = dayKey(sale.createdAt);
+      const branchName = sale.branch.name;
+      branchNames.add(branchName);
+
+      const row = byDay.get(day) ?? {};
+      row[branchName] = (row[branchName] ?? 0) + cardAmount;
+      byDay.set(day, row);
+
+      const detailKey = `${day}:${sale.branch.id}`;
+      const current = detail.get(detailKey) ?? {
+        day,
+        branchId: sale.branch.id,
+        branchName,
+        amount: 0,
+        count: 0,
+      };
+      current.amount += cardAmount;
+      current.count += 1;
+      detail.set(detailKey, current);
+    }
+
+    const sortedBranchNames = Array.from(branchNames).sort((a, b) =>
+      a.localeCompare(b, "es"),
+    );
+    const data = Array.from(byDay.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, row]) => {
+        const point: Record<string, string | number> = {
+          day,
+          label: formatDayLabel(day),
+        };
+        for (const branchName of sortedBranchNames) {
+          point[branchName] = Math.round(row[branchName] ?? 0);
+        }
+        return point;
+      });
+
+    return {
+      data,
+      branchNames: sortedBranchNames,
+      detail: Array.from(detail.values()).sort(
+        (a, b) => b.day.localeCompare(a.day) || a.branchName.localeCompare(b.branchName, "es"),
+      ),
+    };
+  }, [scopedAnalytics]);
+
   const hourlyData = useMemo(() => {
     const totals = new Array(24).fill(0) as number[];
     for (const sale of scopedAnalytics) {
-      totals[new Date(sale.createdAt).getHours()] += sale.total;
+      totals[Number(formatBusinessTime(sale.createdAt).slice(0, 2))] += sale.total;
     }
     return totals
       .map((total, hour) => ({ label: `${String(hour).padStart(2, "0")}h`, total, hour }))
       .filter((point) => point.total > 0);
   }, [scopedAnalytics]);
+
+  const customCharges = useMemo(
+    () =>
+      scopedAnalytics.flatMap((sale) =>
+        sale.items
+          .filter((item) => item.isCustom)
+          .map((item, index) => ({
+            id: `${sale.id}-${index}`,
+            saleId: sale.id,
+            code: sale.code,
+            createdAt: sale.createdAt,
+            branch: sale.branch,
+            soldBy: sale.soldBy,
+            description: item.name,
+            quantity: item.quantity,
+            amount: item.lineTotal,
+          })),
+      ),
+    [scopedAnalytics],
+  );
+
+  const customChargeSummary = useMemo(() => {
+    const total = customCharges.reduce((sum, charge) => sum + charge.amount, 0);
+    const days = new Set(customCharges.map((charge) => dayKey(charge.createdAt)));
+    return {
+      total,
+      count: customCharges.length,
+      days: days.size,
+      average: customCharges.length ? total / customCharges.length : 0,
+    };
+  }, [customCharges]);
+
+  const customByEmployee = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const charge of customCharges) {
+      totals.set(charge.soldBy.name, (totals.get(charge.soldBy.name) ?? 0) + charge.amount);
+    }
+    return Array.from(totals.entries())
+      .map(([name, value]) => ({ name, value: Math.round(value) }))
+      .sort((a, b) => b.value - a.value);
+  }, [customCharges]);
+
+  const customByBranch = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const charge of customCharges) {
+      totals.set(charge.branch.name, (totals.get(charge.branch.name) ?? 0) + charge.amount);
+    }
+    return Array.from(totals.entries())
+      .map(([name, value]) => ({ name, value: Math.round(value) }))
+      .sort((a, b) => b.value - a.value);
+  }, [customCharges]);
+
+  const customByDay = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const charge of customCharges) {
+      const key = dayKey(charge.createdAt);
+      totals.set(key, (totals.get(key) ?? 0) + charge.amount);
+    }
+    return Array.from(totals.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, value]) => ({ name: formatDayLabel(day), value: Math.round(value) }));
+  }, [customCharges]);
 
   /** Filtro de la lista: aplica el buscador sobre las ventas del día. */
   const filteredSales = useMemo(() => {
@@ -390,7 +541,9 @@ export default function SalesDashboardClient({
 
   const periodRangeLabel =
     period === "day"
-      ? "Hoy"
+      ? periodFrom === todayDateOnly()
+        ? "Hoy"
+        : formatDayLabel(periodFrom)
       : period === "week"
         ? `Del ${formatDayLabel(periodFrom)} al ${formatDayLabel(periodTo)} (lun-dom)`
         : period === "month"
@@ -400,7 +553,7 @@ export default function SalesDashboardClient({
   const analyticsScopeSelector = (
     <div className="flex flex-wrap items-center gap-3">
       <div className="inline-flex rounded-xl border border-outline-variant bg-surface-container p-1">
-        {(["day", "week", "month"] as Array<Exclude<Period, "custom">>).map((p) => (
+        {(["day", "week", "month"] as Array<Exclude<SalesPeriod, "custom">>).map((p) => (
           <button
             key={p}
             type="button"
@@ -415,6 +568,29 @@ export default function SalesDashboardClient({
             {PERIOD_LABELS[p]}
           </button>
         ))}
+      </div>
+
+      <div className="inline-flex rounded-xl border border-outline-variant bg-surface-container p-1">
+        <button
+          type="button"
+          onClick={() => handlePeriodStep(-1)}
+          disabled={analyticsLoading}
+          aria-label={`${PERIOD_LABELS[period]} anterior`}
+          className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-60"
+        >
+          <ChevronLeftIcon className="h-4 w-4" />
+          Anterior
+        </button>
+        <button
+          type="button"
+          onClick={() => handlePeriodStep(1)}
+          disabled={analyticsLoading}
+          aria-label={`${PERIOD_LABELS[period]} siguiente`}
+          className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-60"
+        >
+          Siguiente
+          <ChevronRightIcon className="h-4 w-4" />
+        </button>
       </div>
 
       <DateRangeCalendar
@@ -504,6 +680,42 @@ export default function SalesDashboardClient({
                   </Card>
                 </div>
 
+                <Card>
+                  <CardLabel>Total vendido por sucursal</CardLabel>
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    Ventas completadas del periodo seleccionado.
+                  </p>
+                  <div className="mt-4 space-y-4">
+                    {branchSalesSummary.map((branch) => (
+                      <div key={branch.id}>
+                        <div className="mb-1.5 flex items-center justify-between gap-3 text-sm">
+                          <span className="min-w-0 truncate font-medium text-on-surface">
+                            {branch.name}
+                          </span>
+                          <strong className="shrink-0 tabular-nums text-on-surface">
+                            {formatCurrency(branch.total)}
+                          </strong>
+                        </div>
+                        <div className="h-3 overflow-hidden rounded-full bg-surface-container-high">
+                          <div
+                            className="h-full rounded-full bg-primary"
+                            style={{
+                              width: highestBranchTotal > 0
+                                ? `${(branch.total / highestBranchTotal) * 100}%`
+                                : "0%",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {branchSalesSummary.length === 0 && (
+                      <p className="text-sm text-on-surface-variant">
+                        No hay sucursales disponibles para mostrar.
+                      </p>
+                    )}
+                  </div>
+                </Card>
+
                 {emptyPeriod ? (
                   emptyPeriodCard
                 ) : (
@@ -522,8 +734,10 @@ export default function SalesDashboardClient({
                         <RankingBarChart
                           data={productRanking.slice(0, 5).map((p) => ({
                             name: p.name,
-                            value: Math.round(p.total),
+                            value: p.units,
                           }))}
+                          valueLabel="Unidades"
+                          valueFormat="units"
                         />
                       </Card>
 
@@ -621,15 +835,39 @@ export default function SalesDashboardClient({
 
                 {emptyPeriod ? (
                   emptyPeriodCard
+                ) : productRanking.length === 0 ? (
+                  <Card className="text-center">
+                    <p className="text-sm text-on-surface-variant">
+                      No hay productos de catálogo vendidos en este periodo. Los cobros
+                      personalizados no se cuentan como productos.
+                    </p>
+                  </Card>
                 ) : (
                   <>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <Card className="p-4">
+                        <CardLabel>Unidades vendidas</CardLabel>
+                        <CardValue>{productTotals.units}</CardValue>
+                      </Card>
+                      <Card className="p-4">
+                        <CardLabel>Productos diferentes</CardLabel>
+                        <CardValue>{productTotals.products}</CardValue>
+                      </Card>
+                      <Card className="p-4">
+                        <CardLabel>Importe de productos</CardLabel>
+                        <CardValue>{formatCurrency(productTotals.total)}</CardValue>
+                      </Card>
+                    </div>
+
                     <Card>
-                      <CardLabel>Top 10 productos por venta</CardLabel>
+                      <CardLabel>Top 10 productos por unidades</CardLabel>
                       <RankingBarChart
                         data={productRanking.slice(0, 10).map((p) => ({
                           name: p.name,
-                          value: Math.round(p.total),
+                          value: p.units,
                         }))}
+                        valueLabel="Unidades"
+                        valueFormat="units"
                       />
                     </Card>
 
@@ -638,7 +876,7 @@ export default function SalesDashboardClient({
                       <div className="mt-2 divide-y divide-outline-variant">
                         {productRanking.map((product) => (
                           <div
-                            key={product.name}
+                            key={product.key}
                             className="flex items-center justify-between gap-4 py-3"
                           >
                             <div className="min-w-0">
@@ -735,6 +973,103 @@ export default function SalesDashboardClient({
           },
 
           {
+            key: "personalizados",
+            label: "Cobros personalizados",
+            icon: <ReceiptIcon className="h-4 w-4" />,
+            content: (
+              <div className="space-y-6">
+                {analyticsScopeSelector}
+
+                {customCharges.length === 0 ? (
+                  <Card className="text-center">
+                    <p className="text-sm text-on-surface-variant">
+                      No hay cobros personalizados en el periodo y sucursal seleccionados.
+                    </p>
+                  </Card>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                      <Card className="p-4">
+                        <CardLabel>Total personalizado</CardLabel>
+                        <CardValue>{formatCurrency(customChargeSummary.total)}</CardValue>
+                      </Card>
+                      <Card className="p-4">
+                        <CardLabel>Cobros</CardLabel>
+                        <CardValue>{customChargeSummary.count}</CardValue>
+                      </Card>
+                      <Card className="p-4">
+                        <CardLabel>Promedio</CardLabel>
+                        <CardValue>{formatCurrency(customChargeSummary.average)}</CardValue>
+                      </Card>
+                      <Card className="p-4">
+                        <CardLabel>Días con cobro</CardLabel>
+                        <CardValue>{customChargeSummary.days}</CardValue>
+                      </Card>
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Card>
+                        <CardLabel>Total por empleado</CardLabel>
+                        <RankingBarChart
+                          data={customByEmployee}
+                          valueLabel="Cobros personalizados"
+                        />
+                      </Card>
+                      <Card>
+                        <CardLabel>Total por sucursal</CardLabel>
+                        <RankingBarChart
+                          data={customByBranch}
+                          valueLabel="Cobros personalizados"
+                        />
+                      </Card>
+                    </div>
+
+                    <Card>
+                      <CardLabel>Total por día</CardLabel>
+                      <RankingBarChart
+                        data={customByDay}
+                        valueLabel="Cobros personalizados"
+                      />
+                    </Card>
+
+                    <Card>
+                      <CardLabel>Detalle para localizar cada cobro</CardLabel>
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="w-full min-w-[760px] text-left text-sm">
+                          <thead className="border-b border-outline-variant text-xs uppercase tracking-wide text-on-surface-variant">
+                            <tr>
+                              <th className="px-3 py-3">Fecha y hora</th>
+                              <th className="px-3 py-3">Folio</th>
+                              <th className="px-3 py-3">Descripción</th>
+                              <th className="px-3 py-3">Empleado</th>
+                              <th className="px-3 py-3">Sucursal</th>
+                              <th className="px-3 py-3 text-right">Importe</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {customCharges.map((charge) => (
+                              <tr key={charge.id} className="border-b border-outline-variant last:border-0">
+                                <td className="px-3 py-3 text-on-surface-variant">
+                                  {formatDayLabel(dayKey(charge.createdAt))} · {formatTime(charge.createdAt)}
+                                </td>
+                                <td className="px-3 py-3 font-semibold text-on-surface">{charge.code}</td>
+                                <td className="max-w-[280px] truncate px-3 py-3 text-on-surface">{charge.description}</td>
+                                <td className="px-3 py-3 text-on-surface-variant">{charge.soldBy.name}</td>
+                                <td className="px-3 py-3 text-on-surface-variant">{charge.branch.name}</td>
+                                <td className="px-3 py-3 text-right font-bold text-on-surface">{formatCurrency(charge.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </Card>
+                  </>
+                )}
+              </div>
+            ),
+          },
+
+          {
             key: "pagos",
             label: "Pagos y horarios",
             icon: <WalletIcon className="h-4 w-4" />,
@@ -783,6 +1118,67 @@ export default function SalesDashboardClient({
                         </div>
                       </Card>
                     </div>
+
+                    {cardPaymentDailyByBranch.detail.length > 0 ? (
+                      <>
+                        <Card>
+                          <CardLabel>Cobros con tarjeta por día y sucursal</CardLabel>
+                          <p className="mt-1 text-xs text-on-surface-variant">
+                            Solo pagos registrados como tarjeta en el periodo seleccionado.
+                          </p>
+                          <div className="mt-4">
+                            <DailyBranchChart
+                              data={cardPaymentDailyByBranch.data}
+                              branchNames={cardPaymentDailyByBranch.branchNames}
+                            />
+                          </div>
+                        </Card>
+
+                        <Card>
+                          <CardLabel>Detalle de cobros con tarjeta</CardLabel>
+                          <div className="mt-3 overflow-x-auto">
+                            <table className="w-full min-w-[540px] text-left text-sm">
+                              <thead className="border-b border-outline-variant text-xs uppercase tracking-wide text-on-surface-variant">
+                                <tr>
+                                  <th className="px-3 py-3">Día</th>
+                                  <th className="px-3 py-3">Sucursal</th>
+                                  <th className="px-3 py-3 text-right">Cobros</th>
+                                  <th className="px-3 py-3 text-right">Importe con tarjeta</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {cardPaymentDailyByBranch.detail.map((row) => (
+                                  <tr
+                                    key={`${row.day}:${row.branchId}`}
+                                    className="border-b border-outline-variant last:border-0"
+                                  >
+                                    <td className="px-3 py-3 text-on-surface-variant">
+                                      {formatDayLabel(row.day)}
+                                    </td>
+                                    <td className="px-3 py-3 font-semibold text-on-surface">
+                                      {row.branchName}
+                                    </td>
+                                    <td className="px-3 py-3 text-right text-on-surface-variant">
+                                      {row.count}
+                                    </td>
+                                    <td className="px-3 py-3 text-right font-bold text-on-surface">
+                                      {formatCurrency(row.amount)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </Card>
+                      </>
+                    ) : (
+                      <Card className="text-center">
+                        <CardLabel>Cobros con tarjeta por día y sucursal</CardLabel>
+                        <p className="mt-1 text-sm text-on-surface-variant">
+                          No hay cobros con tarjeta en el periodo y sucursal seleccionados.
+                        </p>
+                      </Card>
+                    )}
 
                     <Card>
                       <CardLabel>Ventas por hora del día</CardLabel>

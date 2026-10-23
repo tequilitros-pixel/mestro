@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 const statusLabels: Record<string, string> = {
   DRAFT: "Borrador",
@@ -51,7 +52,7 @@ export default async function EventsPage() {
                 <p className="font-semibold text-on-surface">{event.clientName}</p>
                 <p className="text-sm text-on-surface-variant">
                   {event.location} ·{" "}
-                  {new Date(event.eventDate).toLocaleDateString("es-MX")} ·{" "}
+                  {formatBusinessDateTime(event.eventDate)} ·{" "}
                   {event.guestCount} invitados
                   {event.package ? ` · ${event.package.name}` : ""}
                   {event.equipmentKit ? ` · ${event.equipmentKit.name}` : ""}

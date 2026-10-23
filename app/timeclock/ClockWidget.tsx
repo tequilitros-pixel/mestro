@@ -3,15 +3,20 @@
 import { useState, useEffect, useRef } from "react";
 import {
   getMyOpenShift,
+  getMyRecentLocationRequest,
   getMyBranches,
   getNearbyBranches,
   clockInAction,
+  requestClockInWithoutLocationAction,
+  closeLocationRequestAction,
   clockOutAction,
+  closeForgottenShiftAction,
   reportGeofenceAlert,
 } from "@/app/actions/timeclock";
 import { ClockIcon, LoginIcon, LogoutIcon } from "@/components/ui/icons";
 import { distanceMeters, hasGeofence, type BranchLocation } from "@/lib/geo";
 import { enqueueOperation } from "@/lib/offline/queue";
+import { formatBusinessTime, formatBusinessDateTimeLocal, parseBusinessDateTimeLocal } from "@/lib/dateTime";
 
 type Branch = BranchLocation & { id: string; name: string };
 type OpenShift = {
@@ -20,6 +25,15 @@ type OpenShift = {
   branch: Branch;
 };
 type OutOfRange = { distance: number; radius: number } | null;
+type LocationRequest = {
+  id: string;
+  clockIn: string | Date;
+  clockOut: string | Date | null;
+  reason: string;
+  status: "PENDIENTE" | "APROBADO" | "RECHAZADO";
+  branch: Branch;
+};
+const FORGOTTEN_SHIFT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 function formatElapsed(milliseconds: number) {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -30,10 +44,7 @@ function formatElapsed(milliseconds: number) {
 }
 
 function toDatetimeLocal(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`;
+  return formatBusinessDateTimeLocal(date);
 }
 
 function getCurrentPosition(): Promise<GeolocationPosition> {
@@ -64,11 +75,14 @@ export default function ClockWidget() {
   const [loading, setLoading] = useState(true);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [openShift, setOpenShift] = useState<OpenShift | null>(null);
+  const [locationRequest, setLocationRequest] = useState<LocationRequest | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [selectedBranch, setSelectedBranch] = useState("");
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showLocationFallback, setShowLocationFallback] = useState(false);
+  const [locationNote, setLocationNote] = useState("");
   const [outOfRange, setOutOfRange] = useState<OutOfRange>(null);
 
   const [confirming, setConfirming] = useState(false);
@@ -83,11 +97,13 @@ export default function ClockWidget() {
   async function load() {
     setLoading(true);
     try {
-      const [shift, myBranches] = await Promise.all([
+      const [shift, myBranches, recentRequest] = await Promise.all([
         getMyOpenShift(),
         getMyBranches(),
+        getMyRecentLocationRequest(),
       ]);
       setOpenShift(shift as OpenShift | null);
+      setLocationRequest(recentRequest as LocationRequest | null);
       setBranches(myBranches);
       localStorage.setItem("maestro:timeclock-branches", JSON.stringify(myBranches));
       if (shift) localStorage.setItem("maestro:timeclock-open-shift", JSON.stringify(shift));
@@ -112,7 +128,7 @@ export default function ClockWidget() {
   // asignada) y se la ofrece para checar entrada. Es silencioso: si no
   // hay permiso de ubicación o falla, simplemente no agrega nada.
   useEffect(() => {
-    if (loading || openShift) return;
+    if (loading || openShift || (locationRequest?.status === "PENDIENTE" && !locationRequest.clockOut)) return;
     if (!("geolocation" in navigator)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setNearbyChecked(true);
@@ -163,12 +179,12 @@ export default function ClockWidget() {
     return () => {
       cancelled = true;
     };
-  }, [loading, openShift]);
+  }, [loading, openShift, locationRequest]);
 
   // Mientras haya un turno abierto, refresca cada minuto para que
   // las horas y el dinero ganado del día avancen solos.
   useEffect(() => {
-    if (!openShift) return;
+    if (!openShift && locationRequest?.status !== "PENDIENTE") return;
 
     const stopwatch = setInterval(() => setNow(Date.now()), 1_000);
     const refresh = setInterval(() => {
@@ -179,7 +195,7 @@ export default function ClockWidget() {
       clearInterval(stopwatch);
       clearInterval(refresh);
     };
-  }, [openShift]);
+  }, [openShift, locationRequest?.status]);
 
   // Mientras haya un turno abierto en una sucursal con geocerca,
   // vigila la ubicación en segundo plano. Si se sale del radio
@@ -244,7 +260,7 @@ export default function ClockWidget() {
 
     setError(null);
 
-    let coords: { latitude: number; longitude: number } | undefined;
+    let coords: { latitude: number; longitude: number; accuracyMeters?: number } | undefined;
 
     if (branch && hasGeofence(branch)) {
       setLocating(true);
@@ -253,10 +269,12 @@ export default function ClockWidget() {
         coords = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
+          accuracyMeters: position.coords.accuracy,
         };
       } catch (err) {
         setLocating(false);
         setError(friendlyGeoError(err));
+        setShowLocationFallback(true);
         return;
       }
       setLocating(false);
@@ -264,6 +282,15 @@ export default function ClockWidget() {
 
     setSaving(true);
     if (!navigator.onLine) {
+      if (branch && hasGeofence(branch)) {
+        const distance = coords ? distanceMeters(branch.geofence.latitude, branch.geofence.longitude, coords.latitude, coords.longitude) : Infinity;
+        if (!coords || distance > branch.geofence.radius || (coords.accuracyMeters ?? Infinity) > 100) {
+          setSaving(false);
+          setShowLocationFallback(true);
+          setError("La ubicación no pudo validarse sin conexión. Conéctate para enviar tu entrada con una nota a aprobación.");
+          return;
+        }
+      }
       const id = crypto.randomUUID();
       const clockIn = new Date();
       await enqueueOperation({ id, kind: "timeclock.clock-in", createdAt: clockIn.toISOString(), payload: { branchId: selectedBranch, clockIn: clockIn.toISOString(), coords } });
@@ -280,9 +307,49 @@ export default function ClockWidget() {
 
     if (result.error) {
       setError(result.error);
+      if (branch && hasGeofence(branch) && result.error.includes("m de la sucursal")) setShowLocationFallback(true);
       return;
     }
 
+    setShowLocationFallback(false);
+    setLocationNote("");
+    await load();
+  }
+
+  async function handleLocationFallback() {
+    if (!selectedBranch) return;
+    if (!navigator.onLine) {
+      setError("Necesitas conexión para enviar la entrada sin ubicación a aprobación.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const result = await requestClockInWithoutLocationAction(selectedBranch, locationNote);
+    setSaving(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setShowLocationFallback(false);
+    setLocationNote("");
+    await load();
+  }
+
+  async function handlePendingClockOut() {
+    if (!locationRequest || locationRequest.status !== "PENDIENTE") return;
+    if (!navigator.onLine) {
+      setError("Necesitas conexión para registrar la salida de esta solicitud.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const result = await closeLocationRequestAction(locationRequest.id);
+    setSaving(false);
+    if (result.error) {
+      setError(result.error);
+      await load();
+      return;
+    }
     await load();
   }
 
@@ -297,6 +364,51 @@ export default function ClockWidget() {
     if (!openShift) return;
 
     setError(null);
+
+    let adjustedClockIn: Date;
+    let adjustedClockOut: Date;
+    try {
+      adjustedClockIn = parseBusinessDateTimeLocal(clockInValue);
+      adjustedClockOut = parseBusinessDateTimeLocal(clockOutValue);
+    } catch {
+      setError("Las horas no son válidas.");
+      return;
+    }
+
+    const forgottenSession = Date.now() - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS;
+    if (forgottenSession) {
+      if (!navigator.onLine) {
+        await enqueueOperation({
+          id: crypto.randomUUID(),
+          kind: "timeclock.clock-out",
+          createdAt: new Date().toISOString(),
+          payload: {
+            entryId: openShift.id,
+            clockIn: adjustedClockIn.toISOString(),
+            clockOut: adjustedClockOut.toISOString(),
+            forgottenSession: true,
+          },
+        });
+        setOpenShift(null);
+        localStorage.removeItem("maestro:timeclock-open-shift");
+        setConfirming(false);
+        return;
+      }
+      setSaving(true);
+      const result = await closeForgottenShiftAction(
+        openShift.id,
+        adjustedClockIn.toISOString(),
+        adjustedClockOut.toISOString(),
+      );
+      setSaving(false);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setConfirming(false);
+      await load();
+      return;
+    }
 
     let coords: { latitude: number; longitude: number } | undefined;
 
@@ -317,26 +429,17 @@ export default function ClockWidget() {
     }
 
     setSaving(true);
-    const adjustedClockIn = new Date(clockInValue);
-    const adjustedClockOut = new Date(clockOutValue);
-
-    if (Number.isNaN(adjustedClockIn.getTime()) || Number.isNaN(adjustedClockOut.getTime())) {
-      setSaving(false);
-      setError("Las horas no son válidas.");
-      return;
-    }
-
     if (!navigator.onLine) {
       const clockOut = adjustedClockOut;
-      await enqueueOperation({ id: crypto.randomUUID(), kind: "timeclock.clock-out", createdAt: new Date().toISOString(), payload: { entryId: openShift.id, clockOut: clockOut.toISOString(), coords } });
+      await enqueueOperation({ id: crypto.randomUUID(), kind: "timeclock.clock-out", createdAt: new Date().toISOString(), payload: { entryId: openShift.id, clockIn: adjustedClockIn.toISOString(), clockOut: clockOut.toISOString(), coords } });
       setOpenShift(null);
       localStorage.removeItem("maestro:timeclock-open-shift");
       setConfirming(false);
       setSaving(false);
       return;
     }
-    // datetime-local no incluye zona horaria. Convertir en el navegador conserva
-    // la hora local del empleado y envía a Vercel un instante ISO inequívoco.
+    // datetime-local no incluye zona horaria. Se interpreta explícitamente en
+    // la zona oficial de negocio antes de enviar un instante ISO inequívoco.
     const result = await clockOutAction(
       openShift.id,
       adjustedClockIn.toISOString(),
@@ -362,7 +465,7 @@ export default function ClockWidget() {
     );
   }
 
-  if (branches.length === 0 && !openShift && !nearbyChecked) {
+  if (branches.length === 0 && !openShift && !locationRequest && !nearbyChecked) {
     return (
       <div className="rounded-2xl border border-outline-variant bg-surface-container p-6 text-center text-on-surface-variant">
         Buscando sucursales cercanas...
@@ -370,7 +473,7 @@ export default function ClockWidget() {
     );
   }
 
-  if (branches.length === 0) {
+  if (branches.length === 0 && !openShift && !locationRequest) {
     return (
       <div className="rounded-2xl border border-secondary/40 bg-secondary/10 p-6 text-center text-secondary">
         No tienes ninguna sucursal asignada ni turno programado para hoy, y no
@@ -397,13 +500,44 @@ export default function ClockWidget() {
         </div>
       )}
 
-      {!openShift ? (
+      {locationRequest?.status === "PENDIENTE" && locationRequest.clockOut && (
+        <div className="rounded-xl border border-secondary/40 bg-secondary/10 p-4 text-sm text-on-surface">
+          Tu entrada y salida sin ubicación en {locationRequest.branch.name} están pendientes de aprobación administrativa.
+        </div>
+      )}
+
+      {locationRequest?.status === "RECHAZADO" && (
+        <div className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">
+          Tu solicitud de entrada sin ubicación en {locationRequest.branch.name} fue rechazada. Consulta con administración o vuelve a checar con ubicación.
+        </div>
+      )}
+
+      {locationRequest?.status === "PENDIENTE" && !locationRequest.clockOut && !openShift ? (
+        <div className="space-y-4 rounded-2xl border border-secondary/40 bg-secondary/10 p-6 text-center">
+          <p className="text-sm font-semibold text-on-surface">Entrada sin ubicación enviada a aprobación</p>
+          <p className="text-sm text-on-surface-variant">{locationRequest.branch.name} · desde las {formatBusinessTime(locationRequest.clockIn)}</p>
+          <p className="text-sm text-on-surface-variant">Motivo: {locationRequest.reason}</p>
+          <p className="text-xs text-on-surface-variant">Las horas se contabilizarán solo si administración aprueba la solicitud.</p>
+          <button
+            onClick={handlePendingClockOut}
+            disabled={saving}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-error py-4 text-lg font-bold text-on-surface disabled:opacity-60"
+          >
+            <LogoutIcon className="h-5 w-5" />
+            {saving ? "Registrando..." : "Registrar salida"}
+          </button>
+        </div>
+      ) : !openShift && branches.length === 0 ? (
+        <div className="rounded-2xl border border-outline-variant bg-surface-container p-6 text-center text-sm text-on-surface-variant">
+          No tienes sucursales disponibles para checar otra entrada hoy.
+        </div>
+      ) : !openShift ? (
         <div className="space-y-4 rounded-2xl border border-outline-variant bg-surface-container p-6">
           <p className="text-sm text-on-surface-variant">Selecciona tu sucursal de hoy:</p>
 
           <select
             value={selectedBranch}
-            onChange={(e) => setSelectedBranch(e.target.value)}
+            onChange={(e) => { setSelectedBranch(e.target.value); setShowLocationFallback(false); setLocationNote(""); setError(null); }}
             className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
           >
             {branches.map((b) => (
@@ -437,6 +571,42 @@ export default function ClockWidget() {
               </>
             )}
           </button>
+
+          {selectedBranch && hasGeofence(branches.find((b) => b.id === selectedBranch) ?? { geofence: null }) && (
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => { setShowLocationFallback((value) => !value); setError(null); }}
+                className="w-full text-sm font-semibold text-primary underline"
+              >
+                {showLocationFallback ? "Cancelar solicitud sin ubicación" : "¿No puedes validar tu ubicación?"}
+              </button>
+              {showLocationFallback && (
+                <div className="space-y-3 rounded-xl border border-secondary/40 bg-secondary/10 p-4">
+                  <p className="text-sm text-on-surface">Puedes registrar la entrada sin ubicación. Quedará pendiente hasta que administración la apruebe.</p>
+                  <label className="block space-y-2">
+                    <span className="text-sm font-semibold text-on-surface">Explica qué pasó con la ubicación</span>
+                    <textarea
+                      value={locationNote}
+                      onChange={(event) => setLocationNote(event.target.value)}
+                      maxLength={500}
+                      rows={3}
+                      className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none focus:border-primary"
+                      placeholder="Ej. Estoy en Veliz, pero mi teléfono marca que estoy fuera de la geocerca."
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleLocationFallback}
+                    disabled={saving || locationNote.trim().length < 10}
+                    className="w-full rounded-xl bg-primary py-3 text-sm font-bold text-on-primary disabled:opacity-60"
+                  >
+                    {saving ? "Enviando..." : "Enviar entrada a aprobación"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : !confirming ? (
         <div className="space-y-4 rounded-2xl border border-tertiary-fixed-dim/40 bg-tertiary-fixed-dim/10 p-6 text-center">
@@ -445,10 +615,7 @@ export default function ClockWidget() {
           </p>
           <p className="text-2xl font-bold text-on-surface">
             Desde las{" "}
-            {new Date(openShift.clockIn).toLocaleTimeString("es-MX", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            {formatBusinessTime(openShift.clockIn)}
           </p>
 
           <div className="rounded-2xl bg-background/55 px-4 py-5">
@@ -466,7 +633,9 @@ export default function ClockWidget() {
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-error py-4 text-lg font-bold text-on-surface transition duration-150 ease-out hover:opacity-90 hover:scale-[1.04] active:scale-[0.97]"
           >
             <LogoutIcon className="h-5 w-5" />
-            Checar salida
+                {now - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS
+                  ? "Cerrar sesión olvidada"
+                  : "Checar salida"}
           </button>
         </div>
       ) : (
@@ -475,6 +644,14 @@ export default function ClockWidget() {
           <p className="text-sm text-on-surface-variant">
             Revisa que las horas sean correctas antes de confirmar.
           </p>
+
+          {openShift && now - new Date(openShift.clockIn).getTime() >= FORGOTTEN_SHIFT_THRESHOLD_MS && (
+            <div className="rounded-xl border border-secondary/40 bg-secondary/10 p-3 text-left text-sm text-secondary">
+              Esta sesión lleva más de 24 horas abierta. Se cerrará como sesión olvidada,
+              sin pedir GPS, y quedará marcada para revisión de nómina. Ajusta la hora real
+              de salida para no registrar por error todas las horas transcurridas.
+            </div>
+          )}
 
           <label className="block space-y-2">
             <span className="text-sm font-semibold text-on-surface-variant">Entrada</span>

@@ -337,7 +337,7 @@ export default function TermsOfService() {
                   ⚠️ Descargo de Garantías
                 </h3>
                 <p className="text-error/80 font-semibold mb-3">
-                  MAESTRO SE PROPORCIONA "TAL CUAL" SIN GARANTÍAS DE NINGÚN TIPO.
+                  MAESTRO SE PROPORCIONA &quot;TAL CUAL&quot; SIN GARANTÍAS DE NINGÚN TIPO.
                 </p>
                 <ul className="space-y-2 ml-4 text-error/80">
                   <li>

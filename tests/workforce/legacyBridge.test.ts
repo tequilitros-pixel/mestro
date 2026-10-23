@@ -59,9 +59,10 @@ test("overnight ScheduledShift maps to absolute instants and keeps business date
     },
     "America/Mexico_City",
   );
-  assert.equal(result.candidate?.businessDate, "2099-01-05");
-  assert.equal(result.candidate?.endAt.getTime()! > result.candidate?.startAt.getTime()!, true);
-  assert.equal(result.candidate?.publicationHistory, "UNKNOWN");
+  assert.ok(result.candidate);
+  assert.equal(result.candidate.businessDate, "2099-01-05");
+  assert.equal(result.candidate.endAt.getTime() > result.candidate.startAt.getTime(), true);
+  assert.equal(result.candidate.publicationHistory, "UNKNOWN");
 });
 
 test("ScheduleWeek becomes branch periods without invented publication revisions", () => {

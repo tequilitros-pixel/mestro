@@ -1,20 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { RawMaterialMovementType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
-import { applyMovement } from "./rawMaterials";
+import { requireModuleActionAccess } from "@/lib/auth";
+import { applyRawMaterialMovement } from "@/lib/liquors/rawMaterialMovements";
 
 export async function completeLiquorBatchStepAction(
   formData: FormData
 ) {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const user = await requireModuleActionAccess("/liquors/batches");
 
   const batchId = String(formData.get("batchId") ?? "").trim();
   const stepId = String(formData.get("stepId") ?? "").trim();
@@ -124,9 +119,14 @@ export async function completeLiquorBatchStepAction(
   const now = new Date();
 
   await prisma.$transaction(async (tx) => {
-    await tx.liquorBatchStep.update({
+    const batches = await tx.$queryRaw<Array<{ status: string }>>`
+      SELECT "status" FROM "LiquorBatch" WHERE "id" = ${batchId} FOR UPDATE
+    `;
+    if (batches[0]?.status !== "EN_ELABORACION") throw new Error("Este lote ya no se encuentra en elaboración.");
+    const claimed = await tx.liquorBatchStep.updateMany({
       where: {
         id: step.id,
+        status: { not: "COMPLETADO" },
       },
       data: {
         status: "COMPLETADO",
@@ -141,6 +141,7 @@ export async function completeLiquorBatchStepAction(
         validationPassed: true,
       },
     });
+    if (claimed.count === 0) return;
 
     if (step.batchIngredientId) {
       await tx.liquorBatchIngredient.update({
@@ -188,7 +189,7 @@ export async function completeLiquorBatchStepAction(
     const consumed = actualQuantity ?? step.batchIngredient?.scaledQuantity ?? 0;
 
     if (rawMaterialId && consumed > 0) {
-      await applyMovement(tx, {
+      await applyRawMaterialMovement(tx, {
         rawMaterialId,
         type: RawMaterialMovementType.CONSUMO_RECETA,
         amount: consumed,

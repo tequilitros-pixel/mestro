@@ -1,8 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { recordManualInventoryMovement } from "@/lib/inventory/manualMovements";
 import { prisma } from "@/lib/prisma";
-import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { getAccessibleBranchIds, requireModuleActionAccess } from "@/lib/auth";
 import { isBranchAllowed } from "@/lib/branches/access";
 
 export type ActionResult =
@@ -11,14 +12,11 @@ export type ActionResult =
 
 export async function createTransferAction(formData: FormData): Promise<ActionResult> {
   try {
-    const user = await getCurrentUser();
-    if (!user) return { success: false, error: "Tu sesión terminó. Vuelve a iniciar sesión." };
-    if (user.role !== "ADMIN") {
-      const permission = await prisma.modulePermission.findUnique({
-        where: { userId_moduleKey: { userId: user.id, moduleKey: "/administration/inventory/sucursales/traspasos" } },
-        select: { id: true },
-      });
-      if (!permission) return { success: false, error: "No tienes permiso para realizar traspasos." };
+    let user;
+    try {
+      user = await requireModuleActionAccess("/administration/inventory/sucursales/traspasos");
+    } catch {
+      return { success: false, error: "No tienes permiso para realizar traspasos." };
     }
 
     const fromBranchId = formData.get("fromBranchId")?.toString() ?? "";
@@ -40,6 +38,14 @@ export async function createTransferAction(formData: FormData): Promise<ActionRe
       return { success: false, error: "No tienes acceso a una de las sucursales seleccionadas." };
     }
 
+    const product = await prisma.inventoryProduct.findFirst({
+      where: { id: productId, isActive: true, archivedAt: null, trackStock: true },
+      select: { id: true },
+    });
+    if (!product) {
+      return { success: false, error: "No se puede traspasar un producto inactivo, archivado o no inventariable." };
+    }
+
     const quantity = Number(quantityRaw);
     if (!Number.isFinite(quantity) || quantity <= 0) {
       return { success: false, error: "La cantidad debe ser mayor a cero." };
@@ -54,26 +60,10 @@ export async function createTransferAction(formData: FormData): Promise<ActionRe
       return { success: false, error: "Sucursal no encontrada." };
     }
 
-    await prisma.$transaction([
-      prisma.inventoryEntry.create({
-        data: {
-          branchId: fromBranchId,
-          productId,
-          type: "TRASPASO",
-          quantity: -quantity,
-          notes: `Traspaso a ${toBranch.name}${notes ? `: ${notes}` : ""}`,
-        },
-      }),
-      prisma.inventoryEntry.create({
-        data: {
-          branchId: toBranchId,
-          productId,
-          type: "TRASPASO",
-          quantity,
-          notes: `Traspaso desde ${fromBranch.name}${notes ? `: ${notes}` : ""}`,
-        },
-      }),
-    ]);
+    await recordManualInventoryMovement({
+      actorId: user.id, operationId: formData.get("operationId")?.toString(),
+      branchId: fromBranchId, toBranchId, productId, type: "TRASPASO", quantity, notes,
+    });
 
     revalidatePath("/administration/inventory/sucursales/traspasos");
     revalidatePath("/administration/inventory/sucursales");
@@ -83,6 +73,6 @@ export async function createTransferAction(formData: FormData): Promise<ActionRe
     return { success: true, message: "Traspaso registrado correctamente." };
   } catch (error) {
     console.error("Error creating transfer:", error);
-    return { success: false, error: "No fue posible registrar el traspaso." };
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible registrar el traspaso." };
   }
 }

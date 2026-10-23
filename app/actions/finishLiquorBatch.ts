@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { LiquorBatchStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 
 type FinishLiquorBatchInput = {
   batchId: string;
@@ -37,6 +37,7 @@ export async function finishLiquorBatchWithRemainderAction(
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "LiquorBatch" WHERE "id" = ${batchId} FOR UPDATE`;
       const batch = await tx.liquorBatch.findUnique({
         where: {
           id: batchId,
@@ -95,6 +96,7 @@ export async function finishLiquorBatchWithRemainderAction(
       const remainingLiters = roundLiters(
         Math.max(totalBatchLiters - bottledLiters, 0)
       );
+      if (batch.status === LiquorBatchStatus.TERMINADO) return { remainingLiters };
 
       const closureNote = [
         `Lote finalizado con remanente de ${formatLiters(
@@ -155,12 +157,7 @@ export async function finishLiquorBatchWithRemainderAction(
 }
 
 async function getAuthenticatedUserId() {
-  const user = await getCurrentUser();
-  if (!user) {
-    throw new Error(
-      "Tu sesión no está disponible. Inicia sesión nuevamente."
-    );
-  }
+  const user = await requireModuleActionAccess("/liquors/bottling");
   return user.id;
 }
 

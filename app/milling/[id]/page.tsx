@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleActionAccess } from "@/lib/auth";
 import MillingCharts from "@/components/MillingCharts";
 import FinishMillingModal from "@/components/FinishMillingModal";
 import {
@@ -10,6 +10,11 @@ import {
 } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
+import {
+  businessDayStart,
+  formatBusinessDateOnly,
+  formatBusinessDateTime,
+} from "@/lib/dateTime";
 import PageTabs from "@/components/ui/PageTabs";
 import OfflineOperationForm from "@/components/offline/OfflineOperationForm";
 import SuccessToast from "@/components/ui/SuccessToast";
@@ -23,6 +28,11 @@ import { Suspense } from "react";
 import {
   weightedAverage,
 } from "@/lib/milling/millingMetrics";
+import { millingWorkedMilliseconds, pauseMilling, resumeMilling } from "@/lib/milling/workSessions";
+import {
+  calculateExtractedSugarKg,
+  calculateSugarExtractionEfficiency,
+} from "@/lib/processCalculations";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -53,6 +63,7 @@ export default async function MillingDetailPage({
           createdAt: "desc",
         },
       },
+      workSessions: { orderBy: { startedAt: "asc" } },
     },
   });
 
@@ -110,11 +121,18 @@ export default async function MillingDetailPage({
     milling.startedAt,
     milling.finishedAt ?? new Date()
   );
+  const workedDuration = formatDuration(
+    new Date(0),
+    new Date(millingWorkedMilliseconds(milling.workSessions))
+  );
 
   const recoveryYield =
     milling.cookedKg > 0
       ? (totalLiters / milling.cookedKg) * 100
       : 0;
+
+  const estimatedSugarKg = calculateExtractedSugarKg(totalLiters, averageBrix ?? 0);
+  const sugarEfficiency = calculateSugarExtractionEfficiency(estimatedSugarKg, milling.cookedKg);
 
   const millingHealth = getMillingHealth({
     hasFinished,
@@ -128,11 +146,7 @@ export default async function MillingDetailPage({
   async function addDischarge(formData: FormData) {
     "use server";
 
-    const user = await getCurrentUser();
-
-    if (!user) {
-      redirect("/login");
-    }
+    const user = await requireModuleActionAccess("/milling");
 
     const currentMilling =
       await prisma.milling.findUnique({
@@ -145,7 +159,7 @@ export default async function MillingDetailPage({
 
     if (
       !currentMilling ||
-      currentMilling.status === MillingStatus.TERMINADA ||
+      currentMilling.status !== MillingStatus.ACTIVA ||
       currentMilling.closureCode
     ) {
       redirect(`/milling/${id}`);
@@ -258,11 +272,7 @@ export default async function MillingDetailPage({
   async function finishMilling(formData: FormData) {
     "use server";
 
-    const user = await getCurrentUser();
-
-    if (!user) {
-      redirect("/login");
-    }
+    const user = await requireModuleActionAccess("/milling");
 
     const finalMashLiters = parseRequiredNumber(
       formData.get("finalMashLiters")
@@ -392,6 +402,11 @@ export default async function MillingDetailPage({
           return updated;
         }
 
+        await transaction.millingWorkSession.updateMany({
+          where: { millingId: id, endedAt: null },
+          data: { endedAt: finishedAt, endedById: user.id, endOperationId: crypto.randomUUID() },
+        });
+
         await transaction.millingEvent.create({
           data: {
             millingId: id,
@@ -433,6 +448,27 @@ export default async function MillingDetailPage({
     redirect(`/milling/${id}?finished=1`);
   }
 
+  async function pauseMillingAction(formData: FormData) {
+    "use server";
+    const user = await requireModuleActionAccess("/milling");
+    await pauseMilling({ id, actorId: user.id, notes: String(formData.get("notes") ?? "").trim() || null });
+    redirect(`/milling/${id}?paused=1`);
+  }
+
+  async function resumeMillingAction(formData: FormData) {
+    "use server";
+    const user = await requireModuleActionAccess("/milling");
+    try {
+      await resumeMilling({ id, actorId: user.id, notes: String(formData.get("notes") ?? "").trim() || null });
+      redirect(`/milling/${id}?resumed=1`);
+    } catch (caught) {
+      if (caught instanceof Error && caught.message === "EQUIPMENT_BUSY") {
+        redirect(`/milling/${id}?error=equipo-ocupado`);
+      }
+      throw caught;
+    }
+  }
+
   const homeTabContent = (
     <>
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -463,12 +499,12 @@ export default async function MillingDetailPage({
           />
 
           <Kpi
-            title="Duración"
-            value={duration}
+            title="Tiempo trabajado"
+            value={milling.workSessions.length > 0 ? workedDuration : duration}
             detail={
               hasFinished
-                ? "Duración oficial"
-                : "Tiempo transcurrido"
+                ? "Suma de jornadas"
+                : `${milling.workSessions.length || 1} jornada(s)`
             }
           />
         </section>
@@ -517,7 +553,7 @@ export default async function MillingDetailPage({
             </div>
           </div>
 
-          <div className="grid border-t border-on-surface-variant/10 sm:grid-cols-3">
+          <div className="grid border-t border-on-surface-variant/10 sm:grid-cols-2 lg:grid-cols-4">
             <ProcessIndicator
               title="Recuperación"
               value={`${formatNumber(
@@ -527,15 +563,21 @@ export default async function MillingDetailPage({
             />
 
             <ProcessIndicator
-              title="Tinas utilizadas"
-              value={String(tanksUsed.length)}
-              warning={tanksUsed.length === 0}
+              title="Azúcar extraído (ART)"
+              value={`${formatNumber(estimatedSugarKg, 1)} kg`}
+              warning={estimatedSugarKg <= 0}
             />
 
             <ProcessIndicator
-              title="Proceso"
-              value={formatStatus(milling.status)}
-              warning={false}
+              title="Eficiencia de azúcares"
+              value={`${formatNumber(sugarEfficiency, 1)} %`}
+              warning={sugarEfficiency < 65 && totalLiters > 0}
+            />
+
+            <ProcessIndicator
+              title="Tinas utilizadas"
+              value={String(tanksUsed.length)}
+              warning={tanksUsed.length === 0}
             />
           </div>
         </section>
@@ -638,7 +680,7 @@ export default async function MillingDetailPage({
 
   const registrarTabContent = (
     <>
-        {!hasFinished && (
+        {milling.status === MillingStatus.ACTIVA && (
           <section className="rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
             <div className="mb-6">
               <h2 className="text-2xl font-bold">
@@ -793,6 +835,22 @@ export default async function MillingDetailPage({
 
   const bitacoraTabContent = (
     <>
+        <section className="mb-6 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
+          <h2 className="text-2xl font-bold">Jornadas de trabajo</h2>
+          <p className="mt-2 text-sm text-on-surface-variant">Cada pausa cierra una jornada; reanudar abre otra sin cambiar de lote.</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {milling.workSessions.length === 0 ? (
+              <p className="text-sm text-on-surface-variant">Registro histórico anterior a las jornadas; se conserva la duración general.</p>
+            ) : milling.workSessions.map((session, index) => (
+              <article key={session.id} className="rounded-xl bg-surface-container-high p-4">
+                <p className="font-bold">Jornada {index + 1}</p>
+                <p className="mt-1 text-sm text-on-surface-variant">{formatDateTime(session.startedAt)} → {session.endedAt ? formatDateTime(session.endedAt) : "En curso"}</p>
+                <p className="mt-1 text-sm">{formatDuration(session.startedAt, session.endedAt ?? new Date())}</p>
+                {session.notes && <p className="mt-2 text-xs text-on-surface-variant">{session.notes}</p>}
+              </article>
+            ))}
+          </div>
+        </section>
         <section className="rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
@@ -953,7 +1011,8 @@ export default async function MillingDetailPage({
                         event.temperature !== null ||
                         event.waterLiters !== null ||
                         event.bagasseKg !== null ||
-                        event.pressPasses !== null) && (
+                        event.pressPasses !== null ||
+                        event.washRecoveredLiters !== null) && (
                         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                           {event.brix !== null && (
                             <Mini
@@ -1007,6 +1066,16 @@ export default async function MillingDetailPage({
                             <Mini
                               title="Pasadas"
                               value={event.pressPasses}
+                            />
+                          )}
+
+                          {event.washRecoveredLiters !==
+                            null && (
+                            <Mini
+                              title="Mosto lavado"
+                              value={`${formatNumber(
+                                event.washRecoveredLiters
+                              )} L`}
                             />
                           )}
                         </div>
@@ -1067,6 +1136,8 @@ export default async function MillingDetailPage({
             created: "Molienda iniciada exitosamente",
             saved: "Datos guardados exitosamente",
             finished: "Molienda cerrada exitosamente",
+            paused: "Molienda pausada; el lote conserva su bitácora",
+            resumed: "Molienda reanudada",
           }}
         />
       </Suspense>
@@ -1092,6 +1163,27 @@ export default async function MillingDetailPage({
             <MillingStatusBadge status={millingHealth} />
           </div>
         </header>
+
+        {!hasFinished && (
+          <section className="mt-6 rounded-2xl border border-outline-variant bg-surface-container p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="font-bold">Jornada de molienda</p>
+                <p className="mt-1 text-sm text-on-surface-variant">
+                  {milling.status === MillingStatus.PAUSADA
+                    ? "Pausada. Puedes continuar otro día con el mismo lote y la misma bitácora."
+                    : `Activa · ${workedDuration} trabajados en ${milling.workSessions.length || 1} jornada(s).`}
+                </p>
+              </div>
+              <form action={milling.status === MillingStatus.PAUSADA ? resumeMillingAction : pauseMillingAction} className="flex gap-2">
+                <input name="notes" placeholder="Nota opcional" className="min-w-0 rounded-xl border border-outline-variant bg-surface-container-high px-3 py-2 text-sm" />
+                <button className="whitespace-nowrap rounded-xl bg-secondary px-4 py-2 font-bold text-on-secondary">
+                  {milling.status === MillingStatus.PAUSADA ? "Reanudar molienda" : "Pausar molienda"}
+                </button>
+              </form>
+            </div>
+          </section>
+        )}
 
         <div className="mt-8">
           <PageTabs tabs={tabs} />
@@ -1740,14 +1832,9 @@ function buildMillingMessages({
 async function createMillingClosureCode(
   date: Date
 ) {
-  const year = date.getFullYear();
-
-  const startOfYear = new Date(year, 0, 1);
-  const startOfNextYear = new Date(
-    year + 1,
-    0,
-    1
-  );
+  const year = Number(formatBusinessDateOnly(date).slice(0, 4));
+  const startOfYear = businessDayStart(`${year}-01-01`);
+  const startOfNextYear = businessDayStart(`${year + 1}-01-01`);
 
   const closuresThisYear =
     await prisma.milling.count({
@@ -1862,10 +1949,7 @@ function formatNumber(
 }
 
 function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatBusinessDateTime(date);
 }
 
 function formatDuration(
