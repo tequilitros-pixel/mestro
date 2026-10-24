@@ -10,7 +10,7 @@ import CocktailCatalog from "./components/CocktailCatalog";
 import TequilitrosCup3D from "./components/TequilitrosCup3D";
 import BookingSteps from "./components/BookingSteps";
 import VideoPlayer from "./components/VideoPlayer";
-import EventQuote from "./EventQuote";
+
 import FloatingWhatsApp from "./components/FloatingWhatsApp";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://maestro-destiladora.space";
@@ -700,7 +700,7 @@ export default function TequilitrosPage() {
         {/* ================================================================
             10. FORMULARIO DE COTIZACIÓN DIRECTA (EVENT QUOTE)
             ================================================================ */}
-        <EventQuote />
+        <div id="cotizar" />
 
         {/* ================================================================
             11. REDES SOCIALES Y CONTACTO
