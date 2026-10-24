@@ -30,20 +30,32 @@ const serviceAreas = [
 
 const faqList = [
   {
+    q: "¿Cuánto cuesta contratar un bartender para eventos con barra móvil?",
+    a: "En Tequilitros Eventos ofrecemos dos modalidades transparentes: Barra Libre a $90 MXN por persona por un servicio continuo de 4 horas con cócteles ilimitados (la opción preferida para bodas y XV años), o Barra a Consumo a $250 MXN por hora de atención de bartender más únicamente las bebidas e insumos que tus invitados consuman.",
+  },
+  {
     q: "¿Cuál es la diferencia entre Barra Libre y Barra a Consumo?",
-    a: "En Barra Libre pagas una tarifa fija de $90 MXN por persona por un servicio de 4 horas; tus invitados toman cócteles sin límite y tu costo es 100% predecible (ideal para bodas y XV años). En Barra a Consumo pagas $250 MXN por cada hora de atención en barra más únicamente los productos que realmente se consuman al final tras el conteo (ideal para eventos donde el consumo es moderado).",
+    a: "En Barra Libre pagas una tarifa fija de $90 MXN por persona por un servicio de 4 horas; tus invitados toman cócteles sin límite y tu costo es 100% predecible (ideal para bodas y XV años). En Barra a Consumo pagas $250 MXN por cada hora de atención en barra más únicamente los productos que realmente se consuman al final tras el conteo frente a ti (ideal para eventos donde el consumo es moderado).",
   },
   {
-    q: "¿Qué incluye el servicio y qué no incluye?",
-    a: "INCLUYE: Personal de preparación (bartenders profesionales), bebidas y tequila de la casa, mezcladores, hielo ilimitado, vasos de 32 oz e insumos completos (fruta fresca, sal, salsas y chile). NO INCLUYE: Meseros, servicio en mesas ni distribución entre los invitados (los invitados acuden directamente a la barra móvil a solicitar sus bebidas).",
+    q: "¿Qué incluye el paquete de mixología de eventos y qué no incluye?",
+    a: "INCLUYE: Personal de preparación (bartenders profesionales), bebidas y tequila artesanal de la casa (blanco, reposado, sangrita y licores), mezcladores, hielo ilimitado, vasos de 32 oz (946 ml) e insumos completos (fruta fresca del día, limón, sal, salsas y escarchados Tajín). NO INCLUYE: Meseros de piso, servicio en mesas ni distribución entre los invitados (los invitados acuden directamente a la barra móvil a solicitar sus bebidas).",
   },
   {
-    q: "¿Cómo funciona la Degustación Gratuita?",
-    a: "Para que pruebes la calidad de nuestro tequila y los cócteles antes de tu evento, ofrecemos Degustación Gratuita en nuestra sucursal disponible más cercana en Colotlán y la región. Puedes solicitarla directamente al cotizar tu fecha por WhatsApp.",
+    q: "¿Qué cócteles preparan los bartenders en los eventos?",
+    a: "Contamos con 7 preparaciones oficiales en vaso de 32 oz: Cantarito (tequila blanco con toronja, naranja, limón y Tajín), Paloma (refresco de toronja y limón fresco), Vampiro (con sangrita de la casa), Tequimiche (con clamato, limón y salsas especiales), Tequimora (con mora azul y Peñafiel), Tequimojito (con hierbabuena fresca) y Coscorrón (con Sprite y golpe en barra). También preparamos versiones sin alcohol (mocktails) para niños y no bebedores.",
+  },
+  {
+    q: "¿Cómo funciona la Degustación Gratuita previa para los anfitriones?",
+    a: "Para que compruebes la calidad de nuestro tequila artesanal y los cócteles antes de tu evento, ofrecemos Degustación Gratuita en nuestra sucursal disponible más cercana en Colotlán y la región. Puedes solicitarla directamente al cotizar tu fecha por WhatsApp.",
   },
   {
     q: "¿A partir de cuántos invitados atienden eventos?",
-    a: "Atendemos eventos desde 40 personas en adelante, adaptándonos al tamaño de tu fiesta, jardín o salón.",
+    a: "Atendemos eventos desde 40 personas en adelante, adaptándonos al tamaño de tu boda, XV años, fiesta privada, graduación, jardín o salón corporativo.",
+  },
+  {
+    q: "¿A qué ciudades y estados dan servicio de bartender y barras móviles?",
+    a: "Nuestra base es Colotlán, Jalisco. Atendemos todo el Norte de Jalisco (Santa María, Totatiche, Villa Guerrero, Mezquitic, Huejúcar), todo Zacatecas (Tlaltenango, Jerez, Fresnillo, Zacatecas Capital, Calera), Aguascalientes y Zona Metropolitana de Guadalajara con viáticos transparentes desde $0 a $1,200 MXN.",
   },
   {
     q: "¿Cómo se calculan y pagan los viáticos fuera de Colotlán?",
@@ -51,15 +63,11 @@ const faqList = [
   },
   {
     q: "¿Cómo es el proceso de pago y reservación?",
-    a: "Para apartar y congelar la fecha de tu evento se requiere un anticipo del 50%. En Barra Libre, el 50% restante se liquida antes de iniciar el servicio. En Barra a Consumo, la atención se liquida antes y el consumo final se paga al concluir el conteo.",
+    a: "Para apartar y congelar la fecha de tu evento se requiere un anticipo del 50%. En Barra Libre, el 50% restante se liquida antes de iniciar el servicio el día del evento. En Barra a Consumo, la atención se liquida antes y el consumo final se paga al concluir el conteo.",
   },
   {
     q: "¿Qué necesita tener el salón o jardín para instalar la barra móvil?",
     a: "Solo un espacio accesible, seguro y nivelado para instalar el módulo de barra de madera, con una toma de energía eléctrica y acceso a agua corriente cuando sea necesario. Nosotros nos encargamos de todo el montaje 1.5 a 2 horas antes de que comience tu evento.",
-  },
-  {
-    q: "¿Ofrecen opciones de cócteles sin alcohol para niños o personas que no beben?",
-    a: "Sí, preparamos versiones sin alcohol (mocktails) con fruta fresca del día, cítricos recién exprimidos, refresco de toronja y escarchados artesanales para que todos disfruten de la barra móvil.",
   },
 ];
 
@@ -71,7 +79,12 @@ function jsonLd() {
         "@type": "Organization",
         "@id": `${siteUrl}/tequilitros#organization`,
         name: "Tequilitros Eventos",
-        alternateName: ["Destiladora del Norte", "Tequilitros Barra Móvil"],
+        alternateName: [
+          "Tequilitros",
+          "Tequilitros Oficial",
+          "Tequilitros Barra Móvil",
+          "Destiladora del Norte",
+        ],
         url: `${siteUrl}/tequilitros`,
         logo: `${siteUrl}/icon-192.png`,
         image: `${siteUrl}/tequilitros/productos/cantarito.png`,
@@ -86,19 +99,23 @@ function jsonLd() {
           "Jerez",
           "Tlaltenango",
           "Fresnillo",
+          "Aguascalientes",
         ],
         sameAs: [whatsappUrl, facebookUrl, instagramUrl],
       },
       {
-        "@type": ["LocalBusiness", "FoodEstablishment", "Service"],
+        "@type": ["LocalBusiness", "Bartender", "CateringService", "EntertainmentBusiness"],
         "@id": `${siteUrl}/tequilitros#business`,
-        name: "Tequilitros Eventos - Barra Móvil y Bartender para Eventos",
+        name: "Tequilitros Eventos | Bartender para Eventos, Barras Móviles y Mixología",
+        alternateName: "Tequilitros Eventos - Barras Móviles y Mixología",
         description:
-          "Barra de tequila para eventos: Barra Libre ($90 MXN/persona) y Barra a Consumo ($250/hr + producto). Cantaritos, palomas, vampiros y mixología desde Colotlán, Jalisco.",
+          "Servicio profesional de bartender para eventos, barras móviles, mixología y cantaritos de 32 oz con tequila artesanal en Jalisco y Zacatecas. Paquetes desde $90 MXN por persona en Barra Libre y Barra a Consumo a $250/hr.",
         url: `${siteUrl}/tequilitros`,
         telephone: "+52 56 6298 9202",
         email: "tequilitros@gmail.com",
-        priceRange: "$90 MXN por persona",
+        priceRange: "$$ (Desde $90 MXN por persona)",
+        currenciesAccepted: "MXN",
+        paymentAccepted: "Efectivo, Transferencia Bancaria SPEI",
         image: `${siteUrl}/tequilitros/productos/cantarito.png`,
         address: {
           "@type": "PostalAddress",
@@ -108,9 +125,49 @@ function jsonLd() {
           postalCode: "46200",
           addressCountry: "MX",
         },
+        geo: {
+          "@type": "GeoCoordinates",
+          latitude: 22.1158,
+          longitude: -103.2642,
+        },
+        openingHoursSpecification: [
+          {
+            "@type": "OpeningHoursSpecification",
+            dayOfWeek: [
+              "Monday",
+              "Tuesday",
+              "Wednesday",
+              "Thursday",
+              "Friday",
+              "Saturday",
+              "Sunday",
+            ],
+            opens: "08:00",
+            closes: "23:00",
+          },
+        ],
+        serviceType: [
+          "Bartender para eventos",
+          "Barras móviles para eventos",
+          "Mixología de eventos",
+          "Paquetes para eventos",
+          "Tequilitros para eventos",
+          "Cantaritos para eventos",
+          "Barra libre de cócteles",
+          "Barra a consumo para fiestas",
+          "Barra de tequila para bodas",
+        ],
+        knowsAbout: [
+          "Servicio de bartender para eventos, bodas y XV años",
+          "Mixología de eventos y coctelería con tequila",
+          "Barras móviles rústicas para fiestas",
+          "Cantaritos tradicionales de 32 oz estilo Jalisco",
+          "Paquetes para eventos y barra libre",
+          "Degustación de tequila para novios y anfitriones",
+        ],
         hasOfferCatalog: {
           "@type": "OfferCatalog",
-          name: "Modalidades de Barra de Tequila para Eventos",
+          name: "Paquetes para Eventos y Modalidades de Barra Móvil",
           itemListElement: [
             {
               "@type": "Offer",
@@ -118,9 +175,9 @@ function jsonLd() {
               priceCurrency: "MXN",
               itemOffered: {
                 "@type": "Service",
-                name: "Barra Libre para Eventos (4 horas)",
+                name: "Paquete Barra Libre con Bartender (4 horas)",
                 description:
-                  "$90 MXN por persona · servicio de 4 horas sin límite de cócteles.",
+                  "$90 MXN por persona · Servicio continuo de 4 horas, bartenders dedicados, tequila artesanal, mezcladores, hielo, vasos de 32 oz y 7 cócteles oficiales sin límite.",
               },
             },
             {
@@ -129,9 +186,20 @@ function jsonLd() {
               priceCurrency: "MXN",
               itemOffered: {
                 "@type": "Service",
-                name: "Barra a Consumo",
+                name: "Paquete Barra a Consumo con Bartender",
                 description:
-                  "$250 MXN por hora de atención + producto consumido contado al final.",
+                  "$250 MXN por hora de atención de bartender en barra + costo exacto de productos consumidos según conteo final.",
+              },
+            },
+            {
+              "@type": "Offer",
+              price: "0",
+              priceCurrency: "MXN",
+              itemOffered: {
+                "@type": "Service",
+                name: "Degustación Gratuita de Tequila y Cócteles",
+                description:
+                  "Prueba gratuita de la calidad de nuestro tequila y cócteles en sucursal Colotlán antes de contratar tu evento.",
               },
             },
           ],
@@ -189,16 +257,19 @@ export default function TequilitrosPage() {
           <div className={styles.heroContent}>
             <div className={styles.kickerBadge}>
               <span className={styles.kickerBadgeDot} />
-              <span>TEQUILITROS · BARRA MÓVIL PARA EVENTOS</span>
+              <span>TEQUILITROS EVENTOS · BARTENDER Y BARRAS MÓVILES</span>
             </div>
 
             <h1 id="hero-heading" className={styles.heroTitle}>
-              Barra de Tequila para los <em>Eventos de tus Clientes.</em>
+              Bartender para Eventos y Barras Móviles{" "}
+              <em className="block text-[#E28735] not-italic">Tequilitros Eventos</em>
             </h1>
 
             <p className={styles.heroLead}>
-              Nosotros preparamos las bebidas en barra con bartenders profesionales; tú disfrutas
-              tu fiesta o tu salón ofrece el paquete completo. Dos modalidades con precios 100% claros.
+              Servicio profesional de <strong>bartender para eventos</strong>, <strong>barras móviles</strong> y{" "}
+              <strong>mixología de eventos</strong> con tequila artesanal. Paquetes para eventos desde $90 MXN por
+              persona en Barra Libre o modalidad Barra a Consumo. Llevamos cantaritos gigantes de 32 oz a bodas,
+              XV años, graduaciones y fiestas en Jalisco y Zacatecas.
             </p>
 
             {/* Badges de Garantía Rápida */}
@@ -273,13 +344,14 @@ export default function TequilitrosPage() {
             ================================================================ */}
         <section className={styles.section} id="modalidades" aria-labelledby="pricing-modalities-title">
           <div className={styles.sectionHeader}>
-            <p className={styles.sectionNo}>01 / MODALIDADES DE PRECIO</p>
+            <p className={styles.sectionNo}>01 / PAQUETES PARA EVENTOS</p>
             <h2 id="pricing-modalities-title" className={styles.sectionTitle}>
-              Dos Modalidades con <em>Precios Claros.</em>
+              Paquetes para Eventos con <em>Precios Claros.</em>
             </h2>
             <p className={styles.sectionSubtitle}>
-              Tú eliges cómo pagar: un costo fijo predecible por persona o pagar únicamente lo que tus
-              invitados consuman. En ambas modalidades nos encargamos de todo el servicio.
+              Tú eliges cómo pagar tu servicio de bartender y barra móvil: un costo fijo predecible por
+              persona en Barra Libre ($90/persona) o pagar únicamente lo que tus invitados consuman en
+              Barra a Consumo ($250/hr). En ambas modalidades nos encargamos de todo el servicio e insumos.
             </p>
           </div>
 
@@ -430,13 +502,13 @@ export default function TequilitrosPage() {
             ================================================================ */}
         <section className={styles.section} id="simulador" aria-labelledby="calculator-title">
           <div className={styles.sectionHeader}>
-            <p className={styles.sectionNo}>02 / CALCULADORA INTERACTIVA</p>
+            <p className={styles.sectionNo}>02 / CALCULADORA DE PAQUETES</p>
             <h2 id="calculator-title" className={styles.sectionTitle}>
-              Calcula el Costo de tu Fiesta <em>en Segundos.</em>
+              Calcula tu Paquete para Eventos <em>en Segundos.</em>
             </h2>
             <p className={styles.sectionSubtitle}>
               Mueve la barra con tu número de invitados y conoce al instante el total a pagar, el anticipo del 50%
-              y los viáticos aplicables.
+              y los viáticos aplicables para tu boda o fiesta.
             </p>
           </div>
 
@@ -448,13 +520,13 @@ export default function TequilitrosPage() {
             ================================================================ */}
         <section className={styles.section} id="menu" aria-labelledby="catalog-title">
           <div className={styles.sectionHeader}>
-            <p className={styles.sectionNo}>03 / MENÚ OFICIAL DE CÓCTELES</p>
+            <p className={styles.sectionNo}>03 / MIXOLOGÍA DE EVENTOS</p>
             <h2 id="catalog-title" className={styles.sectionTitle}>
-              Siete Preparaciones, <em>en Ambas Modalidades.</em>
+              Mixología de Eventos: <em>7 Cócteles con Tequila de la Casa.</em>
             </h2>
             <p className={styles.sectionSubtitle}>
-              Todas están disponibles en Barra Libre y en Barra a Consumo. Recetas elaboradas al momento
-              con fruta fresca, tequila artesanal y escarchados especiales.
+              Cantaritos para eventos, palomas, vampiros y cócteles artesanales en vasos de 32 oz (946 ml).
+              Elaborados al momento por bartenders con fruta fresca, cítricos naturales y escarchados especiales.
             </p>
           </div>
 
@@ -466,12 +538,12 @@ export default function TequilitrosPage() {
             ================================================================ */}
         <section className={styles.section} id="vaso3d" aria-labelledby="glass3d-title">
           <div className={styles.sectionHeader}>
-            <p className={styles.sectionNo}>04 / EL VASO OFICIAL 32 OZ</p>
+            <p className={styles.sectionNo}>04 / TEQUILITROS PARA EVENTOS</p>
             <h2 id="glass3d-title" className={styles.sectionTitle}>
-              Simula tu Bebida en el Vaso 3D <em>(946 ml).</em>
+              Tequilitros para Eventos: <em>Simulador Interactivo 3D (32 oz).</em>
             </h2>
             <p className={styles.sectionSubtitle}>
-              Gira en 360° para ver el termoformado real, los hielos a tope y el escarchado de cada cóctel.
+              Gira en 360° para ver el termoformado real de 32 oz (946 ml), los hielos a tope y el escarchado de cada cóctel.
               Haz clic en cualquiera de las 7 preparaciones para probarla en el vaso.
             </p>
           </div>
@@ -501,12 +573,12 @@ export default function TequilitrosPage() {
             ================================================================ */}
         <section className={styles.section} id="galeria" aria-labelledby="gallery-title">
           <div className={styles.sectionHeader}>
-            <p className={styles.sectionNo}>06 / MONTAJE EN VIVO</p>
+            <p className={styles.sectionNo}>06 / BARRAS MÓVILES EN VIVO</p>
             <h2 id="gallery-title" className={styles.sectionTitle}>
-              El Ambiente de la Barra Móvil <em>en tu Fiesta.</em>
+              Barras Móviles y Bartender <em>en tu Fiesta.</em>
             </h2>
             <p className={styles.sectionSubtitle}>
-              Así luce nuestro módulo de barra rústica de madera atendido por bartenders uniformados.
+              Así luce nuestro módulo de barra rústica de madera atendido por bartenders uniformados en bodas y fiestas privadas.
             </p>
           </div>
 
