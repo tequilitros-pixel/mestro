@@ -97,7 +97,7 @@ export default function PricingCalculator() {
   }, [modality,clientName,clientPhone,eventType,eventDate,specificLocation,selectedViatico,guests,hours,barraLibreBase,atencionBarra,consumoEstimado,viaticosId,barraLibreTotal,barraConsumoTotalEstimado,needsConfirmation]);
 
   return (
-    <div className="relative w-full overflow-hidden rounded-3xl border border-[#242E37] bg-gradient-to-b from-[#11171E] via-[#0D1217] to-[#080B0E] p-5 sm:p-8 md:p-10 shadow-2xl">
+    <div id="cotizar" className="relative w-full overflow-hidden rounded-3xl border border-[#242E37] bg-gradient-to-b from-[#11171E] via-[#0D1217] to-[#080B0E] p-5 sm:p-8 md:p-10 shadow-2xl">
       {/* Kicker badge */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[#242E37] pb-5">
         <div className="flex items-center gap-2">
@@ -279,11 +279,11 @@ export default function PricingCalculator() {
 
       {/* Tarjeta de Resumen y Desglose Financiero */}
       <div className="mt-8 rounded-2xl border border-[#E28735]/40 bg-[radial-gradient(ellipse_at_top,rgba(226,135,53,0.15),transparent_70%)] p-6 sm:p-8">
-        {needsConfirmation && <p className="mb-4 rounded-xl border border-amber-600/50 bg-amber-500/10 p-3 text-xs font-semibold text-amber-200">Presupuesto parcial: {hours > 4 && modality === "libre" ? "las horas extras " : ""}{viaticosId === "otro" ? "y el traslado " : ""}requieren confirmación. No se incluyen importes inventados.</p>}
+        {needsConfirmation && <p className="mb-4 rounded-xl border border-amber-600/50 bg-amber-500/10 p-3 text-xs font-semibold text-amber-200">Presupuesto parcial. {modality === "libre" && hours > 4 ? "Las horas adicionales están pendientes de cotizar. " : ""}{viaticosId === "otro" ? "El traslado está pendiente de cotizar. " : ""}El importe mostrado no incluye cargos sin confirmar.</p>}
         <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
           <div>
             <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-[#E28735]">
-              Presupuesto Estimado · {modality === "libre" ? "Barra Libre" : "Barra a Consumo"}
+              {modality === "libre" ? "Presupuesto Estimado · Barra Libre" : "Estimación Parcial · Barra a Consumo"}
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="font-serif text-4xl font-extrabold tracking-tight text-[#F5F2EB] sm:text-5xl">
@@ -298,7 +298,7 @@ export default function PricingCalculator() {
                 </>
               ) : (
                 <>
-                  ${atencionBarra.toLocaleString("es-MX")} de atención + ${consumoEstimado.toLocaleString("es-MX")} de presupuesto opcional de consumo. El consumo real se liquida al final.
+                  ${atencionBarra.toLocaleString("es-MX")} de atención + ${consumoEstimado.toLocaleString("es-MX")} de presupuesto opcional para productos. El consumo final se determina al terminar el evento.
                 </>
               )}
             </p>
