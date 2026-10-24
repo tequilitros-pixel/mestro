@@ -112,6 +112,7 @@ export default function PricingCalculator() {
       `• Viáticos referenciales: ${viaticosId === "otro" ? "Por confirmar" : "$" + selectedViatico.cost.toLocaleString("es-MX") + " MXN"}`,
       `• Subtotal estimado, sin cargos pendientes: $${total.toLocaleString("es-MX")} MXN`,
       needsConfirmation ? "• IMPORTANTE: hay conceptos pendientes de cotizar (horas extras y/o traslado)." : null,
+      modality === "libre" ? "• Barra Libre incluye todos los productos e ingredientes necesarios para preparar las bebidas del menú; sin cargos adicionales por consumo durante las 4 horas contratadas." : null,
       modality === "consumo" ? "• El consumo final se paga según los productos realmente consumidos." : null,
       "¿Me confirman disponibilidad y cotización final?"
     ].filter(Boolean).join("\n");
@@ -160,7 +161,7 @@ export default function PricingCalculator() {
             <span className="font-mono text-xs text-[#9AA5AC]">MXN / persona · 4 horas</span>
           </div>
           <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
-            Tus invitados toman sin límite durante el horario contratado. Costo 100% predecible para bodas y graduaciones.
+            Incluye todos los productos necesarios para preparar las bebidas del menú: tequila, mezcladores, hielo, vasos e insumos. Sin cobros extra por consumo durante las 4 horas contratadas. Viáticos y horas extra, si aplican, se cotizan aparte.
           </p>
         </button>
 
@@ -380,7 +381,7 @@ export default function PricingCalculator() {
             <p className="mt-2 text-xs text-[#9AA5AC] sm:text-sm">
               {modality === "libre" ? (
                 <>
-                  Para <strong>{guests} personas</strong>. Precio base para 4 horas{hours > 4 ? `; ${hours - 4} hora(s) extra por cotizar` : ""}.
+                  Para <strong>{guests} personas</strong>. Todos los productos para preparar las bebidas del menú están incluidos; sin cobros extra por consumo durante las 4 horas{hours > 4 ? `; ${hours - 4} hora(s) adicional(es) por cotizar` : ""}. Viáticos desglosados según ubicación.
                 </>
               ) : (
                 <>
@@ -422,7 +423,7 @@ export default function PricingCalculator() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-[#30D158]">
-                ✓ Qué Incluye (En ambas modalidades):
+                ✓ Productos e insumos disponibles en ambas modalidades:
               </p>
               <ul className="mt-2 space-y-1.5 text-xs text-[#D2DAE0]">
                 <li className="flex items-center gap-2">
@@ -438,6 +439,7 @@ export default function PricingCalculator() {
                   <span className="text-[#30D158]">●</span> Insumos completos (fruta del día, sal, salsas y chile)
                 </li>
               </ul>
+              <p className="mt-3 text-[11px] leading-relaxed text-[#D4AF37]">En Barra Libre, todos estos productos están incluidos en el precio por persona, sin cargos extra por consumo durante las 4 horas. En Barra a Consumo se cobran los productos que efectivamente se utilicen.</p>
             </div>
 
             <div>
