@@ -14,8 +14,8 @@ const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 const VARIANTS = [
   { name: "Mediano", priceFrom: "Mediano", ice: 250, cup: "POS-ING-VASO-MED", soda: 180, tequila: 30 },
   { name: "Grande", priceFrom: "Grande", ice: 500, cup: "POS-ING-VASO-GDE", soda: 360, tequila: 60 },
-  { name: "Mediano sin tequila", priceFrom: "Mediano sin tequila", ice: 250, cup: "POS-ING-VASO-MED", soda: 180 },
-  { name: "Grande sin tequila", priceFrom: "Grande sin tequila", ice: 500, cup: "POS-ING-VASO-GDE", soda: 360 },
+  { name: "Mediano sin tequila", priceFrom: "Mediano sin tequila", ice: 250, cup: "POS-ING-VASO-MED", soda: 180, tequila: 0 },
+  { name: "Grande sin tequila", priceFrom: "Grande sin tequila", ice: 500, cup: "POS-ING-VASO-GDE", soda: 360, tequila: 0 },
 ] as const;
 
 async function main() {
@@ -84,10 +84,10 @@ async function main() {
             baseUnit: paloma.baseUnit,
             ingredients: {
               create: [
-                { inventoryProductId: inventory.get("POS-ING-TORONJA-REF")!.id, quantity: variant.soda, unit: "ML", unitStatus: "RESOLVED" as const },
-                ...(variant.tequila ? [{ inventoryProductId: inventory.get("POS-ING-TEQUILA")!.id, quantity: variant.tequila, unit: "ML", unitStatus: "RESOLVED" as const }] : []),
-                { inventoryProductId: inventory.get("EXTRA-HIELO")!.id, quantity: variant.ice, unit: "G", unitStatus: "RESOLVED" as const },
-                { inventoryProductId: inventory.get(variant.cup)!.id, quantity: 1, unit: "UNIT", unitStatus: "RESOLVED" as const },
+                { inventoryProduct: { connect: { id: inventory.get("POS-ING-TORONJA-REF")!.id } }, quantity: variant.soda, unit: "ML" as const, unitStatus: "RESOLVED" as const },
+                ...(variant.tequila ? [{ inventoryProduct: { connect: { id: inventory.get("POS-ING-TEQUILA")!.id } }, quantity: variant.tequila, unit: "ML", unitStatus: "RESOLVED" as const }] : []),
+                { inventoryProduct: { connect: { id: inventory.get("EXTRA-HIELO")!.id } }, quantity: variant.ice, unit: "G" as const, unitStatus: "RESOLVED" as const },
+                { inventoryProduct: { connect: { id: inventory.get(variant.cup)!.id } }, quantity: 1, unit: "UNIT" as const, unitStatus: "RESOLVED" as const },
               ],
             },
           })),
