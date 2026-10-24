@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     template: "%s | Tequilitros Eventos",
   },
   description:
-    "Servicio profesional de bartender para eventos, barras móviles, mixología y cantaritos de tequila para bodas, XV años y fiestas. Paquetes para eventos desde $90/persona. Jalisco y Zacatecas. ¡Cotiza tu fecha!",
+    "Barra Libre Tequilitros desde $90/persona por 4 horas: todos los productos para preparar las bebidas del menú incluidos, sin cobros extra por consumo. Viáticos y horas adicionales aparte. Eventos en Jalisco y Zacatecas.",
   keywords: [
     // Búsqueda de Bartender y Servicio
     "bartender para eventos",
@@ -104,7 +104,7 @@ export const metadata: Metadata = {
     siteName: "Tequilitros Eventos",
     title: "Bartender para Eventos, Barras Móviles y Mixología | Tequilitros Eventos",
     description:
-      "Servicio profesional de bartender para eventos, barras móviles, mixología y cantaritos de 32 oz para bodas, XV años y fiestas. Paquetes desde $90/persona en Jalisco y Zacatecas.",
+      "Tequilitros Eventos: Barra Libre desde $90/persona por 4 horas, todos los ingredientes y productos del menú incluidos sin cargos extra por consumo. Viáticos y horas adicionales aparte.",
     images: [
       {
         url: "/tequilitros/productos/cantarito.png",
@@ -124,7 +124,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Bartender para Eventos y Barras Móviles | Tequilitros Eventos",
     description:
-      "Servicio de bartender para eventos, barras móviles y paquetes de mixología desde $90 MXN/persona. Bodas, XV años y fiestas en Jalisco y Zacatecas.",
+      "Tequilitros Eventos: Barra Libre desde $90/persona por 4 horas con todos los productos para preparar bebidas incluidos, sin cobros extra por consumo. Viáticos y horas extra aparte.",
     images: ["/tequilitros/productos/cantarito.png"],
   },
   robots: {
