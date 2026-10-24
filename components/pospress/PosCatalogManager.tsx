@@ -175,81 +175,31 @@ export default function PosCatalogManager({
 
   // Plantilla Inteligente: Crear Charro Negro Completo con sus 4 variedades
   function handleCreateFullCharroNegro() {
-    // 1. Detectar insumos necesarios
-    const teq = inventoryProducts.find(
-      (p) => /tequila.*blanco/i.test(p.name) || (p.code && p.code.includes("TEQ"))
-    ) ?? inventoryProducts.find((p) => /tequila/i.test(p.name));
-
-    const cola = inventoryProducts.find(
-      (p) => /rc|cola|refresco.*cola/i.test(p.name) || p.code === "POS-ING-RC"
-    );
-
-    const limon = inventoryProducts.find(
-      (p) => /lim[oó]n/i.test(p.name) || p.code === "POS-ING-LIMON"
-    );
-
-    const sal = inventoryProducts.find(
-      (p) => /sal/i.test(p.name) || p.code === "POS-ING-SAL"
-    );
-
-    const vasoMed = inventoryProducts.find(
-      (p) => /vaso.*med/i.test(p.name) || p.code === "POS-ING-VASO-MED"
-    );
-
-    const vasoGde = inventoryProducts.find(
-      (p) => /vaso.*gde/i.test(p.name) || p.code === "POS-ING-VASO-GDE"
-    );
-
     const teqCat = categories.find((c) => /tequilitros/i.test(c.name)) ?? categories[0];
     if (!teqCat) {
       showToast("Crea primero al menos una categoría para agregar el producto.", "error");
       return;
     }
 
-    const variantsPayload = [
-      {
-        name: "Mediano",
-        price: 70,
-        ingredients: [
-          ...(teq ? [{ inventoryProductId: teq.id, quantity: 30 }] : []),
-          ...(cola ? [{ inventoryProductId: cola.id, quantity: 180 }] : []),
-          ...(limon ? [{ inventoryProductId: limon.id, quantity: 15 }] : []),
-          ...(sal ? [{ inventoryProductId: sal.id, quantity: 1.5 }] : []),
-          ...(vasoMed ? [{ inventoryProductId: vasoMed.id, quantity: 1 }] : []),
-        ],
-      },
-      {
-        name: "Grande",
-        price: 99,
-        ingredients: [
-          ...(teq ? [{ inventoryProductId: teq.id, quantity: 60 }] : []),
-          ...(cola ? [{ inventoryProductId: cola.id, quantity: 300 }] : []),
-          ...(limon ? [{ inventoryProductId: limon.id, quantity: 30 }] : []),
-          ...(sal ? [{ inventoryProductId: sal.id, quantity: 3 }] : []),
-          ...(vasoGde ? [{ inventoryProductId: vasoGde.id, quantity: 1 }] : []),
-        ],
-      },
-      {
-        name: "Mediano sin tequila",
-        price: 35,
-        ingredients: [
-          ...(cola ? [{ inventoryProductId: cola.id, quantity: 180 }] : []),
-          ...(limon ? [{ inventoryProductId: limon.id, quantity: 15 }] : []),
-          ...(sal ? [{ inventoryProductId: sal.id, quantity: 1.5 }] : []),
-          ...(vasoMed ? [{ inventoryProductId: vasoMed.id, quantity: 1 }] : []),
-        ],
-      },
-      {
-        name: "Grande sin tequila",
-        price: 50,
-        ingredients: [
-          ...(cola ? [{ inventoryProductId: cola.id, quantity: 300 }] : []),
-          ...(limon ? [{ inventoryProductId: limon.id, quantity: 30 }] : []),
-          ...(sal ? [{ inventoryProductId: sal.id, quantity: 3 }] : []),
-          ...(vasoGde ? [{ inventoryProductId: vasoGde.id, quantity: 1 }] : []),
-        ],
-      },
-    ];
+    const paloma = teqCat.products.find((product) => product.name.trim().toLowerCase() === "paloma");
+    const refrescoToronja = inventoryProducts.find((product) => product.code === "POS-ING-TORONJA-REF");
+    const rc = inventoryProducts.find((product) => product.code === "POS-ING-RC");
+    if (!paloma || !refrescoToronja || !rc) {
+      showToast("Hace falta la Paloma, el refresco de toronja o RC para crear esta receta.", "error");
+      return;
+    }
+
+    // El Charro Negro es una Paloma idéntica, salvo por el refresco.
+    // Derivarlo del catálogo vivo conserva precios, tamaños, cantidades y unidades.
+    const variantsPayload = paloma.variants.map((variant) => ({
+      name: variant.name,
+      price: variant.price,
+      ingredients: variant.ingredients.map((ingredient) => ({
+        inventoryProductId:
+          ingredient.inventoryProductId === refrescoToronja.id ? rc.id : ingredient.inventoryProductId,
+        quantity: Number(ingredient.quantity),
+      })),
+    }));
 
     startTransition(async () => {
       const result = await createMultiVariantProductAction({

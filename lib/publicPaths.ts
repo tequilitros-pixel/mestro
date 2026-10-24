@@ -7,6 +7,7 @@ export const PUBLIC_PATHS = [
   "/terms-of-service",
   "/support",
   "/tequilitros",
+  "/offline.html",
   "/robots.txt",
   "/sitemap.xml",
 ] as const;

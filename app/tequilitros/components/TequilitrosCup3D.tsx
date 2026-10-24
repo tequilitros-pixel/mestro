@@ -104,6 +104,20 @@ export const DRINK_FLAVORS: DrinkFlavor[] = [
     ingredients: "Salsas negras preparadas, limón, jugo sazonador, sal con chile en polvo y base de tequila o cerveza.",
     photoUrl: "/tequilitros/productos/tequimiche.png",
   },
+  {
+    id: "coscorron",
+    name: "Coscorrón",
+    subtitle: "Tequila blanco, limón, sal y Peñafiel toronja",
+    liquidColor: 0xf4deb3, // Dorado cítrico pálido tradicional
+    frostColor: 0xfbfaf8, // Sal fina de mar
+    hasFrost: true,
+    frostType: "sal",
+    transmission: 0.76,
+    roughness: 0.17,
+    description: "El clásico de cantina: tequila blanco de la casa, limón fresco, toque de sal marina y Peñafiel toronja con abundante hielo.",
+    ingredients: "Sal, limón, tequila y refresco de toronja.",
+    photoUrl: "/tequilitros/productos/paloma.png",
+  },
 ];
 
 // Genera una textura procedimental de escarchado para sal o chile tajín
@@ -678,7 +692,7 @@ export default function TequilitrosCup3D({
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
           {DRINK_FLAVORS.map((drink) => {
             const isSelected = activeDrink.id === drink.id;
             return (

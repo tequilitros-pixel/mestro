@@ -5,16 +5,18 @@ import Image from "next/image";
 import Link from "next/link";
 import styles from "./tequilitros.module.css";
 import Navbar from "./components/Navbar";
-import TequilitrosCup3D from "./components/TequilitrosCup3D";
-import VideoPlayer from "./components/VideoPlayer";
+import PricingCalculator from "./components/PricingCalculator";
 import CocktailCatalog from "./components/CocktailCatalog";
+import TequilitrosCup3D from "./components/TequilitrosCup3D";
+import BookingSteps from "./components/BookingSteps";
+import VideoPlayer from "./components/VideoPlayer";
 import EventQuote from "./EventQuote";
 import FloatingWhatsApp from "./components/FloatingWhatsApp";
 
-const siteUrl = "https://www.destiladoradelnorte.com";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://maestro-destiladora.space";
 const whatsappUrl =
   "https://wa.me/525662989202?text=" +
-  encodeURIComponent("Hola, quiero cotizar Tequilitros para mi evento.");
+  encodeURIComponent("Hola, quiero cotizar la barra de Tequilitros para mi evento.");
 
 const facebookUrl = "https://www.facebook.com/profile.php?id=1348925031634852";
 const instagramUrl = "https://www.instagram.com/tequilitros_eventos/";
@@ -28,32 +30,44 @@ const serviceAreas = [
 
 const faqList = [
   {
-    q: "¿Qué incluye el servicio de barra móvil y bartender de Tequilitros Eventos?",
-    a: "El alcance se define por escrito en cada cotización. Puede incluir barra móvil, personal de servicio, vasos, hielo, fruta, escarchados y las bebidas elegidas, conforme a la fecha, localidad y paquete confirmado.",
+    q: "¿Cuánto cuesta contratar un bartender para eventos con barra móvil?",
+    a: "En Tequilitros Eventos ofrecemos dos modalidades transparentes: Barra Libre a $90 MXN por persona por un servicio continuo de 4 horas con cócteles ilimitados (la opción preferida para bodas y XV años), o Barra a Consumo a $250 MXN por hora de atención de bartender más únicamente las bebidas e insumos que tus invitados consuman.",
   },
   {
-    q: "¿Cómo contratar una barra móvil con bartender para bodas, XV años o fiestas privadas?",
-    a: "Es muy fácil: llena el cotizador en nuestra página web o envíanos un mensaje directo de WhatsApp al 56 6298 9202. Indícanos la fecha, localidad del evento, número estimado de invitados y las bebidas de tu preferencia. Te responderemos con una propuesta personalizada y transparente.",
+    q: "¿Cuál es la diferencia entre Barra Libre y Barra a Consumo?",
+    a: "En Barra Libre pagas una tarifa fija de $90 MXN por persona por un servicio de 4 horas; tus invitados toman cócteles sin límite y tu costo es 100% predecible (ideal para bodas y XV años). En Barra a Consumo pagas $250 MXN por cada hora de atención en barra más únicamente los productos que realmente se consuman al final tras el conteo frente a ti (ideal para eventos donde el consumo es moderado).",
   },
   {
-    q: "¿Cuáles son las bebidas y cócteles que prepara el bartender en los eventos?",
-    a: "La carta disponible incluye Cantarito, Paloma, Vampiro, Tequimojito, Tequimora y Tequimiche. Las recetas, botellas e insumos se confirman en la cotización del evento.",
+    q: "¿Qué incluye el paquete de mixología de eventos y qué no incluye?",
+    a: "INCLUYE: Personal de preparación (bartenders profesionales), bebidas y tequila artesanal de la casa (blanco, reposado, sangrita y licores), mezcladores, hielo ilimitado, vasos de 32 oz (946 ml) e insumos completos (fruta fresca del día, limón, sal, salsas y escarchados Tajín). NO INCLUYE: Meseros de piso, servicio en mesas ni distribución entre los invitados (los invitados acuden directamente a la barra móvil a solicitar sus bebidas).",
   },
   {
-    q: "¿En qué ciudades y localidades de Jalisco y Zacatecas dan servicio de barra móvil?",
-    a: "Nuestra base de operaciones está en Colotlán, Jalisco. Atendemos eventos en todo el norte de Jalisco, los cañones y cabeceras de Zacatecas (Jerez, Tlaltenango, Fresnillo, Zacatecas capital), Aguascalientes y solicitudes especiales en la Zona Metropolitana de Guadalajara.",
+    q: "¿Qué cócteles preparan los bartenders en los eventos?",
+    a: "Contamos con 7 preparaciones oficiales en vaso de 32 oz: Cantarito (tequila blanco con toronja, naranja, limón y Tajín), Paloma (refresco de toronja y limón fresco), Vampiro (con sangrita de la casa), Tequimiche (con clamato, limón y salsas especiales), Tequimora (con mora azul y Peñafiel), Tequimojito (con hierbabuena fresca) y Coscorrón (con Sprite y golpe en barra). También preparamos versiones sin alcohol (mocktails) para niños y no bebedores.",
   },
   {
-    q: "¿Cómo funciona la modalidad de Barra Libre por Horas vs. Coctelería por Litros?",
-    a: "Barra Libre cubre el bloque de servicio y las condiciones definidas en la cotización. Por Litros o Volumen establece una cantidad acordada de litros o vasos. Ambas modalidades se confirman antes de reservar.",
+    q: "¿Cómo funciona la Degustación Gratuita previa para los anfitriones?",
+    a: "Para que compruebes la calidad de nuestro tequila artesanal y los cócteles antes de tu evento, ofrecemos Degustación Gratuita en nuestra sucursal disponible más cercana en Colotlán y la región. Puedes solicitarla directamente al cotizar tu fecha por WhatsApp.",
   },
   {
-    q: "¿Ofrecen opciones de cócteles sin alcohol (mocktails) para menores o invitados que no beben?",
-    a: "Las alternativas sin alcohol se pueden solicitar al cotizar; se confirman según el menú, la fecha y la disponibilidad de insumos.",
+    q: "¿A partir de cuántos invitados atienden eventos?",
+    a: "Atendemos eventos desde 40 personas en adelante, adaptándonos al tamaño de tu boda, XV años, fiesta privada, graduación, jardín o salón corporativo.",
   },
   {
-    q: "¿Con cuánta anticipación debo reservar la fecha de mi evento?",
-    a: "Comparte la fecha, localidad, invitados estimados y servicio deseado. La disponibilidad y el método de reserva se confirman por escrito antes de cualquier compromiso.",
+    q: "¿A qué ciudades y estados dan servicio de bartender y barras móviles?",
+    a: "Nuestra base es Colotlán, Jalisco. Atendemos todo el Norte de Jalisco (Santa María, Totatiche, Villa Guerrero, Mezquitic, Huejúcar), todo Zacatecas (Tlaltenango, Jerez, Fresnillo, Zacatecas Capital, Calera), Aguascalientes y Zona Metropolitana de Guadalajara con viáticos transparentes desde $0 a $1,200 MXN.",
+  },
+  {
+    q: "¿Cómo se calculan y pagan los viáticos fuera de Colotlán?",
+    a: "Nuestra base es Colotlán, Jalisco. Para traslados cercanos (Tlaltenango, Jerez, etc.) el costo típico es de aproximadamente $500 MXN; para Zacatecas Capital o Fresnillo es de $800 MXN; y para Guadalajara $1,200 MXN. Todo se desglosa por escrito en tu cotización antes de pagar.",
+  },
+  {
+    q: "¿Cómo es el proceso de pago y reservación?",
+    a: "Para apartar y congelar la fecha de tu evento se requiere un anticipo del 50%. En Barra Libre, el 50% restante se liquida antes de iniciar el servicio el día del evento. En Barra a Consumo, la atención se liquida antes y el consumo final se paga al concluir el conteo.",
+  },
+  {
+    q: "¿Qué necesita tener el salón o jardín para instalar la barra móvil?",
+    a: "Solo un espacio accesible, seguro y nivelado para instalar el módulo de barra de madera, con una toma de energía eléctrica y acceso a agua corriente cuando sea necesario. Nosotros nos encargamos de todo el montaje 1.5 a 2 horas antes de que comience tu evento.",
   },
 ];
 
@@ -65,7 +79,12 @@ function jsonLd() {
         "@type": "Organization",
         "@id": `${siteUrl}/tequilitros#organization`,
         name: "Tequilitros Eventos",
-        alternateName: ["Destiladora del Norte", "Tequilitros Barra Móvil"],
+        alternateName: [
+          "Tequilitros",
+          "Tequilitros Oficial",
+          "Tequilitros Barra Móvil",
+          "Destiladora del Norte",
+        ],
         url: `${siteUrl}/tequilitros`,
         logo: `${siteUrl}/icon-192.png`,
         image: `${siteUrl}/tequilitros/productos/cantarito.png`,
@@ -80,19 +99,23 @@ function jsonLd() {
           "Jerez",
           "Tlaltenango",
           "Fresnillo",
+          "Aguascalientes",
         ],
         sameAs: [whatsappUrl, facebookUrl, instagramUrl],
       },
       {
-        "@type": ["LocalBusiness", "FoodEstablishment", "Service"],
+        "@type": ["LocalBusiness", "Bartender", "CateringService", "EntertainmentBusiness"],
         "@id": `${siteUrl}/tequilitros#business`,
-        name: "Tequilitros Eventos - Barra Móvil y Bartender para Eventos",
+        name: "Tequilitros Eventos | Bartender para Eventos, Barras Móviles y Mixología",
+        alternateName: "Tequilitros Eventos - Barras Móviles y Mixología",
         description:
-          "Servicio profesional de barra móvil, bartender y coctelería para bodas, XV años, cumpleaños y fiestas privadas. Cantaritos en vaso de 32 oz y mixología premium en Jalisco y Zacatecas.",
+          "Servicio profesional de bartender para eventos, barras móviles, mixología y cantaritos de 32 oz con tequila artesanal en Jalisco y Zacatecas. Paquetes desde $90 MXN por persona en Barra Libre y Barra a Consumo a $250/hr.",
         url: `${siteUrl}/tequilitros`,
         telephone: "+52 56 6298 9202",
         email: "tequilitros@gmail.com",
-        priceRange: "$$",
+        priceRange: "$$ (Desde $90 MXN por persona)",
+        currenciesAccepted: "MXN",
+        paymentAccepted: "Efectivo, Transferencia Bancaria SPEI",
         image: `${siteUrl}/tequilitros/productos/cantarito.png`,
         address: {
           "@type": "PostalAddress",
@@ -107,65 +130,80 @@ function jsonLd() {
           latitude: 22.1158,
           longitude: -103.2642,
         },
-        areaServed: [
-          { "@type": "AdministrativeArea", name: "Jalisco" },
-          { "@type": "AdministrativeArea", name: "Zacatecas" },
-          { "@type": "City", name: "Colotlán" },
-          { "@type": "City", name: "Tlaltenango" },
-          { "@type": "City", name: "Jerez" },
-          { "@type": "City", name: "Zacatecas" },
-          { "@type": "City", name: "Guadalajara" },
+        openingHoursSpecification: [
+          {
+            "@type": "OpeningHoursSpecification",
+            dayOfWeek: [
+              "Monday",
+              "Tuesday",
+              "Wednesday",
+              "Thursday",
+              "Friday",
+              "Saturday",
+              "Sunday",
+            ],
+            opens: "08:00",
+            closes: "23:00",
+          },
+        ],
+        serviceType: [
+          "Bartender para eventos",
+          "Barras móviles para eventos",
+          "Mixología de eventos",
+          "Paquetes para eventos",
+          "Tequilitros para eventos",
+          "Cantaritos para eventos",
+          "Barra libre de cócteles",
+          "Barra a consumo para fiestas",
+          "Barra de tequila para bodas",
+        ],
+        knowsAbout: [
+          "Servicio de bartender para eventos, bodas y XV años",
+          "Mixología de eventos y coctelería con tequila",
+          "Barras móviles rústicas para fiestas",
+          "Cantaritos tradicionales de 32 oz estilo Jalisco",
+          "Paquetes para eventos y barra libre",
+          "Degustación de tequila para novios y anfitriones",
         ],
         hasOfferCatalog: {
           "@type": "OfferCatalog",
-          name: "Servicios de Barra Móvil y Coctelería",
+          name: "Paquetes para Eventos y Modalidades de Barra Móvil",
           itemListElement: [
             {
               "@type": "Offer",
+              price: "90",
+              priceCurrency: "MXN",
               itemOffered: {
                 "@type": "Service",
-                name: "Barra Libre Móvil con Bartender por Horas",
+                name: "Paquete Barra Libre con Bartender (4 horas)",
                 description:
-                  "Servicio continuo de cócteles preparados en vivo por bartenders profesionales durante el evento.",
+                  "$90 MXN por persona · Servicio continuo de 4 horas, bartenders dedicados, tequila artesanal, mezcladores, hielo, vasos de 32 oz y 7 cócteles oficiales sin límite.",
               },
             },
             {
               "@type": "Offer",
+              price: "250",
+              priceCurrency: "MXN",
               itemOffered: {
                 "@type": "Service",
-                name: "Servicio de Coctelería y Cantaritos por Litros",
+                name: "Paquete Barra a Consumo con Bartender",
                 description:
-                  "Volumen acotado de cantaritos en vaso Reyma 32 oz para cumpleaños y reuniones.",
+                  "$250 MXN por hora de atención de bartender en barra + costo exacto de productos consumidos según conteo final.",
               },
             },
             {
               "@type": "Offer",
+              price: "0",
+              priceCurrency: "MXN",
               itemOffered: {
                 "@type": "Service",
-                name: "Catering de Tequila y Centros de Mesa",
+                name: "Degustación Gratuita de Tequila y Cócteles",
                 description:
-                  "Botellas de Tequila Blanco y Reposado Destiladora del Norte para mesas de invitados.",
+                  "Prueba gratuita de la calidad de nuestro tequila y cócteles en sucursal Colotlán antes de contratar tu evento.",
               },
             },
           ],
         },
-      },
-      {
-        "@type": "BreadcrumbList",
-        itemListElement: [
-          {
-            "@type": "ListItem",
-            position: 1,
-            name: "Inicio",
-            item: siteUrl,
-          },
-          {
-            "@type": "ListItem",
-            position: 2,
-            name: "Tequilitros Eventos",
-            item: `${siteUrl}/tequilitros`,
-          },
-        ],
       },
       {
         "@type": "FAQPage",
@@ -200,13 +238,13 @@ export default function TequilitrosPage() {
 
       <main>
         {/* ================================================================
-            1. PORTADA PRINCIPAL (HERO CINEMATOGRÁFICO)
+            1. HERO CINEMATOGRÁFICO & GANCHO PRINCIPAL (EMBUDO)
             ================================================================ */}
         <section className={styles.hero} id="inicio" aria-labelledby="hero-heading">
           <div className={styles.heroBackground}>
             <Image
               src="/tequilitros/cantarito.jpg"
-              alt="Barra Móvil Tequilitros Eventos - Cantarito frente a barrica de roble"
+              alt="Barra Móvil Tequilitros Eventos - Barra de tequila en fiesta"
               fill
               priority
               loading="eager"
@@ -219,167 +257,276 @@ export default function TequilitrosPage() {
           <div className={styles.heroContent}>
             <div className={styles.kickerBadge}>
               <span className={styles.kickerBadgeDot} />
-              <span>Barra Móvil · Bartenders Profesionales · Destiladora del Norte</span>
+              <span>TEQUILITROS EVENTOS · BARTENDER Y BARRAS MÓVILES</span>
             </div>
 
             <h1 id="hero-heading" className={styles.heroTitle}>
-              Tequilitros Eventos: <em>Barra Móvil, Bartender y Coctelería</em> para tu Celebración
+              Bartender para Eventos y Barras Móviles{" "}
+              <em className="block text-[#E28735] not-italic">Tequilitros Eventos</em>
             </h1>
 
             <p className={styles.heroLead}>
-              Llevamos el mejor servicio de <strong>barra móvil</strong>,{" "}
-              <strong>bartenders profesionales</strong> y coctelería premium con los famosos{" "}
-              <strong>cantaritos en vaso de 32 oz</strong> a tus bodas, XV años, cumpleaños y
-              eventos empresariales en Jalisco, Zacatecas y zona norte.
+              Servicio profesional de <strong>bartender para eventos</strong>, <strong>barras móviles</strong> y{" "}
+              <strong>mixología de eventos</strong> con tequila artesanal. Paquetes para eventos desde $90 MXN por
+              persona en Barra Libre o modalidad Barra a Consumo. Llevamos cantaritos gigantes de 32 oz a bodas,
+              XV años, graduaciones y fiestas en Jalisco y Zacatecas.
             </p>
 
+            {/* Badges de Garantía Rápida */}
+            <div className="mb-8 flex flex-wrap items-center gap-2 sm:gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E28735]/40 bg-[#E28735]/15 px-3.5 py-1.5 font-mono text-xs font-bold text-[#E28735]">
+                <span>●</span> Atendemos desde 40 personas
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/15 px-3.5 py-1.5 font-mono text-xs font-bold text-[#F5F2EB]">
+                <span>●</span> Barra Libre desde $90 MXN / persona
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3.5 py-1.5 font-mono text-xs font-bold text-[#9AA5AC]">
+                <span>●</span> Degustación Gratuita previa
+              </span>
+            </div>
+
+            {/* Llamados a la Acción Inmediatos */}
             <div className={styles.heroActions}>
-              <a href="#cotizar" className={styles.btnPrimary}>
-                <span>Cotizar Barra Móvil</span>
-                <span aria-hidden="true">↗</span>
+              <a href="#simulador" className={styles.btnPrimary}>
+                <span>Calcular mi Presupuesto en Vivo ↓</span>
+                <span aria-hidden="true">⚡</span>
               </a>
 
-              <a href="#bebidas" className={styles.btnSecondary}>
-                <span>Ver Carta de Cócteles ↓</span>
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.btnSecondary}
+              >
+                <span>Cotizar por WhatsApp (56 6298 9202) ↗</span>
               </a>
             </div>
 
+            {/* Métricas de Confianza */}
             <div className={styles.heroBadges}>
               <span>
-                <strong>🍸 Bartender</strong> en Vivo
+                <strong>🍸 Bartenders</strong> Dedicados
               </span>
               <span>
-                <strong>✳ Barra Móvil</strong> Completa
+                <strong>🪵 Barra de Madera</strong> Incluida
               </span>
               <span>
-                <strong>946 ml</strong> Vaso Reyma 32 oz
+                <strong>🏆 Vaso 32 oz</strong> (946 ml)
               </span>
               <span>
                 <strong>📍 Jalisco</strong> & Zacatecas
               </span>
             </div>
           </div>
-
-          <div className={styles.heroVisual} aria-hidden="true">
-            <div className={styles.heroHalo} />
-            <div className={styles.heroProductAccentOne}>
-              <Image
-                src="/tequilitros/productos/vampiro.png"
-                alt="Cóctel Vampiro con sangrita artesanal para eventos"
-                fill
-                sizes="(max-width: 1024px) 34vw, 250px"
-                className={styles.cutoutImage}
-              />
-            </div>
-            <div className={styles.heroProductAccentTwo}>
-              <Image
-                src="/tequilitros/productos/paloma.png"
-                alt="Paloma tradicional con tequila reposado para bodas"
-                fill
-                sizes="(max-width: 1024px) 30vw, 220px"
-                className={styles.cutoutImage}
-              />
-            </div>
-            <div className={styles.heroProductPrimary}>
-              <Image
-                src="/tequilitros/productos/cantarito.png"
-                alt="Cantarito Tequilitros en vaso de 32 oz para eventos y fiestas"
-                fill
-                priority
-                sizes="(max-width: 1024px) 72vw, 620px"
-                className={styles.cutoutImage}
-              />
-            </div>
-            <span className={styles.heroVisualCaption}>Barra Móvil · Tequilitros Eventos</span>
-          </div>
         </section>
 
         {/* ================================================================
-            CINTILLO DE IDENTIDAD Y VALORES (KEYWORD TICKER)
+            CINTILLO DE IDENTIDAD Y VALORES (TICKER)
             ================================================================ */}
         <div className={styles.tickerRibbon} aria-hidden="true">
-          <span>BARRAS MÓVILES PARA EVENTOS</span>
+          <span>BARRA LIBRE $90 MXN / PERSONA</span>
           <b>✳</b>
-          <span>SERVICIO DE BARTENDER</span>
+          <span>BARRA A CONSUMO $250 / HORA</span>
           <b>✳</b>
-          <span>CANTARITOS 32 OZ (946 ML)</span>
+          <span>7 PREPARACIONES CON TEQUILA</span>
           <b>✳</b>
-          <span>DESTILADORA DEL NORTE</span>
+          <span>DESDE 40 PERSONAS</span>
           <b>✳</b>
-          <span>BODAS Y XV AÑOS</span>
+          <span>DEGUSTACIÓN GRATUITA</span>
+          <b>✳</b>
+          <span>BODAS · XV AÑOS · GRADUACIONES</span>
           <b>✳</b>
           <span>COLOTLÁN · JALISCO · ZACATECAS</span>
-          <b>✳</b>
-          <span>COCTELERÍA MEXICANA PREMIUM</span>
         </div>
 
         {/* ================================================================
-            2. PRESENTACIÓN DE TEQUILITROS (QUIÉNES SOMOS)
+            2. LAS DOS MODALIDADES DE PRECIO (PÁGINA 1 DEL PDF)
             ================================================================ */}
-        <section className={styles.section} id="nosotros" aria-labelledby="about-title">
-          <div className={styles.aboutGrid}>
-            <div>
-              <p className={styles.sectionNo}>01 / SOBRE NOSOTROS</p>
-              <h2 id="about-title" className={styles.sectionTitle}>
-                Servicio de Barra Móvil y Bartenders con Raíz: <em>Tequilitros Eventos.</em>
-              </h2>
-              <div className={styles.aboutCopy}>
-                <p>
-                  <strong>Tequilitros Eventos</strong> nace directamente desde{" "}
-                  <strong>Destiladora del Norte</strong> en Colotlán, Jalisco. Creamos una
-                  experiencia completa de <strong>barra móvil para eventos</strong> pensada para
-                  que tú y tus invitados disfruten sin preocuparse por nada.
+        <section className={styles.section} id="modalidades" aria-labelledby="pricing-modalities-title">
+          <div className={styles.sectionHeader}>
+            <p className={styles.sectionNo}>01 / PAQUETES PARA EVENTOS</p>
+            <h2 id="pricing-modalities-title" className={styles.sectionTitle}>
+              Paquetes para Eventos con <em>Precios Claros.</em>
+            </h2>
+            <p className={styles.sectionSubtitle}>
+              Tú eliges cómo pagar tu servicio de bartender y barra móvil: un costo fijo predecible por
+              persona en Barra Libre ($90/persona) o pagar únicamente lo que tus invitados consuman en
+              Barra a Consumo ($250/hr). En ambas modalidades nos encargamos de todo el servicio e insumos.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* Tarjeta 1: Barra Libre */}
+            <div className="relative flex flex-col justify-between overflow-hidden rounded-3xl border-2 border-[#E28735] bg-gradient-to-b from-[#181F27] to-[#0E1318] p-6 sm:p-8 shadow-2xl shadow-[#E28735]/10">
+              <div className="absolute right-4 top-4 rounded-full bg-[#E28735] px-3 py-1 font-mono text-[10px] font-extrabold uppercase tracking-wider text-[#080B0E]">
+                MÁS POPULAR
+              </div>
+
+              <div>
+                <span className="font-mono text-xs font-bold uppercase tracking-wider text-[#E28735]">
+                  Modalidad 01
+                </span>
+                <h3 className="mt-1 font-serif text-3xl font-bold text-[#F5F2EB]">
+                  Barra Libre
+                </h3>
+                <div className="mt-4 flex items-baseline gap-2">
+                  <span className="font-serif text-5xl font-extrabold text-[#E28735]">$90</span>
+                  <span className="font-mono text-sm font-semibold text-[#9AA5AC]">
+                    MXN por persona · servicio de 4 horas
+                  </span>
+                </div>
+                <p className="mt-4 text-xs leading-relaxed text-[#D2DAE0] sm:text-sm">
+                  Los invitados toman sin límite durante el horario contratado. Costo 100% predecible según
+                  los invitados confirmados.
                 </p>
-                <p>
-                  Nuestros <strong>bartenders y mixólogos</strong> llevan todo el equipo necesario:
-                  barra móvil de madera con presencia estética, cristalería y vasos de 32 oz,
-                  frutas cítricas del día recién cortadas, hielo abundante y la mejor selección de
-                  tequila artesanal.
-                </p>
-                <p>
-                  Desde un cantarito cítrico bien frío con escarchado Tajín hasta una barra libre
-                  continua de coctelería para bodas y graduaciones, adaptamos el servicio a las
-                  necesidades de tu celebración.
-                </p>
+
+                <ul className="mt-6 space-y-2.5 border-t border-[#242E37] pt-5 text-xs text-[#F5F2EB]">
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#30D158]">✓</span> Servicio continuo de 4 horas
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#30D158]">✓</span> Barra libre de cócteles del menú
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#30D158]">✓</span> Hora extra con costo adicional acordado previamente
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#30D158]">✓</span> Más viáticos según ubicación
+                  </li>
+                </ul>
+              </div>
+
+              <div className="mt-8 border-t border-[#242E37] pt-5">
+                <a href="#simulador" className={styles.btnPrimary}>
+                  <span>Calcular Barra Libre en el Simulador ↓</span>
+                </a>
               </div>
             </div>
 
-            <div>
-              <div className={styles.aboutHighlights}>
-                <div className={styles.highlightCard}>
-                  <h4>🍸 Bartenders Profesionales</h4>
-                  <p>Personal capacitado en servicio al cliente, preparación ágil y atención de barra en fiestas.</p>
+            {/* Tarjeta 2: Barra a Consumo */}
+            <div className="relative flex flex-col justify-between overflow-hidden rounded-3xl border border-[#242E37] bg-gradient-to-b from-[#141B22] to-[#0E1318] p-6 sm:p-8 hover:border-[#D4AF37]/60 transition-all">
+              <div className="absolute right-4 top-4 rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/15 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-[#D4AF37]">
+                PAGO EXACTO
+              </div>
+
+              <div>
+                <span className="font-mono text-xs font-bold uppercase tracking-wider text-[#D4AF37]">
+                  Modalidad 02
+                </span>
+                <h3 className="mt-1 font-serif text-3xl font-bold text-[#F5F2EB]">
+                  Barra a Consumo
+                </h3>
+                <div className="mt-4 flex items-baseline gap-2">
+                  <span className="font-serif text-5xl font-extrabold text-[#D4AF37]">$250</span>
+                  <span className="font-mono text-sm font-semibold text-[#9AA5AC]">
+                    MXN por hora de atención + producto consumido
+                  </span>
                 </div>
-                <div className={styles.highlightCard}>
-                  <h4>🪵 Barra Móvil Elegante</h4>
-                  <p>Módulo de barra móvil de madera que decora y se adapta a jardines, salones y haciendas.</p>
-                </div>
-                <div className={styles.highlightCard}>
-                  <h4>🏆 Cantaritos en Vaso 32 oz</h4>
-                  <p>Servicio en el auténtico vaso Reyma 32 EU (946 ml) con hielo y escarchados artesanales.</p>
-                </div>
-                <div className={styles.highlightCard}>
-                  <h4>📍 Cobertura Regional</h4>
-                  <p>Atención directa en Colotlán, Norte de Jalisco, Zacatecas y solicitudes metropolitanas.</p>
-                </div>
+                <p className="mt-4 text-xs leading-relaxed text-[#D2DAE0] sm:text-sm">
+                  Solo se paga lo que realmente se consume; al final del evento se hace el conteo de botellas
+                  y vasos frente a ti.
+                </p>
+
+                <ul className="mt-6 space-y-2.5 border-t border-[#242E37] pt-5 text-xs text-[#F5F2EB]">
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#30D158]">✓</span> Atención y servicio de barra por hora ($250/hr)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#30D158]">✓</span> Lista fija de precios por insumo consumido
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#30D158]">✓</span> El inventario inicial no es cobro fijo: si no se consume, no se paga
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#30D158]">✓</span> Más viáticos según ubicación
+                  </li>
+                </ul>
+              </div>
+
+              <div className="mt-8 border-t border-[#242E37] pt-5">
+                <a href="#simulador" className={styles.btnSecondary}>
+                  <span>Ver Precios por Insumo y Calcular ↓</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Comparativa Oficial: Qué Incluye y Qué No Incluye */}
+          <div className="mt-8 overflow-hidden rounded-2xl border border-[#242E37] bg-[#0E1318]">
+            <div className="border-b border-[#242E37] bg-[#141B22] px-6 py-3 font-mono text-xs font-bold uppercase tracking-widest text-[#E28735]">
+              En las Dos Modalidades: Barra Libre y Barra a Consumo
+            </div>
+            <div className="grid grid-cols-1 gap-6 p-6 sm:grid-cols-2 sm:p-8">
+              <div>
+                <h4 className="flex items-center gap-2 font-mono text-xs font-bold uppercase text-[#30D158]">
+                  <span>✓</span> Incluye
+                </h4>
+                <ul className="mt-3 space-y-2 text-xs text-[#D2DAE0] sm:text-sm">
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#30D158]">●</span> <strong>Personal de preparación:</strong> Bartenders profesionales dedicados a la barra.
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#30D158]">●</span> <strong>Bebidas:</strong> Tequila blanco, reposado, licores y sangría.
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#30D158]">●</span> <strong>Mezcladores, hielo y vasos:</strong> Peñafiel, agua mineral, hielo y vasos de 32 oz.
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#30D158]">●</span> <strong>Insumos:</strong> Limón exprimido, sal, salsas, concentrados y chile Tajín.
+                  </li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="flex items-center gap-2 font-mono text-xs font-bold uppercase text-[#FF453A]">
+                  <span>✕</span> No Incluye
+                </h4>
+                <ul className="mt-3 space-y-2 text-xs text-[#9AA5AC] sm:text-sm">
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#FF453A]">●</span> <strong>Meseros:</strong> No contamos con personal de meseros de salón.
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#FF453A]">●</span> <strong>Servicio en mesas:</strong> No se reparten bebidas en las mesas.
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#FF453A]">●</span> <strong>Distribución de bebidas:</strong> Los invitados acuden directamente a la barra móvil a solicitar sus cócteles.
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
         </section>
 
         {/* ================================================================
-            3. CATÁLOGO INTERACTIVO DE BEBIDAS
+            3. SIMULADOR Y CALCULADORA EN VIVO (EMBUDO INTERACTIVO)
             ================================================================ */}
-        <section className={styles.section} id="bebidas" aria-labelledby="catalog-title">
+        <section className={styles.section} id="simulador" aria-labelledby="calculator-title">
           <div className={styles.sectionHeader}>
-            <p className={styles.sectionNo}>02 / MIXOLOGÍA Y COCTELERÍA</p>
-            <h2 id="catalog-title" className={styles.sectionTitle}>
-              Coctelería y Cantaritos para Eventos: <em>Elige las Bebidas para tus Invitados.</em>
+            <p className={styles.sectionNo}>02 / CALCULADORA DE PAQUETES</p>
+            <h2 id="calculator-title" className={styles.sectionTitle}>
+              Calcula tu Paquete para Eventos <em>en Segundos.</em>
             </h2>
             <p className={styles.sectionSubtitle}>
-              Nuestros <strong>bartenders</strong> preparan cada cóctel al momento frente a tus invitados
-              con fruta fresca, tequila artesanal de Destiladora del Norte y escarchados especiales.
-              Consulta nuestra carta disponible y personalízala para tu fecha.
+              Mueve la barra con tu número de invitados y conoce al instante el total a pagar, el anticipo del 50%
+              y los viáticos aplicables para tu boda o fiesta.
+            </p>
+          </div>
+
+          <PricingCalculator />
+        </section>
+
+        {/* ================================================================
+            4. MENÚ OFICIAL (LAS 7 PREPARACIONES DEL PDF)
+            ================================================================ */}
+        <section className={styles.section} id="menu" aria-labelledby="catalog-title">
+          <div className={styles.sectionHeader}>
+            <p className={styles.sectionNo}>03 / MIXOLOGÍA DE EVENTOS</p>
+            <h2 id="catalog-title" className={styles.sectionTitle}>
+              Mixología de Eventos: <em>7 Cócteles con Tequila de la Casa.</em>
+            </h2>
+            <p className={styles.sectionSubtitle}>
+              Cantaritos para eventos, palomas, vampiros y cócteles artesanales en vasos de 32 oz (946 ml).
+              Elaborados al momento por bartenders con fruta fresca, cítricos naturales y escarchados especiales.
             </p>
           </div>
 
@@ -387,18 +534,17 @@ export default function TequilitrosPage() {
         </section>
 
         {/* ================================================================
-            4. EXPERIENCIA 3D: VASO REYMA 32 EU (946 ML)
+            5. EXPERIENCIA INTERACTIVA: EL VASO EN 3D
             ================================================================ */}
         <section className={styles.section} id="vaso3d" aria-labelledby="glass3d-title">
           <div className={styles.sectionHeader}>
-            <p className={styles.sectionNo}>03 / VASO OFICIAL 32 OZ</p>
+            <p className={styles.sectionNo}>04 / TEQUILITROS PARA EVENTOS</p>
             <h2 id="glass3d-title" className={styles.sectionTitle}>
-              El Vaso Tequilitros 946 ml <em>en 3D Interactivo.</em>
+              Tequilitros para Eventos: <em>Simulador Interactivo 3D (32 oz).</em>
             </h2>
             <p className={styles.sectionSubtitle}>
-              Conoce el formato oficial de vaso Reyma 32 EU modelado en 3D con base en las fotos de producto
-              de Tequilitros. El formato más solicitado en <strong>barras móviles para bodas y fiestas</strong>,
-              con pie escalonado, estrías termoformadas, hielos reales a tope y etiqueta oficial.
+              Gira en 360° para ver el termoformado real de 32 oz (946 ml), los hielos a tope y el escarchado de cada cóctel.
+              Haz clic en cualquiera de las 7 preparaciones para probarla en el vaso.
             </p>
           </div>
 
@@ -406,154 +552,84 @@ export default function TequilitrosPage() {
         </section>
 
         {/* ================================================================
-            5. SERVICIOS Y MODALIDADES PARA EVENTOS
+            6. CUATRO PASOS PARA RESERVAR & REQUISITOS (PÁGINA 3 DEL PDF)
             ================================================================ */}
-        <section className={styles.section} id="servicios" aria-labelledby="services-title">
+        <section className={styles.section} id="pasos" aria-labelledby="steps-title">
           <div className={styles.sectionHeader}>
-            <p className={styles.sectionNo}>04 / PAQUETES Y MODALIDADES</p>
-            <h2 id="services-title" className={styles.sectionTitle}>
-              Paquetes de Barra Móvil y Bartender para <em>Bodas, XV Años y Fiestas.</em>
+            <p className={styles.sectionNo}>05 / CÓMO CONTRATAR</p>
+            <h2 id="steps-title" className={styles.sectionTitle}>
+              Cuatro Pasos para <em>Reservar la Barra.</em>
             </h2>
             <p className={styles.sectionSubtitle}>
-              Modalidades flexibles de contratación de <strong>barras móviles</strong> adaptadas al
-              número de invitados, duración y presupuesto de tu evento.
+              Proceso simple, claro y sin sorpresas. Desde el primer mensaje de WhatsApp hasta el día de tu evento.
             </p>
           </div>
 
-          <div className={styles.servicesGrid}>
-            <article className={styles.serviceCard}>
-              <div className={styles.serviceCardHeader}>
-                <span>Modalidad 01 · Para Bodas y Graduaciones</span>
-                <h3>Barra Libre con Bartender por Horas</h3>
-                <p>
-                  Servicio de coctelería durante el bloque de tiempo y bajo las condiciones
-                  establecidos en la cotización.
-                </p>
-              </div>
-
-              <ul className={styles.serviceFeatures}>
-                <li><span>✓</span> Bartenders profesionales atendiendo la barra</li>
-                <li><span>✓</span> Preparación continua durante el horario acordado</li>
-                <li><span>✓</span> Montaje y personal según el paquete confirmado</li>
-                <li><span>✓</span> Insumos y carta definidos en la cotización</li>
-                <li><span>✓</span> Vaso o cristalería según el servicio acordado</li>
-              </ul>
-
-              <a href="#cotizar" className={styles.btnSecondary}>
-                Cotizar Barra Libre ↗
-              </a>
-            </article>
-
-            <article className={styles.serviceCard}>
-              <div className={styles.serviceCardHeader}>
-                <span>Modalidad 02 · Cumpleaños y Fiestas Privadas</span>
-                <h3>Servicio de Coctelería por Litros o Volumen</h3>
-                <p>
-                  Ideal para eventos con consumo definido: contratas un volumen determinado de
-                  litros o vasos Reyma de 32 oz preparados con la carta de tu elección.
-                </p>
-              </div>
-
-              <ul className={styles.serviceFeatures}>
-                <li><span>✓</span> Paquete por número exacto de vasos o litros</li>
-                <li><span>✓</span> Servicio y montaje conforme al paquete contratado</li>
-                <li><span>✓</span> Carta de bebidas confirmada antes del evento</li>
-                <li><span>✓</span> Insumos y presentación detallados en la propuesta</li>
-                <li><span>✓</span> Recargas sólo si se acuerdan previamente</li>
-              </ul>
-
-              <a href="#cotizar" className={styles.btnSecondary}>
-                Cotizar por Litros ↗
-              </a>
-            </article>
-
-            <article className={styles.serviceCard}>
-              <div className={styles.serviceCardHeader}>
-                <span>Modalidad 03 · Mesas de Honor y Regalos</span>
-                <h3>Botellas y Barricas de Tequila</h3>
-                <p>
-                  Consulta botellas de Tequila Blanco y Reposado de Destiladora del Norte
-                  para el servicio, mesas de invitados u obsequios.
-                </p>
-              </div>
-
-              <ul className={styles.serviceFeatures}>
-                <li><span>✓</span> Presentaciones y cantidades por confirmar</li>
-                <li><span>✓</span> Disponibilidad sujeta a inventario</li>
-                <li><span>✓</span> Servicio directo a mesa si se acuerda</li>
-                <li><span>✓</span> Precio y condiciones incluidos en la cotización</li>
-                <li><span>✓</span> Entrega conforme a lo acordado</li>
-              </ul>
-
-              <a href="#cotizar" className={styles.btnSecondary}>
-                Consultar Botellas ↗
-              </a>
-            </article>
-          </div>
+          <BookingSteps />
         </section>
 
         {/* ================================================================
-            6. CÓMO SE COTIZA (TRANSPARENCIA COMERCIAL)
+            7. GALERÍA & VIDEO EN VIVO DE LA BARRA
             ================================================================ */}
-        <section className={styles.section} id="paquetes" aria-labelledby="pricing-title">
+        <section className={styles.section} id="galeria" aria-labelledby="gallery-title">
           <div className={styles.sectionHeader}>
-            <p className={styles.sectionNo}>05 / PRESUPUESTOS CLAROS</p>
-            <h2 id="pricing-title" className={styles.sectionTitle}>
-              ¿Cómo Cotizar tu Servicio de <em>Barra Móvil y Bartenders?</em>
+            <p className={styles.sectionNo}>06 / BARRAS MÓVILES EN VIVO</p>
+            <h2 id="gallery-title" className={styles.sectionTitle}>
+              Barras Móviles y Bartender <em>en tu Fiesta.</em>
             </h2>
             <p className={styles.sectionSubtitle}>
-              Armamos una cotización a la medida de tu celebración tomando en cuenta estos 4 factores:
+              Así luce nuestro módulo de barra rústica de madera atendido por bartenders uniformados en bodas y fiestas privadas.
             </p>
           </div>
 
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-2xl border border-[#242E37] bg-[#0E1318] p-6">
-              <span className="font-mono text-xs font-bold text-[#E28735]">FACTOR 01</span>
-              <h3 className="mt-2 font-serif text-xl font-bold text-[#F5F2EB]">Número de Invitados</h3>
-              <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
-                Estimamos fruta, hielo, vasos y tequila con la información proporcionada para la cotización.
-              </p>
+          <div className="grid gap-8 lg:grid-cols-12 items-center mb-12">
+            <div className="lg:col-span-7">
+              <VideoPlayer
+                src="/tequilitros/barra-movil-tequilitros.mp4"
+                poster="/tequilitros/cantarito.jpg"
+              />
             </div>
 
-            <div className="rounded-2xl border border-[#242E37] bg-[#0E1318] p-6">
-              <span className="font-mono text-xs font-bold text-[#E28735]">FACTOR 02</span>
-              <h3 className="mt-2 font-serif text-xl font-bold text-[#F5F2EB]">Horas de Servicio</h3>
-              <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
-                El bloque de tiempo en que nuestros bartenders estarán preparando cócteles en vivo durante tu fiesta.
-              </p>
-            </div>
+            <div className="lg:col-span-5 space-y-4">
+              <div className="rounded-2xl border border-[#242E37] bg-[#0E1318] p-6">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#E28735]">
+                  Montaje Rústico
+                </span>
+                <h3 className="mt-1 font-serif text-xl font-bold text-[#F5F2EB]">
+                  Barra de Madera Artesanal
+                </h3>
+                <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
+                  Diseñada para lucir espectacular en jardines, salones, haciendas y terrazas. Montamos con 1.5 a 2 horas de anticipación.
+                </p>
+              </div>
 
-            <div className="rounded-2xl border border-[#242E37] bg-[#0E1318] p-6">
-              <span className="font-mono text-xs font-bold text-[#E28735]">FACTOR 03</span>
-              <h3 className="mt-2 font-serif text-xl font-bold text-[#F5F2EB]">Carta de Cócteles</h3>
-              <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
-                Tú eliges los sabores: cantaritos, palomas, vampiros, mojitos turquesa o tequimiche botanero.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-[#242E37] bg-[#0E1318] p-6">
-              <span className="font-mono text-xs font-bold text-[#E28735]">FACTOR 04</span>
-              <h3 className="mt-2 font-serif text-xl font-bold text-[#F5F2EB]">Lugar y Traslado</h3>
-              <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
-                Revisamos distancia y logística desde Colotlán; los viáticos aplicables se detallan antes de contratar.
-              </p>
+              <div className="rounded-2xl border border-[#242E37] bg-[#0E1318] p-6">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#D4AF37]">
+                  Servicio Fluido
+                </span>
+                <h3 className="mt-1 font-serif text-xl font-bold text-[#F5F2EB]">
+                  Bartenders Dedicados
+                </h3>
+                <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
+                  Preparación ágil para evitar filas largas, garantizando que cada vaso salga con la temperatura perfecta y escarchado recién hecho.
+                </p>
+              </div>
             </div>
           </div>
         </section>
 
         {/* ================================================================
-            7 & 8. COBERTURA GEOGRÁFICA Y TRASLADOS / VIÁTICOS
+            8. COBERTURA GEOGRÁFICA Y TRASLADOS
             ================================================================ */}
-        <section className={styles.section} id="viaticos" aria-labelledby="travel-title">
+        <section className={styles.section} id="cobertura" aria-labelledby="travel-title">
           <div className={styles.logisticsGrid}>
             <div>
-              <p className={styles.sectionNo}>06 / COBERTURA Y LOGÍSTICA</p>
+              <p className={styles.sectionNo}>07 / COBERTURA Y LOGÍSTICA</p>
               <h2 id="travel-title" className={styles.sectionTitle}>
-                Cobertura de Barras Móviles en <em>Jalisco, Zacatecas y Alrededores.</em>
+                Base en Colotlán, <em>Llegamos a tu Municipio.</em>
               </h2>
               <p className={styles.sectionSubtitle}>
-                Con base en Colotlán, Jalisco, trasladamos nuestra <strong>barra móvil y equipo de bartenders</strong>{" "}
-                a salones, haciendas, ranchos, terrazas y jardines en:
+                Trasladamos la barra móvil completa, insumos y personal a eventos en:
               </p>
 
               <ul className={styles.coverageList}>
@@ -569,25 +645,25 @@ export default function TequilitrosPage() {
             <div className={styles.travelCards}>
               <article className={styles.travelCard}>
                 <div className={styles.travelCardNumber}>CRITERIO 01</div>
-                <h3>Traslado Seguro y Puntual</h3>
+                <h3>Viáticos Claros y Fijos</h3>
                 <p>
-                  Revisamos combustible, peajes y necesidades de traslado según la localidad solicitada.
+                  Desde $0 en Colotlán hasta $500 en Tlaltenango/Jerez o $800 en Zacatecas/Fresnillo. Todo por escrito antes de pagar.
                 </p>
               </article>
 
               <article className={styles.travelCard}>
                 <div className={styles.travelCardNumber}>CRITERIO 02</div>
-                <h3>Montaje Anticipado</h3>
+                <h3>Montaje Puntual</h3>
                 <p>
-                  El horario de llegada y montaje se acuerda en la propuesta de acuerdo con el lugar y el servicio solicitado.
+                  Llegamos de 1.5 a 2 horas antes para armar la barra, enfriar insumos y dejar todo listo para el primer brindis.
                 </p>
               </article>
 
               <article className={styles.travelCard}>
                 <div className={styles.travelCardNumber}>CRITERIO 03</div>
-                <h3>Viáticos Claros por Escrito</h3>
+                <h3>Sin Sorpresas</h3>
                 <p>
-                  Si el evento requiere hospedaje o traslados largos, se detalla en la propuesta antes de contratar.
+                  Solo se consideran gastos adicionales cuando la distancia o el horario requieran hospedaje acordado previamente.
                 </p>
               </article>
             </div>
@@ -595,141 +671,16 @@ export default function TequilitrosPage() {
         </section>
 
         {/* ================================================================
-            9. GALERÍA CINEMATOGRÁFICA & VIDEO EN VIVO
-            ================================================================ */}
-        <section className={styles.section} id="galeria" aria-labelledby="gallery-title">
-          <div className={styles.sectionHeader}>
-            <p className={styles.sectionNo}>07 / EXPERIENCIA EN VIVO</p>
-            <h2 id="gallery-title" className={styles.sectionTitle}>
-              La Barra Móvil en Acción: <em>El Ambiente de Fiesta se Vive.</em>
-            </h2>
-            <p className={styles.sectionSubtitle}>
-              Conoce la barra y algunas bebidas de Tequilitros. El montaje y el alcance dependen
-              de la propuesta confirmada para cada evento.
-            </p>
-          </div>
-
-          <div className="grid gap-8 lg:grid-cols-12 items-center mb-12">
-            <div className="lg:col-span-7">
-              <VideoPlayer
-                src="/tequilitros/barra-movil-tequilitros.mp4"
-                poster="/tequilitros/cantarito.jpg"
-              />
-            </div>
-
-            <div className="lg:col-span-5 space-y-4">
-              <div className="rounded-2xl border border-[#242E37] bg-[#0E1318] p-6">
-                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#E28735]">
-                  Barra móvil para eventos
-                </span>
-                <h3 className="mt-1 font-serif text-xl font-bold text-[#F5F2EB]">
-                  Montaje Rústico y Elegante
-                </h3>
-                <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
-                  El tipo de montaje y sus elementos se revisan según el espacio y la propuesta solicitada.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-[#242E37] bg-[#0E1318] p-6">
-                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#D4AF37]">
-                  Servicio de bartender
-                </span>
-                <h3 className="mt-1 font-serif text-xl font-bold text-[#F5F2EB]">
-                  Preparación Rápida y Profesional
-                </h3>
-                <p className="mt-2 text-xs leading-relaxed text-[#9AA5AC]">
-                  La preparación, los tiempos y el personal se definen según la carta y el alcance acordado.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ================================================================
-            10. REDES SOCIALES OFICIALES (METRICOOL VERIFIED)
-            ================================================================ */}
-        <section className={styles.section} id="redes" aria-labelledby="social-title">
-          <div className={styles.sectionHeader}>
-            <p className={styles.sectionNo}>08 / SÍGUENOS EN REDES SOCIALES</p>
-            <h2 id="social-title" className={styles.sectionTitle}>
-              Tequilitros Eventos en Redes: <em>Momentos que se Comparten.</em>
-            </h2>
-            <p className={styles.sectionSubtitle}>
-              Sigue nuestras cuentas oficiales de Facebook e Instagram para ver videos de nuestros últimos montajes,
-              bodas, fiestas y el ambiente de la barra móvil.
-            </p>
-          </div>
-
-          <div className={styles.socialGallery}>
-            <div className={`${styles.socialPhoto} ${styles.socialProduct}`}>
-              <Image
-                src="/tequilitros/productos/vampiro.png"
-                alt="Servicio de barra móvil Tequilitros - Cóctel Vampiro para fiestas"
-                fill
-                sizes="(max-width: 768px) 100vw, 40vw"
-                className={styles.cutoutImage}
-              />
-            </div>
-            <div className={`${styles.socialPhoto} ${styles.socialProduct}`}>
-              <Image
-                src="/tequilitros/productos/paloma.png"
-                alt="Bartender para bodas Tequilitros - Paloma tradicional con sal marina"
-                fill
-                sizes="(max-width: 768px) 50vw, 30vw"
-                className={styles.cutoutImage}
-              />
-            </div>
-            <div className={`${styles.socialPhoto} ${styles.socialProduct}`}>
-              <Image
-                src="/tequilitros/productos/cantarito.png"
-                alt="Cantaritos de tequila en vaso de 32 oz para eventos y fiestas"
-                fill
-                sizes="(max-width: 768px) 50vw, 30vw"
-                className={styles.cutoutImage}
-              />
-            </div>
-          </div>
-
-          <div className={styles.socialActions}>
-            <a
-              href={facebookUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.socialButton}
-            >
-              <div>
-                <span>Facebook Oficial</span>
-                <strong>Tequilitros para Eventos ↗</strong>
-              </div>
-              <span className="text-2xl text-[#E28735]">f</span>
-            </a>
-
-            <a
-              href={instagramUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.socialButton}
-            >
-              <div>
-                <span>Instagram Oficial</span>
-                <strong>@tequilitros_eventos ↗</strong>
-              </div>
-              <span className="text-2xl text-[#E28735]">📸</span>
-            </a>
-          </div>
-        </section>
-
-        {/* ================================================================
-            11. PREGUNTAS FRECUENTES (FAQ PARA SEO Y GOOGLE)
+            9. PREGUNTAS FRECUENTES (OBJECIONES DERRIBADAS)
             ================================================================ */}
         <section className={styles.section} id="faq" aria-labelledby="faq-title">
           <div className={styles.sectionHeader}>
-            <p className={styles.sectionNo}>09 / RESUELVE TUS DUDAS</p>
+            <p className={styles.sectionNo}>08 / DUDAS FRECUENTES</p>
             <h2 id="faq-title" className={styles.sectionTitle}>
-              Preguntas Frecuentes sobre el Servicio de <em>Barra Móvil y Bartenders.</em>
+              Todo lo que Necesitas Saber <em>Antes de Contratar.</em>
             </h2>
             <p className={styles.sectionSubtitle}>
-              Todo lo que necesitas saber para contratar la barra de cócteles para tu boda, fiesta o aniversario.
+              Respuestas directas a las preguntas más comunes de los anfitriones.
             </p>
           </div>
 
@@ -747,79 +698,66 @@ export default function TequilitrosPage() {
         </section>
 
         {/* ================================================================
-            12. COTIZADOR INTERACTIVO (EVENT QUOTE)
+            10. FORMULARIO DE COTIZACIÓN DIRECTA (EVENT QUOTE)
             ================================================================ */}
         <EventQuote />
 
         {/* ================================================================
-            13. CONTACTO DIRECTO
+            11. REDES SOCIALES Y CONTACTO
             ================================================================ */}
-        <section className={styles.contactSection} id="contacto" aria-labelledby="contact-title">
-          <div className={styles.contactGrid}>
-            <div>
-              <p className={styles.sectionNo}>10 / CONTACTO INMEDIATO</p>
-              <h2 id="contact-title" className={styles.sectionTitle}>
-                Cotiza la Barra Móvil para <em>tu Evento Hoy.</em>
-              </h2>
-              <p className={styles.sectionSubtitle}>
-                Escríbenos directamente o llámanos. Revisamos disponibilidad de fecha,
-                cobertura y presupuesto de forma inmediata.
-              </p>
-            </div>
+        <section className={styles.section} id="contacto" aria-labelledby="social-title">
+          <div className={styles.sectionHeader}>
+            <p className={styles.sectionNo}>10 / ATENCIÓN DIRECTA</p>
+            <h2 id="social-title" className={styles.sectionTitle}>
+              Hablemos de <em>tu Celebración.</em>
+            </h2>
+            <p className={styles.sectionSubtitle}>
+              Escríbenos o llámanos. Te respondemos al momento para revisar la fecha de tu evento.
+            </p>
+          </div>
 
-            <div className={styles.contactCard}>
-              <div className={styles.contactCardHeader}>Contacto directo</div>
-              <div className={styles.contactLinks}>
-                <a
-                  href={whatsappUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.contactLink}
-                >
-                  <div>
-                    <span className="font-mono text-xs block text-[#E28735]">WHATSAPP OFICIAL</span>
-                    <span>56 6298 9202</span>
-                  </div>
-                  <span>↗</span>
-                </a>
-
-                <a href="tel:+525662989202" className={styles.contactLink}>
-                  <div>
-                    <span className="font-mono text-xs block text-[#E28735]">LLAMADAS DIRECTAS</span>
-                    <span>+52 56 6298 9202</span>
-                  </div>
-                  <span>📞</span>
-                </a>
-
-                <a href="mailto:tequilitros@gmail.com" className={styles.contactLink}>
-                  <div>
-                    <span className="font-mono text-xs block text-[#E28735]">CORREO ELECTRÓNICO</span>
-                    <span>tequilitros@gmail.com</span>
-                  </div>
-                  <span>✉</span>
-                </a>
+          <div className={styles.socialActions}>
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.socialButton}
+            >
+              <div>
+                <span>WhatsApp Oficial</span>
+                <strong>56 6298 9202 ↗</strong>
               </div>
+              <span className="text-2xl text-[#30D158]">💬</span>
+            </a>
 
-              <p className={styles.legalNotice}>
-                Contenido dirigido a personas mayores de edad (+18). Consume con responsabilidad.
-              </p>
-            </div>
+            <a
+              href={instagramUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.socialButton}
+            >
+              <div>
+                <span>Instagram Oficial</span>
+                <strong>@tequilitros_eventos ↗</strong>
+              </div>
+              <span className="text-2xl text-[#E28735]">📸</span>
+            </a>
           </div>
         </section>
       </main>
 
       {/* ================================================================
-          14. FOOTER EDITORIAL CON ENLACES Y PALABRAS CLAVE
+          12. FOOTER EDITORIAL
           ================================================================ */}
       <footer className={styles.footer}>
         <div className={styles.footerLogo}>
-          <span>✳</span> TEQUILITROS EVENTOS · BARRAS MÓVILES & BARTENDERS
+          <span>✳</span> TEQUILITROS · BARRA MÓVIL PARA EVENTOS
         </div>
 
         <div className="text-center font-mono text-[11px] text-[#5D6B75] max-w-xl mx-auto space-y-1">
           <p>© {new Date().getFullYear()} DESTILADORA DEL NORTE · COLOTLÁN, JALISCO, MÉXICO</p>
           <p className="text-[10px] text-[#424F58]">
-            Servicio de barra móvil, bartender y coctelería para bodas, XV años y eventos privados en Jalisco y Zacatecas.
+            Dos modalidades: Barra Libre ($90/persona) y Barra a Consumo ($250/hr). Eventos desde 40 personas.
           </p>
         </div>
 

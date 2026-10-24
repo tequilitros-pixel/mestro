@@ -122,7 +122,7 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
       })
       .catch(() => setLoadError("No se pudieron leer las cuentas pendientes locales."));
 
-    // Sync inicial con servidor si hay conexión
+    // Las cuentas quedan en este dispositivo; no se simula una sincronización remota.
     if (navigator.onLine) {
       void syncPendingTabs(initialBranchId)
         .then((data) => {
@@ -308,6 +308,9 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
           <h1 className="text-3xl font-bold text-on-surface">Cuentas pendientes por pagar</h1>
           <p className="mt-1 text-sm text-on-surface-variant">
             Guarda cuentas a nombre del cliente para cobrarlas cuando regresen (hoy, mañana o después).
+          </p>
+          <p className="mt-1 text-xs text-on-surface-variant">
+            Las cuentas se conservan en este dispositivo hasta liquidarlas; el cobro se registra en POS al momento de pagar.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

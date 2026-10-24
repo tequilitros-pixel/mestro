@@ -428,6 +428,7 @@ export default function SupportPage() {
             {filteredFaqs.map((faq) => (
               <div
                 key={faq.id}
+                id={faq.id}
                 className="rounded-lg border border-outline-variant bg-surface-container-low overflow-hidden"
               >
                 <button
