@@ -507,8 +507,8 @@ export default function TequilitrosPage() {
               Calcula tu Paquete para Eventos <em>en Segundos.</em>
             </h2>
             <p className={styles.sectionSubtitle}>
-              Mueve la barra con tu número de invitados y conoce al instante el total a pagar, el anticipo del 50%
-              y los viáticos aplicables para tu boda o fiesta.
+              Elige tu modalidad, invitados, duración y lugar para obtener un presupuesto orientativo.
+              Envíanos los detalles por WhatsApp para confirmar disponibilidad y precio final.
             </p>
           </div>
 
@@ -696,11 +696,6 @@ export default function TequilitrosPage() {
             ))}
           </div>
         </section>
-
-        {/* ================================================================
-            10. FORMULARIO DE COTIZACIÓN DIRECTA (EVENT QUOTE)
-            ================================================================ */}
-        <div id="cotizar" />
 
         {/* ================================================================
             11. REDES SOCIALES Y CONTACTO
