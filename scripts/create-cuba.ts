@@ -85,7 +85,7 @@ async function main() {
             ingredients: {
               create: [
                 { inventoryProduct: { connect: { id: inventory.get("POS-ING-TORONJA-REF")!.id } }, quantity: variant.soda, unit: "ML" as const, unitStatus: "RESOLVED" as const },
-                ...(variant.tequila ? [{ inventoryProduct: { connect: { id: inventory.get("POS-ING-TEQUILA")!.id } }, quantity: variant.tequila, unit: "ML", unitStatus: "RESOLVED" as const }] : []),
+                ...(variant.tequila ? [{ inventoryProduct: { connect: { id: inventory.get("POS-ING-TEQUILA")!.id } }, quantity: variant.tequila, unit: "ML" as const, unitStatus: "RESOLVED" as const }] : []),
                 { inventoryProduct: { connect: { id: inventory.get("EXTRA-HIELO")!.id } }, quantity: variant.ice, unit: "G" as const, unitStatus: "RESOLVED" as const },
                 { inventoryProduct: { connect: { id: inventory.get(variant.cup)!.id } }, quantity: 1, unit: "UNIT" as const, unitStatus: "RESOLVED" as const },
               ],
