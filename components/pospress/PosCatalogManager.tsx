@@ -3,7 +3,6 @@
 import { useMemo, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
 import {
-  createMultiVariantProductAction,
   createPosCategoryAction,
   createPosProductAction,
   createPosVariantAction,
@@ -171,102 +170,6 @@ export default function PosCatalogManager({
     setProdInventoryTracked(true);
     setProdIngredients([]);
     setIsProductModalOpen(true);
-  }
-
-  // Plantilla Inteligente: Crear Charro Negro Completo con sus 4 variedades
-  function handleCreateFullCharroNegro() {
-    // 1. Detectar insumos necesarios
-    const teq = inventoryProducts.find(
-      (p) => /tequila.*blanco/i.test(p.name) || (p.code && p.code.includes("TEQ"))
-    ) ?? inventoryProducts.find((p) => /tequila/i.test(p.name));
-
-    const cola = inventoryProducts.find(
-      (p) => /rc|cola|refresco.*cola/i.test(p.name) || p.code === "POS-ING-RC"
-    );
-
-    const limon = inventoryProducts.find(
-      (p) => /lim[oó]n/i.test(p.name) || p.code === "POS-ING-LIMON"
-    );
-
-    const sal = inventoryProducts.find(
-      (p) => /sal/i.test(p.name) || p.code === "POS-ING-SAL"
-    );
-
-    const vasoMed = inventoryProducts.find(
-      (p) => /vaso.*med/i.test(p.name) || p.code === "POS-ING-VASO-MED"
-    );
-
-    const vasoGde = inventoryProducts.find(
-      (p) => /vaso.*gde/i.test(p.name) || p.code === "POS-ING-VASO-GDE"
-    );
-
-    const teqCat = categories.find((c) => /tequilitros/i.test(c.name)) ?? categories[0];
-    if (!teqCat) {
-      showToast("Crea primero al menos una categoría para agregar el producto.", "error");
-      return;
-    }
-
-    const variantsPayload = [
-      {
-        name: "Mediano",
-        price: 70,
-        ingredients: [
-          ...(teq ? [{ inventoryProductId: teq.id, quantity: 30 }] : []),
-          ...(cola ? [{ inventoryProductId: cola.id, quantity: 180 }] : []),
-          ...(limon ? [{ inventoryProductId: limon.id, quantity: 15 }] : []),
-          ...(sal ? [{ inventoryProductId: sal.id, quantity: 1.5 }] : []),
-          ...(vasoMed ? [{ inventoryProductId: vasoMed.id, quantity: 1 }] : []),
-        ],
-      },
-      {
-        name: "Grande",
-        price: 99,
-        ingredients: [
-          ...(teq ? [{ inventoryProductId: teq.id, quantity: 60 }] : []),
-          ...(cola ? [{ inventoryProductId: cola.id, quantity: 300 }] : []),
-          ...(limon ? [{ inventoryProductId: limon.id, quantity: 30 }] : []),
-          ...(sal ? [{ inventoryProductId: sal.id, quantity: 3 }] : []),
-          ...(vasoGde ? [{ inventoryProductId: vasoGde.id, quantity: 1 }] : []),
-        ],
-      },
-      {
-        name: "Mediano sin tequila",
-        price: 35,
-        ingredients: [
-          ...(cola ? [{ inventoryProductId: cola.id, quantity: 180 }] : []),
-          ...(limon ? [{ inventoryProductId: limon.id, quantity: 15 }] : []),
-          ...(sal ? [{ inventoryProductId: sal.id, quantity: 1.5 }] : []),
-          ...(vasoMed ? [{ inventoryProductId: vasoMed.id, quantity: 1 }] : []),
-        ],
-      },
-      {
-        name: "Grande sin tequila",
-        price: 50,
-        ingredients: [
-          ...(cola ? [{ inventoryProductId: cola.id, quantity: 300 }] : []),
-          ...(limon ? [{ inventoryProductId: limon.id, quantity: 30 }] : []),
-          ...(sal ? [{ inventoryProductId: sal.id, quantity: 3 }] : []),
-          ...(vasoGde ? [{ inventoryProductId: vasoGde.id, quantity: 1 }] : []),
-        ],
-      },
-    ];
-
-    startTransition(async () => {
-      const result = await createMultiVariantProductAction({
-        categoryId: teqCat.id,
-        name: "Charro Negro",
-        description: "Tequila con refresco de cola, jugo de limón y escarchado de sal.",
-        variants: variantsPayload,
-      });
-
-      if (!result.success) {
-        showToast(result.error, "error");
-        return;
-      }
-
-      showToast("¡Charro Negro creado con sus 4 variedades y recetas!", "success");
-      window.location.reload();
-    });
   }
 
   // Abrir modal para agregar una variedad a un producto existente
@@ -505,16 +408,6 @@ export default function PosCatalogManager({
               + Nueva Categoría
             </button>
 
-            {/* Botón Mágico Charro Negro */}
-            <button
-              onClick={handleCreateFullCharroNegro}
-              disabled={pending}
-              className="inline-flex items-center gap-2 rounded-xl bg-amber-500/15 border border-amber-500/40 px-4 py-2.5 text-sm font-bold text-amber-500 hover:bg-amber-500/25 transition shadow-sm"
-              title="Crea el producto Charro Negro con sus 4 variedades listas (Mediano, Grande, Mediano sin tequila, Grande sin tequila)"
-            >
-              <span>🥃</span> + Agregar Charro Negro Completo
-            </button>
-
             <button
               onClick={handleOpenNewProduct}
               className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary shadow-lg shadow-primary/20 hover:opacity-95 active:scale-95 transition"
@@ -583,7 +476,7 @@ export default function PosCatalogManager({
             <div className="rounded-2xl border border-dashed border-outline-variant p-12 text-center text-on-surface-variant">
               <p className="text-base font-semibold">No se encontraron productos.</p>
               <p className="text-xs mt-1">
-                Haz clic en "+ Agregar Charro Negro Completo" o "+ Nuevo Producto" para comenzar.
+                Haz clic en "+ Nuevo Producto" para comenzar.
               </p>
             </div>
           ) : (
