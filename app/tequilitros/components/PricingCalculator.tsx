@@ -57,7 +57,6 @@ export default function PricingCalculator() {
 
   // Cálculos para Barra Libre ($90 MXN / persona · 4 horas)
   const barraLibreBase = guests * 90;
-  const extraHours = Math.max(0, hours - 4);
   const barraLibreTotal = barraLibreBase + selectedViatico.cost; // Horas adicionales se cotizan por separado
   const anticipo50 = Math.round(barraLibreTotal * 0.5);
   const saldoFinal = barraLibreTotal - anticipo50;
@@ -93,7 +92,7 @@ export default function PricingCalculator() {
       needsConfirmation ? "• IMPORTANTE: hay conceptos pendientes de cotizar (horas extras y/o traslado)." : null,
       modality === "consumo" ? "• El consumo final se paga según los productos realmente consumidos." : null,
       "¿Me confirman disponibilidad y cotización final?"
-    ].filter(Boolean).join("\\n");
+    ].filter(Boolean).join("\n");
     return `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(details)}`;
   }, [modality,clientName,clientPhone,eventType,eventDate,specificLocation,selectedViatico,guests,hours,barraLibreBase,atencionBarra,consumoEstimado,viaticosId,barraLibreTotal,barraConsumoTotalEstimado,needsConfirmation]);
 
