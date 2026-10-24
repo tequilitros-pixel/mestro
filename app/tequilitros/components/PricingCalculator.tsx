@@ -31,14 +31,23 @@ const VIATICOS_OPCIONES = [
   { id: "tlaltenango", label: "Tlaltenango, Jerez, Santa María ($500)", cost: 500 },
   { id: "zacatecas", label: "Zacatecas Capital, Fresnillo ($800)", cost: 800 },
   { id: "guadalajara", label: "Guadalajara, Zapopan o foráneo ($1,200)", cost: 1200 },
-  { id: "otro", label: "Otra localidad (por calcular)", cost: 500 },
+  { id: "otro", label: "Otra localidad (por confirmar)", cost: 0 },
 ];
 
 export default function PricingCalculator() {
   const [modality, setModality] = useState<"libre" | "consumo">("libre");
   const [guests, setGuests] = useState<number>(150);
   const [hours, setHours] = useState<number>(4);
-  const [viaticosId, setViaticosId] = useState<string>("tlaltenango");
+  const [viaticosId, setViaticosId] = useState<string>("colotlan");
+  const [clientName, setClientName] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [eventType, setEventType] = useState("");
+  const [specificLocation, setSpecificLocation] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [consumptionBudget, setConsumptionBudget] = useState("");
+  const today = new Date();
+  const earliestDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+  const needsConfirmation = viaticosId === "otro" || (modality === "libre" && hours > 4);
   const [showPriceList, setShowPriceList] = useState<boolean>(false);
 
   const selectedViatico = useMemo(
@@ -49,45 +58,44 @@ export default function PricingCalculator() {
   // Cálculos para Barra Libre ($90 MXN / persona · 4 horas)
   const barraLibreBase = guests * 90;
   const extraHours = Math.max(0, hours - 4);
-  const extraHoursCost = extraHours * (guests * 20); // $20/persona por hora extra referencial
-  const barraLibreTotal = barraLibreBase + extraHoursCost + selectedViatico.cost;
+  const barraLibreTotal = barraLibreBase + selectedViatico.cost; // Horas adicionales se cotizan por separado
   const anticipo50 = Math.round(barraLibreTotal * 0.5);
   const saldoFinal = barraLibreTotal - anticipo50;
 
   // Cálculos para Barra a Consumo ($250 MXN / hora + consumo estimado)
   const atencionBarra = hours * 250;
-  // Estimado referencial de consumo (~$78 por persona según desglose oficial de 150 pers = $11,786)
-  const consumoEstimado = Math.round(guests * 78.5);
+  // Consumo estimado opcional elegido por el cliente; nunca es cobro garantizado.
+  const consumoEstimado = Math.max(0, Number(consumptionBudget) || 0);
   const barraConsumoTotalEstimado = atencionBarra + consumoEstimado + selectedViatico.cost;
 
-  // Generador de mensaje para WhatsApp
+  // Cotización compartible con todos los datos sin afirmar precios pendientes.
   const whatsappUrl = useMemo(() => {
-    const text =
+    const total = modality === "libre" ? barraLibreTotal : barraConsumoTotalEstimado;
+    const details = [
+      "Hola, quiero cotizar Tequilitros Eventos:",
+      `• Nombre: ${clientName.trim() || "Por confirmar"}`,
+      `• Teléfono: ${clientPhone.trim() || "Por confirmar"}`,
+      `• Evento: ${eventType || "Por confirmar"}`,
+      `• Fecha: ${eventDate || "Por confirmar"}`,
+      `• Localidad: ${selectedViatico.label}`,
+      `• Dirección / salón: ${specificLocation.trim() || "Por confirmar"}`,
+      `• Modalidad: ${modality === "libre" ? "Barra libre" : "Barra a consumo"}`,
+      `• Invitados: ${guests}`,
+      `• Duración solicitada: ${hours} horas`,
       modality === "libre"
-        ? `Hola, quiero cotizar la BARRA LIBRE de Tequilitros para mi evento:
-- Modalidad: Barra Libre ($90/persona)
-- Invitados estimados: ${guests} personas
-- Duración: ${hours} horas
-- Ubicación: ${selectedViatico.label}
-- Total estimado: $${barraLibreTotal.toLocaleString("es-MX")} MXN (Anticipo 50%: $${anticipo50.toLocaleString("es-MX")})
-¿Tienen disponible la fecha para confirmar?`
-        : `Hola, quiero cotizar la BARRA A CONSUMO de Tequilitros para mi evento:
-- Modalidad: Barra a Consumo ($250/hr de atención + producto consumido)
-- Invitados estimados: ${guests} personas
-- Horas de atención: ${hours} horas ($${atencionBarra.toLocaleString("es-MX")})
-- Ubicación: ${selectedViatico.label}
-¿Me podrían orientar sobre las fechas y la carta disponible?`;
-
-    return `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(text)}`;
-  }, [
-    modality,
-    guests,
-    hours,
-    selectedViatico,
-    barraLibreTotal,
-    anticipo50,
-    atencionBarra,
-  ]);
+        ? `• Precio base (4 horas): $${barraLibreBase.toLocaleString("es-MX")} MXN`
+        : `• Servicio de barra: $${atencionBarra.toLocaleString("es-MX")} MXN`,
+      modality === "consumo"
+        ? `• Consumo previsto por el cliente (no definitivo): $${consumoEstimado.toLocaleString("es-MX")} MXN`
+        : null,
+      `• Viáticos referenciales: ${viaticosId === "otro" ? "Por confirmar" : "$" + selectedViatico.cost.toLocaleString("es-MX") + " MXN"}`,
+      `• Subtotal estimado, sin cargos pendientes: $${total.toLocaleString("es-MX")} MXN`,
+      needsConfirmation ? "• IMPORTANTE: hay conceptos pendientes de cotizar (horas extras y/o traslado)." : null,
+      modality === "consumo" ? "• El consumo final se paga según los productos realmente consumidos." : null,
+      "¿Me confirman disponibilidad y cotización final?"
+    ].filter(Boolean).join("\\n");
+    return `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(details)}`;
+  }, [modality,clientName,clientPhone,eventType,eventDate,specificLocation,selectedViatico,guests,hours,barraLibreBase,atencionBarra,consumoEstimado,viaticosId,barraLibreTotal,barraConsumoTotalEstimado,needsConfirmation]);
 
   return (
     <div className="relative w-full overflow-hidden rounded-3xl border border-[#242E37] bg-gradient-to-b from-[#11171E] via-[#0D1217] to-[#080B0E] p-5 sm:p-8 md:p-10 shadow-2xl">
@@ -216,7 +224,7 @@ export default function PricingCalculator() {
             <option value={7}>7 horas (+3 horas adicionales)</option>
           </select>
           <p className="mt-1 text-[11px] text-[#717F8A]">
-            {hours > 4 ? `Incluye ${hours - 4} hora(s) extra acordada(s)` : "Servicio base recomendado"}
+            {hours > 4 ? `${hours - 4} hora(s) adicional(es): precio por confirmar` : "Servicio base de 4 horas"}
           </p>
         </div>
 
@@ -238,15 +246,41 @@ export default function PricingCalculator() {
             ))}
           </select>
           <p className="mt-1 text-[11px] text-[#717F8A]">
-            {selectedViatico.cost === 0
+            {viaticosId === "otro" ? "Traslado por cotizar" : selectedViatico.cost === 0
               ? "Sin costo adicional en zona base"
-              : `+$${selectedViatico.cost} MXN por traslado`}
+              : `+${selectedViatico.cost} MXN por traslado`}
           </p>
         </div>
       </div>
 
+      {/* Datos del evento y presupuesto personalizable, en un solo flujo */}
+      <div className="mt-6 grid grid-cols-1 gap-4 rounded-2xl border border-[#242E37] bg-[#0E1318]/80 p-5 sm:grid-cols-2 sm:p-6">
+        <label className="text-xs font-bold text-[#F5F2EB]">Tu nombre (opcional)
+          <input value={clientName} onChange={e=>setClientName(e.target.value)} autoComplete="name" placeholder="Nombre del anfitrión" className="mt-2 w-full rounded-xl border border-[#384654] bg-[#141B22] p-3 text-sm text-white" />
+        </label>
+        <label className="text-xs font-bold text-[#F5F2EB]">WhatsApp (opcional)
+          <input type="tel" value={clientPhone} onChange={e=>setClientPhone(e.target.value)} autoComplete="tel" placeholder="Tu número" className="mt-2 w-full rounded-xl border border-[#384654] bg-[#141B22] p-3 text-sm text-white" />
+        </label>
+        <label className="text-xs font-bold text-[#F5F2EB]">Fecha del evento
+          <input type="date" min={earliestDate} value={eventDate} onChange={e=>setEventDate(e.target.value)} className="mt-2 w-full rounded-xl border border-[#384654] bg-[#141B22] p-3 text-sm text-white" />
+        </label>
+        <label className="text-xs font-bold text-[#F5F2EB]">Tipo de evento
+          <select value={eventType} onChange={e=>setEventType(e.target.value)} className="mt-2 w-full rounded-xl border border-[#384654] bg-[#141B22] p-3 text-sm text-white">
+            <option value="">Seleccionar</option>
+            {["Boda","XV años","Cumpleaños","Graduación","Fiesta privada","Evento empresarial","Otro"].map(v=><option key={v} value={v}>{v}</option>)}
+          </select>
+        </label>
+        <label className="text-xs font-bold text-[#F5F2EB] sm:col-span-2">Salón, dirección o municipio específico
+          <input value={specificLocation} onChange={e=>setSpecificLocation(e.target.value)} placeholder="Ej. Salón en Colotlán, Jalisco" className="mt-2 w-full rounded-xl border border-[#384654] bg-[#141B22] p-3 text-sm text-white" />
+        </label>
+        {modality === "consumo" && <label className="text-xs font-bold text-[#F5F2EB] sm:col-span-2">Presupuesto estimado para bebidas e insumos ($ MXN)
+          <input type="number" min={0} step={100} value={consumptionBudget} onChange={e=>setConsumptionBudget(e.target.value)} placeholder="Opcional; se cobra el consumo real" className="mt-2 w-full rounded-xl border border-[#384654] bg-[#141B22] p-3 text-sm text-white" />
+        </label>}
+      </div>
+
       {/* Tarjeta de Resumen y Desglose Financiero */}
       <div className="mt-8 rounded-2xl border border-[#E28735]/40 bg-[radial-gradient(ellipse_at_top,rgba(226,135,53,0.15),transparent_70%)] p-6 sm:p-8">
+        {needsConfirmation && <p className="mb-4 rounded-xl border border-amber-600/50 bg-amber-500/10 p-3 text-xs font-semibold text-amber-200">Presupuesto parcial: {hours > 4 && modality === "libre" ? "las horas extras " : ""}{viaticosId === "otro" ? "y el traslado " : ""}requieren confirmación. No se incluyen importes inventados.</p>}
         <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
           <div>
             <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-[#E28735]">
@@ -261,11 +295,11 @@ export default function PricingCalculator() {
             <p className="mt-2 text-xs text-[#9AA5AC] sm:text-sm">
               {modality === "libre" ? (
                 <>
-                  Para <strong>{guests} personas</strong> en {hours} horas de servicio continuo.
+                  Para <strong>{guests} personas</strong>. Precio base para 4 horas{hours > 4 ? `; ${hours - 4} hora(s) extra por cotizar` : ""}.
                 </>
               ) : (
                 <>
-                  Estimación ilustrativa: ${atencionBarra.toLocaleString()} atención + ${consumoEstimado.toLocaleString()} producto estimado.
+                  ${atencionBarra.toLocaleString("es-MX")} de atención + ${consumoEstimado.toLocaleString("es-MX")} de presupuesto opcional de consumo. El consumo real se liquida al final.
                 </>
               )}
             </p>
@@ -274,15 +308,15 @@ export default function PricingCalculator() {
           {/* Desglose de Pago (50% Anticipo / 50% Saldo) */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="rounded-xl border border-[#242E37] bg-[#141B22] p-3 text-left">
-              <p className="font-mono text-[10px] uppercase text-[#9AA5AC]">Anticipo 50% (Apartar)</p>
+              <p className="font-mono text-[10px] uppercase text-[#9AA5AC]">Anticipo (sujeto a confirmación)</p>
               <p className="font-mono text-base font-extrabold text-[#30D158]">
-                ${anticipo50.toLocaleString("es-MX")} MXN
+                {modality === "libre" && !needsConfirmation ? `${anticipo50.toLocaleString("es-MX")} MXN` : "Por confirmar"}
               </p>
             </div>
             <div className="rounded-xl border border-[#242E37] bg-[#141B22] p-3 text-left">
-              <p className="font-mono text-[10px] uppercase text-[#9AA5AC]">Saldo antes de iniciar</p>
+              <p className="font-mono text-[10px] uppercase text-[#9AA5AC]">Saldo (sujeto a confirmación)</p>
               <p className="font-mono text-base font-extrabold text-[#F5F2EB]">
-                ${saldoFinal.toLocaleString("es-MX")} MXN
+                {modality === "libre" && !needsConfirmation ? `${saldoFinal.toLocaleString("es-MX")} MXN` : "Por confirmar"}
               </p>
             </div>
 
@@ -292,7 +326,7 @@ export default function PricingCalculator() {
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#E28735] px-6 py-3.5 font-mono text-xs font-bold uppercase tracking-wider text-[#080B0E] transition-all duration-200 hover:bg-[#F59E0B] hover:shadow-lg hover:shadow-[#E28735]/25"
             >
-              <span>Apartar por WhatsApp</span>
+              <span>Solicitar cotización por WhatsApp</span>
               <span className="text-sm">↗</span>
             </a>
           </div>
