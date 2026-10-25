@@ -16,6 +16,7 @@ const OPERATOR_ALLOWED_PATHS = [
   "/fermentation",
   "/distillation",
   "/timeclock",
+  "/cotizador-tequilitros",
 ];
 
 const PUBLIC_MARKETING_PATHS = ["/tequilitros"];
