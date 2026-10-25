@@ -17,6 +17,10 @@ export const ALWAYS_AVAILABLE_PATHS = [
   "/timeclock/payroll",
   "/timeclock/history",
   "/timeclock/requests",
+  "/cotizador-tequilitros",
+  "/cotizador-tequilitros/calendario",
+  "/cotizador-tequilitros/historial",
+  "/cotizador-tequilitros/contratos",
 ] as const;
 
 /** Acceso histórico para operadores que aún no tienen permisos configurados. */
@@ -56,6 +60,7 @@ const ADMIN_ONLY_PATHS = [
 ] as const;
 
 export function isAlwaysAvailablePath(pathname: string): boolean {
+  if (pathname === "/cotizador-tequilitros" || pathname.startsWith("/cotizador-tequilitros/")) return true;
   return ALWAYS_AVAILABLE_PATHS.some((path) => pathname === path);
 }
 

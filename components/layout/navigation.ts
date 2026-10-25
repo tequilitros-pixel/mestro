@@ -58,7 +58,8 @@ export type AppModule =
   | "pos"
   | "administration"
   | "timeclock"
-  | "personnel";
+  | "personnel"
+  | "tequilitros-quote";
 
 export type MainModule = {
   href: string;
@@ -163,6 +164,14 @@ export const MAIN_MODULES: MainModule[] = [
     icon: ClockIcon,
     iconVariant: "blue",
     module: "timeclock",
+  },
+  {
+    href: "/cotizador-tequilitros",
+    label: "Cotizar Tequilitros",
+    shortLabel: "Cotizador",
+    icon: PartyIcon,
+    iconVariant: "orange",
+    module: "tequilitros-quote",
   },
   {
     href: "/administration/personnel",
@@ -591,6 +600,37 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       iconVariant: "amber",
     },
   ],
+
+  "tequilitros-quote": [
+    {
+      href: "/cotizador-tequilitros",
+      label: "Cotizador",
+      icon: PartyIcon,
+      iconVariant: "orange",
+      operatorAllowed: true,
+    },
+    {
+      href: "/cotizador-tequilitros/calendario",
+      label: "Calendario",
+      icon: CalendarIcon,
+      iconVariant: "amber",
+      operatorAllowed: true,
+    },
+    {
+      href: "/cotizador-tequilitros/historial",
+      label: "Cotizaciones",
+      icon: ListChecksIcon,
+      iconVariant: "blue",
+      operatorAllowed: true,
+    },
+    {
+      href: "/cotizador-tequilitros/contratos",
+      label: "Recibos y Contratos",
+      icon: ClipboardIcon,
+      iconVariant: "purple",
+      operatorAllowed: true,
+    },
+  ],
 };
 
 export function matchesRoute(pathname: string, href: string) {
@@ -642,6 +682,10 @@ export function getCurrentModule(pathname: string): AppModule {
 
   if (matchesRoute(pathname, "/timeclock")) {
     return "timeclock";
+  }
+
+  if (matchesRoute(pathname, "/cotizador-tequilitros")) {
+    return "tequilitros-quote";
   }
 
   const productionPaths = [
@@ -743,12 +787,13 @@ export function isMainModuleVisible(
 
   const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);
   if (role === "OPERATOR" && !hasConfiguredPermissions) {
-    // El operador conserva su acceso fijo de siempre: solo Producción.
-    return module.module === "production";
+    // El operador conserva su acceso fijo de producción y cotizador universal.
+    return module.module === "production" || module.module === "tequilitros-quote";
   }
 
   if (module.module === "home") return true;
   if (module.module === "timeclock") return true;
+  if (module.module === "tequilitros-quote") return true;
 
   const items = SUBMENUS[module.module as Exclude<AppModule, "home">] ?? [];
 
