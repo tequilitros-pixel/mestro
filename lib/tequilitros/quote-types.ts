@@ -22,6 +22,27 @@ export const DRINKS_CATALOG = [
   "Botellas de Tequila Blanco/Reposado para mesas",
 ] as const;
 
+export const CONSUMO_PRICES_CATALOG = [
+  { item: "Tequila blanco, 1 L", price: 350, unit: "botella" },
+  { item: "Licores de la casa", price: 150, unit: "botella" },
+  { item: "Sangría, 1 L", price: 90, unit: "botella" },
+  { item: "Peñafiel toronja", price: 30, unit: "pieza" },
+  { item: "Agua mineral", price: 28, unit: "pieza" },
+  { item: "Jugo de toronja", price: 75, unit: "litro" },
+  { item: "Tampico", price: 45, unit: "litro" },
+  { item: "Limón exprimido", price: 60, unit: "litro" },
+  { item: "Hielo, bolsa de 5 kg", price: 20, unit: "bolsa" },
+  { item: "Vasos 32 oz (Reyma)", price: 70, unit: "paq. 25 pzas" },
+  { item: "Servilletas", price: 55, unit: "paquete" },
+  { item: "Popotes", price: 60, unit: "por kg" },
+  { item: "Sal", price: 20, unit: "por kg" },
+  { item: "Chile limón", price: 60, unit: "bote" },
+  { item: "Madrileña", price: 90, unit: "botella" },
+  { item: "Clamato", price: 50, unit: "botella" },
+  { item: "Salsas de la casa", price: 100, unit: "por lote" },
+  { item: "Tequimiche especial", price: 100, unit: "por lote" },
+] as const;
+
 export const EVENT_TYPES = [
   "Boda",
   "XV Años",

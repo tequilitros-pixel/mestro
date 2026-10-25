@@ -80,8 +80,9 @@ export default function HistorialClient({
   });
 
   function openDepositModal(quote: QuoteItem) {
-    const half = Math.round(quote.saleAmount * 0.5);
-    setDepositAmount(half);
+    const isConsumo = quote.metadata?.modality === "consumo";
+    const amount = isConsumo ? quote.saleAmount : Math.round(quote.saleAmount * 0.5);
+    setDepositAmount(amount);
     setDepositModalQuote(quote);
   }
 
@@ -420,7 +421,9 @@ export default function HistorialClient({
             <div className="space-y-3 text-xs">
               <div>
                 <label className="block font-semibold mb-1">
-                  Monto del Anticipo Recibido (50% sugerido) *
+                  {depositModalQuote.metadata?.modality === "consumo"
+                    ? "Monto para Congelar Fecha (Horas + Viáticos) *"
+                    : "Monto del Anticipo Recibido (50% sugerido) *"}
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-2 text-on-surface-variant font-mono">$</span>

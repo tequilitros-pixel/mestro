@@ -5,6 +5,7 @@ import {
   VIATICOS_OPTIONS,
   DRINKS_CATALOG,
   EVENT_TYPES,
+  CONSUMO_PRICES_CATALOG,
   type TequilitrosQuoteMetadata,
 } from "@/lib/tequilitros/quote-types";
 import { createQuoteAction } from "./actions";
@@ -51,6 +52,7 @@ export default function CotizadorForm({
     branches[0]?.name || "Canoas"
   );
   const [specialNotes, setSpecialNotes] = useState("");
+  const [showPriceList, setShowPriceList] = useState(false);
 
   // Loading & Submission State
   const [loading, setLoading] = useState(false);
@@ -77,18 +79,26 @@ export default function CotizadorForm({
   );
 
   // Cálculos matemáticos
+  const isConsumo = modality === "consumo";
   const extraHours = Math.max(0, durationHours - 4);
-  const pricePerGuest = 90;
-  const extraHoursCost = modality === "libre" ? extraHours * (guestCount * 20) : 0;
+  const pricePerGuest = isConsumo ? 0 : 90;
+  const extraHoursCost = !isConsumo ? extraHours * (guestCount * 20) : 0;
+  const atencionCost = durationHours * 250;
 
-  const baseServiceCost =
-    modality === "libre"
-      ? guestCount * pricePerGuest
-      : durationHours * 250 + Math.round(guestCount * 78.5);
+  const baseServiceCost = !isConsumo
+    ? guestCount * pricePerGuest
+    : atencionCost;
 
-  const totalAmount = baseServiceCost + extraHoursCost + selectedViatico.cost;
-  const depositRequired = Math.round(totalAmount * 0.5);
-  const balanceRemaining = totalAmount - depositRequired;
+  const totalAmount = !isConsumo
+    ? baseServiceCost + extraHoursCost + selectedViatico.cost
+    : atencionCost + selectedViatico.cost;
+
+  // En barra a consumo: se congelan horas + viáticos para apartar (ej. $1,500 MXN)
+  const depositRequired = !isConsumo
+    ? Math.round(totalAmount * 0.5)
+    : totalAmount;
+
+  const balanceRemaining = !isConsumo ? totalAmount - depositRequired : 0;
 
   // Chequeo de disponibilidad en la fecha seleccionada
   const dateAvailability = useMemo(() => {
@@ -418,7 +428,7 @@ export default function CotizadorForm({
             >
               <p className="font-bold text-xs sm:text-sm">Barra a Consumo</p>
               <p className="text-[11px] text-on-surface-variant mt-0.5">
-                $250/hr atención + producto consumido
+                $250/hr atención + viáticos para apartar · Producto liquidable en evento
               </p>
             </button>
           </div>
@@ -427,7 +437,7 @@ export default function CotizadorForm({
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <label className="text-xs font-semibold text-on-surface">
-                Número de Invitados (Aforo Total) *
+                {isConsumo ? "Asistentes Estimados (Referencial)" : "Número de Invitados (Aforo Total) *"}
               </label>
               <span className="font-mono text-base font-bold text-primary">
                 {guestCount} personas
@@ -457,9 +467,17 @@ export default function CotizadorForm({
               </span>
             </div>
 
-            {/* NOTA CLAVE DE NEGOCIO: Niños y adultos cuentan */}
+            {/* NOTA CLAVE DE NEGOCIO */}
             <div className="rounded-lg bg-surface-container p-2.5 text-[11px] leading-relaxed text-on-surface-variant border border-outline-variant">
-              💡 <strong className="text-on-surface">Regla de Aforo Total:</strong> Barra Libre se cotiza por el 100% de asistentes al evento (incluyendo niños y adultos sin excepción), dado que consumen refrescos, jugos, aguas minerales, hielo y cristalería.
+              {isConsumo ? (
+                <>
+                  🍸 <strong className="text-on-surface">Barra a Consumo:</strong> En esta modalidad el producto <span className="underline font-semibold">no se cobra por adelantado</span>. Solo se cubren las horas pactadas ($250/hr) y viáticos para apartar y congelar la fecha. El producto que se consuma se liquida al concluir el evento.
+                </>
+              ) : (
+                <>
+                  💡 <strong className="text-on-surface">Regla de Aforo Total:</strong> Barra Libre se cotiza por el 100% de asistentes al evento (incluyendo niños y adultos sin excepción), dado que consumen refrescos, jugos, aguas minerales, hielo y cristalería.
+                </>
+              )}
             </div>
           </div>
 
@@ -539,57 +557,140 @@ export default function CotizadorForm({
 
           {/* Desglose de conceptos */}
           <div className="space-y-2.5 text-xs">
-            <div className="flex justify-between">
-              <span className="text-on-surface-variant">
-                {modality === "libre" ? "Barra Libre (base 4 hrs):" : "Atención + Consumo estimado:"}
-              </span>
-              <span className="font-mono font-semibold text-on-surface">
-                ${baseServiceCost.toLocaleString("es-MX")} MXN
-              </span>
-            </div>
+            {isConsumo ? (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">
+                    Atención de Barra ({durationHours} hrs × $250/hr):
+                  </span>
+                  <span className="font-mono font-semibold text-on-surface">
+                    ${atencionCost.toLocaleString("es-MX")} MXN
+                  </span>
+                </div>
 
-            {extraHours > 0 && (
-              <div className="flex justify-between">
-                <span className="text-on-surface-variant">
-                  Horas Extra ({extraHours} hr{extraHours > 1 ? "s" : ""}):
-                </span>
-                <span className="font-mono font-semibold text-on-surface">
-                  +${extraHoursCost.toLocaleString("es-MX")} MXN
-                </span>
-              </div>
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">
+                    Viáticos ({selectedViatico.label.split("(")[0]}):
+                  </span>
+                  <span className="font-mono font-semibold text-on-surface">
+                    +${selectedViatico.cost.toLocaleString("es-MX")} MXN
+                  </span>
+                </div>
+
+                <div className="border-t border-outline-variant pt-3 space-y-1">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-sm font-bold text-on-surface">Total Fijo para Congelar:</span>
+                    <span className="font-mono text-2xl font-black text-primary">
+                      ${totalAmount.toLocaleString("es-MX")} <span className="text-xs font-normal">MXN</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Anticipo para apartar */}
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-1">
+                  <div className="flex justify-between text-xs font-bold text-emerald-400">
+                    <span>Monto para Congelar Fecha:</span>
+                    <span className="font-mono text-sm">
+                      ${depositRequired.toLocaleString("es-MX")} MXN
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-emerald-400/80">
+                    <span>Saldo de atención y viáticos:</span>
+                    <span className="font-mono">$0 MXN (100% cubierto)</span>
+                  </div>
+                </div>
+
+                {/* Producto a Consumo */}
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-1.5">
+                  <div className="flex justify-between text-xs font-bold text-amber-400">
+                    <span>🍸 Producto Consumido:</span>
+                    <span>A liquidar en evento</span>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    No se cobra por adelantado. Se contabiliza y paga al finalizar el evento conforme a la lista oficial.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowPriceList((prev) => !prev)}
+                    className="text-xs font-bold text-primary hover:underline cursor-pointer block pt-1"
+                  >
+                    {showPriceList ? "Ocultar catálogo de precios ▲" : "Ver catálogo de precios por producto ▼"}
+                  </button>
+                </div>
+
+                {showPriceList && (
+                  <div className="rounded-xl border border-outline-variant bg-surface-container-low p-3 space-y-2 text-xs max-h-56 overflow-y-auto">
+                    <p className="font-bold text-[11px] uppercase tracking-wider text-on-surface">
+                      Tarifario Oficial por Producto:
+                    </p>
+                    <div className="space-y-1 text-[11px]">
+                      {CONSUMO_PRICES_CATALOG.map((p, idx) => (
+                        <div key={idx} className="flex justify-between border-b border-outline-variant/30 py-0.5">
+                          <span className="text-on-surface-variant">{p.item}</span>
+                          <span className="font-mono font-bold text-on-surface">
+                            ${p.price} <span className="text-[10px] font-normal text-on-surface-variant">/{p.unit}</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">
+                    Barra Libre (base 4 hrs):
+                  </span>
+                  <span className="font-mono font-semibold text-on-surface">
+                    ${baseServiceCost.toLocaleString("es-MX")} MXN
+                  </span>
+                </div>
+
+                {extraHours > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-on-surface-variant">
+                      Horas Extra ({extraHours} hr{extraHours > 1 ? "s" : ""}):
+                    </span>
+                    <span className="font-mono font-semibold text-on-surface">
+                      +${extraHoursCost.toLocaleString("es-MX")} MXN
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">
+                    Viáticos ({selectedViatico.label.split("(")[0]}):
+                  </span>
+                  <span className="font-mono font-semibold text-on-surface">
+                    +${selectedViatico.cost.toLocaleString("es-MX")} MXN
+                  </span>
+                </div>
+
+                <div className="border-t border-outline-variant pt-3 space-y-1">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-sm font-bold text-on-surface">Total Inversión:</span>
+                    <span className="font-mono text-2xl font-black text-primary">
+                      ${totalAmount.toLocaleString("es-MX")} <span className="text-xs font-normal">MXN</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Anticipo del 50% */}
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-1">
+                  <div className="flex justify-between text-xs font-bold text-emerald-400">
+                    <span>Anticipo para Apartar (50%):</span>
+                    <span className="font-mono text-sm">
+                      ${depositRequired.toLocaleString("es-MX")} MXN
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-emerald-400/80">
+                    <span>Saldo el día del evento:</span>
+                    <span className="font-mono">${balanceRemaining.toLocaleString("es-MX")} MXN</span>
+                  </div>
+                </div>
+              </>
             )}
-
-            <div className="flex justify-between">
-              <span className="text-on-surface-variant">
-                Viáticos ({selectedViatico.label.split("(")[0]}):
-              </span>
-              <span className="font-mono font-semibold text-on-surface">
-                +${selectedViatico.cost.toLocaleString("es-MX")} MXN
-              </span>
-            </div>
-
-            <div className="border-t border-outline-variant pt-3 space-y-1">
-              <div className="flex justify-between items-baseline">
-                <span className="text-sm font-bold text-on-surface">Total Inversión:</span>
-                <span className="font-mono text-2xl font-black text-primary">
-                  ${totalAmount.toLocaleString("es-MX")} <span className="text-xs font-normal">MXN</span>
-                </span>
-              </div>
-            </div>
-
-            {/* Anticipo del 50% */}
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-1">
-              <div className="flex justify-between text-xs font-bold text-emerald-400">
-                <span>Anticipo para Apartar (50%):</span>
-                <span className="font-mono text-sm">
-                  ${depositRequired.toLocaleString("es-MX")} MXN
-                </span>
-              </div>
-              <div className="flex justify-between text-[11px] text-emerald-400/80">
-                <span>Saldo el día del evento:</span>
-                <span className="font-mono">${balanceRemaining.toLocaleString("es-MX")} MXN</span>
-              </div>
-            </div>
           </div>
 
           {/* Reglas de contratación clave */}
