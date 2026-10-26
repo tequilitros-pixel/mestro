@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { rawPrisma as prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
   parseDateOnly,
@@ -173,9 +173,10 @@ function scheduledHoursOf(startTime: string, endTime: string) {
 
 /**
  * Función interna cacheada que realiza todas las consultas costosas a la
- * base de datos. No contiene lógica de autenticación (las cookies no son
- * accesibles dentro de `unstable_cache`). El caché se invalida
- * automáticamente cuando cambia cualquier dato de nómina mediante
+ * base de datos. Usa el cliente sin contexto porque el cliente contextual
+ * resuelve al usuario desde cookies; eso tampoco se permite dentro de
+ * `unstable_cache`. El acceso administrativo se valida antes de llamarla.
+ * El caché se invalida automáticamente cuando cambia cualquier dato de nómina mediante
  * `revalidateTag('payroll-analytics')`.
  */
 const fetchPayrollAnalyticsData = unstable_cache(
