@@ -68,6 +68,11 @@ test("la ruta de ventas resumen no es interceptada por la entrada de POSpress", 
     false,
     "las pantallas reales bajo /pos deben permanecer accesibles",
   );
+  assert.equal(
+    redirects.some((redirect) => redirect.source === "/administration/pos2/:path*"),
+    false,
+    "el panel y sus módulos administrativos POS 2.0 deben permanecer accesibles",
+  );
 });
 
 test("cada permiso configurable tiene una pestaña y se resuelve exactamente", () => {

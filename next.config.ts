@@ -17,11 +17,6 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
-        source: "/administration/pos2/:path*",
-        destination: "/pospress",
-        permanent: true,
-      },
-      {
         source: "/workforce-v1/:path*",
         destination: "/workforce/:path*",
         permanent: true,
