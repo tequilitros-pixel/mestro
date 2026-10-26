@@ -14,6 +14,14 @@ const statusLabels: Record<string, string> = {
 
 export default async function EventsPage() {
   const events = await prisma.serviceEvent.findMany({
+    where: {
+      NOT: {
+        AND: [
+          { code: { startsWith: "COT-" } },
+          { status: "DRAFT" },
+        ],
+      },
+    },
     orderBy: { eventDate: "desc" },
     include: { package: true, equipmentKit: true },
   });
