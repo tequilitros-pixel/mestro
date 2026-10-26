@@ -25,6 +25,7 @@ import {
   type PendingTabLine,
 } from "@/lib/offline/pending-tabs";
 import PostSaleModal from "./PostSaleModal";
+import PosVariantPickerModal from "./PosVariantPickerModal";
 import type { ReceiptData } from "./ReceiptTicket";
 
 type Variant = {
@@ -869,8 +870,9 @@ export default function PosSellClient({
       </div>
 
       {variantPicker && (
-        <VariantPickerModal
+        <PosVariantPickerModal
           product={variantPicker}
+          formatPrice={formatCurrency}
           onSelect={(variant) => {
             addVariant(variantPicker, variant);
             setVariantPicker(null);
@@ -1043,38 +1045,7 @@ export default function PosSellClient({
   );
 }
 
-function VariantPickerModal({
-  product,
-  onSelect,
-  onClose,
-}: {
-  product: Product;
-  onSelect: (variant: Variant) => void;
-  onClose: () => void;
-}) {
-  return (
-    <ModalShell title={product.name} onClose={onClose}>
-      <div className="space-y-2">
-        {product.variants
-          .filter((v) => v.active)
-          .map((variant) => (
-            <button
-              key={variant.id}
-              onClick={() => onSelect(variant)}
-              className="flex w-full items-center justify-between rounded-xl border border-outline-variant p-3 text-left transition hover:border-primary"
-            >
-              <span className="text-sm font-semibold text-on-surface">
-                {variant.name}
-              </span>
-              <span className="text-sm text-on-surface-variant">
-                {formatCurrency(variant.price)}
-              </span>
-            </button>
-          ))}
-      </div>
-    </ModalShell>
-  );
-}
+
 
 function CustomChargeModal({
   onAdd,

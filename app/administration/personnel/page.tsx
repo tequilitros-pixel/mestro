@@ -384,7 +384,7 @@ export default function PersonnelPage() {
                                               </button>
                                               <Link
                                                 href={`/administration/personnel/${u.id}/permissions`}
-                                                className="text-xs font-semibold text-on-surface-variant transition hover:text-primary"
+                                                className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary transition hover:bg-primary/20"
                                               >
                                                 Permisos
                                               </Link>

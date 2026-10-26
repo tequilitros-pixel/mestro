@@ -1,5 +1,6 @@
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { headers } from "next/headers";
+import { requireModuleAccess } from "@/lib/auth";
+import { getModuleKeyForPath } from "@/lib/permission-modules";
 
 export const metadata = {
   title: "Cotizador Tequilitros | Maestro",
@@ -11,10 +12,11 @@ export default async function CotizadorLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getCurrentUser();
-  if (!user) {
-    redirect("/login");
-  }
+  const headersList = await headers();
+  const pathname = headersList.get("x-pathname") ?? "/cotizador-tequilitros";
+  const moduleKey = getModuleKeyForPath(pathname) ?? "/cotizador-tequilitros";
+
+  await requireModuleAccess(moduleKey);
 
   return (
     <div className="min-h-screen bg-background text-on-surface">

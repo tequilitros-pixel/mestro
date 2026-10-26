@@ -185,7 +185,8 @@ export const MAIN_MODULES: MainModule[] = [
 
 export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
   accounting: [
-    { href: "/accounting", label: "Contabilidad", icon: ReceiptIcon, iconVariant: "amber" },
+    { href: "/accounting", label: "Contabilidad", icon: ReceiptIcon, iconVariant: "amber", permissionKey: "/accounting" },
+    { href: "/administration/financial-categories", label: "Categorías", icon: TagIcon, iconVariant: "amber", permissionKey: "/administration/financial-categories" },
   ],
   production: [
     {
@@ -193,12 +194,14 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "Planta",
       icon: FactoryIcon,
       iconVariant: "slate",
+      permissionKey: "/plant",
     },
     {
       href: "/lots",
       label: "Lotes",
       icon: PackageIcon,
       iconVariant: "purple",
+      permissionKey: "/lots",
     },
     {
       href: "/cooking",
@@ -206,6 +209,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: FlameIcon,
       iconVariant: "orange",
       operatorAllowed: true,
+      permissionKey: "/cooking",
     },
     {
       href: "/boiler",
@@ -213,6 +217,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: FlameIcon,
       iconVariant: "orange",
       operatorAllowed: true,
+      permissionKey: "/boiler",
     },
     {
       href: "/milling",
@@ -220,6 +225,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: GearIcon,
       iconVariant: "blue",
       operatorAllowed: true,
+      permissionKey: "/milling",
     },
     {
       href: "/fermentation",
@@ -227,6 +233,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: FlaskIcon,
       iconVariant: "green",
       operatorAllowed: true,
+      permissionKey: "/fermentation",
     },
     {
       href: "/distillation",
@@ -234,18 +241,34 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: GlassWaterIcon,
       iconVariant: "purple",
       operatorAllowed: true,
+      children: [
+        {
+          href: "/distillation",
+          label: "Destilación",
+          icon: GlassWaterIcon,
+          permissionKey: "/distillation",
+        },
+        {
+          href: "/distillation/statistics",
+          label: "Estadísticas",
+          icon: ChartLineIcon,
+          permissionKey: "/distillation/statistics",
+        },
+      ],
     },
     {
       href: "/costs",
       label: "Costos",
       icon: CoinsIcon,
       iconVariant: "green",
+      permissionKey: "/costs",
     },
     {
       href: "/control-room",
       label: "Sala",
       icon: BrainIcon,
       iconVariant: "cyan",
+      permissionKey: "/control-room",
     },
   ],
 
@@ -255,24 +278,28 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "Inicio",
       icon: HomeIcon,
       iconVariant: "blue",
+      permissionKey: "/liquors",
     },
     {
       href: "/liquors/recipes",
       label: "Recetas",
       icon: BookIcon,
       iconVariant: "purple",
+      permissionKey: "/liquors/recipes",
     },
     {
       href: "/liquors/raw-materials",
       label: "Materia prima",
       icon: FlaskIcon,
       iconVariant: "green",
+      permissionKey: "/liquors/raw-materials",
     },
     {
       href: "/liquors/batches",
       label: "Lotes",
       icon: TagIcon,
       iconVariant: "purple",
+      permissionKey: "/liquors/batches",
     },
     {
       href: "/liquors/production",
@@ -284,12 +311,13 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
           href: "/liquors/production",
           label: "Proceso de elaboración",
           icon: MartiniIcon,
+          permissionKey: "/liquors/production",
         },
         {
           href: "/liquors/production/labels",
           label: "Crear etiquetas",
           icon: PrinterIcon,
-          permissionKey: "/liquors/qr",
+          permissionKey: "/liquors/production/labels",
         },
       ],
     },
@@ -298,24 +326,28 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "Embotellado",
       icon: BottleIcon,
       iconVariant: "cyan",
+      permissionKey: "/liquors/bottling",
     },
     {
       href: "/liquors/inventory",
       label: "Inventario",
       icon: PackageIcon,
       iconVariant: "orange",
+      permissionKey: "/liquors/inventory",
     },
     {
       href: "/liquors/qr",
       label: "QR",
       icon: QrIcon,
       iconVariant: "slate",
+      permissionKey: "/liquors/qr",
     },
     {
       href: "/liquors/expiration",
       label: "Caducidad",
       icon: CalendarIcon,
       iconVariant: "amber",
+      permissionKey: "/liquors/expiration",
     },
   ],
 
@@ -325,18 +357,21 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "Inicio",
       icon: HomeIcon,
       iconVariant: "blue",
+      permissionKey: "/cash-cuts",
     },
     {
       href: "/cash-cuts/branches",
       label: "Sucursales",
       icon: StoreIcon,
       iconVariant: "orange",
+      permissionKey: "/cash-cuts/branches",
     },
     {
       href: "/cash-cuts/daily",
       label: "Cortes",
       icon: WalletIcon,
       iconVariant: "green",
+      permissionKey: "/cash-cuts/daily",
     },
     {
       href: "/cash-cuts/dashboard",
@@ -348,31 +383,37 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
           href: "/cash-cuts/dashboard",
           label: "Dashboard",
           icon: ChartLineIcon,
+          permissionKey: "/cash-cuts/dashboard",
         },
         {
           href: "/cash-cuts/expenses",
           label: "Salidas",
           icon: UploadIcon,
+          permissionKey: "/cash-cuts/expenses",
         },
         {
           href: "/cash-cuts/envelopes",
           label: "Sobres",
           icon: MailIcon,
+          permissionKey: "/cash-cuts/envelopes",
         },
         {
           href: "/cash-cuts/safe",
           label: "Caja fuerte",
           icon: LockIcon,
+          permissionKey: "/cash-cuts/safe",
         },
         {
           href: "/cash-cuts/audit",
           label: "Auditoría",
           icon: SearchIcon,
+          permissionKey: "/cash-cuts/audit",
         },
         {
           href: "/cash-cuts/history",
           label: "Historial",
           icon: ChartBarIcon,
+          permissionKey: "/cash-cuts/history",
         },
       ],
     },
@@ -405,35 +446,49 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "Mesas",
       icon: StoreIcon,
       iconVariant: "purple",
-      permissionKey: "/pos",
+      permissionKeys: ["/pos", "/pospress/tables"],
     },
     {
       href: "/pospress/pending-tabs",
       label: "Cuentas pendientes",
       icon: ClockIcon,
       iconVariant: "amber",
-      permissionKey: "/pos",
+      permissionKeys: ["/pos", "/pospress/pending-tabs"],
     },
     {
       href: "/pospress/catalog",
       label: "Editor de productos",
       icon: PackageIcon,
       iconVariant: "orange",
-      permissionKey: "/pos",
+      permissionKey: "/pospress/catalog",
     },
     {
       href: "/pospress/recipes",
       label: "Recetas POS",
       icon: BookIcon,
       iconVariant: "purple",
-      permissionKey: "/pos",
+      permissionKey: "/pospress/recipes",
     },
     {
       href: "/pospress/discounts",
       label: "Editor de descuentos",
       icon: TagIcon,
       iconVariant: "blue",
-      permissionKey: "/pos",
+      permissionKey: "/pospress/discounts",
+    },
+    {
+      href: "/pos/settings",
+      label: "Configuración POS",
+      icon: GearIcon,
+      iconVariant: "slate",
+      permissionKey: "/pos/settings",
+    },
+    {
+      href: "/administration/pos2",
+      label: "POS v2 Admin",
+      icon: CashRegisterIcon,
+      iconVariant: "cyan",
+      permissionKey: "/administration/pos2",
     },
   ],
 
@@ -443,18 +498,21 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "Inicio",
       icon: HomeIcon,
       iconVariant: "blue",
+      permissionKey: "/administration/inventory",
     },
     {
       href: "/administration/inventory/products",
       label: "Productos",
       icon: PackageIcon,
       iconVariant: "orange",
+      permissionKey: "/administration/inventory/products",
     },
     {
       href: "/administration/inventory/branch-counts/statistics",
       label: "Dashboard de conteos semanales",
       icon: ChartLineIcon,
       iconVariant: "blueDeep",
+      permissionKey: "/administration/inventory/branch-counts/statistics",
     },
     {
       href: "/administration/inventory/eventos",
@@ -466,21 +524,25 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
           href: "/administration/inventory/eventos",
           label: "Resumen",
           icon: PartyIcon,
+          permissionKey: "/administration/inventory/eventos",
         },
         {
           href: "/administration/inventory/event-packages",
           label: "Paquetes de eventos",
           icon: MartiniIcon,
+          permissionKey: "/administration/inventory/event-packages",
         },
         {
           href: "/administration/inventory/equipment-kits",
           label: "Modalidades de equipo",
           icon: ToolboxIcon,
+          permissionKey: "/administration/inventory/equipment-kits",
         },
         {
           href: "/administration/inventory/events",
           label: "Eventos",
           icon: ClipboardIcon,
+          permissionKey: "/administration/inventory/events",
         },
       ],
     },
@@ -494,31 +556,37 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
           href: "/administration/inventory/sucursales",
           label: "Resumen",
           icon: StoreIcon,
+          permissionKey: "/administration/inventory/sucursales",
         },
         {
           href: "/administration/inventory/sucursales/stock",
           label: "Stock actual",
           icon: ChartBarIcon,
+          permissionKey: "/administration/inventory/sucursales/stock",
         },
         {
           href: "/administration/inventory/branch-entries",
           label: "Entradas y ajustes",
           icon: InboxIcon,
+          permissionKey: "/administration/inventory/branch-entries",
         },
         {
           href: "/administration/inventory/sucursales/traspasos",
           label: "Traspasos",
           icon: ArrowsRangeIcon,
+          permissionKey: "/administration/inventory/sucursales/traspasos",
         },
         {
           href: "/administration/inventory/branch-counts",
           label: "Conteos semanales",
           icon: ListChecksIcon,
+          permissionKey: "/administration/inventory/branch-counts",
         },
         {
           href: "/administration/inventory/branch-counts/statistics",
           label: "Resumen de conteos",
           icon: ChartLineIcon,
+          permissionKey: "/administration/inventory/branch-counts/statistics",
         },
       ],
     },
@@ -531,6 +599,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: CalendarIcon,
       iconVariant: "green",
       operatorAllowed: true,
+      permissionKey: "/timeclock",
     },
     {
       href: "/timeclock/calendar",
@@ -538,6 +607,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: ClockIcon,
       iconVariant: "blue",
       operatorAllowed: true,
+      permissionKey: "/timeclock/calendar",
     },
     {
       href: "/timeclock/availability",
@@ -545,6 +615,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: CalendarIcon,
       iconVariant: "amber",
       operatorAllowed: true,
+      permissionKey: "/timeclock/availability",
     },
     {
       href: "/timeclock/hours",
@@ -552,37 +623,65 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: CalendarIcon,
       iconVariant: "green",
       operatorAllowed: true,
+      permissionKey: "/timeclock/hours",
+    },
+    {
+      href: "/timeclock/history",
+      label: "Historial de turnos",
+      icon: ClockIcon,
+      iconVariant: "blue",
+      operatorAllowed: true,
+      permissionKey: "/timeclock/history",
+    },
+    {
+      href: "/timeclock/requests",
+      label: "Solicitudes",
+      icon: InboxIcon,
+      iconVariant: "amber",
+      operatorAllowed: true,
+      permissionKey: "/timeclock/requests",
+    },
+    {
+      href: "/timeclock/kiosk",
+      label: "Kiosco",
+      icon: StoreIcon,
+      iconVariant: "purple",
+      permissionKey: "/timeclock/kiosk",
     },
     {
       href: "/administration/personnel",
       label: "Empleados",
       icon: UsersIcon,
       iconVariant: "purple",
+      permissionKey: "/administration/personnel",
     },
     {
       href: "/administration/schedule",
       label: "Horarios",
       icon: CalendarIcon,
       iconVariant: "purple",
+      permissionKey: "/administration/schedule",
     },
     {
       href: "/administration/personnel/timeclock",
       label: "Asistencia y correcciones",
       icon: ListChecksIcon,
       iconVariant: "amber",
-    },
-    {
-      href: "/timeclock/payroll",
-      label: "Pagos",
-      icon: DollarIcon,
-      iconVariant: "green",
-      operatorAllowed: true,
+      permissionKey: "/administration/personnel/timeclock",
     },
     {
       href: "/timeclock/geofences",
       label: "Geozonas",
       icon: MapPinIcon,
       iconVariant: "cyan",
+      permissionKey: "/timeclock/geofences",
+    },
+    {
+      href: "/administration/workforce",
+      label: "Portal Workforce",
+      icon: UsersIcon,
+      iconVariant: "blue",
+      permissionKey: "/administration/workforce",
     },
   ],
 
@@ -592,12 +691,28 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       label: "Usuarios y permisos",
       icon: UsersIcon,
       iconVariant: "purple",
+      permissionKey: "/administration/personnel",
+    },
+    {
+      href: "/administration/schedule",
+      label: "Horarios",
+      icon: CalendarIcon,
+      iconVariant: "purple",
+      permissionKey: "/administration/schedule",
     },
     {
       href: "/administration/personnel/notifications",
       label: "Notificaciones",
       icon: BellIcon,
       iconVariant: "amber",
+      permissionKey: "/administration/personnel/notifications",
+    },
+    {
+      href: "/administration/workforce",
+      label: "Workforce",
+      icon: ToolboxIcon,
+      iconVariant: "blue",
+      permissionKey: "/administration/workforce",
     },
   ],
 
@@ -608,6 +723,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: PartyIcon,
       iconVariant: "orange",
       operatorAllowed: true,
+      permissionKey: "/cotizador-tequilitros",
     },
     {
       href: "/cotizador-tequilitros/calendario",
@@ -615,6 +731,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: CalendarIcon,
       iconVariant: "amber",
       operatorAllowed: true,
+      permissionKey: "/cotizador-tequilitros/calendario",
     },
     {
       href: "/cotizador-tequilitros/historial",
@@ -622,6 +739,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: ListChecksIcon,
       iconVariant: "blue",
       operatorAllowed: true,
+      permissionKey: "/cotizador-tequilitros/historial",
     },
     {
       href: "/cotizador-tequilitros/contratos",
@@ -629,6 +747,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: ClipboardIcon,
       iconVariant: "purple",
       operatorAllowed: true,
+      permissionKey: "/cotizador-tequilitros/contratos",
     },
   ],
 };
@@ -743,12 +862,19 @@ export function isSubmenuItemVisible(
     return isInventoryCountCaptureRole(role);
   }
 
-  // Compatibilidad con operadores antiguos: si todavía no tienen permisos
-  // configurados conservan su acceso fijo de producción. En cuanto el admin
-  // les asigna permisos, se respeta exactamente esa configuración.
+  // Compatibilidad con operadores/usuarios antiguos si todavía no tienen permisos
+  // configurados. En cuanto el admin les asigna permisos, se respeta esa configuración.
   const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);
-  if (role === "OPERATOR" && !hasConfiguredPermissions) {
-    return item.href === "/" || item.operatorAllowed === true;
+  if (!hasConfiguredPermissions) {
+    if (role === "OPERATOR") {
+      return item.href === "/" || item.operatorAllowed === true;
+    }
+    if (role === "GERENTE" && isInventoryManagerReadPath(item.href)) {
+      return true;
+    }
+    if (isAlwaysAvailablePath(item.href)) {
+      return true;
+    }
   }
 
   /*
@@ -762,9 +888,8 @@ export function isSubmenuItemVisible(
     );
   }
 
-  if (isAlwaysAvailablePath(item.href)) return true;
   if (isAdminOnlyPath(item.href)) return false;
-  if (role === "GERENTE" && isInventoryManagerReadPath(item.href)) return true;
+  if (!hasConfiguredPermissions && isAlwaysAvailablePath(item.href)) return true;
 
   const permissionHref = item.permissionKey ?? item.href;
   const requiredKeys = item.permissionKeys ?? [
@@ -775,7 +900,15 @@ export function isSubmenuItemVisible(
 
   // Se compara el permiso resuelto de forma exacta para que cada módulo
   // herede únicamente el permiso que le corresponde.
-  return requiredKeys.some((requiredKey) => moduleKeys.includes(requiredKey));
+  return requiredKeys.some((requiredKey) => {
+    if (!requiredKey) return false;
+    if (moduleKeys.includes(requiredKey)) return true;
+    if (requiredKey === "/pos" && moduleKeys.includes("/pospress")) return true;
+    if (requiredKey === "/pospress" && moduleKeys.includes("/pos")) return true;
+    if (requiredKey === "/administration/inventory" && moduleKeys.includes("/administration")) return true;
+    if (requiredKey === "/administration" && moduleKeys.includes("/administration/inventory")) return true;
+    return false;
+  });
 }
 
 export function isMainModuleVisible(
@@ -787,13 +920,11 @@ export function isMainModuleVisible(
 
   const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);
   if (role === "OPERATOR" && !hasConfiguredPermissions) {
-    // El operador conserva su acceso fijo de producción y cotizador universal.
+    // El operador conserva su acceso fijo de producción y cotizador universal si no tiene matriz.
     return module.module === "production" || module.module === "tequilitros-quote";
   }
 
   if (module.module === "home") return true;
-  if (module.module === "timeclock") return true;
-  if (module.module === "tequilitros-quote") return true;
 
   const items = SUBMENUS[module.module as Exclude<AppModule, "home">] ?? [];
 

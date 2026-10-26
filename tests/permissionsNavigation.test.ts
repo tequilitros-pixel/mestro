@@ -5,6 +5,7 @@ import {
   getModuleKeyForPath,
   isAdminOnlyPath,
   isAlwaysAvailablePath,
+  isConfigurablePermissionKey,
 } from "../lib/permission-modules";
 import {
   MAIN_MODULES,
@@ -144,12 +145,13 @@ test("Cortes activa su módulo principal sin conceder las demás pantallas", () 
   assert.deepEqual(visible, ["Cortes"]);
 });
 
-test("el historial de cortes queda reservado a administración", () => {
+test("el historial de cortes es configurable por permiso", () => {
   const history = SUBMENUS["cash-cuts"]
     .find((item) => item.label === "Control")!
     .children!.find((item) => item.href === "/cash-cuts/history")!;
-  assert.equal(isAdminOnlyPath(history.href), true);
-  assert.equal(isSubmenuItemVisible("GERENTE", ["/cash-cuts/safe", "/cash-cuts/history"], history), false);
+  assert.equal(isConfigurablePermissionKey(history.href), true);
+  assert.equal(isSubmenuItemVisible("GERENTE", ["/cash-cuts/safe"], history), false);
+  assert.equal(isSubmenuItemVisible("GERENTE", ["/cash-cuts/safe", "/cash-cuts/history"], history), true);
   assert.equal(isSubmenuItemVisible("ADMIN", [], history), true);
 });
 

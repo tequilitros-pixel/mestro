@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { ComponentType } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { getUserModuleKeys } from "@/app/actions/permissions";
+import { canAccessModule } from "@/lib/permission-modules";
 import { getActiveProcesses } from "@/lib/brain/data/getActiveProcesses";
 import { getRecordingStatus } from "@/lib/brain/getRecordingStatus";
 import { prisma } from "@/lib/prisma";
@@ -17,6 +19,8 @@ import {
   CalendarIcon,
   CashRegisterIcon,
   UsersIcon,
+  ReceiptIcon,
+  PartyIcon,
   AlertIcon,
   InfoIcon,
   CheckIcon,
@@ -42,21 +46,92 @@ export default async function HomePage() {
     redirect("/login");
   }
 
+  const moduleKeys =
+    user.role !== "ADMIN" ? await getUserModuleKeys(user.id) : [];
+
+  const hasAccess = (key: string) => canAccessModule(user.role, moduleKeys, key);
+
+  // Verificación de acceso por área para no exponer información confidencial
+  const canSeeTequila =
+    hasAccess("/plant") ||
+    hasAccess("/lots") ||
+    hasAccess("/cooking") ||
+    hasAccess("/fermentation") ||
+    hasAccess("/distillation") ||
+    hasAccess("/boiler") ||
+    hasAccess("/milling");
+
+  const canSeeLiquors =
+    hasAccess("/liquors") ||
+    hasAccess("/liquors/production") ||
+    hasAccess("/liquors/batches") ||
+    hasAccess("/liquors/inventory") ||
+    hasAccess("/liquors/bottling") ||
+    hasAccess("/liquors/recipes");
+
+  const canSeeCash =
+    hasAccess("/cash-cuts") ||
+    hasAccess("/cash-cuts/daily") ||
+    hasAccess("/cash-cuts/dashboard") ||
+    hasAccess("/cash-cuts/envelopes") ||
+    hasAccess("/cash-cuts/safe");
+
+  const canSeeInventory =
+    hasAccess("/administration/inventory") ||
+    hasAccess("/administration/inventory/products") ||
+    hasAccess("/administration/inventory/sucursales") ||
+    hasAccess("/administration/inventory/events");
+
+  const canSeePos =
+    hasAccess("/pos") ||
+    hasAccess("/pospress") ||
+    hasAccess("/pos/sales");
+
+  const canSeeTimeclock =
+    hasAccess("/timeclock") ||
+    hasAccess("/timeclock/hours") ||
+    hasAccess("/timeclock/availability");
+
+  const canSeeSchedule =
+    hasAccess("/administration/schedule") ||
+    hasAccess("/timeclock/calendar");
+
+  const canSeePersonnel =
+    hasAccess("/administration/personnel") ||
+    hasAccess("/administration/workforce");
+
+  const canSeeAccounting = hasAccess("/accounting");
+  const canSeeCotizador = hasAccess("/cotizador-tequilitros");
+
   const scheduleCardHref =
-    user.role === "ADMIN" ? "/administration/schedule" : "/timeclock/calendar";
-  const scheduleCardTitle = user.role === "ADMIN" ? "Horario" : "Mi horario";
+    user.role === "ADMIN" || hasAccess("/administration/schedule")
+      ? "/administration/schedule"
+      : "/timeclock/calendar";
+
+  const scheduleCardTitle =
+    user.role === "ADMIN" || hasAccess("/administration/schedule")
+      ? "Horario"
+      : "Mi horario";
+
   const scheduleCardDescription =
-    user.role === "ADMIN"
+    user.role === "ADMIN" || hasAccess("/administration/schedule")
       ? "Edita, revisa y publica los turnos por empleado o sucursal."
       : "Consulta tu horario publicado y tus turnos de trabajo.";
 
-  const processes = await getActiveProcesses();
+  // Carga condicional: solo consulta procesos de planta si el usuario tiene permiso de tequila
+  const processes = canSeeTequila ? await getActiveProcesses() : null;
   const [recordingStatus, expiringBottles, lotsCount] = await Promise.all([
-    getRecordingStatus(processes),
-    getExpiringBottles(),
-    prisma.lot.count(),
+    processes ? getRecordingStatus(processes) : null,
+    canSeeLiquors ? getExpiringBottles() : [],
+    canSeeTequila ? prisma.lot.count() : 0,
   ]);
-  const { cookings, millings, fermentations, distillations } = processes;
+
+  const activeProcesses = processes
+    ? processes.cookings.length +
+      processes.millings.length +
+      processes.fermentations.length +
+      processes.distillations.length
+    : 0;
 
   const now = new Date();
 
@@ -90,13 +165,10 @@ export default async function HomePage() {
 
   const firstName = user.name.trim().split(/\s+/)[0] || "equipo";
 
-  const activeProcesses =
-    cookings.length +
-    millings.length +
-    fermentations.length +
-    distillations.length;
-
-  const alerts = buildAlerts(recordingStatus, expiringBottles);
+  const alerts = buildAlerts(
+    canSeeTequila ? recordingStatus : null,
+    canSeeLiquors ? expiringBottles : [],
+  );
 
   return (
     <main className="min-h-screen bg-background p-4 text-on-surface sm:p-6 lg:p-8">
@@ -118,155 +190,197 @@ export default async function HomePage() {
           <div className="mt-4 h-0.5 w-8 bg-primary/30" />
         </div>
 
-        {/* Alertas de operación */}
-        <section className="mb-8">
-          <div className="surface-sheen overflow-hidden rounded-xl border border-outline-variant bg-surface-container-high/40 backdrop-blur">
-            <div className="flex items-center justify-between border-b border-outline-variant px-4 py-3">
-              <h3 className="font-mono text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                Alertas de Operación
-              </h3>
+        {/* Alertas de operación: solo se muestran alertas de áreas permitidas */}
+        {(canSeeTequila || canSeeLiquors) && (
+          <section className="mb-8">
+            <div className="surface-sheen overflow-hidden rounded-xl border border-outline-variant bg-surface-container-high/40 backdrop-blur">
+              <div className="flex items-center justify-between border-b border-outline-variant px-4 py-3">
+                <h3 className="font-mono text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                  Alertas de Operación
+                </h3>
 
-              {alerts.length > 0 && (
-                <span className="flex h-2 w-2 rounded-full bg-error" />
-              )}
+                {alerts.length > 0 && (
+                  <span className="flex h-2 w-2 rounded-full bg-error" />
+                )}
+              </div>
+
+              <div className="flex flex-col divide-y divide-outline-variant">
+                {alerts.length === 0 ? (
+                  <div className="flex items-center gap-3 p-4">
+                    <CheckIcon className="h-5 w-5 shrink-0 text-tertiary-fixed-dim" />
+                    <p className="text-sm font-semibold text-primary">
+                      Todo en orden. Sin pendientes urgentes.
+                    </p>
+                  </div>
+                ) : (
+                  alerts.map((alert, i) => {
+                    const AlertGlyph = alert.icon;
+                    return (
+                      <Link
+                        key={i}
+                        href={alert.href}
+                        className="flex items-center gap-3 p-4 transition duration-150 ease-out hover:bg-surface-container-high/60"
+                      >
+                        <AlertGlyph
+                          className={`h-5 w-5 shrink-0 ${alert.iconClass}`}
+                        />
+
+                        <div className="flex-grow">
+                          <p className="text-sm font-semibold text-primary">
+                            {alert.title}
+                          </p>
+                          <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wide text-on-surface-variant">
+                            {alert.subtitle}
+                          </p>
+                        </div>
+
+                        <ChevronRightIcon className="h-4 w-4 shrink-0 text-on-surface-variant" />
+                      </Link>
+                    );
+                  })
+                )}
+              </div>
             </div>
+          </section>
+        )}
 
-            <div className="flex flex-col divide-y divide-outline-variant">
-              {alerts.length === 0 ? (
-                <div className="flex items-center gap-3 p-4">
-                  <CheckIcon className="h-5 w-5 shrink-0 text-tertiary-fixed-dim" />
-                  <p className="text-sm font-semibold text-primary">
-                    Todo en orden. Sin pendientes urgentes.
-                  </p>
-                </div>
-              ) : (
-                alerts.map((alert, i) => {
-                  const AlertGlyph = alert.icon;
-                  return (
-                    <Link
-                      key={i}
-                      href={alert.href}
-                      className="flex items-center gap-3 p-4 transition duration-150 ease-out hover:bg-surface-container-high/60"
-                    >
-                      <AlertGlyph
-                        className={`h-5 w-5 shrink-0 ${alert.iconClass}`}
-                      />
-
-                      <div className="flex-grow">
-                        <p className="text-sm font-semibold text-primary">
-                          {alert.title}
-                        </p>
-                        <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wide text-on-surface-variant">
-                          {alert.subtitle}
-                        </p>
-                      </div>
-
-                      <ChevronRightIcon className="h-4 w-4 shrink-0 text-on-surface-variant" />
-                    </Link>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </section>
-
-        {/* Módulos principales */}
+        {/* Módulos principales: solo renderiza aquellos autorizados para el usuario */}
         <section className="mb-8 grid gap-4 sm:grid-cols-2">
-          <ModuleCard
-            icon={FactoryIcon}
-            eyebrow="Proceso Maestro"
-            title="Producción de tequila"
-            description="Lotes, cocción, molienda, fermentación y destilación."
-            href="/plant"
-            status={activeProcesses > 0 ? "Operando" : "Disponible"}
-            featured
-          />
+          {canSeeTequila && (
+            <ModuleCard
+              icon={FactoryIcon}
+              eyebrow="Proceso Maestro"
+              title="Producción de tequila"
+              description="Lotes, cocción, molienda, fermentación y destilación."
+              href="/plant"
+              status={activeProcesses > 0 ? "Operando" : "Disponible"}
+              featured
+            />
+          )}
 
-          <ModuleCard
-            icon={FlaskIcon}
-            eyebrow="Especialidades"
-            title="Elaboración de licores"
-            description="Recetas, lotes, producción, embotellado y caducidad."
-            href="/liquors"
-            status="Disponible"
-            featured
-          />
-
-          <ModuleCard
-            icon={WalletIcon}
-            eyebrow="Operación Tequilitros"
-            title="Cortes de caja"
-            description="Sucursales, ventas, salidas, sobres y caja fuerte."
-            href="/cash-cuts"
-            status="Disponible"
-          />
-
-          <ModuleCard
-            icon={PackageIcon}
-            eyebrow="Eventos y sucursales"
-            title="Inventario"
-            description="Productos, paquetes, equipo, eventos y conteos."
-            href="/administration/inventory"
-            status="Disponible"
-          />
-
-          <ModuleCard
-            icon={CashRegisterIcon}
-            eyebrow="Operación de ventas"
-            title="Punto de Venta"
-            description="Cobros, mesas, transacciones y resumen de ventas."
-            href="/pospress"
-            status="Disponible"
-          />
-
-          <ModuleCard
-            icon={ClockIcon}
-            eyebrow="Entradas y salidas"
-            title="Checador"
-            description="Registra asistencia y consulta horas, pagos e historial."
-            href="/timeclock"
-            status="Disponible"
-          />
-
-          <ModuleCard
-            icon={CalendarIcon}
-            eyebrow="Personal, horarios y nómina"
-            title={scheduleCardTitle}
-            description={scheduleCardDescription}
-            href={scheduleCardHref}
-            status="Disponible"
-          />
-
-          <ModuleCard
-            icon={UsersIcon}
-            eyebrow="Equipo y permisos"
-            title="Personal"
-            description="Usuarios, sucursales, tarifas y permisos por módulo."
-            href="/administration/personnel"
-            status="Disponible"
-          />
-        </section>
-
-        {/* Resumen de planta */}
-        <section className="mb-6">
-          <h3 className="mb-4 text-center font-mono text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-            Resumen de Planta
-          </h3>
-
-          <div className="grid grid-cols-3 gap-2">
-            <PlantStat
+          {canSeeLiquors && (
+            <ModuleCard
               icon={FlaskIcon}
-              value={fermentations.length}
-              label="Fermentaciones"
+              eyebrow="Especialidades"
+              title="Elaboración de licores"
+              description="Recetas, lotes, producción, embotellado y caducidad."
+              href="/liquors"
+              status="Disponible"
+              featured
             />
-            <PlantStat
-              icon={FlameIcon}
-              value={distillations.length}
-              label="Destilaciones"
+          )}
+
+          {canSeeCash && (
+            <ModuleCard
+              icon={WalletIcon}
+              eyebrow="Operación Tequilitros"
+              title="Cortes de caja"
+              description="Sucursales, ventas, salidas, sobres y caja fuerte."
+              href="/cash-cuts"
+              status="Disponible"
             />
-            <PlantStat icon={PackageIcon} value={lotsCount} label="Lotes" />
-          </div>
+          )}
+
+          {canSeeInventory && (
+            <ModuleCard
+              icon={PackageIcon}
+              eyebrow="Eventos y sucursales"
+              title="Inventario"
+              description="Productos, paquetes, equipo, eventos y conteos."
+              href="/administration/inventory"
+              status="Disponible"
+            />
+          )}
+
+          {canSeePos && (
+            <ModuleCard
+              icon={CashRegisterIcon}
+              eyebrow="Operación de ventas"
+              title="Punto de Venta"
+              description="Cobros, mesas, transacciones y resumen de ventas."
+              href="/pospress"
+              status="Disponible"
+            />
+          )}
+
+          {canSeeTimeclock && (
+            <ModuleCard
+              icon={ClockIcon}
+              eyebrow="Entradas y salidas"
+              title="Checador"
+              description="Registra asistencia y consulta horas, pagos e historial."
+              href="/timeclock"
+              status="Disponible"
+            />
+          )}
+
+          {canSeeSchedule && (
+            <ModuleCard
+              icon={CalendarIcon}
+              eyebrow="Personal, horarios y nómina"
+              title={scheduleCardTitle}
+              description={scheduleCardDescription}
+              href={scheduleCardHref}
+              status="Disponible"
+            />
+          )}
+
+          {canSeePersonnel && (
+            <ModuleCard
+              icon={UsersIcon}
+              eyebrow="Equipo y permisos"
+              title="Personal"
+              description="Usuarios, sucursales, tarifas y permisos por módulo."
+              href="/administration/personnel"
+              status="Disponible"
+            />
+          )}
+
+          {canSeeAccounting && (
+            <ModuleCard
+              icon={ReceiptIcon}
+              eyebrow="Finanzas y caja"
+              title="Contabilidad"
+              description="Control de pagos, movimientos financieros y flujo de caja."
+              href="/accounting"
+              status="Disponible"
+            />
+          )}
+
+          {canSeeCotizador && (
+            <ModuleCard
+              icon={PartyIcon}
+              eyebrow="Eventos y barras"
+              title="Cotizador Tequilitros"
+              description="Cotizaciones de eventos, disponibilidad y contratos."
+              href="/cotizador-tequilitros"
+              status="Disponible"
+            />
+          )}
         </section>
+
+        {/* Resumen de planta: visible ÚNICAMENTE para usuarios con acceso a tequila */}
+        {canSeeTequila && processes && (
+          <section className="mb-6">
+            <h3 className="mb-4 text-center font-mono text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+              Resumen de Planta
+            </h3>
+
+            <div className="grid grid-cols-3 gap-2">
+              <PlantStat
+                icon={FlaskIcon}
+                value={processes.fermentations.length}
+                label="Fermentaciones"
+              />
+              <PlantStat
+                icon={FlameIcon}
+                value={processes.distillations.length}
+                label="Destilaciones"
+              />
+              <PlantStat icon={PackageIcon} value={lotsCount} label="Lotes" />
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );
@@ -289,9 +403,6 @@ async function getExpiringBottles() {
           batch: {
             include: { product: true },
           },
-
-          // El tequila blanco se embotella del granel y no tiene lote:
-          // el nombre a mostrar sale de la materia prima.
           rawMaterial: true,
         },
       },
@@ -300,44 +411,51 @@ async function getExpiringBottles() {
 }
 
 function buildAlerts(
-  recordingStatus: Awaited<ReturnType<typeof getRecordingStatus>>,
+  recordingStatus: Awaited<ReturnType<typeof getRecordingStatus>> | null,
   expiringBottles: Awaited<ReturnType<typeof getExpiringBottles>>,
 ): Alert[] {
   const alerts: Alert[] = [];
 
-  for (const c of recordingStatus.cooking) {
-    if (!c.isOverdue) continue;
-    alerts.push({
-      icon: AlertIcon,
-      iconClass: "text-secondary",
-      title: `${c.label} requiere lectura`,
-      subtitle: "Cocción · Acción requerida",
-      href: "/cooking",
-    });
-  }
+  if (recordingStatus) {
+    for (const c of recordingStatus.cooking) {
+      if (!c.isOverdue) continue;
+      alerts.push({
+        icon: AlertIcon,
+        iconClass: "text-secondary",
+        title: `${c.label} requiere lectura`,
+        subtitle: "Cocción · Acción requerida",
+        href: "/cooking",
+      });
+    }
 
-  for (const f of recordingStatus.fermentation) {
-    if (!f.isOverdue) continue;
-    alerts.push({
-      icon: AlertIcon,
-      iconClass: "text-secondary",
-      title: `${f.label} requiere lectura`,
-      subtitle: "Fermentación · Acción requerida",
-      href: "/fermentation",
-    });
-  }
+    for (const f of recordingStatus.fermentation) {
+      if (!f.isOverdue) continue;
+      alerts.push({
+        icon: AlertIcon,
+        iconClass: "text-secondary",
+        title: `${f.label} requiere lectura`,
+        subtitle: "Fermentación · Acción requerida",
+        href: "/fermentation",
+      });
+    }
 
-  const now = new Date();
+    for (const d of recordingStatus.distillation) {
+      if (!d.isOverdue) continue;
+      alerts.push({
+        icon: AlertIcon,
+        iconClass: "text-secondary",
+        title: `${d.label} requiere lectura`,
+        subtitle: "Destilación · Acción requerida",
+        href: "/distillation",
+      });
+    }
+  }
 
   for (const bottle of expiringBottles) {
     if (!bottle.expirationDate) continue;
 
-    const daysLeft = Math.max(
-      0,
-      Math.ceil(
-        (bottle.expirationDate.getTime() - now.getTime()) /
-          (1000 * 60 * 60 * 24),
-      ),
+    const daysLeft = Math.ceil(
+      (bottle.expirationDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
     );
 
     alerts.push({

@@ -27,6 +27,7 @@ import {
   type PendingTabStatus,
 } from "@/lib/offline/pending-tabs";
 import PostSaleModal from "@/components/pos/PostSaleModal";
+import PosVariantPickerModal from "@/components/pos/PosVariantPickerModal";
 import type { ReceiptData } from "@/components/pos/ReceiptTicket";
 
 type Variant = { id: string; name: string; price: number; active: boolean };
@@ -778,39 +779,15 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
 
       {/* Modal: Variant Selector */}
       {variantProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-outline-variant bg-surface-container-high p-5 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-primary">Elegir variedad</p>
-                <h3 className="text-lg font-bold text-on-surface">{variantProduct.name}</h3>
-              </div>
-              <button
-                onClick={() => setVariantProduct(null)}
-                className="rounded-lg p-1.5 hover:bg-surface"
-              >
-                <XIcon className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="space-y-2">
-              {variantProduct.variants
-                .filter((variant) => variant.active)
-                .map((variant) => (
-                  <button
-                    key={variant.id}
-                    onClick={() => {
-                      void addVariantToTab(variantProduct, variant);
-                      setVariantProduct(null);
-                    }}
-                    className="flex w-full items-center justify-between rounded-xl border border-outline-variant bg-surface p-3 text-left transition hover:border-primary hover:bg-primary/5"
-                  >
-                    <span className="text-sm font-bold text-on-surface">{variant.name}</span>
-                    <span className="text-sm font-semibold text-primary">{currency(variant.price)}</span>
-                  </button>
-                ))}
-            </div>
-          </div>
-        </div>
+        <PosVariantPickerModal
+          product={variantProduct}
+          formatPrice={currency}
+          onSelect={(variant) => {
+            void addVariantToTab(variantProduct, variant);
+            setVariantProduct(null);
+          }}
+          onClose={() => setVariantProduct(null)}
+        />
       )}
 
       {/* Modal: Create New Pending Tab */}

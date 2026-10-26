@@ -91,3 +91,42 @@ export async function setGroupPermissionAction(
     return { success: false, error: "No fue posible actualizar los permisos." };
   }
 }
+
+export async function setAllPermissionsAction(
+  userId: string,
+  granted: boolean,
+): Promise<{ success: boolean; error?: string }> {
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser || currentUser.role !== "ADMIN") {
+    return { success: false, error: "No tienes permiso para hacer esto." };
+  }
+
+  const { PERMISSION_GROUPS } = await import("@/lib/permission-modules");
+  const allKeys = PERMISSION_GROUPS.flatMap((g) => g.modules.map((m) => m.key));
+
+  try {
+    if (granted) {
+      await prisma.$transaction(
+        allKeys.map((moduleKey) =>
+          prisma.modulePermission.upsert({
+            where: { userId_moduleKey: { userId, moduleKey } },
+            update: {},
+            create: { userId, moduleKey },
+          }),
+        ),
+      );
+    } else {
+      await prisma.modulePermission.deleteMany({
+        where: { userId },
+      });
+    }
+
+    revalidatePath(`/administration/personnel/${userId}/permissions`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error setting all permissions:", error);
+    return { success: false, error: "No fue posible actualizar todos los permisos." };
+  }
+}

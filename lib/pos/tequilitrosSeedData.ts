@@ -161,6 +161,20 @@ export const PRODUCTS: SeedProduct[] = [
         ],
       },
       {
+        name: "Mediano - Doble shot",
+        price: 70,
+        ingredients: [
+          { ingredientCode: "POS-ING-SAL", quantity: 1.5 },
+          { ingredientCode: "POS-ING-LIMON", quantity: 15 },
+          { ingredientCode: "POS-ING-SANGRIA", quantity: 60 },
+          { ingredientCode: "POS-ING-JNARANJA", quantity: 90 },
+          { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
+          { ingredientCode: "POS-ING-TORONJA-REF", quantity: 90 },
+          { ingredientCode: "POS-ING-TAJIN", quantity: 1 },
+          { ingredientCode: "POS-ING-VASO-MED", quantity: 1 },
+        ],
+      },
+      {
         name: "Grande",
         price: 99,
         ingredients: [
@@ -170,6 +184,20 @@ export const PRODUCTS: SeedProduct[] = [
           { ingredientCode: "POS-ING-JNARANJA", quantity: 180 },
           { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
           { ingredientCode: "POS-ING-TORONJA-REF", quantity: 240 },
+          { ingredientCode: "POS-ING-TAJIN", quantity: 1.5 },
+          { ingredientCode: "POS-ING-VASO-GDE", quantity: 1 },
+        ],
+      },
+      {
+        name: "Grande - Doble shot",
+        price: 99,
+        ingredients: [
+          { ingredientCode: "POS-ING-SAL", quantity: 3 },
+          { ingredientCode: "POS-ING-LIMON", quantity: 30 },
+          { ingredientCode: "POS-ING-SANGRIA", quantity: 120 },
+          { ingredientCode: "POS-ING-JNARANJA", quantity: 180 },
+          { ingredientCode: "POS-ING-TEQUILA", quantity: 120 },
+          { ingredientCode: "POS-ING-TORONJA-REF", quantity: 180 },
           { ingredientCode: "POS-ING-TAJIN", quantity: 1.5 },
           { ingredientCode: "POS-ING-VASO-GDE", quantity: 1 },
         ],
@@ -222,6 +250,20 @@ export const PRODUCTS: SeedProduct[] = [
         ],
       },
       {
+        name: "Mediano - Doble shot",
+        price: 70,
+        ingredients: [
+          { ingredientCode: "POS-ING-SAL", quantity: 1.5 },
+          { ingredientCode: "POS-ING-LIMON", quantity: 30 },
+          { ingredientCode: "POS-ING-JTORONJA", quantity: 7.5 },
+          { ingredientCode: "POS-ING-JNARANJA", quantity: 150 },
+          { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
+          { ingredientCode: "POS-ING-TORONJA-REF", quantity: 90 },
+          { ingredientCode: "POS-ING-TAJIN", quantity: 1 },
+          { ingredientCode: "POS-ING-VASO-MED", quantity: 1 },
+        ],
+      },
+      {
         name: "Grande",
         price: 99,
         ingredients: [
@@ -231,6 +273,20 @@ export const PRODUCTS: SeedProduct[] = [
           { ingredientCode: "POS-ING-JNARANJA", quantity: 150 },
           { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
           { ingredientCode: "POS-ING-TORONJA-REF", quantity: 240 },
+          { ingredientCode: "POS-ING-TAJIN", quantity: 1.5 },
+          { ingredientCode: "POS-ING-VASO-GDE", quantity: 1 },
+        ],
+      },
+      {
+        name: "Grande - Doble shot",
+        price: 99,
+        ingredients: [
+          { ingredientCode: "POS-ING-SAL", quantity: 3 },
+          { ingredientCode: "POS-ING-LIMON", quantity: 60 },
+          { ingredientCode: "POS-ING-JTORONJA", quantity: 15 },
+          { ingredientCode: "POS-ING-JNARANJA", quantity: 150 },
+          { ingredientCode: "POS-ING-TEQUILA", quantity: 120 },
+          { ingredientCode: "POS-ING-TORONJA-REF", quantity: 180 },
           { ingredientCode: "POS-ING-TAJIN", quantity: 1.5 },
           { ingredientCode: "POS-ING-VASO-GDE", quantity: 1 },
         ],
@@ -280,6 +336,17 @@ export const PRODUCTS: SeedProduct[] = [
         ],
       },
       {
+        name: "Mediano - Doble shot",
+        price: 70,
+        ingredients: [
+          { ingredientCode: "POS-ING-SAL", quantity: 1.5 },
+          { ingredientCode: "POS-ING-LIMON", quantity: 30 },
+          { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
+          { ingredientCode: "POS-ING-TORONJA-REF", quantity: 150 },
+          { ingredientCode: "POS-ING-VASO-MED", quantity: 1 },
+        ],
+      },
+      {
         name: "Grande",
         price: 99,
         ingredients: [
@@ -287,6 +354,17 @@ export const PRODUCTS: SeedProduct[] = [
           { ingredientCode: "POS-ING-LIMON", quantity: 60 },
           { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
           { ingredientCode: "POS-ING-TORONJA-REF", quantity: 360 },
+          { ingredientCode: "POS-ING-VASO-GDE", quantity: 1 },
+        ],
+      },
+      {
+        name: "Grande - Doble shot",
+        price: 99,
+        ingredients: [
+          { ingredientCode: "POS-ING-SAL", quantity: 3 },
+          { ingredientCode: "POS-ING-LIMON", quantity: 60 },
+          { ingredientCode: "POS-ING-TEQUILA", quantity: 120 },
+          { ingredientCode: "POS-ING-TORONJA-REF", quantity: 300 },
           { ingredientCode: "POS-ING-VASO-GDE", quantity: 1 },
         ],
       },
@@ -331,6 +409,19 @@ export const PRODUCTS: SeedProduct[] = [
         ],
       },
       {
+        name: "Mediano - Doble shot",
+        price: 70,
+        ingredients: [
+          { ingredientCode: "POS-ING-SAL", quantity: 1.5 },
+          { ingredientCode: "POS-ING-LIMON", quantity: 15 },
+          { ingredientCode: "POS-ING-SALSAS", quantity: 7.5 },
+          { ingredientCode: "POS-ING-CLAMATO", quantity: 60 },
+          { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
+          { ingredientCode: "POS-ING-AGUAMINERAL", quantity: 90 },
+          { ingredientCode: "POS-ING-VASO-MED", quantity: 1 },
+        ],
+      },
+      {
         name: "Grande",
         price: 99,
         ingredients: [
@@ -340,6 +431,19 @@ export const PRODUCTS: SeedProduct[] = [
           { ingredientCode: "POS-ING-CLAMATO", quantity: 120 },
           { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
           { ingredientCode: "POS-ING-AGUAMINERAL", quantity: 240 },
+          { ingredientCode: "POS-ING-VASO-GDE", quantity: 1 },
+        ],
+      },
+      {
+        name: "Grande - Doble shot",
+        price: 99,
+        ingredients: [
+          { ingredientCode: "POS-ING-SAL", quantity: 3 },
+          { ingredientCode: "POS-ING-LIMON", quantity: 30 },
+          { ingredientCode: "POS-ING-SALSAS", quantity: 15 },
+          { ingredientCode: "POS-ING-CLAMATO", quantity: 120 },
+          { ingredientCode: "POS-ING-TEQUILA", quantity: 120 },
+          { ingredientCode: "POS-ING-AGUAMINERAL", quantity: 180 },
           { ingredientCode: "POS-ING-VASO-GDE", quantity: 1 },
         ],
       },
@@ -388,6 +492,19 @@ export const PRODUCTS: SeedProduct[] = [
         ],
       },
       {
+        name: "Mediano - Doble shot",
+        price: 70,
+        ingredients: [
+          { ingredientCode: "POS-ING-SAL", quantity: 1.5 },
+          { ingredientCode: "POS-ING-LIMON", quantity: 15 },
+          { ingredientCode: "POS-ING-MADRILENA", quantity: 7.5 },
+          { ingredientCode: "POS-ING-ZARZAMORA", quantity: 45 },
+          { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
+          { ingredientCode: "POS-ING-TORONJA-REF", quantity: 90 },
+          { ingredientCode: "POS-ING-VASO-MED", quantity: 1 },
+        ],
+      },
+      {
         name: "Grande",
         price: 99,
         ingredients: [
@@ -397,6 +514,19 @@ export const PRODUCTS: SeedProduct[] = [
           { ingredientCode: "POS-ING-ZARZAMORA", quantity: 90 },
           { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
           { ingredientCode: "POS-ING-TORONJA-REF", quantity: 240 },
+          { ingredientCode: "POS-ING-VASO-GDE", quantity: 1 },
+        ],
+      },
+      {
+        name: "Grande - Doble shot",
+        price: 99,
+        ingredients: [
+          { ingredientCode: "POS-ING-SAL", quantity: 3 },
+          { ingredientCode: "POS-ING-LIMON", quantity: 30 },
+          { ingredientCode: "POS-ING-MADRILENA", quantity: 15 },
+          { ingredientCode: "POS-ING-ZARZAMORA", quantity: 90 },
+          { ingredientCode: "POS-ING-TEQUILA", quantity: 120 },
+          { ingredientCode: "POS-ING-TORONJA-REF", quantity: 180 },
           { ingredientCode: "POS-ING-VASO-GDE", quantity: 1 },
         ],
       },
@@ -445,6 +575,19 @@ export const PRODUCTS: SeedProduct[] = [
         ],
       },
       {
+        name: "Mediano - Doble shot",
+        price: 70,
+        ingredients: [
+          { ingredientCode: "POS-ING-SAL", quantity: 1.5 },
+          { ingredientCode: "POS-ING-LIMON", quantity: 30 },
+          { ingredientCode: "POS-ING-MADRILENA", quantity: 7.5 },
+          { ingredientCode: "LIC-MENTA", quantity: 30 },
+          { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
+          { ingredientCode: "POS-ING-TORONJA-REF", quantity: 90 },
+          { ingredientCode: "POS-ING-VASO-MED", quantity: 1 },
+        ],
+      },
+      {
         name: "Grande",
         price: 99,
         ingredients: [
@@ -454,6 +597,19 @@ export const PRODUCTS: SeedProduct[] = [
           { ingredientCode: "LIC-MENTA", quantity: 60 },
           { ingredientCode: "POS-ING-TEQUILA", quantity: 60 },
           { ingredientCode: "POS-ING-TORONJA-REF", quantity: 240 },
+          { ingredientCode: "POS-ING-VASO-GDE", quantity: 1 },
+        ],
+      },
+      {
+        name: "Grande - Doble shot",
+        price: 99,
+        ingredients: [
+          { ingredientCode: "POS-ING-SAL", quantity: 3 },
+          { ingredientCode: "POS-ING-LIMON", quantity: 60 },
+          { ingredientCode: "POS-ING-MADRILENA", quantity: 15 },
+          { ingredientCode: "LIC-MENTA", quantity: 60 },
+          { ingredientCode: "POS-ING-TEQUILA", quantity: 120 },
+          { ingredientCode: "POS-ING-TORONJA-REF", quantity: 180 },
           { ingredientCode: "POS-ING-VASO-GDE", quantity: 1 },
         ],
       },
