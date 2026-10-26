@@ -874,7 +874,10 @@ export default function PosSellClient({
           product={variantPicker}
           formatPrice={formatCurrency}
           onSelect={(variant) => {
-            addVariant(variantPicker, variant);
+            addVariant(variantPicker, {
+              ...variant,
+              employeePrice: variant.employeePrice ?? null,
+            });
             setVariantPicker(null);
           }}
           onClose={() => setVariantPicker(null)}
