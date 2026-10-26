@@ -676,13 +676,6 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       iconVariant: "cyan",
       permissionKey: "/timeclock/geofences",
     },
-    {
-      href: "/administration/workforce",
-      label: "Portal Workforce",
-      icon: UsersIcon,
-      iconVariant: "blue",
-      permissionKey: "/administration/workforce",
-    },
   ],
 
   personnel: [
@@ -706,13 +699,6 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: BellIcon,
       iconVariant: "amber",
       permissionKey: "/administration/personnel/notifications",
-    },
-    {
-      href: "/administration/workforce",
-      label: "Workforce",
-      icon: ToolboxIcon,
-      iconVariant: "blue",
-      permissionKey: "/administration/workforce",
     },
   ],
 

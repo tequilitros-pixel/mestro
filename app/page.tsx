@@ -96,9 +96,7 @@ export default async function HomePage() {
     hasAccess("/administration/schedule") ||
     hasAccess("/timeclock/calendar");
 
-  const canSeePersonnel =
-    hasAccess("/administration/personnel") ||
-    hasAccess("/administration/workforce");
+  const canSeePersonnel = hasAccess("/administration/personnel");
 
   const canSeeAccounting = hasAccess("/accounting");
   const canSeeCotizador = hasAccess("/cotizador-tequilitros");

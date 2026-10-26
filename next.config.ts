@@ -22,9 +22,14 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
+        source: "/administration/workforce/:path*",
+        destination: "/administration/schedule",
+        permanent: false,
+      },
+      {
         source: "/administration/workforce-v1/:path*",
-        destination: "/administration/workforce/:path*",
-        permanent: true,
+        destination: "/administration/schedule",
+        permanent: false,
       },
     ];
   },

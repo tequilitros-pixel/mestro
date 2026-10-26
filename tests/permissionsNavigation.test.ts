@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   PERMISSION_GROUPS,
+  canAccessModule,
+  getDefaultPathForModuleKeys,
   getModuleKeyForPath,
   isAdminOnlyPath,
   isAlwaysAvailablePath,
@@ -73,6 +75,28 @@ test("la ruta de ventas resumen no es interceptada por la entrada de POSpress", 
     false,
     "el panel y sus módulos administrativos POS 2.0 deben permanecer accesibles",
   );
+});
+
+test("el portal Workforce descontinuado vuelve al horario original", async () => {
+  assert.equal(
+    canAccessModule("GERENTE", ["/administration/workforce"], "/administration/schedule"),
+    true,
+  );
+  assert.equal(getDefaultPathForModuleKeys(["/administration/workforce"]), "/administration/schedule");
+  assert.equal(getModuleKeyForPath("/administration/workforce/payroll"), "/administration/schedule");
+  assert.equal(
+    PERMISSION_GROUPS.flatMap((group) => group.modules).some(
+      (module) => module.key === "/administration/workforce",
+    ),
+    false,
+  );
+
+  const redirects = await nextConfig.redirects!();
+  const legacy = redirects.find(
+    (redirect) => redirect.source === "/administration/workforce/:path*",
+  );
+  assert.equal(legacy?.destination, "/administration/schedule");
+  assert.equal(legacy?.permanent, false);
 });
 
 test("cada permiso configurable tiene una pestaña y se resuelve exactamente", () => {

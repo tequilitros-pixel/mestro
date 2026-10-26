@@ -149,14 +149,13 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
-    group: "Administración de Personal y Horarios (Workforce)",
+    group: "Administración de Personal y Horarios",
     modules: [
       { key: "/administration/personnel", label: "Directorio de personal" },
       { key: "/administration/schedule", label: "Programación de horarios" },
       { key: "/administration/personnel/timeclock", label: "Supervisión de asistencia y checador" },
       { key: "/administration/personnel/notifications", label: "Avisos a personal" },
       { key: "/timeclock/geofences", label: "Geocercas de sucursales" },
-      { key: "/administration/workforce", label: "Portal Workforce y nómina" },
     ],
   },
 ];
@@ -212,6 +211,13 @@ export function canAccessModule(
   if (moduleKey === "/administration" && moduleKeys.includes("/administration/inventory")) return true;
   if (moduleKey === "/administration/inventory" && moduleKeys.includes("/administration")) return true;
 
+  // Workforce administrativo fue descontinuado. Un permiso histórico abre el
+  // horario original sin modificar los permisos ya almacenados.
+  if (
+    moduleKey === "/administration/schedule" &&
+    moduleKeys.includes("/administration/workforce")
+  ) return true;
+
   return moduleKeys.includes(moduleKey);
 }
 
@@ -231,6 +237,12 @@ export function getModuleKeyForPath(pathname: string): string | null {
   if (
     pathname === "/administration/schedule" ||
     pathname.startsWith("/administration/schedule/")
+  ) {
+    return "/administration/schedule";
+  }
+  if (
+    pathname === "/administration/workforce" ||
+    pathname.startsWith("/administration/workforce/")
   ) {
     return "/administration/schedule";
   }
@@ -263,28 +275,6 @@ export function getModuleKeyForPath(pathname: string): string | null {
   }
   if (pathname === "/workforce/timesheet" || pathname === "/workforce/payroll") {
     return "/timeclock/hours";
-  }
-  if (pathname.startsWith("/administration/workforce")) {
-    const sub = pathname.replace("/administration/workforce", "");
-    if (sub === "/attendance" || sub.startsWith("/attendance/")) {
-      return "/administration/workforce/attendance";
-    }
-    if (sub === "/timesheets" || sub.startsWith("/timesheets/")) {
-      return "/administration/workforce/timesheets";
-    }
-    if (sub === "/clock-corrections" || sub.startsWith("/clock-corrections/")) {
-      return "/administration/workforce/clock-corrections";
-    }
-    if (sub === "/overtime" || sub.startsWith("/overtime/")) {
-      return "/administration/workforce/overtime";
-    }
-    if (sub === "/payroll" || sub.startsWith("/payroll/")) {
-      return "/administration/workforce/payroll";
-    }
-    if (sub === "/settings" || sub.startsWith("/settings/")) {
-      return "/administration/workforce/settings";
-    }
-    return "/administration/workforce";
   }
   if (pathname === "/workforce" || pathname.startsWith("/workforce/")) {
     return "/administration/workforce";
@@ -466,14 +456,17 @@ export function isInventoryCountCaptureRole(role: string): boolean {
 
 /** Primera pantalla útil después de iniciar sesión, según los permisos asignados. */
 export function getDefaultPathForModuleKeys(moduleKeys: string[]): string {
+  const effectiveKeys = moduleKeys.includes("/administration/workforce")
+    ? [...moduleKeys, "/administration/schedule"]
+    : moduleKeys;
   const orderedKeys = PERMISSION_GROUPS.flatMap((group) =>
     group.modules.map((module) => module.key),
   );
 
   const defaultKey = orderedKeys.find((key) =>
-    moduleKeys.includes(key) ||
-    (key === "/pos" && moduleKeys.includes("/pospress")) ||
-    (key === "/administration/inventory" && moduleKeys.includes("/administration")),
+    effectiveKeys.includes(key) ||
+    (key === "/pos" && effectiveKeys.includes("/pospress")) ||
+    (key === "/administration/inventory" && effectiveKeys.includes("/administration")),
   );
 
   if (defaultKey === "/pos") return "/pospress";
