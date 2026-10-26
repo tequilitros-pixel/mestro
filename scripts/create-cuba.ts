@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { CatalogBaseUnit, Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
@@ -11,12 +11,29 @@ const apply = process.argv.includes("--apply");
 const pool = new Pool({ connectionString });
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
-const VARIANTS = [
+type CubaVariant = {
+  name: string;
+  priceFrom: string;
+  ice: number;
+  cup: "POS-ING-VASO-MED" | "POS-ING-VASO-GDE";
+  soda: number;
+  tequila?: number;
+};
+
+const VARIANTS: readonly CubaVariant[] = [
   { name: "Mediano", priceFrom: "Mediano", ice: 250, cup: "POS-ING-VASO-MED", soda: 180, tequila: 30 },
   { name: "Grande", priceFrom: "Grande", ice: 500, cup: "POS-ING-VASO-GDE", soda: 360, tequila: 60 },
   { name: "Mediano sin tequila", priceFrom: "Mediano sin tequila", ice: 250, cup: "POS-ING-VASO-MED", soda: 180 },
   { name: "Grande sin tequila", priceFrom: "Grande sin tequila", ice: 500, cup: "POS-ING-VASO-GDE", soda: 360 },
-] as const;
+];
+
+function recipeIngredient(
+  inventoryProductId: string,
+  quantity: number,
+  unit: CatalogBaseUnit,
+): Prisma.PosVariantIngredientUncheckedCreateWithoutVariantInput {
+  return { inventoryProductId, quantity, unit, unitStatus: "RESOLVED" };
+}
 
 async function main() {
   const [paloma, cuba, ingredients] = await Promise.all([
@@ -84,10 +101,10 @@ async function main() {
             baseUnit: paloma.baseUnit,
             ingredients: {
               create: [
-                { inventoryProductId: inventory.get("POS-ING-TORONJA-REF")!.id, quantity: variant.soda, unit: "ML", unitStatus: "RESOLVED" as const },
-                ...(variant.tequila ? [{ inventoryProductId: inventory.get("POS-ING-TEQUILA")!.id, quantity: variant.tequila, unit: "ML", unitStatus: "RESOLVED" as const }] : []),
-                { inventoryProductId: inventory.get("EXTRA-HIELO")!.id, quantity: variant.ice, unit: "G", unitStatus: "RESOLVED" as const },
-                { inventoryProductId: inventory.get(variant.cup)!.id, quantity: 1, unit: "UNIT", unitStatus: "RESOLVED" as const },
+                recipeIngredient(inventory.get("POS-ING-TORONJA-REF")!.id, variant.soda, CatalogBaseUnit.ML),
+                ...(variant.tequila ? [recipeIngredient(inventory.get("POS-ING-TEQUILA")!.id, variant.tequila, CatalogBaseUnit.ML)] : []),
+                recipeIngredient(inventory.get("EXTRA-HIELO")!.id, variant.ice, CatalogBaseUnit.G),
+                recipeIngredient(inventory.get(variant.cup)!.id, 1, CatalogBaseUnit.UNIT),
               ],
             },
           })),

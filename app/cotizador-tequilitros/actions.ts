@@ -30,6 +30,21 @@ function getUtcDayBounds(eventDate: Date) {
   return { start, end };
 }
 
+function isTequilitrosEventMetadata(notes: string | null): boolean {
+  if (!notes) return false;
+
+  try {
+    const metadata: unknown = JSON.parse(notes);
+    return Boolean(
+      metadata &&
+        typeof metadata === "object" &&
+        (metadata as Record<string, unknown>).type === "TEQUILITROS_QUOTE",
+    );
+  } catch {
+    return false;
+  }
+}
+
 interface StoredQuoteData extends TequilitrosQuoteMetadata {
   id: string;
   code: string;
@@ -78,6 +93,10 @@ export async function createQuoteAction(input: QuoteCreationInput) {
 
     if (!input.clientName.trim()) {
       return { success: false, error: "El nombre del cliente es obligatorio." };
+    }
+
+    if (!input.clientPhone?.trim()) {
+      return { success: false, error: "El teléfono o WhatsApp del cliente es obligatorio." };
     }
 
     const eventDate = getEventDate(input.dateStr);
@@ -139,14 +158,18 @@ export async function createQuoteAction(input: QuoteCreationInput) {
     const result = await prisma.$transaction(
       async (tx) => {
         // Validar límite de 3 eventos confirmados para este día
-        const sameDayConfirmedEvents = await tx.serviceEvent.count({
+        const sameDayConfirmedEvents = await tx.serviceEvent.findMany({
           where: {
             eventDate: { gte: start, lte: end },
             status: { notIn: ["CANCELLED", "DRAFT"] },
           },
+          select: { notes: true },
         });
 
-        if (sameDayConfirmedEvents >= MAX_CONFIRMED_EVENTS_PER_DAY) {
+        if (
+          sameDayConfirmedEvents.filter((event) => isTequilitrosEventMetadata(event.notes)).length >=
+          MAX_CONFIRMED_EVENTS_PER_DAY
+        ) {
           throw new Error("La fecha ya alcanzó el máximo de 3 eventos confirmados.");
         }
 
@@ -273,14 +296,18 @@ export async function registerDepositAction(input: {
     const result = await prisma.$transaction(
       async (tx) => {
         // Validar límite de 3 eventos confirmados para ese día
-        const sameDayConfirmed = await tx.serviceEvent.count({
+        const sameDayConfirmed = await tx.serviceEvent.findMany({
           where: {
             eventDate: { gte: start, lte: end },
             status: { notIn: ["CANCELLED", "DRAFT"] },
           },
+          select: { notes: true },
         });
 
-        if (sameDayConfirmed >= MAX_CONFIRMED_EVENTS_PER_DAY) {
+        if (
+          sameDayConfirmed.filter((event) => isTequilitrosEventMetadata(event.notes)).length >=
+          MAX_CONFIRMED_EVENTS_PER_DAY
+        ) {
           throw new Error("Esta fecha ya cuenta con 3 eventos confirmados. No es posible confirmar otro evento.");
         }
 
@@ -349,20 +376,6 @@ export async function getQuotesListAction() {
   const user = await getCurrentUser();
   if (!user) return [];
 
-  try {
-    // Limpieza preventiva: eliminar borradores huérfanos que hayan caído en ServiceEvent
-    await prisma.serviceEvent.deleteMany({
-      where: {
-        code: { startsWith: "COT-" },
-        status: "DRAFT",
-      },
-    }).catch(() => {
-      // Ignorar si falla por concurrencia
-    });
-  } catch {
-    // Continuar
-  }
-
   // Leer todas las cotizaciones guardadas en AuditEvent
   const records = await prisma.auditEvent.findMany({
     where: { entityType: "TequilitrosQuote" },
@@ -402,7 +415,7 @@ export async function getCalendarMonthAction(year: number, month: number) {
   const confirmedEvents = await prisma.serviceEvent.findMany({
     where: {
       eventDate: { gte: start, lte: end },
-      status: { notIn: ["CANCELLED", "DRAFT"] },
+    status: { notIn: ["CANCELLED", "DRAFT"] },
     },
     orderBy: { eventDate: "asc" },
   });
@@ -431,6 +444,7 @@ export async function getCalendarMonthAction(year: number, month: number) {
 
   // Contabilizar eventos confirmados oficiales
   for (const ev of confirmedEvents) {
+    if (!isTequilitrosEventMetadata(ev.notes)) continue;
     const dateStr = ev.eventDate.toISOString().slice(0, 10);
     const dayItem = mapByDay.get(dateStr);
     if (!dayItem) continue;

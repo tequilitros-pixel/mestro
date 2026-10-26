@@ -582,5 +582,8 @@ export async function generateTequilitrosPdfBlob(data: QuotePdfData): Promise<Bl
   }
 
   const pdfBytes = await doc.save();
-  return new Blob([pdfBytes], { type: "application/pdf" });
+  // pdf-lib expone una vista que puede estar respaldada por ArrayBufferLike.
+  // Crear una copia DOM-compatible evita el conflicto de tipos de TS 5.9 y
+  // mantiene el PDF idéntico para descarga, compartir y AirDrop.
+  return new Blob([Uint8Array.from(pdfBytes)], { type: "application/pdf" });
 }

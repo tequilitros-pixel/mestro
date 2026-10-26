@@ -58,7 +58,9 @@ export interface TequilitrosQuoteMetadata {
   version: 1;
   type: "TEQUILITROS_QUOTE";
   folio: string; // Ej: COT-2026-0042
-  clientEmail?: string;
+  // Los registros históricos pueden no tener correo y se conservan como null
+  // dentro del JSON de AuditEvent.
+  clientEmail?: string | null;
   eventType: string;
   modality: "libre" | "consumo" | "personalizado";
   durationHours: number;
