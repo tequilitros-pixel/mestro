@@ -70,19 +70,30 @@ export default function PayrollDashboard() {
   useEffect(() => {
     let cancelled = false;
 
-    getPayrollAnalytics(from, to).then((result) => {
-      if (cancelled) return;
+    getPayrollAnalytics(from, to)
+      .then((result) => {
+        if (cancelled) return;
 
-      if ("error" in result) {
-        setError(result.error);
+        if ("error" in result) {
+          setError(result.error);
+          setData(null);
+        } else {
+          setError(null);
+          setData(result.data);
+        }
+      })
+      .catch((cause: unknown) => {
+        if (cancelled) return;
         setData(null);
-      } else {
-        setError(null);
-        setData(result.data);
-      }
-
-      setLoading(false);
-    });
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "No se pudo cargar la información de nómina.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
     return () => {
       cancelled = true;
