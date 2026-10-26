@@ -97,6 +97,12 @@ test("el portal Workforce descontinuado vuelve al horario original", async () =>
   );
   assert.equal(legacy?.destination, "/administration/schedule");
   assert.equal(legacy?.permanent, false);
+
+  const workforceHome = redirects.find(
+    (redirect) => redirect.source === "/workforce",
+  );
+  assert.equal(workforceHome?.destination, "/administration/schedule");
+  assert.equal(workforceHome?.permanent, false);
 });
 
 test("cada permiso configurable tiene una pestaña y se resuelve exactamente", () => {
