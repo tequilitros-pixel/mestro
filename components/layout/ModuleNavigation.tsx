@@ -116,7 +116,7 @@ export default function ModuleNavigation({
             role="dialog"
             aria-modal="true"
             aria-label="Secciones del módulo"
-            className="module-drawer absolute inset-y-0 left-0 w-[min(18rem,calc(100vw-2.5rem))] border-r border-outline-variant bg-surface-container-low p-3 shadow-2xl"
+            className="module-drawer absolute inset-y-0 left-0 flex min-h-0 w-[min(18rem,calc(100vw-2.5rem))] flex-col border-r border-outline-variant bg-surface-container-low p-3 shadow-2xl"
           >
             <div className="mb-3 flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-on-surface-variant">
@@ -242,7 +242,7 @@ function ModuleLinks({
     : [{ label: "", items }];
 
   return (
-    <nav aria-label="Navegación del módulo" className="flex-1 overflow-y-auto p-2">
+    <nav aria-label="Navegación del módulo" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
       {groupedItems.map((group) => (
         <section key={group.label || "module-links"} className="mb-3 last:mb-0">
           {!collapsed && group.label && (

@@ -612,6 +612,14 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       group: "Mi jornada",
     },
     {
+      href: "/administration/schedule",
+      label: "Programar horarios",
+      icon: CalendarIcon,
+      iconVariant: "purple",
+      permissionKey: "/administration/schedule",
+      group: "Mi jornada",
+    },
+    {
       href: "/timeclock/availability",
       label: "Disponibilidad",
       icon: CalendarIcon,
@@ -670,14 +678,6 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: UsersIcon,
       iconVariant: "purple",
       permissionKey: "/administration/personnel",
-      group: "Operación y configuración",
-    },
-    {
-      href: "/administration/schedule",
-      label: "Programar horarios",
-      icon: CalendarIcon,
-      iconVariant: "purple",
-      permissionKey: "/administration/schedule",
       group: "Operación y configuración",
     },
     {
