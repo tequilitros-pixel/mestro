@@ -69,25 +69,52 @@ export default function PayrollDashboard() {
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    getPayrollAnalytics(from, to).then((result) => {
-      if (cancelled) return;
-
-      if ("error" in result) {
-        setError(result.error);
+    // La acción remota puede fallar sin devolver un resultado. Mostrar
+    // un error recuperable en lugar de mantener el spinner indefinidamente.
+    Promise.race([
+      getPayrollAnalytics(from, to),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("PAYROLL_TIMEOUT")), 20000);
+      }),
+    ])
+      .then((result) => {
+        if (cancelled) return;
+        if ("error" in result) {
+          setError(result.error);
+          setData(null);
+        } else {
+          setError(null);
+          setData(result.data);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (cancelled) return;
+        setError(
+          reason instanceof Error && reason.message === "PAYROLL_TIMEOUT"
+            ? "La consulta de nómina está tardando demasiado. Intenta de nuevo."
+            : "No fue posible cargar la nómina. Intenta de nuevo.",
+        );
         setData(null);
-      } else {
-        setError(null);
-        setData(result.data);
-      }
-
-      setLoading(false);
-    });
+      })
+      .finally(() => {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+        if (!cancelled) setLoading(false);
+      });
 
     return () => {
       cancelled = true;
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
     };
   }, [from, to, refreshKey]);
+
+  function retryLoad() {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    setRefreshKey((key) => key + 1);
+  }
 
   function handleRangeChange(value: string) {
     setRangeDays(value);
@@ -118,8 +145,11 @@ export default function PayrollDashboard() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">
-        {error}
+      <div role="alert" className="space-y-3 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">
+        <p>{error}</p>
+        <button type="button" onClick={retryLoad} className="rounded-lg border border-error/50 px-3 py-2 font-semibold hover:bg-error/10">
+          Reintentar
+        </button>
       </div>
     );
   }
