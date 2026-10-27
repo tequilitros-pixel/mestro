@@ -3,7 +3,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
 import {
   addDaysToDateOnly,
   formatDateOnly,
@@ -1100,8 +1100,8 @@ export async function getEmployeePayrollDetail(
 ): Promise<{ error: string } | { success: true; data: PayrollEmployeeDetail }> {
   const currentUser = await getCurrentUser();
   if (!currentUser) return { error: "No autorizado" };
-  const isAdmin = currentUser.role === "ADMIN" || currentUser.permissions.includes("/timeclock/payroll");
-  if (!isAdmin && currentUser.id !== userId) {
+  const payrollViewer = await getCurrentUserWithAnyModuleAccess(["/timeclock/payroll"]);
+  if (!payrollViewer && currentUser.id !== userId) {
     return { error: "No tienes permiso" };
   }
 

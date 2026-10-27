@@ -46,11 +46,13 @@ export default function ReceiptTicket({
   containerId = "thermal-receipt-print-area",
   showPreviewBorders = true,
   printable = true,
+  paperWidth = "80mm",
 }: {
   data: ReceiptData;
   containerId?: string;
   showPreviewBorders?: boolean;
   printable?: boolean;
+  paperWidth?: "58mm" | "80mm";
 }) {
   return (
     <div
@@ -63,7 +65,7 @@ export default function ReceiptTicket({
         @media print {
           @page {
             margin: 0;
-            size: 80mm auto;
+            size: ${paperWidth} auto;
           }
           body * {
             visibility: hidden !important;
@@ -75,7 +77,7 @@ export default function ReceiptTicket({
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            width: 78mm !important;
+            width: ${paperWidth === "58mm" ? "56mm" : "78mm"} !important;
             max-width: 100% !important;
             margin: 0 !important;
             padding: 4mm 2mm !important;
