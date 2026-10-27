@@ -101,7 +101,7 @@ test("el portal Workforce descontinuado vuelve a Checador y horario", async () =
   const workforceHome = redirects.find(
     (redirect) => redirect.source === "/workforce",
   );
-  assert.equal(workforceHome?.destination, "/timeclock");
+  assert.equal(workforceHome?.destination, "/administration/schedule");
   assert.equal(workforceHome?.permanent, false);
 });
 

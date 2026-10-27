@@ -1,9 +1,28 @@
 "use client";
 
-import React, { useState } from "react";
-import { CheckIcon, MailIcon, PrinterIcon, XIcon } from "@/components/ui/icons";
+import React, { useEffect, useState } from "react";
+import {
+  CheckIcon,
+  MailIcon,
+  PrinterIcon,
+  XIcon,
+  SettingsIcon,
+  RefreshIcon,
+  AlertIcon,
+} from "@/components/ui/icons";
 import ReceiptTicket, { type ReceiptData } from "./ReceiptTicket";
 import { enqueueOperation } from "@/lib/offline/queue";
+import {
+  type PrinterSettings,
+  type PrinterConnectionType,
+  getStoredPrinterSettings,
+  saveStoredPrinterSettings,
+  printReceiptUniversal,
+  isWebBluetoothSupported,
+  isWebSerialSupported,
+} from "@/lib/pos/thermalPrinter";
+import PrinterSettingsModal from "./PrinterSettingsModal";
+import { triggerAlertFeedback } from "@/lib/feedback";
 
 const formatCurrency = (val: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(val);
@@ -21,8 +40,53 @@ export default function PostSaleModal({
   const [emailMessage, setEmailMessage] = useState("");
   const [showPreview, setShowPreview] = useState(false);
 
-  function handlePrint() {
-    window.print();
+  // Impresión térmica universal
+  const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(getStoredPrinterSettings);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printStatus, setPrintStatus] = useState<string | null>(null);
+  const [printError, setPrintError] = useState<string | null>(null);
+  const [printSuccess, setPrintSuccess] = useState(false);
+  const [showPrinterSettings, setShowPrinterSettings] = useState(false);
+
+  useEffect(() => {
+    triggerAlertFeedback("success");
+  }, []);
+
+  async function handlePrint(overrideType?: PrinterConnectionType) {
+    const currentSettings = overrideType
+      ? { ...printerSettings, type: overrideType }
+      : printerSettings;
+
+    if (overrideType && overrideType !== printerSettings.type) {
+      saveStoredPrinterSettings(currentSettings);
+      setPrinterSettings(currentSettings);
+    }
+
+    setIsPrinting(true);
+    setPrintStatus("Preparando impresión…");
+    setPrintError(null);
+    setPrintSuccess(false);
+
+    try {
+      const res = await printReceiptUniversal(receipt, currentSettings, (status) => {
+        setPrintStatus(status);
+      });
+
+      if (res.success) {
+        setPrintSuccess(true);
+        setPrintStatus(`Ticket impreso en ${res.deviceName || "impresora"}`);
+        setTimeout(() => {
+          setPrintSuccess(false);
+          setPrintStatus(null);
+        }, 4000);
+      } else {
+        setPrintError(res.error || "No fue posible imprimir el ticket.");
+      }
+    } catch (err) {
+      setPrintError(err instanceof Error ? err.message : "Error al enviar el ticket.");
+    } finally {
+      setIsPrinting(false);
+    }
   }
 
   async function handleSendEmail(e: React.FormEvent) {
@@ -141,15 +205,136 @@ export default function PostSaleModal({
 
         {/* Square-style Actions */}
         <div className="mt-6 space-y-4">
-          {/* Button: Print Ticket */}
+          {/* Printer Selector & Status */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1.5">
+                <PrinterIcon className="h-4 w-4" /> Impresora de Tickets ({printerSettings.paperWidth})
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowPrinterSettings(true)}
+                className="flex items-center gap-1 font-semibold text-primary hover:underline"
+              >
+                <SettingsIcon className="h-3.5 w-3.5" />
+                Configurar
+              </button>
+            </div>
+
+            {/* Quick Switch Buttons */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-surface-container-high border border-outline-variant">
+              <button
+                type="button"
+                onClick={() => handlePrint("bluetooth")}
+                disabled={isPrinting}
+                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold transition ${
+                  printerSettings.type === "bluetooth"
+                    ? "bg-surface text-primary shadow-sm ring-1 ring-primary/30"
+                    : "text-on-surface-variant hover:text-on-surface hover:bg-surface/50"
+                }`}
+                title="Impresión portátil inalámbrica Bluetooth"
+              >
+                <span>📱</span>
+                <span className="truncate">Bluetooth</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePrint("usb")}
+                disabled={isPrinting}
+                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold transition ${
+                  printerSettings.type === "usb"
+                    ? "bg-surface text-primary shadow-sm ring-1 ring-primary/30"
+                    : "text-on-surface-variant hover:text-on-surface hover:bg-surface/50"
+                }`}
+                title="Conexión directa por cable USB Tipo-C u OTG"
+              >
+                <span>🔌</span>
+                <span className="truncate">Cable USB</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePrint("system")}
+                disabled={isPrinting}
+                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold transition ${
+                  printerSettings.type === "system"
+                    ? "bg-surface text-primary shadow-sm ring-1 ring-primary/30"
+                    : "text-on-surface-variant hover:text-on-surface hover:bg-surface/50"
+                }`}
+                title="Ventana estándar de impresión del sistema / PDF"
+              >
+                <span>🖨️</span>
+                <span className="truncate">Sistema</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Primary Action Button: Print Ticket */}
           <button
             type="button"
-            onClick={handlePrint}
-            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-primary px-5 py-3.5 text-base font-bold text-on-primary shadow-lg shadow-primary/25 transition active:scale-[0.98] hover:opacity-95"
+            disabled={isPrinting}
+            onClick={() => handlePrint()}
+            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-primary px-5 py-3.5 text-base font-bold text-on-primary shadow-lg shadow-primary/25 transition active:scale-[0.98] hover:opacity-95 disabled:opacity-60"
           >
-            <PrinterIcon className="h-5 w-5" />
-            Imprimir Ticket Térmico
+            {isPrinting ? (
+              <>
+                <RefreshIcon className="h-5 w-5 animate-spin" />
+                <span>{printStatus || "Imprimiendo…"}</span>
+              </>
+            ) : (
+              <>
+                <PrinterIcon className="h-5 w-5" />
+                <span>
+                  Imprimir Ticket (
+                  {printerSettings.type === "bluetooth"
+                    ? "Bluetooth"
+                    : printerSettings.type === "usb"
+                    ? "Cable USB"
+                    : "Sistema"}
+                  )
+                </span>
+              </>
+            )}
           </button>
+
+          {/* Print Feedback Status */}
+          {printSuccess && (
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500/10 p-2.5 text-xs font-semibold text-emerald-600 border border-emerald-500/20">
+              <CheckIcon className="h-4 w-4" />
+              <span>{printStatus}</span>
+            </div>
+          )}
+
+          {printError && (
+            <div className="rounded-xl bg-error/10 p-3 text-xs font-semibold text-error border border-error/20 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertIcon className="h-4 w-4 shrink-0 mt-0.5" />
+                <span className="flex-1">{printError}</span>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1 border-t border-error/20">
+                <span className="text-[11px] text-error/80 self-center">Opciones rápidas:</span>
+                {printerSettings.type !== "usb" && (
+                  <button
+                    type="button"
+                    onClick={() => handlePrint("usb")}
+                    className="rounded-lg bg-surface px-2.5 py-1 text-[11px] font-bold text-on-surface shadow-sm hover:bg-surface-container-high transition"
+                  >
+                    🔌 Probar con Cable USB
+                  </button>
+                )}
+                {printerSettings.type !== "system" && (
+                  <button
+                    type="button"
+                    onClick={() => handlePrint("system")}
+                    className="rounded-lg bg-surface px-2.5 py-1 text-[11px] font-bold text-on-surface shadow-sm hover:bg-surface-container-high transition"
+                  >
+                    🖨️ Usar Diálogo del Sistema
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Form: Email Ticket */}
           <form onSubmit={handleSendEmail} className="space-y-2">
@@ -208,6 +393,7 @@ export default function PostSaleModal({
             <div className="max-h-60 overflow-y-auto rounded-2xl bg-surface-container-high p-3">
               <ReceiptTicket
                 data={receipt}
+                paperWidth={printerSettings.paperWidth}
                 containerId="thermal-receipt-preview"
                 showPreviewBorders={false}
                 printable={false}
@@ -228,8 +414,21 @@ export default function PostSaleModal({
 
       {/* Hidden container for thermal printing */}
       <div className="hidden print:block">
-        <ReceiptTicket data={receipt} containerId="thermal-receipt-print-area" />
+        <ReceiptTicket
+          data={receipt}
+          paperWidth={printerSettings.paperWidth}
+          containerId="thermal-receipt-print-area"
+        />
       </div>
+
+      {/* Printer Settings Modal */}
+      {showPrinterSettings && (
+        <PrinterSettingsModal
+          settings={printerSettings}
+          onSave={(newSettings) => setPrinterSettings(newSettings)}
+          onClose={() => setShowPrinterSettings(false)}
+        />
+      )}
     </div>
   );
 }

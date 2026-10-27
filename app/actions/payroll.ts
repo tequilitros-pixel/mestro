@@ -18,6 +18,7 @@ import {
 import { resolveBranchHourlyRate, summarizeHourlyRates, type HourlyRateRow } from "@/lib/payroll/branchRates";
 import { formatCivilDate } from "@/lib/dateTime";
 import { sendPayrollReviewEmail } from "@/lib/email";
+import { createNotificationsForUsers } from "@/app/actions/notifications";
 
 /**
  * ==========================================================
@@ -148,6 +149,10 @@ export type PayrollWeekEmployee = {
   adjustmentsTotal: number;
   finalPay: number;
   approval: PayrollEmployeeApproval;
+  signature?: {
+    signedAt: string | null;
+    signedByName: string | null;
+  } | null;
 };
 
 export type PayrollWeekTable = {
@@ -237,6 +242,11 @@ export type PayrollEmployeeDetail = {
   finalPay: number;
   period: PayrollPeriodInfo;
   approval: PayrollEmployeeApproval;
+  signature?: {
+    signatureData: string | null;
+    signedAt: string | null;
+    signedByName: string | null;
+  } | null;
 };
 
 /**
@@ -361,6 +371,7 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
       adjustmentsTotal,
       finalPay,
       approval: { status: "BORRADOR", approvedByName: null, approvedAt: null },
+      signature: null,
     });
 
     totalRegular += regularHours;
@@ -984,6 +995,7 @@ export async function getPayrollWeekTable(
             adjustmentsTotal: 0,
             finalPay: 0,
             approval: { status: "BORRADOR" as const, approvedByName: null, approvedAt: null },
+            signature: null,
           };
         }
         if (period.status === "REVISION" && entry.status === "REVISION") {
@@ -1036,6 +1048,12 @@ export async function getPayrollWeekTable(
               totalPay: Number(approval.totalPay),
             })),
           },
+          signature: entry.signedAt
+            ? {
+                signedAt: entry.signedAt.toISOString(),
+                signedByName: entry.signedByName ?? null,
+              }
+            : null,
         };
       })
       .sort((a, b) => b.totalHours - a.totalHours || a.name.localeCompare(b.name, "es-MX"));
@@ -1080,8 +1098,12 @@ export async function getEmployeePayrollDetail(
   userId: string,
   weekStart: string,
 ): Promise<{ error: string } | { success: true; data: PayrollEmployeeDetail }> {
-  const admin = await requireAdmin();
-  if (!admin) return { error: "No tienes permiso" };
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return { error: "No autorizado" };
+  const isAdmin = currentUser.role === "ADMIN" || currentUser.permissions.includes("/timeclock/payroll");
+  if (!isAdmin && currentUser.id !== userId) {
+    return { error: "No tienes permiso" };
+  }
 
   const mondayStr = mondayOfWeek(weekStart);
   const weekEnd = addDaysToDateOnly(mondayStr, 6);
@@ -1195,6 +1217,11 @@ export async function getEmployeePayrollDetail(
             approvedAt: approval.approvedAt.toISOString(),
             totalPay: Number(approval.totalPay),
           })),
+        },
+        signature: {
+          signatureData: entry.signatureData ?? null,
+          signedAt: entry.signedAt?.toISOString() ?? null,
+          signedByName: entry.signedByName ?? null,
         },
       },
     };
@@ -1356,9 +1383,26 @@ export async function submitPayrollPeriodAction(weekStart: string) {
   void (async () => {
     try {
       const admins = await prisma.user.findMany({
-        where: { role: "ADMIN", active: true, email: { not: null } },
-        select: { email: true },
+        where: { role: "ADMIN", active: true },
+        select: { id: true, email: true },
       });
+
+      // 1. Notificación In-App (Campanita)
+      if (admins.length > 0) {
+        await createNotificationsForUsers(
+          admins.map((a) => a.id),
+          {
+            title: "📋 Nómina enviada a revisión",
+            body: `${admin.name} envió a revisión la nómina de la semana ${mondayStr} (${live.employees.length} colaboradores).`,
+            category: "PAYROLL",
+            priority: "HIGH",
+            href: `/timeclock/payroll?week=${mondayStr}`,
+            metadata: { weekStart: mondayStr, employeeCount: live.employees.length },
+          }
+        );
+      }
+
+      // 2. Notificación vía correo electrónico
       const toEmails = admins.map((a) => a.email!).filter(Boolean);
       if (toEmails.length > 0) {
         const startCivil = formatCivilDate(`${mondayStr}T00:00:00.000Z`, { day: "numeric", month: "short" });
@@ -1375,7 +1419,7 @@ export async function submitPayrollPeriodAction(weekStart: string) {
         });
       }
     } catch (err) {
-      console.error("[submitPayrollPeriodAction] Error sending review email notification:", err);
+      console.error("[submitPayrollPeriodAction] Error sending review notifications:", err);
     }
   })();
 
@@ -1518,8 +1562,33 @@ export async function markPayrollPeriodPaidAction(weekStart: string) {
       where: { id: period.id },
       data: { status: "PAGADA", paidById: admin.id, paidAt: new Date() },
     });
-    return { success: true };
+    return { success: true, periodId: period.id };
   });
+
+  if (result.success && "periodId" in result && result.periodId) {
+    // Notificar a todos los empleados pagados para que consulten y firmen su recibo
+    void (async () => {
+      try {
+        const entries = await prisma.payrollEntry.findMany({
+          where: { periodId: result.periodId },
+          select: { userId: true },
+        });
+        const userIds = entries.map((e) => e.userId);
+        if (userIds.length > 0) {
+          await createNotificationsForUsers(userIds, {
+            title: "💵 Pago de nómina emitido",
+            body: `Tu pago de la semana ${mondayStr} ha sido procesado. Tu recibo oficial ya está disponible para consulta y firma digital.`,
+            category: "PAYROLL",
+            priority: "HIGH",
+            href: "/timeclock/payroll",
+            metadata: { weekStart: mondayStr },
+          });
+        }
+      } catch (notifErr) {
+        console.error("[markPayrollPeriodPaidAction] Error enviando notificaciones:", notifErr);
+      }
+    })();
+  }
 
   revalidatePath("/timeclock/payroll");
   revalidateTag("payroll-analytics", "max");

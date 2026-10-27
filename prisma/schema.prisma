@@ -85,6 +85,7 @@ model User {
   millingSessionsEnded   MillingWorkSession[] @relation("MillingSessionEndedBy")
   millingDischarges  MillingDischarge[]
   pushSubscriptions  PushSubscription[]
+  notifications      Notification[]
   passwordResetCodes PasswordResetCode[]
   modulePermissions  ModulePermission[]
   sessions           UserSession[]
@@ -3321,6 +3322,10 @@ model PayrollEntry {
   daysSnapshot        Json
   adjustmentsSnapshot Json @default("[]")
 
+  signatureData String?   @db.Text
+  signedAt      DateTime?
+  signedByName  String?
+
   createdAt DateTime @default(now())
 
   period     PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
@@ -4822,6 +4827,41 @@ model NotificationRule {
 
   @@index([active])
   @@index([triggerType])
+}
+
+enum NotificationCategory {
+  POS
+  TIMECLOCK
+  PAYROLL
+  INVENTORY
+  PRODUCTION
+  SYSTEM
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model Notification {
+  id        String               @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  category  NotificationCategory
+  priority  NotificationPriority @default(NORMAL)
+  href      String?
+  read      Boolean              @default(false)
+  readAt    DateTime?
+  metadata  Json?
+  createdAt DateTime             @default(now())
+
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }
 
 /**

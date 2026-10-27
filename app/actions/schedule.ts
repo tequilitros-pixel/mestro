@@ -14,6 +14,7 @@ import {
 } from "@/lib/dateOnly";
 import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/periodLock";
 import { availabilityConflict, getAvailabilityMatrix, getEffectiveAvailability } from "@/lib/availability";
+import { createNotification, createNotificationsForUsers } from "@/app/actions/notifications";
 
 /**
  * Granularidad individual por turno (estilo Connecteam):
@@ -488,6 +489,28 @@ export async function publishWeekAction(weekStart: string) {
     create: { weekStart: start, status: "PUBLISHED", publishedAt: new Date(), publishedById: admin.id },
   });
 
+  // Notificar a los colaboradores que tienen turnos en la semana publicada
+  try {
+    const affectedShifts = await prisma.scheduledShift.findMany({
+      where: { date: { gte: start, lt: end }, type: "TURNO" },
+      select: { userId: true },
+      distinct: ["userId"],
+    });
+    const userIds = affectedShifts.map((s) => s.userId);
+    if (userIds.length > 0) {
+      await createNotificationsForUsers(userIds, {
+        title: "📅 Horario semanal publicado",
+        body: `Se ha publicado el horario oficial para la semana del ${mondayOfWeek(weekStart)}. Consulta tus turnos y descansos asignados.`,
+        category: "TIMECLOCK",
+        priority: "NORMAL",
+        href: "/timeclock/calendar",
+        metadata: { weekStart: mondayOfWeek(weekStart) },
+      });
+    }
+  } catch (notifErr) {
+    console.error("[publishWeekScheduleAction] Error al notificar:", notifErr);
+  }
+
   revalidatePath("/administration/schedule");
   revalidatePath("/timeclock/calendar");
 
@@ -510,6 +533,21 @@ export async function publishEmployeeScheduleAction(weekStart: string, userId: s
     where: { userId, date: { gte: start, lt: end } },
     data: { publicationStatus: "PUBLISHED" },
   });
+
+  // Notificar al colaborador individual
+  try {
+    await createNotification({
+      userId,
+      title: "📅 Tu horario ha sido publicado",
+      body: `Tus turnos para la semana del ${mondayStr} han sido publicados y confirmados.`,
+      category: "TIMECLOCK",
+      priority: "NORMAL",
+      href: "/timeclock/calendar",
+      metadata: { weekStart: mondayStr },
+    });
+  } catch (notifErr) {
+    console.error("[publishEmployeeScheduleAction] Error al notificar:", notifErr);
+  }
 
   revalidatePath("/administration/schedule");
   revalidatePath("/timeclock/calendar");

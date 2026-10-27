@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Maestro - Sin conexión</title>
+  <title>Maestro · Modo Fuera de Línea</title>
   <style>
     * { box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: #121415;
+      background: #0b0f12;
       color: #e2e8f0;
       margin: 0;
       padding: 24px;
@@ -18,50 +18,83 @@
       justify-content: center;
     }
     .card {
-      max-width: 420px;
+      max-width: 440px;
       width: 100%;
-      background: #1c1f22;
-      border: 1px solid #2e353b;
-      border-radius: 16px;
+      background: #14191e;
+      border: 1px solid #242c33;
+      border-radius: 20px;
       padding: 32px 24px;
       text-align: center;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(226, 135, 53, 0.15);
+      color: #f59e0b;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 12px;
+      border-radius: 999px;
+      margin-bottom: 16px;
+      border: 1px solid rgba(245, 158, 11, 0.3);
     }
     .icon {
-      font-size: 48px;
-      margin-bottom: 16px;
+      font-size: 44px;
+      margin-bottom: 12px;
     }
     h1 {
-      font-size: 20px;
+      font-size: 21px;
       font-weight: 700;
       color: #f8fafc;
-      margin: 0 0 12px;
+      margin: 0 0 10px;
     }
     p {
       font-size: 14px;
-      line-height: 1.6;
+      line-height: 1.5;
       color: #94a3b8;
       margin: 0 0 24px;
     }
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
     .btn {
-      display: inline-block;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       width: 100%;
-      padding: 12px 20px;
-      font-size: 15px;
+      padding: 13px 18px;
+      font-size: 14px;
       font-weight: 600;
-      color: #121415;
-      background: #e28735;
-      border: none;
-      border-radius: 10px;
+      border-radius: 12px;
       cursor: pointer;
       text-decoration: none;
-      transition: opacity 0.2s;
+      transition: all 0.15s ease;
+      border: none;
     }
-    .btn:active {
-      opacity: 0.8;
+    .btn-primary {
+      color: #0b0f12;
+      background: #e28735;
     }
-    .status-hint {
-      margin-top: 16px;
+    .btn-primary:active {
+      transform: scale(0.98);
+      background: #c97327;
+    }
+    .btn-secondary {
+      color: #e2e8f0;
+      background: #1e262e;
+      border: 1px solid #2e3a45;
+    }
+    .btn-secondary:active {
+      transform: scale(0.98);
+      background: #28333e;
+    }
+    .footer-hint {
+      margin-top: 20px;
       font-size: 12px;
       color: #64748b;
     }
@@ -69,11 +102,26 @@
 </head>
 <body>
   <main class="card">
+    <div class="badge">
+      <span>●</span> Modo Fuera de Línea Activo
+    </div>
     <div class="icon">📡</div>
     <h1>Sin conexión a internet</h1>
-    <p>Maestro requiere conexión a la red para sincronizar operaciones, asistencia y ventas de forma segura. Revisa tu conexión Wi-Fi o datos móviles.</p>
-    <button class="btn" onclick="window.location.href='https://www.destiladoradelnorte.com'">Reintentar conexión</button>
-    <div class="status-hint">Destiladora del Norte · Sistema Operativo</div>
+    <p>Puedes seguir cobrando en el punto de venta, registrando entradas/salidas o gestionando mesas. Todas tus operaciones se guardan de forma segura en este dispositivo y se sincronizarán automáticamente al recuperar la señal.</p>
+
+    <div class="actions">
+      <a href="/pospress" class="btn btn-primary">
+        🛒 Abrir Punto de Venta (POSpress)
+      </a>
+      <a href="/timeclock" class="btn btn-secondary">
+        ⏱️ Abrir Reloj Checador
+      </a>
+      <button class="btn btn-secondary" onclick="window.location.reload()">
+        🔄 Reintentar Conexión
+      </button>
+    </div>
+
+    <div class="footer-hint">Destiladora del Norte · Sistema Maestro</div>
   </main>
 </body>
 </html>

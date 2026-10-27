@@ -59,6 +59,26 @@ type BranchOption = {
   openCashCutId: string | null;
 };
 
+type DiscountRule = { id: string; name: string; percent: number };
+type DiscountRulesResponse = { blockedBy: string | null; discounts: DiscountRule[] };
+
+function isDiscountRulesResponse(value: unknown): value is DiscountRulesResponse {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { blockedBy?: unknown; discounts?: unknown };
+  return (
+    (typeof candidate.blockedBy === "string" || candidate.blockedBy === null) &&
+    Array.isArray(candidate.discounts) &&
+    candidate.discounts.every(
+      (rule): rule is DiscountRule =>
+        Boolean(rule) &&
+        typeof rule === "object" &&
+        typeof (rule as DiscountRule).id === "string" &&
+        typeof (rule as DiscountRule).name === "string" &&
+        typeof (rule as DiscountRule).percent === "number",
+    )
+  );
+}
+
 type LineDiscount = {
   kind: "DESCUENTO_NORMAL" | "CORTESIA";
   type: "PERCENT" | "AMOUNT";
@@ -226,6 +246,23 @@ export default function PosSellClient({
       }, 0);
     }
 
+    const cachedEmployees = localStorage.getItem("maestro:pos-employees");
+    if (cachedEmployees) {
+      window.setTimeout(() => {
+        try {
+          const data = JSON.parse(cachedEmployees);
+          if (!cancelled && data) {
+            setEmployees(data.employees || []);
+            setEmployeeDiscountPercent(data.employeeDiscountPercent ?? 50);
+            setDiscountLimitPercent(data.discountLimitPercent ?? null);
+            setManagers(data.managers || []);
+          }
+        } catch {
+          localStorage.removeItem("maestro:pos-employees");
+        }
+      }, 0);
+    }
+
     fetch("/api/pos/products")
       .then((r) => {
         if (!r.ok) throw new Error("No se pudo cargar el catálogo.");
@@ -258,6 +295,9 @@ export default function PosSellClient({
           setEmployeeDiscountPercent(data.employeeDiscountPercent);
           setDiscountLimitPercent(data.discountLimitPercent);
           setManagers(data.managers);
+          try {
+            localStorage.setItem("maestro:pos-employees", JSON.stringify(data));
+          } catch {}
         },
       )
       .catch(() => {});
@@ -271,13 +311,36 @@ export default function PosSellClient({
 
   useEffect(() => {
     if (!branchId) return;
+    const cacheKey = `maestro:pos-discount-rules:${branchId}`;
+    const cachedRules = localStorage.getItem(cacheKey);
+    if (cachedRules) {
+      window.setTimeout(() => {
+        try {
+          const parsed: unknown = JSON.parse(cachedRules);
+          if (isDiscountRulesResponse(parsed)) {
+            setDiscountBlockedBy(parsed.blockedBy);
+            setConfiguredDiscounts(parsed.discounts);
+          }
+        } catch {}
+      }, 0);
+    }
+
     fetch(`/api/pos/discount-rules?branchId=${encodeURIComponent(branchId)}`)
       .then((response) => response.ok ? response.json() : null)
-      .then((data: { blockedBy: string | null; discounts: Array<{ id: string; name: string; percent: number }> } | null) => {
-        setDiscountBlockedBy(data?.blockedBy ?? null);
-        setConfiguredDiscounts(data?.discounts?.filter((rule) => typeof rule.percent === "number") ?? []);
+      .then((data: unknown) => {
+        if (!isDiscountRulesResponse(data)) return;
+        setDiscountBlockedBy(data.blockedBy);
+        setConfiguredDiscounts(data.discounts);
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch {}
       })
-      .catch(() => { setDiscountBlockedBy(null); setConfiguredDiscounts([]); });
+      .catch(() => {
+        if (!cachedRules) {
+          setDiscountBlockedBy(null);
+          setConfiguredDiscounts([]);
+        }
+      });
   }, [branchId]);
 
   const branch = branchOptions.find((b) => b.id === branchId) ?? null;
@@ -454,20 +517,38 @@ export default function PosSellClient({
           <div className="flex items-center gap-2">
             <CashRegisterIcon className="h-5 w-5 text-primary" />
             <h1 className="text-lg font-bold text-on-surface">{title}</h1>
+            {!isOnline && (
+              <span className="flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-600 dark:text-amber-400">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                Modo Fuera de Línea
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
-            <select
-              value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
-              className="rounded-xl border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
-            >
-              {branchOptions.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+            {branchOptions.length === 1 ? (
+              <div className="flex items-center gap-2 rounded-xl border border-outline-variant bg-surface-container px-3 py-2 text-sm font-bold text-on-surface">
+                <span>📍</span>
+                <span>{branchOptions[0].name}</span>
+                {branchOptions[0].openCashCutId && (
+                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+                    Corte Activo
+                  </span>
+                )}
+              </div>
+            ) : (
+              <select
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+                className="rounded-xl border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface outline-none focus:border-primary font-semibold"
+              >
+                {branchOptions.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            )}
 
             {canManageCatalog && (
               <>
@@ -487,14 +568,6 @@ export default function PosSellClient({
                 </Link>
               </>
             )}
-
-            <Link
-              href="/pos/sales"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
-            >
-              <ChartLineIcon className="h-4 w-4" />
-              Ventas resumen
-            </Link>
 
             <Link
               href="/pospress/transactions"

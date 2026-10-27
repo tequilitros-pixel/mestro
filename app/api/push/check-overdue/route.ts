@@ -4,6 +4,11 @@ import * as webpush from "web-push";
 import { prisma, rawPrisma } from "@/lib/prisma";
 import { withDatabaseActor } from "@/lib/database-context";
 import {
+  createNotificationsForUsers,
+  type NotificationCategory,
+  type NotificationPriority,
+} from "@/app/actions/notifications";
+import {
   checkStockBajo,
   checkLicorCaducidad,
   checkReconteoPendiente,
@@ -62,6 +67,34 @@ async function runCheck(
       return checkProcesoAtrasado();
     default:
       return null;
+  }
+}
+
+function getTriggerCategory(triggerType: string): NotificationCategory {
+  switch (triggerType) {
+    case "STOCK_BAJO":
+    case "RECONTEO_PENDIENTE":
+      return "INVENTORY";
+    case "LICOR_CADUCIDAD":
+    case "PROCESO_ATRASADO":
+      return "PRODUCTION";
+    case "CORTE_DIFERENCIA":
+      return "POS";
+    default:
+      return "SYSTEM";
+  }
+}
+
+function getTriggerPriority(triggerType: string): NotificationPriority {
+  switch (triggerType) {
+    case "CORTE_DIFERENCIA":
+    case "PROCESO_ATRASADO":
+      return "URGENT";
+    case "STOCK_BAJO":
+    case "LICOR_CADUCIDAD":
+      return "HIGH";
+    default:
+      return "NORMAL";
   }
 }
 
@@ -135,6 +168,29 @@ export async function GET(request: Request) {
       }
 
       triggered += 1;
+
+      // Disparo In-App para la campanita del header
+      try {
+        const recipientUsers = await prisma.user.findMany({
+          where: { role: { in: rule.recipientRoles }, active: true },
+          select: { id: true },
+        });
+        if (recipientUsers.length > 0) {
+          await createNotificationsForUsers(
+            recipientUsers.map((u) => u.id),
+            {
+              title: result.title,
+              body: result.body,
+              category: getTriggerCategory(rule.triggerType),
+              priority: getTriggerPriority(rule.triggerType),
+              href: result.url,
+              metadata: { ruleId: rule.id, triggerType: rule.triggerType },
+            }
+          );
+        }
+      } catch (inAppErr) {
+        console.error("[PUSH CHECK] Error creando notificación In-App:", inAppErr);
+      }
 
       const subscriptions = await prisma.pushSubscription.findMany({
         where: { user: { role: { in: rule.recipientRoles }, active: true } },

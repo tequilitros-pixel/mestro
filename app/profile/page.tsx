@@ -2,6 +2,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { changePasswordAction } from "@/app/actions/changePassword";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import PushNotificationSettings from "@/components/notifications/PushNotificationSettings";
 
 const ERROR_MESSAGES: Record<string, string> = {
   campos: "Completa todos los campos.",
@@ -106,6 +107,8 @@ export default async function ProfilePage({
           </button>
         </form>
       </section>
+
+      <PushNotificationSettings />
 
       <section className="rounded-xl border border-outline-variant bg-surface-container p-6 space-y-3">
         <h2 className="text-lg font-semibold text-primary">Gestión de la cuenta</h2>

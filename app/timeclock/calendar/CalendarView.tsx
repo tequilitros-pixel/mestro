@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
-import { addDaysToDateOnly } from "@/lib/dateOnly";
-import { groupCalendarWeeks } from "@/lib/workforce/calendarWeeks";
+import { useEffect, useMemo, useState } from "react";
+import { addDaysToDateOnly, groupCalendarWeeks } from "@/lib/dateOnly";
 import { CalendarIcon, ClockIcon, MapPinIcon, PartyIcon } from "@/components/ui/icons";
 
 type ScheduleEventInfo = {
@@ -68,14 +67,47 @@ function shiftLabel(shift: Shift) {
 }
 
 export default function CalendarView({ shifts, openShift, todayKey }: CalendarViewProps) {
+  const [effectiveShifts, setEffectiveShifts] = useState<Shift[]>(shifts);
+  const [isOnline, setIsOnline] = useState(
+    () => typeof navigator === "undefined" || navigator.onLine,
+  );
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    if (shifts.length > 0) {
+      try {
+        localStorage.setItem("maestro:employee-calendar", JSON.stringify(shifts));
+      } catch {}
+    } else {
+      const cached = localStorage.getItem("maestro:employee-calendar");
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached) as Shift[];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            window.setTimeout(() => setEffectiveShifts(parsed), 0);
+          }
+        } catch {}
+      }
+    }
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [shifts]);
+
   const byDate = useMemo(() => {
     const map = new Map<string, Shift[]>();
-    for (const shift of shifts) {
+    for (const shift of effectiveShifts) {
       const key = shift.date.slice(0, 10);
       map.set(key, [...(map.get(key) ?? []), shift]);
     }
     return map;
-  }, [shifts]);
+  }, [effectiveShifts]);
 
   const days = useMemo(() => Array.from({ length: 21 }, (_, index) => addDaysToDateOnly(todayKey, index)), [todayKey]);
   const weeks = useMemo(() => groupCalendarWeeks(days), [days]);
@@ -92,7 +124,15 @@ export default function CalendarView({ shifts, openShift, todayKey }: CalendarVi
         <header className="flex items-start justify-between gap-4">
           <div>
             <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-outline">Próximos 21 días</p>
-            <h1 className="mt-1 text-3xl font-bold text-on-surface">Mi horario</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl font-bold text-on-surface">Mi horario</h1>
+              {!isOnline && (
+                <span className="flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-600 dark:text-amber-400">
+                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                  Modo Fuera de Línea
+                </span>
+              )}
+            </div>
             <p className="mt-2 text-sm leading-6 text-on-surface-variant">Aquí puedes ver claramente qué días trabajas y cuáles son de descanso.</p>
           </div>
           <Link href="/timeclock" className="flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-outline-variant bg-surface-container px-3 text-sm font-semibold text-on-surface transition hover:border-primary/25 hover:text-primary"><ClockIcon className="h-5 w-5" />Checador</Link>
@@ -116,7 +156,7 @@ export default function CalendarView({ shifts, openShift, todayKey }: CalendarVi
           })}
         </div>
 
-        {shifts.length === 0 && <div className="rounded-2xl border border-dashed border-outline-variant p-6 text-center text-sm text-on-surface-variant"><CalendarIcon className="mx-auto mb-2 h-8 w-8" />No tienes turnos publicados en los próximos 21 días.</div>}
+        {effectiveShifts.length === 0 && <div className="rounded-2xl border border-dashed border-outline-variant p-6 text-center text-sm text-on-surface-variant"><CalendarIcon className="mx-auto mb-2 h-8 w-8" />No tienes turnos publicados en los próximos 21 días.</div>}
       </div>
     </main>
   );

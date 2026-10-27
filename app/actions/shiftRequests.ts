@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { formatDateOnly, parseDateOnly } from "@/lib/dateOnly";
 import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/periodLock";
+import { createNotification, createNotificationsForUsers } from "@/app/actions/notifications";
 
 export type ShiftRequestKind = "CANNOT_WORK" | "CHANGE_TIME" | "SWAP" | "DAY_OFF";
 
@@ -56,6 +57,37 @@ export async function createShiftRequestAction(input: { shiftId: string; type: S
     proposedEndTime: input.type === "CHANGE_TIME" ? input.proposedEndTime : null,
     swapTargetUserId: input.type === "SWAP" ? input.swapTargetUserId : null,
   } });
+
+  // Notificar a administradores y gerentes
+  try {
+    const managers = await prisma.user.findMany({
+      where: { role: { in: ["ADMIN", "GERENTE"] }, active: true },
+      select: { id: true },
+    });
+    const typeLabel =
+      input.type === "SWAP"
+        ? "Intercambio de turno"
+        : input.type === "CHANGE_TIME"
+        ? "Cambio de horario"
+        : input.type === "DAY_OFF"
+        ? "Día libre"
+        : "Inasistencia";
+
+    await createNotificationsForUsers(
+      managers.map((m) => m.id),
+      {
+        title: `🔄 Solicitud de turno: ${user.name}`,
+        body: `${user.name} solicitó ${typeLabel}: ${input.reason.trim()}`,
+        category: "TIMECLOCK",
+        priority: "NORMAL",
+        href: "/administration/schedule",
+        metadata: { shiftId: shift.id, type: input.type },
+      }
+    );
+  } catch (notifErr) {
+    console.error("[createShiftRequestAction] Error al notificar:", notifErr);
+  }
+
   revalidatePath("/timeclock/requests"); revalidatePath("/administration/schedule");
   return { success: true };
 }
@@ -92,6 +124,24 @@ export async function reviewShiftRequestAction(id: string, approve: boolean, rev
     if (request.type === "SWAP" && request.swapTargetUserId) await tx.scheduledShift.update({ where: { id: request.shiftId }, data: { userId: request.swapTargetUserId } });
     if (request.type === "CANNOT_WORK" || request.type === "DAY_OFF") await tx.scheduledShift.update({ where: { id: request.shiftId }, data: { type: "DESCANSO", branchId: null, startTime: null, endTime: null, eventId: null } });
   });
+
+  // Notificar al colaborador solicitante
+  try {
+    await createNotification({
+      userId: request.requestedById,
+      title: approve ? "✅ Solicitud de turno autorizada" : "❌ Solicitud de turno rechazada",
+      body: approve
+        ? "Tu solicitud de cambio sobre el turno fue autorizada por administración."
+        : `Tu solicitud fue rechazada.${reviewNotes?.trim() ? ` Motivo: ${reviewNotes.trim()}` : ""}`,
+      category: "TIMECLOCK",
+      priority: approve ? "NORMAL" : "HIGH",
+      href: "/timeclock/calendar",
+      metadata: { shiftId: request.shiftId, status: approve ? "APPROVED" : "REJECTED" },
+    });
+  } catch (notifErr) {
+    console.error("[reviewShiftRequestAction] Error al notificar:", notifErr);
+  }
+
   revalidatePath("/timeclock/requests"); revalidatePath("/timeclock/calendar"); revalidatePath("/administration/schedule");
   return { success: true };
 }
