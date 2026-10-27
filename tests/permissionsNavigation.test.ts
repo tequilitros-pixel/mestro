@@ -77,7 +77,7 @@ test("la ruta de ventas resumen no es interceptada por la entrada de POSpress", 
   );
 });
 
-test("el portal Workforce descontinuado vuelve al horario original", async () => {
+test("el portal Workforce descontinuado vuelve a Checador y horario", async () => {
   assert.equal(
     canAccessModule("GERENTE", ["/administration/workforce"], "/administration/schedule"),
     true,
@@ -101,7 +101,7 @@ test("el portal Workforce descontinuado vuelve al horario original", async () =>
   const workforceHome = redirects.find(
     (redirect) => redirect.source === "/workforce",
   );
-  assert.equal(workforceHome?.destination, "/administration/schedule");
+  assert.equal(workforceHome?.destination, "/timeclock");
   assert.equal(workforceHome?.permanent, false);
 });
 

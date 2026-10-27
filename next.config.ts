@@ -21,13 +21,12 @@ const nextConfig: NextConfig = {
         destination: "/workforce/:path*",
         permanent: true,
       },
-      // La portada del portal Workforce fue reemplazada por el horario
-      // operativo original. Conservamos las rutas específicas de checador,
-      // disponibilidad y nómina mientras existan, pero un acceso histórico a
-      // la portada ya no debe reabrir esa experiencia.
+      // La portada histórica de Workforce fue reemplazada por Checador y
+      // horario, que concentra Calendario y Nómina. Conservamos las rutas
+      // específicas mientras se migra cualquier enlace guardado.
       {
         source: "/workforce",
-        destination: "/administration/schedule",
+        destination: "/timeclock",
         permanent: false,
       },
       {
