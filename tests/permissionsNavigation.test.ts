@@ -105,6 +105,29 @@ test("el portal Workforce descontinuado vuelve a Checador y horario", async () =
   assert.equal(workforceHome?.permanent, false);
 });
 
+test("Checador y horario reúne nómina y la configuración operativa", () => {
+  const items = SUBMENUS.timeclock;
+  const payroll = items.find((item) => item.href === "/timeclock/payroll");
+  const schedule = items.find((item) => item.href === "/administration/schedule");
+  const geofences = items.find((item) => item.href === "/timeclock/geofences");
+  const notifications = items.find(
+    (item) => item.href === "/administration/personnel/notifications",
+  );
+
+  assert.equal(payroll?.label, "Nómina y pagos");
+  assert.equal(payroll?.group, "Mi jornada");
+  assert.equal(schedule?.group, "Operación y configuración");
+  assert.equal(geofences?.group, "Operación y configuración");
+  assert.equal(notifications?.group, "Operación y configuración");
+  assert.equal(getModuleKeyForPath("/timeclock/payroll"), "/timeclock/payroll");
+  assert.equal(getCurrentModule("/administration/personnel/timeclock"), "timeclock");
+  assert.equal(getCurrentModule("/administration/personnel/notifications"), "timeclock");
+  assert.equal(
+    isSubmenuItemVisible("GERENTE", ["/timeclock/payroll"], payroll!),
+    true,
+  );
+});
+
 test("cada permiso configurable tiene una pestaña y se resuelve exactamente", () => {
   for (const key of configurableKeys) {
     assert.ok(

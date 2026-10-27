@@ -226,18 +226,42 @@ function ModuleLinks({
   collapsed?: boolean;
   onNavigate?: () => void;
 }) {
+  const groupedItems = items.some((item) => item.group)
+    ? items.reduce<{ label: string; items: SubMenuItem[] }[]>((groups, item) => {
+        const label = item.group ?? "Otras secciones";
+        const currentGroup = groups.at(-1);
+
+        if (currentGroup?.label === label) {
+          currentGroup.items.push(item);
+        } else {
+          groups.push({ label, items: [item] });
+        }
+
+        return groups;
+      }, [])
+    : [{ label: "", items }];
+
   return (
     <nav aria-label="Navegación del módulo" className="flex-1 overflow-y-auto p-2">
-      {items.map((item) => (
-        <ModuleItem
-          key={item.href}
-          item={item}
-          pathname={pathname}
-          role={role}
-          moduleKeys={moduleKeys}
-          collapsed={collapsed}
-          onNavigate={onNavigate}
-        />
+      {groupedItems.map((group) => (
+        <section key={group.label || "module-links"} className="mb-3 last:mb-0">
+          {!collapsed && group.label && (
+            <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant">
+              {group.label}
+            </p>
+          )}
+          {group.items.map((item) => (
+            <ModuleItem
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              role={role}
+              moduleKeys={moduleKeys}
+              collapsed={collapsed}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </section>
       ))}
     </nav>
   );

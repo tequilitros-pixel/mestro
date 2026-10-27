@@ -143,6 +143,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "/timeclock/calendar", label: "Mi horario" },
       { key: "/timeclock/availability", label: "Mi disponibilidad" },
       { key: "/timeclock/hours", label: "Mi nómina y horas" },
+      { key: "/timeclock/payroll", label: "Nómina y pagos" },
       { key: "/timeclock/history", label: "Mi historial de turnos" },
       { key: "/timeclock/requests", label: "Mis solicitudes" },
       { key: "/timeclock/kiosk", label: "Modo kiosco de checador" },
@@ -263,6 +264,12 @@ export function getModuleKeyForPath(pathname: string): string | null {
     pathname.startsWith("/timeclock/geofences/")
   ) {
     return "/timeclock/geofences";
+  }
+  if (
+    pathname === "/timeclock/payroll" ||
+    pathname.startsWith("/timeclock/payroll/")
+  ) {
+    return "/timeclock/payroll";
   }
   if (pathname === "/timeclock/kiosk" || pathname === "/workforce/kiosk") {
     return "/timeclock/kiosk";

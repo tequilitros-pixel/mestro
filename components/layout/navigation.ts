@@ -600,38 +600,52 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       iconVariant: "green",
       operatorAllowed: true,
       permissionKey: "/timeclock",
+      group: "Mi jornada",
     },
     {
       href: "/timeclock/calendar",
-      label: "Mi horario",
+      label: "Horario",
       icon: ClockIcon,
       iconVariant: "blue",
       operatorAllowed: true,
       permissionKey: "/timeclock/calendar",
+      group: "Mi jornada",
     },
     {
       href: "/timeclock/availability",
-      label: "Mi disponibilidad",
+      label: "Disponibilidad",
       icon: CalendarIcon,
       iconVariant: "amber",
       operatorAllowed: true,
       permissionKey: "/timeclock/availability",
+      group: "Mi jornada",
     },
     {
       href: "/timeclock/hours",
-      label: "Mi nómina",
+      label: "Horas y pago estimado",
       icon: CalendarIcon,
       iconVariant: "green",
       operatorAllowed: true,
       permissionKey: "/timeclock/hours",
+      group: "Mi jornada",
+    },
+    {
+      href: "/timeclock/payroll",
+      label: "Nómina y pagos",
+      icon: DollarIcon,
+      iconVariant: "green",
+      operatorAllowed: true,
+      permissionKey: "/timeclock/payroll",
+      group: "Mi jornada",
     },
     {
       href: "/timeclock/history",
-      label: "Historial de turnos",
+      label: "Historial de asistencia",
       icon: ClockIcon,
       iconVariant: "blue",
       operatorAllowed: true,
       permissionKey: "/timeclock/history",
+      group: "Mi jornada",
     },
     {
       href: "/timeclock/requests",
@@ -640,6 +654,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       iconVariant: "amber",
       operatorAllowed: true,
       permissionKey: "/timeclock/requests",
+      group: "Mi jornada",
     },
     {
       href: "/timeclock/kiosk",
@@ -647,6 +662,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: StoreIcon,
       iconVariant: "purple",
       permissionKey: "/timeclock/kiosk",
+      group: "Operación y configuración",
     },
     {
       href: "/administration/personnel",
@@ -654,13 +670,15 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: UsersIcon,
       iconVariant: "purple",
       permissionKey: "/administration/personnel",
+      group: "Operación y configuración",
     },
     {
       href: "/administration/schedule",
-      label: "Horarios",
+      label: "Programar horarios",
       icon: CalendarIcon,
       iconVariant: "purple",
       permissionKey: "/administration/schedule",
+      group: "Operación y configuración",
     },
     {
       href: "/administration/personnel/timeclock",
@@ -668,6 +686,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: ListChecksIcon,
       iconVariant: "amber",
       permissionKey: "/administration/personnel/timeclock",
+      group: "Operación y configuración",
     },
     {
       href: "/timeclock/geofences",
@@ -675,6 +694,15 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: MapPinIcon,
       iconVariant: "cyan",
       permissionKey: "/timeclock/geofences",
+      group: "Operación y configuración",
+    },
+    {
+      href: "/administration/personnel/notifications",
+      label: "Notificaciones",
+      icon: BellIcon,
+      iconVariant: "amber",
+      permissionKey: "/administration/personnel/notifications",
+      group: "Operación y configuración",
     },
   ],
 
@@ -773,12 +801,16 @@ export function getCurrentModule(pathname: string): AppModule {
     return "timeclock";
   }
 
-  if (matchesRoute(pathname, "/administration/personnel")) {
-    return "personnel";
+  if (
+    matchesRoute(pathname, "/administration/schedule") ||
+    matchesRoute(pathname, "/administration/personnel/timeclock") ||
+    matchesRoute(pathname, "/administration/personnel/notifications")
+  ) {
+    return "timeclock";
   }
 
-  if (matchesRoute(pathname, "/administration/schedule")) {
-    return "timeclock";
+  if (matchesRoute(pathname, "/administration/personnel")) {
+    return "personnel";
   }
 
   if (matchesRoute(pathname, "/administration")) {
