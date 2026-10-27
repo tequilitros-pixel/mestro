@@ -116,7 +116,11 @@ test("Checador y horario reúne nómina y la configuración operativa", () => {
 
   assert.equal(payroll?.label, "Nómina y pagos");
   assert.equal(payroll?.group, "Mi jornada");
-  assert.equal(schedule?.group, "Operación y configuración");
+  assert.equal(schedule?.group, "Mi jornada");
+  assert.equal(items.indexOf(schedule!), items.indexOf(items.find((item) => item.href === "/timeclock/calendar")!) + 1);
+  assert.equal(isSubmenuItemVisible("ADMIN", [], schedule!), true);
+  assert.equal(isSubmenuItemVisible("GERENTE", ["/timeclock/payroll"], schedule!), false);
+  assert.equal(isSubmenuItemVisible("GERENTE", ["/administration/schedule"], schedule!), true);
   assert.equal(geofences?.group, "Operación y configuración");
   assert.equal(notifications?.group, "Operación y configuración");
   assert.equal(getModuleKeyForPath("/timeclock/payroll"), "/timeclock/payroll");
