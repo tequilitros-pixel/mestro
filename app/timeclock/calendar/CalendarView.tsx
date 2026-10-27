@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { addDaysToDateOnly, groupCalendarWeeks } from "@/lib/dateOnly";
+import { addDaysToDateOnly } from "@/lib/dateOnly";
+import { groupCalendarWeeks } from "@/lib/workforce/calendarWeeks";
 import { CalendarIcon, ClockIcon, MapPinIcon, PartyIcon } from "@/components/ui/icons";
 
 type ScheduleEventInfo = {
