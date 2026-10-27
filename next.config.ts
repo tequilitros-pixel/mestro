@@ -97,6 +97,18 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // El navegador debe volver a validar el worker en cada apertura para
+      // que una PWA instalada no quede atendiendo recursos de una versión
+      // anterior después de una publicación.
+      {
+        source: "/sw.js",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+        ],
+      },
     ];
   },
 };

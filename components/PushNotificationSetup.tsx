@@ -122,6 +122,7 @@ export default function PushNotificationSetup() {
       const registration =
         await navigator.serviceWorker.register("/sw.js", {
           scope: "/",
+          updateViaCache: "none",
         });
 
       await navigator.serviceWorker.ready;

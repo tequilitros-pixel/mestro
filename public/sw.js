@@ -1,7 +1,7 @@
 // Al actualizar la interfaz, la versión invalida los recursos estáticos de
 // versiones anteriores antes de volver a servirlos desde caché.
 const IS_DEVELOPMENT_HOST = ["localhost", "127.0.0.1"].includes(self.location.hostname);
-const CACHE_NAME = IS_DEVELOPMENT_HOST ? "maestro-shell-dev-v11" : "maestro-shell-v11";
+const CACHE_NAME = IS_DEVELOPMENT_HOST ? "maestro-shell-dev-v12" : "maestro-shell-v12";
 const STATIC_ASSETS = [
   "/manifest.json",
   "/icon-192.png",
