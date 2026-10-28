@@ -1,5 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { rawPrisma as prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { hashSessionToken } from "@/lib/session";
@@ -13,7 +14,8 @@ import {
 
 
 
-export async function getCurrentSession() {
+// React caches this only within a single server request, never across users.
+export const getCurrentSession = cache(async function getCurrentSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get("maestro_session")?.value;
 
@@ -26,7 +28,7 @@ export async function getCurrentSession() {
 
   if (!session || session.expiresAt <= new Date() || !session.user.active) return null;
   return session;
-}
+});
 export async function getCurrentUser() {
   return (await getCurrentSession())?.user ?? null;
 }
