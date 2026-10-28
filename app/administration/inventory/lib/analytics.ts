@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { computeStockMatrix, totalStockByProduct } from "./stock";
+import { computeStockMatrix, totalStockByProduct, type StockMatrix } from "./stock";
 import {
   addBusinessDays,
   businessDayStart,
@@ -259,6 +259,7 @@ function addWaste(acc: ProductAccumulator | BranchAccumulator, quantity: number,
 export async function getInventoryAnalytics(
   days = ANALYTICS_DAYS,
   allowedBranchIds: string[] | null = null,
+  stockMatrixPromise?: Promise<StockMatrix>,
 ): Promise<InventoryAnalytics> {
   const today = formatBusinessDateOnly(new Date());
   const since = businessDayStart(addBusinessDays(today, -(days - 1)));
@@ -312,7 +313,7 @@ export async function getInventoryAnalytics(
     const current = movement._max.createdAt;
     if (!previous || (current && current > previous)) lastMovementByProduct.set(movement.inventoryProductId, current);
   }
-  const stockMatrix = await computeStockMatrix(products.map((product) => product.id), allowedBranchIds);
+  const stockMatrix = await (stockMatrixPromise ?? computeStockMatrix(products.map((product) => product.id), allowedBranchIds));
 
   const productAcc = new Map<string, ProductAccumulator>();
   const categoryAcc = new Map<string, { consumed: number; cost: number; waste: number; products: Set<string>; movements: number }>();
