@@ -50,6 +50,7 @@ export default function PostSaleModal({
 
   useEffect(() => {
     triggerAlertFeedback("success");
+    setPrinterSettings(getStoredPrinterSettings());
   }, []);
 
   async function handlePrint(overrideType?: PrinterConnectionType) {
