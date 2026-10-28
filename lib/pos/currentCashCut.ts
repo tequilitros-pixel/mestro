@@ -34,9 +34,15 @@ export async function getCurrentPospressCashCut(
   });
   if (ownCut) return ownCut;
 
-  return prisma.cashCut.findFirst({
+  // Si el usuario no abrió un corte propio, sólo podemos inferir el contexto
+  // cuando hay uno único dentro de sus sucursales autorizadas. Elegir el más
+  // reciente entre dos sucursales abiertas podría mandar la operación al
+  // negocio equivocado.
+  const fallbackCuts = await prisma.cashCut.findMany({
     where: baseWhere,
     orderBy: { openedAt: "desc" },
     select,
+    take: 2,
   });
+  return fallbackCuts.length === 1 ? fallbackCuts[0] : null;
 }

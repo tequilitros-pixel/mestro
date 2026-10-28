@@ -135,6 +135,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const {
     branchId,
+    cashCutId,
     items,
     discountAmount: rawDiscountAmount,
     discountReason,
@@ -147,6 +148,7 @@ export async function POST(request: NextRequest) {
     inventoryMode,
   }: {
     branchId?: string;
+    cashCutId?: string;
     items?: CartItemInput[];
     discountAmount?: number;
     discountReason?: string;
@@ -164,7 +166,7 @@ export async function POST(request: NextRequest) {
   }
 
   const salePayloadHash = hashPayload({
-    branchId, items, discountAmount: rawDiscountAmount, discountReason,
+    branchId, cashCutId, items, discountAmount: rawDiscountAmount, discountReason,
     discountReasonCode, employeeBuyerId, payments,
     inventoryMode: inventoryMode ?? "legacy",
     authorization: authorization ? { managerId: authorization.managerId } : undefined,
@@ -185,6 +187,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado en esta sucursal" }, { status: 403 });
   }
 
+  // El corte abierto es la frontera operativa de un cajero. No se acepta una
+  // sucursal enviada por el navegador si no coincide con el corte autorizado
+  // del usuario, aunque éste tenga acceso histórico a más de una sucursal.
+  const currentCashCut = user.role === "ADMIN" ? null : await getCurrentPospressCashCut(user);
+  if (user.role !== "ADMIN") {
+    if (!currentCashCut) {
+      return NextResponse.json(
+        { error: "No tienes un corte de caja abierto asignado para cobrar." },
+        { status: 403 },
+      );
+    }
+    if (branchId !== currentCashCut.branch.id) {
+      return NextResponse.json({ error: "Solo puedes cobrar en la sucursal de tu corte abierto." }, { status: 403 });
+    }
+    if (!cashCutId || cashCutId !== currentCashCut.id) {
+      return NextResponse.json({ error: "El corte de caja cambió. Actualiza POSPress antes de cobrar." }, { status: 409 });
+    }
+  }
+
   // El chequeo de idempotencia va DESPUÉS de validar acceso a la
   // sucursal: si no, un clientOperationId adivinado o reutilizado
   // podría devolver los datos de una venta de otra sucursal.
@@ -193,6 +214,9 @@ export async function POST(request: NextRequest) {
     if (existing) {
       if (!(await hasBranchAccess(existing.branchId))) {
         return NextResponse.json({ error: "No autorizado en esta sucursal" }, { status: 403 });
+      }
+      if (currentCashCut && existing.cashCutId !== currentCashCut.id) {
+        return NextResponse.json({ error: "Esta operación pertenece a otro corte de caja." }, { status: 403 });
       }
       if (existing.clientPayloadHash && existing.clientPayloadHash !== salePayloadHash) {
         const error = new DomainError("IDEMPOTENCY_KEY_REUSED", { operationId: clientOperationId });
@@ -251,7 +275,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Sucursal no encontrada" }, { status: 404 });
   }
 
-  const openCashCut = await prisma.cashCut.findFirst({
+  const openCashCut = currentCashCut ?? await prisma.cashCut.findFirst({
     where: { branchId, status: "ABIERTO" },
     orderBy: { openedAt: "desc" },
   });
@@ -261,6 +285,9 @@ export async function POST(request: NextRequest) {
       { error: "Esta sucursal no tiene un corte de caja abierto. Ábrelo antes de cobrar." },
       { status: 400 }
     );
+  }
+  if (cashCutId && cashCutId !== openCashCut.id) {
+    return NextResponse.json({ error: "El corte de caja cambió. Actualiza POSPress antes de cobrar." }, { status: 409 });
   }
 
   // Resolvemos cada línea del carrito: producto de catálogo (con

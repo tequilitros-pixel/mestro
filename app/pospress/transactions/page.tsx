@@ -63,6 +63,7 @@ export default async function PospressTransactionsPage() {
       branches={branches}
       workers={workers}
       isAdmin={isAdmin}
+      currentCashCutId={currentCashCut?.id}
       initialSales={sales.map((sale) => ({
         id: sale.id,
         code: sale.code,

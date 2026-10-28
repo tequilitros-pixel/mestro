@@ -1,19 +1,28 @@
-import { getAccessibleBranchIds } from "@/lib/auth";
+import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import PospressPendingTabsClient from "@/components/pospress/PospressPendingTabsClient";
+import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function PospressPendingTabsPage() {
+  const user = await getCurrentUser();
   const allowedBranchIds = await getAccessibleBranchIds();
+  const isAdmin = user?.role === "ADMIN";
+  const currentCashCut = user && !isAdmin ? await getCurrentPospressCashCut(user) : null;
   const branches = await prisma.branch.findMany({
-    where: { active: true, ...(allowedBranchIds ? { id: { in: allowedBranchIds } } : {}) },
+    where: {
+      active: true,
+      ...(isAdmin
+        ? (allowedBranchIds ? { id: { in: allowedBranchIds } } : {})
+        : currentCashCut ? { id: currentCashCut.branch.id } : { id: "__no-open-pospress-cut__" }),
+    },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
 
-  const cuts = branches.length
+  const cuts = isAdmin && branches.length
     ? await prisma.cashCut.findMany({
         where: { status: "ABIERTO", branchId: { in: branches.map((branch) => branch.id) } },
         orderBy: { openedAt: "desc" },
@@ -32,7 +41,9 @@ export default async function PospressPendingTabsPage() {
     <PospressPendingTabsClient
       branches={branches.map((branch) => ({
         ...branch,
-        openCashCutId: openCutByBranch.get(branch.id) ?? null,
+        openCashCutId: currentCashCut?.branch.id === branch.id
+          ? currentCashCut.id
+          : openCutByBranch.get(branch.id) ?? null,
       }))}
     />
   );

@@ -462,7 +462,7 @@ export default function PosSellClient({
   }
 
   async function handleSavePendingTab() {
-    if (!pendingCustomerName.trim() || !branchId || cart.length === 0) return;
+    if (!pendingCustomerName.trim() || !branchId || !branch?.openCashCutId || cart.length === 0) return;
 
     const lines: PendingTabLine[] = cart.map((line) => {
       if (line.isCustom) {
@@ -488,6 +488,7 @@ export default function PosSellClient({
     const newTab: PendingTab = {
       id: crypto.randomUUID(),
       branchId,
+      cashCutId: branch?.openCashCutId ?? "",
       customerName: pendingCustomerName.trim(),
       phone: pendingCustomerPhone.trim() || undefined,
       notes: pendingCustomerNotes.trim() || undefined,
@@ -1622,6 +1623,7 @@ function PaymentModal({
       clientCreatedAt,
       displayTotal: total,
       branchId: branch.id,
+      cashCutId: branch.openCashCutId ?? undefined,
       discountAmount,
       discountReasonCode,
       discountReason: discountReasonNote,

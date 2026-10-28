@@ -108,7 +108,7 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
 
     const online = () => {
       setIsOnline(true);
-      void syncPendingTabs(branchId).then((data) => {
+      void syncPendingTabs(branchId, branches.find((item) => item.id === branchId)?.openCashCutId ?? undefined).then((data) => {
         if (!cancelled) setTabs(data);
       });
     };
@@ -117,7 +117,7 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
     window.addEventListener("online", online);
     window.addEventListener("offline", offline);
 
-    void listLocalPendingTabs(initialBranchId)
+    void listLocalPendingTabs(initialBranchId, branches[0]?.openCashCutId ?? undefined)
       .then((data) => {
         if (!cancelled) setTabs(data);
       })
@@ -125,7 +125,7 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
 
     // Las cuentas quedan en este dispositivo; no se simula una sincronización remota.
     if (navigator.onLine) {
-      void syncPendingTabs(initialBranchId)
+      void syncPendingTabs(initialBranchId, branches[0]?.openCashCutId ?? undefined)
         .then((data) => {
           if (!cancelled) setTabs(data);
         })
@@ -161,7 +161,8 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
       });
 
     const changed = () => {
-      void listLocalPendingTabs(branchId).then(setTabs);
+      const cashCutId = branches.find((item) => item.id === branchId)?.openCashCutId ?? undefined;
+      void listLocalPendingTabs(branchId, cashCutId).then(setTabs);
     };
     window.addEventListener("maestro:pending-tabs-changed", changed);
 
@@ -171,7 +172,7 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
       window.removeEventListener("offline", offline);
       window.removeEventListener("maestro:pending-tabs-changed", changed);
     };
-  }, [initialBranchId, branchId]);
+  }, [branches, initialBranchId, branchId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -193,7 +194,7 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
   // Filtrado y búsqueda
   const filteredTabs = useMemo(() => {
     return tabs.filter((t) => {
-      if (t.branchId !== branchId) return false;
+      if (t.branchId !== branchId || t.cashCutId !== branch?.openCashCutId) return false;
       if (filterStatus !== "ALL" && t.status !== filterStatus) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -205,17 +206,17 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
       }
       return true;
     });
-  }, [tabs, branchId, filterStatus, searchQuery]);
+  }, [tabs, branch, branchId, filterStatus, searchQuery]);
 
   // Métricas
-  const pendingCount = tabs.filter((t) => t.branchId === branchId && t.status === "PENDIENTE").length;
+  const pendingCount = tabs.filter((t) => t.branchId === branchId && t.cashCutId === branch?.openCashCutId && t.status === "PENDIENTE").length;
   const totalPendingAmount = tabs
-    .filter((t) => t.branchId === branchId && t.status === "PENDIENTE")
+    .filter((t) => t.branchId === branchId && t.cashCutId === branch?.openCashCutId && t.status === "PENDIENTE")
     .reduce((sum, t) => sum + t.total, 0);
-  const paidCount = tabs.filter((t) => t.branchId === branchId && t.status === "PAGADA").length;
+  const paidCount = tabs.filter((t) => t.branchId === branchId && t.cashCutId === branch?.openCashCutId && t.status === "PAGADA").length;
 
   async function refreshTabs() {
-    setTabs(await listLocalPendingTabs(branchId));
+    setTabs(await listLocalPendingTabs(branchId, branch?.openCashCutId ?? undefined));
   }
 
   async function createNewTab() {
@@ -224,6 +225,7 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
     const newTab: PendingTab = {
       id: crypto.randomUUID(),
       branchId: branch.id,
+      cashCutId: branch.openCashCutId ?? "",
       customerName: newCustomerName.trim(),
       phone: newCustomerPhone.trim() || undefined,
       notes: newCustomerNotes.trim() || undefined,
@@ -452,13 +454,14 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
                     : "bg-surface-container text-on-surface-variant hover:bg-surface"
                 }`}
               >
-                Todas ({tabs.filter((t) => t.branchId === branchId).length})
+                Todas ({tabs.filter((t) => t.branchId === branchId && t.cashCutId === branch?.openCashCutId).length})
               </button>
             </div>
 
             <button
               onClick={() => setIsCreatingNew(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-on-primary shadow-sm transition hover:scale-[1.02]"
+              disabled={!hasOpenCut}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-on-primary shadow-sm transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50"
             >
               + Nueva cuenta pendiente
             </button>
@@ -881,6 +884,7 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
         <PendingTabPaymentModal
           tab={activeTab}
           branchId={branchId}
+          cashCutId={branch?.openCashCutId ?? ""}
           branchName={branch?.name ?? "Tequilitros"}
           isOnline={isOnline}
           onClose={() => setPaymentOpen(false)}
@@ -912,6 +916,7 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
 function PendingTabPaymentModal({
   tab,
   branchId,
+  cashCutId,
   branchName,
   isOnline,
   onClose,
@@ -919,6 +924,7 @@ function PendingTabPaymentModal({
 }: {
   tab: PendingTab;
   branchId: string;
+  cashCutId: string;
   branchName: string;
   isOnline: boolean;
   onClose: () => void;
@@ -954,6 +960,7 @@ function PendingTabPaymentModal({
       clientCreatedAt: createdAt,
       displayTotal: tab.total,
       branchId,
+      cashCutId: cashCutId || undefined,
       inventoryMode: "v2" as const,
       discountReason: `Cuenta pendiente: ${tab.customerName}`,
       items: tab.lines.map((line) =>

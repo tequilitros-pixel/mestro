@@ -1,6 +1,7 @@
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import PosSellClient from "@/components/pos/PosSellClient";
+import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,16 +17,20 @@ export default async function PosPressPage({
     searchParams,
   ]);
 
+  const isAdmin = user?.role === "ADMIN";
+  const currentCashCut = user && !isAdmin ? await getCurrentPospressCashCut(user) : null;
   const branches = await prisma.branch.findMany({
     where: {
       active: true,
-      ...(allowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
+      ...(isAdmin
+        ? (allowedBranchIds ? { id: { in: allowedBranchIds } } : {})
+        : currentCashCut ? { id: currentCashCut.branch.id } : { id: "__no-open-pospress-cut__" }),
     },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
 
-  const openCuts = branches.length
+  const openCuts = isAdmin && branches.length
     ? await prisma.cashCut.findMany({
         where: {
           status: "ABIERTO",
@@ -54,7 +59,9 @@ export default async function PosPressPage({
       branchOptions={branches.map((branch) => ({
         id: branch.id,
         name: branch.name,
-        openCashCutId: openCutByBranch.get(branch.id) ?? null,
+        openCashCutId: currentCashCut?.branch.id === branch.id
+          ? currentCashCut.id
+          : openCutByBranch.get(branch.id) ?? null,
       }))}
       canManageCatalog={user?.role === "ADMIN"}
     />
