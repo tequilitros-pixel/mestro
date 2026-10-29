@@ -8,7 +8,6 @@ import { getActiveDiscountRules } from "@/lib/pos/discountRules";
 import { setRlsContext, withRlsContext } from "@/lib/rls";
 import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
 import { hashPayload } from "@/lib/pos2/payloadHash";
-import { consumePosInventory } from "@/lib/pos/v1InventoryGuard";
 import {
   consumePospressInventoryV2,
   type PospressInventoryRequirement,
@@ -620,7 +619,6 @@ export async function POST(request: NextRequest) {
       include: { items: true, payments: true, branch: true },
     });
 
-    const inventoryRequirements: Array<{ productId: string; quantity: number }> = [];
     const pospressInventoryRequirements: PospressInventoryRequirement[] = [];
     for (const item of resolvedItems) {
       if (!item.variantId) continue;
@@ -629,33 +627,28 @@ export async function POST(request: NextRequest) {
 
       for (const ingredient of variant.ingredients) {
         const quantity = new Prisma.Decimal(ingredient.quantity).times(item.quantity);
-        inventoryRequirements.push({ productId: ingredient.inventoryProductId, quantity: quantity.toNumber() });
-        if (inventoryMode === "v2") {
-          if (!ingredient.unit || ingredient.unitStatus !== "RESOLVED") {
-            throw new DomainError("RECIPE_UNIT_UNRESOLVED", {
-              ingredientId: ingredient.id,
-              inventoryProductId: ingredient.inventoryProductId,
-            });
-          }
-          pospressInventoryRequirements.push({
+        if (!ingredient.unit || ingredient.unitStatus !== "RESOLVED") {
+          throw new DomainError("RECIPE_UNIT_UNRESOLVED", {
+            ingredientId: ingredient.id,
             inventoryProductId: ingredient.inventoryProductId,
-            quantity,
-            unit: ingredient.unit,
           });
         }
+        pospressInventoryRequirements.push({
+          inventoryProductId: ingredient.inventoryProductId,
+          quantity,
+          unit: ingredient.unit,
+        });
       }
     }
-    if (inventoryMode === "v2") {
-      await consumePospressInventoryV2(tx, {
-        branchId,
-        actorId: user.id,
-        saleId: createdSale.id,
-        operationId: clientOperationId ?? randomUUID(),
-        requirements: pospressInventoryRequirements,
-      });
-    } else {
-      await consumePosInventory(tx, { branchId, saleCode: code, requirements: inventoryRequirements });
-    }
+    // inventoryMode remains in the request hash for retries queued by older clients.
+    // Every new sale is committed against the same V2 stock ledger.
+    await consumePospressInventoryV2(tx, {
+      branchId,
+      actorId: user.id,
+      saleId: createdSale.id,
+      operationId: clientOperationId ?? randomUUID(),
+      requirements: pospressInventoryRequirements,
+    });
 
     // Suma los pagos de esta venta al corte de caja abierto de la
     // sucursal — así "Ventas" en el corte queda alimentado por el
