@@ -15,6 +15,7 @@ export async function openCashSession(input: {
   actor: CommandActor;
   openingCash: string;
 }) {
+  if (process.env.NODE_ENV === "production") throw new DomainError("POS_VERSION_RETIRED");
   let opening: Money;
   try { opening = Money.nonNegative(input.openingCash); } catch { throw new DomainError("VALIDATION_ERROR", { field: "openingCash" }); }
   const payload = { branchId: input.branchId, registerId: input.registerId, terminalId: input.terminalId, actorId: input.actor.id, openingCash: opening.toString() };
