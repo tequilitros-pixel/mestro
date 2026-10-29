@@ -162,6 +162,7 @@ model User {
 
   inventoryCountsClosed InventoryCount[] @relation("InventoryCountClosedBy")
   inventoryCountsCreated InventoryCount[] @relation("InventoryCountCreatedBy")
+  inventoryCountsVoided InventoryCount[] @relation("InventoryCountVoidedBy")
 
   registersCreated             Register[]               @relation("RegisterCreatedBy")
   terminalsCreated             Terminal[]               @relation("TerminalCreatedBy")
@@ -2600,6 +2601,7 @@ model InventoryEntry {
 enum InventoryCountStatus {
   BORRADOR
   CERRADO
+  ANULADO
 }
 
 model InventoryCount {
@@ -2612,12 +2614,15 @@ model InventoryCount {
   notes     String?
   closedAt   DateTime?
   closedById String?
+  voidedAt   DateTime?
+  voidedById String?
   createdById String?
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
 
   branch       Branch                      @relation(fields: [branchId], references: [id])
   closedBy     User?                       @relation("InventoryCountClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  voidedBy     User?                       @relation("InventoryCountVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
   createdBy    User?                       @relation("InventoryCountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   items        InventoryCountItem[]
   declarations InventoryCountDeclaration[]
@@ -2626,6 +2631,7 @@ model InventoryCount {
   @@index([countDate])
   @@index([countType])
   @@index([closedById])
+  @@index([voidedById])
   @@index([createdById])
 }
 
