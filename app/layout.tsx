@@ -19,7 +19,7 @@ const OPERATOR_ALLOWED_PATHS = [
   "/cotizador-tequilitros",
 ];
 
-const PUBLIC_MARKETING_PATHS = ["/tequilitros"];
+const PUBLIC_MARKETING_PATHS = ["/tequilitros", "/TequilaElColotlense"];
 
 function matchesPath(pathname: string, path: string) {
   return pathname === path || pathname.startsWith(`${path}/`);
