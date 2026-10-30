@@ -102,6 +102,7 @@ export default async function SucursalesInventoryPage() {
     }))
     .filter(
       (product) =>
+        matrix.branches.every((branch) => !matrix.uninitializedByBranch.get(branch.id)?.has(product.id)) &&
         Number(product.minimumStock) > 0 &&
         product.stock < Number(product.minimumStock)
     )

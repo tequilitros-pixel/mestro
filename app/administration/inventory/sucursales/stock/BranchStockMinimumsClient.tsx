@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { AlertIcon, CheckIcon, PackageIcon } from "@/components/ui/icons";
 import {
   formatCommercialQuantity,
@@ -23,6 +24,8 @@ export type BranchStockMinimumRow = {
   contentUnit: string | null;
   normalizedContentPerUnit: number | null;
   stock: number;
+  initialized: boolean;
+  historicalOpening: boolean;
   minimumQuantity: number;
 };
 
@@ -132,12 +135,14 @@ export default function BranchStockMinimumsClient({ branchId, branchName, rows: 
   const [rows, setRows] = useState(initialRows);
   const shortages = useMemo(
     () => rows
+      .filter((row) => row.initialized)
       .map((row) => ({ ...row, shortfall: getStockShortfall(row.stock, row.minimumQuantity) }))
       .filter((row) => row.shortfall > 0)
       .sort((a, b) => b.shortfall - a.shortfall),
     [rows],
   );
   const configuredProducts = rows.filter((row) => row.minimumQuantity > 0).length;
+  const uninitializedCount = rows.filter((row) => !row.initialized).length;
 
   function updateMinimum(productId: string, minimumQuantity: number) {
     setRows((current) => current.map((row) => (
@@ -161,6 +166,12 @@ export default function BranchStockMinimumsClient({ branchId, branchName, rows: 
           <p className="mt-1 truncate text-lg font-bold text-on-surface">{branchName}</p>
         </div>
       </section>
+
+      {uninitializedCount > 0 && (
+        <p role="status" className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-on-surface">
+          {uninitializedCount} productos aún no tienen saldo inicial en esta sucursal. Su existencia se muestra como «Sin conteo» y no se calcula un faltante hasta registrar el inventario inicial. <Link className="font-semibold underline" href="/administration/inventory/branch-counts">Abrir conteos</Link>
+        </p>
+      )}
 
       <section className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container">
         <div className="border-b border-outline-variant px-4 py-4 sm:px-5">
@@ -223,17 +234,18 @@ export default function BranchStockMinimumsClient({ branchId, branchName, rows: 
               </tr>
             )}
             {rows.map((row) => {
-              const shortfall = getStockShortfall(row.stock, row.minimumQuantity);
+              const shortfall = row.initialized ? getStockShortfall(row.stock, row.minimumQuantity) : 0;
               const underMinimum = shortfall > 0;
               return (
                 <tr key={row.id} className={`border-t border-outline-variant ${underMinimum ? "bg-error/5" : ""}`}>
                   <td className="sticky left-0 bg-surface-container px-4 py-3 font-medium text-on-surface sm:px-5">
                     {row.name}
                     <span className="ml-2 text-xs font-normal text-on-surface-variant">{row.category}</span>
+                    {row.historicalOpening && <span className="block text-xs font-normal text-amber-700">Saldo histórico trasladado; verificar con conteo físico</span>}
                   </td>
                   <td className="px-4 py-3 text-on-surface-variant">{commercialLabel(row)}</td>
                   <td className={`px-4 py-3 text-right font-semibold ${underMinimum ? "text-error" : "text-on-surface"}`}>
-                    {formatCommercialQuantity(row.stock, row)}
+                    {row.initialized ? formatCommercialQuantity(row.stock, row) : "Sin conteo"}
                   </td>
                   <td className="px-4 py-3">
                     {canEdit ? (
@@ -245,7 +257,7 @@ export default function BranchStockMinimumsClient({ branchId, branchName, rows: 
                     )}
                   </td>
                   <td className={`px-4 py-3 text-right font-bold ${underMinimum ? "text-error" : "text-on-surface-variant"}`}>
-                    {underMinimum ? formatCommercialQuantity(shortfall, row) : "—"}
+                    {row.initialized && underMinimum ? formatCommercialQuantity(shortfall, row) : "—"}
                   </td>
                 </tr>
               );

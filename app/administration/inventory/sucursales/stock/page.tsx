@@ -82,7 +82,7 @@ export default async function BranchStockPage({
   );
   const visibleProductIds = visibleProducts.map((product) => product.id);
 
-  const [matrix, configuredMinimums, user] = await Promise.all([
+  const [matrix, configuredMinimums, user, legacyOpenings, declarations] = await Promise.all([
     selectedBranch
       ? computeStockMatrix(visibleProductIds, [selectedBranch.id])
       : Promise.resolve(null),
@@ -96,7 +96,27 @@ export default async function BranchStockPage({
         })
       : Promise.resolve([]),
     getCurrentUser(),
+    selectedBranch ? prisma.inventoryMovement.findMany({
+      where: { branchId: selectedBranch.id, inventoryProductId: { in: visibleProductIds }, sourceType: "LEGACY_OPENING" },
+      select: { inventoryProductId: true, createdAt: true },
+    }) : Promise.resolve([]),
+    selectedBranch ? prisma.inventoryCountDeclaration.findMany({
+      where: { branchId: selectedBranch.id, inventoryProductId: { in: visibleProductIds } },
+      select: { inventoryProductId: true, createdAt: true },
+    }) : Promise.resolve([]),
   ]);
+
+  const latestOpening = new Map<string, Date>();
+  for (const opening of legacyOpenings) {
+    const prior = latestOpening.get(opening.inventoryProductId);
+    if (!prior || opening.createdAt > prior) latestOpening.set(opening.inventoryProductId, opening.createdAt);
+  }
+  const verifiedAfterOpening = new Set(declarations
+    .filter((declaration) => {
+      const opening = latestOpening.get(declaration.inventoryProductId);
+      return opening && declaration.createdAt > opening;
+    })
+    .map((declaration) => declaration.inventoryProductId));
 
   const minimumByProduct = new Map(
     configuredMinimums.map((minimum) => [minimum.inventoryProductId, Number(minimum.minimumQuantity)]),
@@ -109,6 +129,8 @@ export default async function BranchStockPage({
     contentPerUnit: product.contentPerUnit === null ? null : Number(product.contentPerUnit),
     normalizedContentPerUnit: product.normalizedContentPerUnit === null ? null : Number(product.normalizedContentPerUnit),
     stock: branchStock?.get(product.id) ?? 0,
+    initialized: !(selectedBranch && matrix?.uninitializedByBranch.get(selectedBranch.id)?.has(product.id)),
+    historicalOpening: latestOpening.has(product.id) && !verifiedAfterOpening.has(product.id),
     minimumQuantity: minimumByProduct.get(product.id) ?? 0,
   }));
 

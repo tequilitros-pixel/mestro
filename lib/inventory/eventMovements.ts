@@ -3,7 +3,7 @@ import { Prisma, type ServiceEventItem } from "@prisma/client";
 import { applyInventoryBatchInTransaction } from "@/lib/pos2/inventory/applyMovements";
 import { groupInventoryDeltas } from "@/lib/pos2/inventory/domain";
 import { appendAuditEvent } from "@/lib/pos2/audit";
-import { normalizeManualInventoryQuantity, requireLegacyInventoryAvailable } from "@/lib/inventory/manualMovements";
+import { normalizeManualInventoryQuantity } from "@/lib/inventory/manualMovements";
 
 export async function applyEventInventoryMovement(tx: Prisma.TransactionClient, input: {
   item: ServiceEventItem; branchId: string; actorId: string; operationId: string;
@@ -13,6 +13,7 @@ export async function applyEventInventoryMovement(tx: Prisma.TransactionClient, 
   await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.branchId}:${item.productId}`},0))::text`;
   const product = await tx.inventoryProduct.findUniqueOrThrow({ where: { id: item.productId } });
   const balance = await tx.inventoryBalance.findUnique({ where: { branchId_inventoryProductId: { branchId: input.branchId, inventoryProductId: product.id } } });
+  if (!balance) throw new Error("Registra el conteo inicial del producto antes de moverlo en un evento.");
   const closed = Number(input.returning ? item.returnedQuantity ?? 0 : item.sentQuantity ?? item.plannedQuantity);
   const open = input.returning ? Number(item.returnedOpenQuantity ?? 0) : 0;
   if (!closed && !open) return;
@@ -36,7 +37,6 @@ export async function applyEventInventoryMovement(tx: Prisma.TransactionClient, 
     if (!(factor > 0)) throw new Error("La presentación del evento no permite convertir el remanente.");
     legacyQuantity += open / factor;
   }
-  if (!balance && !input.returning) await requireLegacyInventoryAvailable(tx, input.branchId, product.id, legacyQuantity, item.unit);
   await tx.inventoryEntry.create({ data: { branchId: input.branchId, productId: product.id,
     type: input.returning ? "REGRESO_EVENTO" : "SALIDA_EVENTO", quantity: input.returning ? legacyQuantity : -legacyQuantity,
     notes: `Evento ${input.eventId} · ${input.returning ? "regreso confirmado" : "salida confirmada"}`,
