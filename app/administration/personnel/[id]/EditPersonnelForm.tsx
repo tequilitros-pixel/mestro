@@ -4,6 +4,7 @@ import { useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import { updatePersonnel, updateHourlyRate, updateBranchHourlyRate } from "@/app/actions/personnel";
 import { setEmployeePinAction, clearEmployeePinAction } from "@/app/actions/kiosk";
+import { calculateCompositeSalary } from "@/lib/payroll/compositeSalary";
 import {
   ROLE_LABELS,
   ROLES_CON_SUCURSAL,
@@ -65,6 +66,9 @@ export default function EditPersonnelForm({
   );
   const [savingBranchId, setSavingBranchId] = useState<string | null>(null);
   const [branchRateMessage, setBranchRateMessage] = useState<string | null>(null);
+
+  const numericRate = parseFloat(hourlyRate) || 0;
+  const composite = calculateCompositeSalary(numericRate, 40);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -183,6 +187,12 @@ export default function EditPersonnelForm({
     if (result.error) {
       setError(result.error);
       return;
+    }
+
+    // Si también se modificó la tarifa por hora, se guarda automáticamente
+    const rateValue = hourlyRate.trim() === "" ? null : Number(hourlyRate);
+    if (rateValue !== user.hourlyRate && !Number.isNaN(rateValue)) {
+      await updateHourlyRate(user.id, rateValue);
     }
 
     setSuccess(true);
@@ -319,33 +329,86 @@ export default function EditPersonnelForm({
       </div>
 
       <section className="compact-form-panel space-y-4 rounded-xl border border-outline-variant bg-surface-container">
-        <SectionHeader icon={DollarIcon} title="Pago por hora" />
+        <SectionHeader icon={DollarIcon} title="Sueldo Base y Salario Compuesto" />
 
         <p className="text-sm text-on-surface-variant">
-          Tarifa general por hora. Se aplica cuando la sucursal no tiene una tarifa específica.
+          Captura el <strong>sueldo base por hora</strong>. El sistema recalcula en tiempo real el desglose proporcional de ley (aguinaldo, vacaciones y prima vacacional) y aplicará esta tarifa de hoy en adelante, manteniendo intactas las nóminas de semanas pasadas.
         </p>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="0.00"
-            value={hourlyRate}
-            onChange={(e) => setHourlyRate(e.target.value)}
-            className="w-40 rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
-          />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-on-surface-variant">$</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              value={hourlyRate}
+              onChange={(e) => setHourlyRate(e.target.value)}
+              className="w-44 rounded-xl border border-outline-variant bg-background pl-8 pr-4 py-3 text-base font-bold text-on-surface outline-none transition placeholder:text-outline focus:border-primary"
+            />
+          </div>
           <button
             onClick={handleSaveRate}
             disabled={savingRate}
-            className="rounded-xl border border-outline-variant px-4 py-3 text-sm font-semibold text-on-surface transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97] hover:border-primary hover:text-primary disabled:opacity-60 disabled:hover:scale-100"
+            className="rounded-xl bg-primary px-5 py-3 text-sm font-bold text-on-primary shadow-sm transition duration-150 ease-out hover:opacity-90 active:scale-[0.97] disabled:opacity-60"
           >
-            {savingRate ? "Guardando..." : "Guardar tarifa"}
+            {savingRate ? "Guardando..." : "Actualizar tarifa"}
           </button>
         </div>
 
         {rateMessage && (
-          <p className="text-xs text-on-surface-variant">{rateMessage}</p>
+          <p className={`text-xs font-semibold ${rateMessage.includes("error") || rateMessage.includes("válida") ? "text-error" : "text-primary"}`}>
+            {rateMessage}
+          </p>
+        )}
+
+        {numericRate > 0 && (
+          <div className="mt-3 rounded-2xl border border-primary/25 bg-primary/5 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-1 border-b border-primary/15 pb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                Desglose de Salario Compuesto (en vivo)
+              </span>
+              <span className="text-xs font-semibold text-on-surface-variant">
+                Jornada estimada: 40 hrs / sem.
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="rounded-xl border border-outline-variant/60 bg-surface p-2.5">
+                <p className="text-[11px] font-semibold text-on-surface-variant">Sueldo Base</p>
+                <p className="mt-0.5 text-base font-bold text-on-surface">${composite.baseHourlyRate.toFixed(2)}/h</p>
+                <p className="mt-0.5 font-mono text-[10px] text-on-surface-variant">${composite.basePay.toFixed(2)} sem.</p>
+              </div>
+
+              <div className="rounded-xl border border-outline-variant/60 bg-surface p-2.5">
+                <p className="text-[11px] font-semibold text-on-surface-variant">Aguinaldo (15 días)</p>
+                <p className="mt-0.5 text-base font-bold text-primary">+${composite.aguinaldoHourly.toFixed(2)}/h</p>
+                <p className="mt-0.5 font-mono text-[10px] text-on-surface-variant">+${composite.aguinaldoPay.toFixed(2)} sem.</p>
+              </div>
+
+              <div className="rounded-xl border border-outline-variant/60 bg-surface p-2.5">
+                <p className="text-[11px] font-semibold text-on-surface-variant">Vacaciones (12 días)</p>
+                <p className="mt-0.5 text-base font-bold text-primary">+${composite.vacacionesHourly.toFixed(2)}/h</p>
+                <p className="mt-0.5 font-mono text-[10px] text-on-surface-variant">+${composite.vacacionesPay.toFixed(2)} sem.</p>
+              </div>
+
+              <div className="rounded-xl border border-outline-variant/60 bg-surface p-2.5">
+                <p className="text-[11px] font-semibold text-on-surface-variant">Prima Vac. (25%)</p>
+                <p className="mt-0.5 text-base font-bold text-primary">+${composite.primaVacacionalHourly.toFixed(2)}/h</p>
+                <p className="mt-0.5 font-mono text-[10px] text-on-surface-variant">+${composite.primaVacacionalPay.toFixed(2)} sem.</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-primary/10 px-3.5 py-2.5 text-primary">
+              <span className="text-xs font-bold">
+                Tarifa Integrada Total: ${composite.totalHourlyRate.toFixed(2)} / hora
+              </span>
+              <span className="text-sm font-black">
+                Total por 40 hrs: ${composite.totalPay.toFixed(2)}
+              </span>
+            </div>
+          </div>
         )}
 
         <div className="border-t border-outline-variant pt-4">

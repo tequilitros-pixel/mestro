@@ -7,6 +7,20 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   return [
     {
+      url: `${siteUrl}/TequilaElColotlense`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 1.0,
+      images: [
+        `${siteUrl}/tienda/tequila-blanco.jpg`,
+        `${siteUrl}/tienda/tequila-reposado.jpg`,
+        `${siteUrl}/tienda/licor-zarzamora.jpg`,
+        `${siteUrl}/tienda/licor-mango.jpg`,
+        `${siteUrl}/tienda/licor-jamaica.jpg`,
+        `${siteUrl}/tienda/concentrado-cantarito.jpg`,
+      ],
+    },
+    {
       url: `${siteUrl}/tequilitros`,
       lastModified: now,
       changeFrequency: "weekly",

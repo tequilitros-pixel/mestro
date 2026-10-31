@@ -41,8 +41,17 @@ export default function NewCountForm({
       className="space-y-6 rounded-2xl border border-outline-variant bg-surface-container p-6"
     >
       {result && !result.success && (
-        <div className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">
-          {result.error}
+        <div className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error space-y-3">
+          <p>{result.error}</p>
+          {result.openCountId && (
+            <button
+              type="button"
+              onClick={() => router.push(`/administration/inventory/branch-counts/${result.openCountId}`)}
+              className="rounded-lg border border-error/40 bg-background px-3 py-2 text-xs font-bold text-on-surface hover:bg-surface-container-high"
+            >
+              Abrir conteo existente
+            </button>
+          )}
         </div>
       )}
 

@@ -724,8 +724,11 @@ export default function CotizadorForm({
         <QuoteDocumentModal
           isOpen={modalOpen}
           onClose={() => setModalOpen(false)}
-          documentType="QUOTE"
+          documentType={generatedDoc.metadata.isContractConfirmed ? "CONTRACT" : "QUOTE"}
           data={generatedDoc}
+          onUpdateMetadata={(newMeta) => {
+            setGeneratedDoc((prev) => (prev ? { ...prev, metadata: newMeta } : null));
+          }}
         />
       )}
     </div>

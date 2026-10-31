@@ -344,20 +344,36 @@ export default function PospressPendingTabsClient({ branches }: { branches: Bran
             <label className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
               Sucursal
             </label>
-            <select
-              value={branchId}
-              onChange={(e) => {
-                setBranchId(e.target.value);
-                setSelectedTabId(null);
-              }}
-              className="mt-0.5 w-full truncate rounded-lg border border-outline-variant bg-surface px-2.5 py-1.5 text-sm font-semibold text-on-surface"
-            >
-              {branches.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            {branches.length === 1 ? (
+              <div className="mt-0.5 flex items-center gap-2 rounded-lg border border-outline-variant bg-surface px-2.5 py-1.5 text-sm font-bold text-on-surface">
+                <span>📍</span>
+                <span>{branches[0].name}</span>
+                {branches[0].openCashCutId ? (
+                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+                    Corte Activo
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-600">
+                    Sin Corte Abierto
+                  </span>
+                )}
+              </div>
+            ) : (
+              <select
+                value={branchId}
+                onChange={(e) => {
+                  setBranchId(e.target.value);
+                  setSelectedTabId(null);
+                }}
+                className="mt-0.5 w-full truncate rounded-lg border border-outline-variant bg-surface px-2.5 py-1.5 text-sm font-semibold text-on-surface"
+              >
+                {branches.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <span
             className={`rounded-full px-2.5 py-1 text-xs font-bold ${
@@ -925,25 +941,94 @@ function PendingTabPaymentModal({
   onSuccess: (receipt: ReceiptData) => Promise<void>;
 }) {
   const [method, setMethod] = useState("EFECTIVO");
-  const [amount, setAmount] = useState(tab.total.toFixed(2));
-  const [cashReceived, setCashReceived] = useState(tab.total.toString());
+  const [discountType, setDiscountType] = useState<"NONE" | "PERCENT" | "AMOUNT" | "CORTESIA">("NONE");
+  const [discountValue, setDiscountValue] = useState<number>(0);
+  const [discountReasonCode, setDiscountReasonCode] = useState("");
+  const [discountReasonNote, setDiscountReasonNote] = useState("");
+  const [configuredDiscounts, setConfiguredDiscounts] = useState<
+    Array<{ id: string; name: string; percent: number }>
+  >([]);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [operationId] = useState(() => crypto.randomUUID());
   const [createdAt] = useState(() => new Date().toISOString());
 
-  const numAmount = Number(amount) || 0;
+  // Cargar reglas configuradas de descuento de la sucursal
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/pos/discount-rules?branchId=${encodeURIComponent(branchId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        setConfiguredDiscounts(data.discounts?.filter((r: any) => typeof r.percent === "number") ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [branchId]);
+
+  let discountAmount = 0;
+  if (discountType === "CORTESIA") {
+    discountAmount = tab.total;
+  } else if (discountType === "PERCENT") {
+    discountAmount = Math.round(tab.total * (discountValue / 100) * 100) / 100;
+  } else if (discountType === "AMOUNT") {
+    discountAmount = Math.round(discountValue * 100) / 100;
+  }
+  discountAmount = Math.min(Math.max(discountAmount, 0), tab.total);
+  const finalTotal = Math.max(0, Math.round((tab.total - discountAmount) * 100) / 100);
+  const isFree = finalTotal <= 0;
+
+  const [cashReceived, setCashReceived] = useState(finalTotal.toString());
+
+  useEffect(() => {
+    setCashReceived(finalTotal.toString());
+  }, [finalTotal]);
+
+  const numAmount = isFree ? 0 : finalTotal;
   const numCashReceived = Number(cashReceived) || 0;
   const change = method === "EFECTIVO" ? Math.max(0, numCashReceived - numAmount) : 0;
 
+  function applyPresetDiscount(percent: number, name?: string) {
+    setDiscountType("PERCENT");
+    setDiscountValue(percent);
+    if (!discountReasonCode) setDiscountReasonCode("PROMOCION");
+    if (name && !discountReasonNote) setDiscountReasonNote(name);
+  }
+
+  function applyCortesia() {
+    setDiscountType("CORTESIA");
+    setDiscountValue(100);
+    setDiscountReasonCode("CORTESIA");
+    if (!discountReasonNote) setDiscountReasonNote(`Cortesía cuenta: ${tab.customerName}`);
+  }
+
+  function clearDiscount() {
+    setDiscountType("NONE");
+    setDiscountValue(0);
+    setDiscountReasonCode("");
+    setDiscountReasonNote("");
+  }
+
   async function submit() {
-    if (!(numAmount > 0) || Math.abs(numAmount - tab.total) >= 0.01) {
-      setError("El pago debe cubrir exactamente el monto de la cuenta.");
-      return;
+    if (discountType !== "NONE" && discountAmount > 0) {
+      if (!discountReasonCode) {
+        setError("Por favor selecciona el motivo del descuento o cortesía.");
+        return;
+      }
+      if (discountReasonCode === "OTRO" && !discountReasonNote.trim()) {
+        setError("Escribe una breve descripción del motivo.");
+        return;
+      }
     }
-    if (method === "EFECTIVO" && numCashReceived < numAmount) {
-      setError("El efectivo recibido no puede ser menor al total.");
-      return;
+
+    if (!isFree) {
+      if (method === "EFECTIVO" && numCashReceived < numAmount) {
+        setError("El efectivo recibido no puede ser menor al total.");
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -952,10 +1037,13 @@ function PendingTabPaymentModal({
     const payload = {
       clientOperationId: operationId,
       clientCreatedAt: createdAt,
-      displayTotal: tab.total,
+      displayTotal: finalTotal,
+      subtotal: tab.total,
+      discountAmount,
+      discountReasonCode: discountAmount > 0 ? discountReasonCode : undefined,
+      discountReason: discountAmount > 0 ? discountReasonNote : `Cuenta pendiente: ${tab.customerName}`,
       branchId,
       inventoryMode: "v2" as const,
-      discountReason: `Cuenta pendiente: ${tab.customerName}`,
       items: tab.lines.map((line) =>
         line.variantId === "custom"
           ? {
@@ -969,7 +1057,7 @@ function PendingTabPaymentModal({
               quantity: line.quantity,
             },
       ),
-      payments: [{ method, amount: numAmount }],
+      payments: isFree ? [] : [{ method, amount: numAmount }],
     };
 
     const receiptItems = tab.lines.map((l) => ({
@@ -995,11 +1083,11 @@ function PendingTabPaymentModal({
           date: new Date().toLocaleString("es-MX"),
           items: receiptItems,
           subtotal: tab.total,
-          discountAmount: 0,
-          total: tab.total,
-          payments: [{ method, amount: numAmount }],
-          cashReceived: method === "EFECTIVO" ? numCashReceived : null,
-          change: method === "EFECTIVO" ? change : null,
+          discountAmount,
+          total: finalTotal,
+          payments: isFree ? [] : [{ method, amount: numAmount }],
+          cashReceived: method === "EFECTIVO" && !isFree ? numCashReceived : null,
+          change: method === "EFECTIVO" && !isFree ? change : null,
           isOffline: true,
         };
 
@@ -1027,11 +1115,11 @@ function PendingTabPaymentModal({
         cashierName: saleData.soldBy?.name,
         items: receiptItems,
         subtotal: tab.total,
-        discountAmount: 0,
-        total: tab.total,
-        payments: [{ method, amount: numAmount }],
-        cashReceived: method === "EFECTIVO" ? numCashReceived : null,
-        change: method === "EFECTIVO" ? change : null,
+        discountAmount,
+        total: finalTotal,
+        payments: isFree ? [] : [{ method, amount: numAmount }],
+        cashReceived: method === "EFECTIVO" && !isFree ? numCashReceived : null,
+        change: method === "EFECTIVO" && !isFree ? change : null,
         isOffline: false,
       };
 
@@ -1053,18 +1141,18 @@ function PendingTabPaymentModal({
             date: new Date().toLocaleString("es-MX"),
             items: receiptItems,
             subtotal: tab.total,
-            discountAmount: 0,
-            total: tab.total,
-            payments: [{ method, amount: numAmount }],
-            cashReceived: method === "EFECTIVO" ? numCashReceived : null,
-            change: method === "EFECTIVO" ? change : null,
+            discountAmount,
+            total: finalTotal,
+            payments: isFree ? [] : [{ method, amount: numAmount }],
+            cashReceived: method === "EFECTIVO" && !isFree ? numCashReceived : null,
+            change: method === "EFECTIVO" && !isFree ? change : null,
             isOffline: true,
           };
 
           await onSuccess(receipt);
           return;
         } catch {
-          // continue to error below
+          // continue
         }
       }
       setError(caught instanceof Error ? caught.message : "No fue posible registrar el cobro.");
@@ -1074,11 +1162,11 @@ function PendingTabPaymentModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-surface-dim/70 p-0 sm:items-center sm:p-4">
-      <div className="w-full max-w-md rounded-t-2xl border border-outline-variant bg-surface-container-high p-5 shadow-2xl sm:rounded-2xl">
-        <div className="mb-4 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-surface-dim/75 p-0 sm:items-center sm:p-4">
+      <div className="w-full max-w-lg max-h-[95vh] overflow-y-auto rounded-t-2xl border border-outline-variant bg-surface-container-high p-5 shadow-2xl sm:rounded-2xl">
+        <div className="mb-4 flex items-center justify-between border-b border-outline-variant pb-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-primary">Liquidar cuenta</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-primary">Liquidar cuenta pendiente</p>
             <h2 className="text-xl font-bold text-on-surface">{tab.customerName}</h2>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-surface">
@@ -1086,82 +1174,254 @@ function PendingTabPaymentModal({
           </button>
         </div>
 
-        <p className="mb-4 text-center text-3xl font-bold text-on-surface">{currency(tab.total)}</p>
+        {/* Resumen de montos */}
+        <div className="rounded-xl border border-outline-variant bg-surface-container p-3 mb-4 space-y-1">
+          <div className="flex justify-between text-sm text-on-surface-variant">
+            <span>Subtotal deudor:</span>
+            <span className="font-semibold">{currency(tab.total)}</span>
+          </div>
 
-        <label className="mb-3 block text-xs font-semibold text-on-surface-variant">
-          Método de pago
-          <select
-            value={method}
-            onChange={(event) => setMethod(event.target.value)}
-            className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2.5 text-sm font-semibold text-on-surface"
-          >
-            {PAYMENT_METHODS.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
+          {discountAmount > 0 && (
+            <div className="flex justify-between text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+              <span>Descuento / Cortesía:</span>
+              <span>−{currency(discountAmount)}</span>
+            </div>
+          )}
 
-        {method === "EFECTIVO" && (
-          <div className="mb-3 space-y-2">
-            <label className="block text-xs font-semibold text-on-surface-variant">
-              Efectivo recibido
-              <input
-                type="number"
-                step="1"
-                min={tab.total}
-                value={cashReceived}
-                onChange={(e) => setCashReceived(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2.5 text-sm font-bold text-on-surface"
-              />
-            </label>
+          <div className="flex justify-between text-2xl font-black text-on-surface pt-2 border-t border-outline-variant">
+            <span>Total a liquidar:</span>
+            <span className={isFree ? "text-emerald-600 dark:text-emerald-400" : "text-primary"}>
+              {currency(finalTotal)}
+            </span>
+          </div>
+        </div>
 
-            {/* Quick cash buttons */}
-            <div className="flex flex-wrap gap-1.5">
-              {QUICK_AMOUNTS.filter((amt) => amt >= tab.total).map((amt) => (
-                <button
-                  key={amt}
-                  type="button"
-                  onClick={() => setCashReceived(amt.toString())}
-                  className="rounded-lg border border-outline-variant bg-surface px-2.5 py-1 text-xs font-bold text-on-surface transition hover:border-primary"
-                >
-                  ${amt}
-                </button>
-              ))}
+        {/* Sección de descuentos y cortesías */}
+        <div className="rounded-xl border border-outline-variant bg-surface p-3 mb-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-on-surface">
+              Descuento o Cortesía
+            </span>
+            {discountType !== "NONE" && (
               <button
                 type="button"
-                onClick={() => setCashReceived(tab.total.toString())}
-                className="rounded-lg border border-primary bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary"
+                onClick={clearDiscount}
+                className="text-xs font-bold text-error hover:underline"
               >
-                Exacto ({currency(tab.total)})
+                Quitar
               </button>
-            </div>
+            )}
+          </div>
 
-            {change > 0 && (
-              <div className="flex items-center justify-between rounded-xl bg-emerald-500/15 p-3 text-emerald-600 dark:text-emerald-400">
-                <span className="text-xs font-bold uppercase tracking-wider">Cambio a devolver:</span>
-                <span className="text-lg font-bold">{currency(change)}</span>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={applyCortesia}
+              className={`rounded-xl py-2 px-3 text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                discountType === "CORTESIA"
+                  ? "bg-emerald-600 text-white"
+                  : "border border-emerald-600/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/20"
+              }`}
+            >
+              <span>🎁</span>
+              Cortesía 100% ($0.00)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (discountType === "PERCENT") setDiscountType("AMOUNT");
+                else setDiscountType("PERCENT");
+              }}
+              className="rounded-xl border border-outline-variant bg-surface-container py-2 px-3 text-xs font-bold text-on-surface hover:bg-surface-container-high"
+            >
+              {discountType === "AMOUNT" ? "Modo: En pesos ($)" : "Modo: Porcentaje (%)"}
+            </button>
+          </div>
+
+          {/* Porcentajes rápidos */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[5, 10, 15, 20, 50].map((pct) => (
+              <button
+                key={pct}
+                type="button"
+                onClick={() => applyPresetDiscount(pct)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                  discountType === "PERCENT" && discountValue === pct
+                    ? "bg-primary text-on-primary"
+                    : "border border-outline-variant bg-surface-container text-on-surface hover:border-primary"
+                }`}
+              >
+                {pct}%
+              </button>
+            ))}
+          </div>
+
+          {/* Promociones configuradas en la sucursal */}
+          {configuredDiscounts.length > 0 && (
+            <div className="space-y-1">
+              <span className="text-[11px] font-semibold text-on-surface-variant">Promociones:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {configuredDiscounts.map((rule) => (
+                  <button
+                    key={rule.id}
+                    type="button"
+                    onClick={() => applyPresetDiscount(rule.percent, rule.name)}
+                    className="rounded-lg border border-primary/40 bg-primary/5 px-2.5 py-1 text-xs font-bold text-primary hover:bg-primary/10"
+                  >
+                    {rule.name} ({rule.percent}%)
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Input manual */}
+          {discountType === "PERCENT" && (
+            <div>
+              <label className="text-[11px] font-semibold text-on-surface-variant">
+                Porcentaje a descontar (%)
+              </label>
+              <input
+                type="number"
+                min="0.1"
+                max="100"
+                step="0.1"
+                value={discountValue || ""}
+                onChange={(e) => setDiscountValue(Number(e.target.value))}
+                placeholder="Ej. 20"
+                className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface font-bold"
+              />
+            </div>
+          )}
+
+          {discountType === "AMOUNT" && (
+            <div>
+              <label className="text-[11px] font-semibold text-on-surface-variant">
+                Importe directo a descontar ($)
+              </label>
+              <input
+                type="number"
+                min="0.1"
+                max={tab.total}
+                step="0.5"
+                value={discountValue || ""}
+                onChange={(e) => setDiscountValue(Number(e.target.value))}
+                placeholder="Ej. 50"
+                className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface font-bold"
+              />
+            </div>
+          )}
+
+          {discountAmount > 0 && (
+            <div className="space-y-2 pt-2 border-t border-outline-variant">
+              <div>
+                <label className="text-xs font-bold text-on-surface">
+                  Motivo del descuento <span className="text-error">*</span>
+                </label>
+                <select
+                  value={discountReasonCode}
+                  onChange={(e) => setDiscountReasonCode(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2 text-xs font-semibold text-on-surface"
+                >
+                  <option value="">-- Selecciona el motivo --</option>
+                  <option value="CORTESIA">Cortesía de la casa / Gerencia</option>
+                  <option value="CLIENTE_FRECUENTE">Cliente frecuente / VIP</option>
+                  <option value="PROMOCION">Promoción comercial</option>
+                  <option value="COMPENSACION">Compensación / Atención</option>
+                  <option value="CONVENIO">Convenio comercial</option>
+                  <option value="AUTORIZACION_GERENTE">Autorización de gerente</option>
+                  <option value="OTRO">Otro motivo</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-on-surface-variant">
+                  {discountReasonCode === "OTRO" ? "Justificación *" : "Nota / Observación (opcional)"}
+                </label>
+                <input
+                  type="text"
+                  value={discountReasonNote}
+                  onChange={(e) => setDiscountReasonNote(e.target.value)}
+                  placeholder="Detalle del ajuste..."
+                  className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2 text-xs text-on-surface"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Método de pago si no es cortesía total */}
+        {!isFree ? (
+          <>
+            <label className="mb-3 block text-xs font-semibold text-on-surface-variant">
+              Método de pago
+              <select
+                value={method}
+                onChange={(event) => setMethod(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2.5 text-sm font-semibold text-on-surface"
+              >
+                {PAYMENT_METHODS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {method === "EFECTIVO" && (
+              <div className="mb-3 space-y-2">
+                <label className="block text-xs font-semibold text-on-surface-variant">
+                  Efectivo recibido
+                  <input
+                    type="number"
+                    step="1"
+                    min={finalTotal}
+                    value={cashReceived}
+                    onChange={(e) => setCashReceived(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-outline-variant bg-surface px-3 py-2.5 text-sm font-bold text-on-surface"
+                  />
+                </label>
+
+                {numCashReceived > numAmount && (
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center">
+                    <p className="text-xs text-emerald-800 dark:text-emerald-300">Cambio para el cliente</p>
+                    <p className="text-xl font-black text-emerald-700 dark:text-emerald-400">
+                      {currency(change)}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
+          </>
+        ) : (
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 mb-4 text-center">
+            <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">
+              ✨ Cortesía Total Aplicada (100%)
+            </p>
+            <p className="text-xs text-emerald-700 dark:text-emerald-400">
+              Cuenta saldada en $0.00. No se requiere cobro monetario.
+            </p>
           </div>
         )}
 
-        {!isOnline && (
-          <p className="mb-3 rounded-xl bg-secondary/10 p-3 text-xs font-semibold text-secondary">
-            Modo sin conexión: el cobro se encolará y la cuenta quedará liquidada localmente.
+        {error && (
+          <p className="mb-3 rounded-xl border border-error/30 bg-error/10 p-3 text-sm text-error">
+            {error}
           </p>
         )}
-
-        {error && <p className="mb-3 rounded-xl bg-error/10 p-3 text-sm text-error">{error}</p>}
 
         <button
           disabled={submitting}
           onClick={() => void submit()}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-on-primary shadow-sm transition hover:scale-[1.01] disabled:opacity-40"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-bold text-on-primary transition hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40"
         >
           <CheckIcon className="h-4 w-4" />
-          {submitting ? "Guardando cobro…" : "Confirmar cobro y cerrar cuenta"}
+          {submitting
+            ? "Guardando…"
+            : isFree
+            ? `Confirmar cortesía ($0.00)`
+            : `Confirmar cobro (${currency(finalTotal)})`}
         </button>
       </div>
     </div>

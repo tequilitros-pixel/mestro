@@ -580,3 +580,299 @@ export async function markRecountFulfilledAction(
     return { success: false, error: error instanceof Error ? error.message : "No fue posible actualizar el estado." };
   }
 }
+
+export async function updateServiceEventAction(
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
+    const eventId = formData.get("eventId")?.toString() ?? "";
+    const clientName = formData.get("clientName")?.toString().trim() ?? "";
+    const clientPhone = formData.get("clientPhone")?.toString().trim() || null;
+    const location = formData.get("location")?.toString().trim() ?? "";
+    const eventDateRaw = formData.get("eventDate")?.toString() ?? "";
+    const guestCount = readOptionalNumber(formData.get("guestCount"));
+    const packageId = formData.get("packageId")?.toString() || null;
+    const equipmentKitId = formData.get("equipmentKitId")?.toString() || null;
+    const saleAmount = readOptionalNumber(formData.get("saleAmount"));
+    const notes = formData.get("notes")?.toString().trim() || null;
+    const recalculateChecklist = formData.get("recalculateChecklist")?.toString() === "true";
+
+    if (!eventId) return { success: false, error: "Falta el ID del evento." };
+    if (!clientName) return { success: false, error: "El nombre del cliente es obligatorio." };
+    if (!location) return { success: false, error: "La ubicación es obligatoria." };
+    if (!eventDateRaw) return { success: false, error: "La fecha del evento es obligatoria." };
+    if (guestCount === null || guestCount <= 0) {
+      return { success: false, error: "El número de invitados debe ser mayor a cero." };
+    }
+
+    let eventDate: Date;
+    try {
+      eventDate = parseBusinessDateTimeLocal(eventDateRaw);
+    } catch {
+      return { success: false, error: "La fecha del evento no es válida." };
+    }
+
+    const guests = Math.trunc(guestCount);
+
+    await prisma.$transaction(async (tx) => {
+      const existing = await lockEvent(tx, eventId);
+      if (existing.returnConfirmedAt) {
+        throw new Error("El evento ya fue completado y cerrado; no se puede editar.");
+      }
+
+      const packageChanged = existing.packageId !== packageId;
+      const guestsChanged = existing.guestCount !== guests;
+      const kitChanged = existing.equipmentKitId !== equipmentKitId;
+
+      if (recalculateChecklist && !existing.checkoutConfirmedAt && (packageChanged || guestsChanged || kitChanged)) {
+        await tx.serviceEventItem.deleteMany({
+          where: { eventId, isCustom: false },
+        });
+
+        const maxSort = await tx.serviceEventItem.aggregate({
+          where: { eventId },
+          _max: { sortOrder: true },
+        });
+        let sortOrder = (maxSort._max.sortOrder ?? 0) + 1;
+
+        if (packageId) {
+          const packageItems = await tx.eventPackageItem.findMany({
+            where: { packageId },
+            include: { product: true },
+            orderBy: { sortOrder: "asc" },
+          });
+
+          for (const item of packageItems) {
+            const quantity = calculatePackageItemQuantity(item, guests);
+            await tx.serviceEventItem.create({
+              data: {
+                eventId,
+                productId: item.productId,
+                productName: item.product.name,
+                unit: item.product.unit,
+                itemType: item.product.itemType,
+                unitCost: item.product.unitCost,
+                handlingUnit: item.product.handlingUnit,
+                contentPerUnit: item.product.contentPerUnit,
+                contentUnit: item.product.contentUnit,
+                plannedQuantity: quantity,
+                isCustom: false,
+                sortOrder: sortOrder++,
+              },
+            });
+          }
+        }
+
+        if (equipmentKitId) {
+          const kitItems = await tx.equipmentKitItem.findMany({
+            where: { kitId: equipmentKitId },
+            include: { product: true },
+            orderBy: { sortOrder: "asc" },
+          });
+
+          for (const item of kitItems) {
+            await tx.serviceEventItem.create({
+              data: {
+                eventId,
+                productId: item.productId,
+                productName: item.product.name,
+                unit: item.product.unit,
+                itemType: item.product.itemType,
+                unitCost: item.product.unitCost,
+                handlingUnit: item.product.handlingUnit,
+                contentPerUnit: item.product.contentPerUnit,
+                contentUnit: item.product.contentUnit,
+                plannedQuantity: item.quantity,
+                isCustom: false,
+                sortOrder: sortOrder++,
+              },
+            });
+          }
+        }
+      }
+
+      await tx.serviceEvent.update({
+        where: { id: eventId },
+        data: {
+          clientName,
+          clientPhone,
+          location,
+          eventDate,
+          guestCount: guests,
+          packageId,
+          equipmentKitId,
+          saleAmount,
+          notes,
+        },
+      });
+    });
+
+    revalidatePath(`/administration/inventory/events/${eventId}`);
+    revalidatePath("/administration/inventory/events");
+
+    return { success: true, message: "Evento actualizado correctamente." };
+  } catch (error) {
+    console.error("Error updating service event:", error);
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible actualizar el evento." };
+  }
+}
+
+export async function deleteServiceEventAction(eventId: string): Promise<ActionResult> {
+  try {
+    const user = await getEventActor();
+    if (!user || user.role !== "ADMIN") {
+      return { success: false, error: "Solo los administradores pueden eliminar eventos." };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const event = await tx.serviceEvent.findUnique({
+        where: { id: eventId },
+        include: { cashCuts: { select: { id: true, code: true } } },
+      });
+      if (!event) throw new Error("Evento no encontrado.");
+
+      if (event.cashCuts.length > 0) {
+        throw new Error(
+          `No se puede eliminar el evento porque tiene ${event.cashCuts.length} corte(s) de caja vinculado(s). Puedes cancelarlo o archivarlo.`
+        );
+      }
+
+      if (event.stockDeductedAt) {
+        throw new Error(
+          "El inventario de este evento ya fue descontado de una sucursal. No se puede eliminar para no romper la contabilidad."
+        );
+      }
+
+      if (event.returnConfirmedAt) {
+        throw new Error(
+          "El regreso de este evento ya fue confirmado contablemente. No se puede eliminar."
+        );
+      }
+
+      await tx.serviceEvent.delete({ where: { id: eventId } });
+    });
+
+    revalidatePath("/administration/inventory/events");
+    return { success: true, message: "Evento eliminado correctamente." };
+  } catch (error) {
+    console.error("Error deleting service event:", error);
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible eliminar el evento." };
+  }
+}
+
+export async function archiveServiceEventAction(eventId: string): Promise<ActionResult> {
+  try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
+    await prisma.$transaction(async (tx) => {
+      await lockEvent(tx, eventId);
+      await tx.serviceEvent.update({
+        where: { id: eventId },
+        data: { status: "CANCELLED" },
+      });
+    });
+
+    revalidatePath(`/administration/inventory/events/${eventId}`);
+    revalidatePath("/administration/inventory/events");
+    return { success: true, message: "Evento cancelado y archivado." };
+  } catch (error) {
+    console.error("Error archiving service event:", error);
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible archivar el evento." };
+  }
+}
+
+export async function unarchiveServiceEventAction(eventId: string): Promise<ActionResult> {
+  try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
+    await prisma.$transaction(async (tx) => {
+      const event = await tx.serviceEvent.findUnique({ where: { id: eventId } });
+      if (!event) throw new Error("Evento no encontrado.");
+      if (event.status !== "CANCELLED") throw new Error("El evento no está archivado.");
+      await tx.serviceEvent.update({
+        where: { id: eventId },
+        data: { status: "DRAFT" },
+      });
+    });
+
+    revalidatePath(`/administration/inventory/events/${eventId}`);
+    revalidatePath("/administration/inventory/events");
+    return { success: true, message: "Evento restaurado a borrador activo." };
+  } catch (error) {
+    console.error("Error unarchiving service event:", error);
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible restaurar el evento." };
+  }
+}
+
+export async function batchCheckEventItemsAction(input: {
+  eventId: string;
+  phase: "salida" | "regreso";
+  target: "ALL_PLANNED" | "EQUIPMENT_ALL" | "ALL_ITEMS";
+}): Promise<ActionResult> {
+  try {
+    if (!(await getEventActor())) return { success: false, error: "No tienes permiso para administrar eventos." };
+    const { eventId, phase, target } = input;
+
+    await prisma.$transaction(async (tx) => {
+      const event = await lockEvent(tx, eventId);
+
+      if (phase === "salida") {
+        if (event.checkoutConfirmedAt) throw new Error("La salida ya fue confirmada.");
+        const whereClause = {
+          eventId,
+          checkedOut: false,
+          ...(target === "EQUIPMENT_ALL" ? { itemType: "EQUIPMENT" as const } : {}),
+        };
+
+        const items = await tx.serviceEventItem.findMany({ where: whereClause });
+        for (const item of items) {
+          await tx.serviceEventItem.update({
+            where: { id: item.id },
+            data: {
+              sentQuantity: item.plannedQuantity,
+              checkedOut: true,
+              checkoutStatus: "REVISADO",
+            },
+          });
+        }
+      } else {
+        if (!event.checkoutConfirmedAt) throw new Error("Confirma la salida antes de registrar el regreso.");
+        if (event.returnConfirmedAt) throw new Error("El regreso ya fue confirmado.");
+
+        const whereClause = {
+          eventId,
+          checkedOut: true,
+          checkedIn: false,
+          ...(target === "EQUIPMENT_ALL" ? { itemType: "EQUIPMENT" as const } : {}),
+        };
+
+        const items = await tx.serviceEventItem.findMany({ where: whereClause });
+        for (const item of items) {
+          const sent = item.sentQuantity ?? item.plannedQuantity;
+          await tx.serviceEventItem.update({
+            where: { id: item.id },
+            data: {
+              returnedQuantity: sent,
+              damagedQuantity: 0,
+              returnedOpenQuantity: 0,
+              lostQuantity: 0,
+              checkedIn: true,
+              returnStatus: "COMPLETO",
+            },
+          });
+        }
+      }
+    });
+
+    revalidatePath(`/administration/inventory/events/${eventId}`);
+    return {
+      success: true,
+      message:
+        phase === "salida"
+          ? "Artículos marcados como cargados según plan."
+          : "Artículos marcados como devueltos íntegros.",
+    };
+  } catch (error) {
+    console.error("Error in batch check event items:", error);
+    return { success: false, error: error instanceof Error ? error.message : "No fue posible procesar la acción en lote." };
+  }
+}

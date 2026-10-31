@@ -46,16 +46,23 @@ export default function ReceiptTicket({
   containerId = "thermal-receipt-print-area",
   showPreviewBorders = true,
   printable = true,
+  paperWidth = "58mm",
 }: {
   data: ReceiptData;
   containerId?: string;
   showPreviewBorders?: boolean;
   printable?: boolean;
+  paperWidth?: "58mm" | "80mm";
 }) {
+  const is58mm = paperWidth === "58mm";
+  const printWidthMm = is58mm ? "56mm" : "78mm";
+  const pageSizeMm = is58mm ? "58mm auto" : "80mm auto";
+  const maxPreviewWidth = is58mm ? "max-w-[270px]" : "max-w-[340px]";
+
   return (
     <div
       id={containerId}
-      className={`mx-auto w-full max-w-[320px] bg-white p-4 font-mono text-xs text-black leading-tight ${
+      className={`mx-auto w-full ${maxPreviewWidth} bg-white p-3 font-mono text-[11px] text-black leading-tight ${
         showPreviewBorders ? "rounded-xl border border-gray-200 shadow-sm" : ""
       }`}
     >
@@ -63,7 +70,7 @@ export default function ReceiptTicket({
         @media print {
           @page {
             margin: 0;
-            size: 80mm auto;
+            size: ${pageSizeMm};
           }
           body * {
             visibility: hidden !important;
@@ -75,10 +82,10 @@ export default function ReceiptTicket({
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            width: 78mm !important;
+            width: ${printWidthMm} !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 4mm 2mm !important;
+            padding: 3mm 2mm !important;
             background: #fff !important;
             color: #000 !important;
             box-shadow: none !important;

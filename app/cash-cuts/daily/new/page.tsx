@@ -38,8 +38,27 @@ export default function NuevoCortePage() {
   const [counting, setCounting] = useState(false);
   const [events, setEvents] = useState<EligibleEvent[]>([]);
   const [eventId, setEventId] = useState("");
+  const [previousNextFund, setPreviousNextFund] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!branchId) {
+      setPreviousNextFund(null);
+      return;
+    }
+    fetch(`/api/cash-cuts?branchId=${encodeURIComponent(branchId)}&status=CERRADO`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((cuts: Array<{ nextFund?: number | null }>) => {
+        const lastCut = Array.isArray(cuts) ? cuts[0] : null;
+        if (lastCut && typeof lastCut.nextFund === "number") {
+          setPreviousNextFund(lastCut.nextFund);
+        } else {
+          setPreviousNextFund(null);
+        }
+      })
+      .catch(() => setPreviousNextFund(null));
+  }, [branchId]);
 
   useEffect(() => {
     const cachedBranches = localStorage.getItem("maestro:cash-cut-branches");
@@ -148,6 +167,18 @@ export default function NuevoCortePage() {
             ))}
           </select>
         </Card>
+
+        {previousNextFund !== null && (
+          <Card highlight className="border-primary/40 bg-primary/5">
+            <CardLabel>Fondo reportado por el turno anterior</CardLabel>
+            <p className="mt-1 text-2xl font-bold text-on-surface">
+              ${previousNextFund.toFixed(2)}
+            </p>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              El cajero saliente declaró haber dejado este importe físico en caja. Verifica que coincida con tu conteo.
+            </p>
+          </Card>
+        )}
 
         <Card>
           <CardLabel>Fecha</CardLabel>

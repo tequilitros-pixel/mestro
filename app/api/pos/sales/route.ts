@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { PaymentMethod, PosBenefitReason, Prisma } from "@prisma/client";
@@ -7,17 +7,16 @@ import { getDiscountLimitsByRole, verifyManagerPin } from "@/lib/pos/discountLim
 import { getActiveDiscountRules } from "@/lib/pos/discountRules";
 import { setRlsContext, withRlsContext } from "@/lib/rls";
 import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
-import { hashPayload } from "@/lib/pos2/payloadHash";
-import { consumePosInventory } from "@/lib/pos/v1InventoryGuard";
 import {
   consumePospressInventoryV2,
   type PospressInventoryRequirement,
 } from "@/lib/pos/pospressInventory";
 import { DomainError } from "@/lib/domain/errors";
-import { appendAuditEvent } from "@/lib/pos2/audit";
-import { appendOutboxEvent } from "@/lib/pos2/outbox";
-import { evaluateCapabilityShadow } from "@/lib/pos2/capabilities";
 import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
+
+function hashPayload(payload: unknown): string {
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
 
 const ROLES_QUE_PUEDEN_VENDER = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -73,8 +72,8 @@ export async function GET(request: NextRequest) {
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
 
-  const currentCashCut = user.role === "ADMIN" ? null : await getCurrentPospressCashCut(user);
-  const scopedBranchId = user.role === "ADMIN" ? undefined : currentCashCut?.branch.id;
+  const currentCashCut = await getCurrentPospressCashCut(user);
+  const scopedBranchId = currentCashCut?.branch.id;
 
   if (user.role !== "ADMIN" && !currentCashCut) return NextResponse.json([]);
   if (scopedBranchId && branchId && branchId !== scopedBranchId) {
@@ -251,10 +250,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Sucursal no encontrada" }, { status: 404 });
   }
 
-  const openCashCut = await prisma.cashCut.findFirst({
-    where: { branchId, status: "ABIERTO" },
+  // Verificamos si el usuario tiene un corte abierto en alguna sucursal
+  const userOpenCut = await prisma.cashCut.findFirst({
+    where: {
+      status: "ABIERTO",
+      OR: [
+        { responsibleId: user.id },
+        { createdById: user.id },
+      ],
+    },
+    include: { branch: true },
     orderBy: { openedAt: "desc" },
   });
+
+  // Si tiene un corte abierto en una sucursal distinta a la que intenta vender, se bloquea estrictamente
+  if (userOpenCut && userOpenCut.branchId !== branchId) {
+    return NextResponse.json(
+      {
+        error: `Tienes un corte de caja abierto en la sucursal "${userOpenCut.branch.name}". Solo puedes vender en esa sucursal mientras tu corte siga abierto.`,
+      },
+      { status: 403 }
+    );
+  }
+
+  // El corte de caja a vincular es específicamente el corte abierto del usuario, o el de la sucursal
+  const openCashCut =
+    userOpenCut && userOpenCut.branchId === branchId
+      ? userOpenCut
+      : await prisma.cashCut.findFirst({
+          where: { branchId, status: "ABIERTO" },
+          orderBy: { openedAt: "desc" },
+        });
 
   if (!openCashCut) {
     return NextResponse.json(
@@ -618,7 +644,7 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    if (inventoryMode === "v2") {
+    if (pospressInventoryRequirements.length > 0) {
       await consumePospressInventoryV2(tx, {
         branchId,
         actorId: user.id,
@@ -626,8 +652,6 @@ export async function POST(request: NextRequest) {
         operationId: clientOperationId ?? randomUUID(),
         requirements: pospressInventoryRequirements,
       });
-    } else {
-      await consumePosInventory(tx, { branchId, saleCode: code, requirements: inventoryRequirements });
     }
 
     // Suma los pagos de esta venta al corte de caja abierto de la
@@ -649,20 +673,6 @@ export async function POST(request: NextRequest) {
         },
       });
     }
-
-    await appendAuditEvent(tx, {
-      actorId: user.id, branchId, action: "pos.sale.completed", entityType: "PosSale",
-      entityId: createdSale.id, operationId: clientOperationId, metadata: { code, total, itemCount: resolvedItems.length },
-    });
-    await evaluateCapabilityShadow(tx, {
-      actor: { id: user.id, role: user.role, branchIds: user.role === "ADMIN" ? null : [branchId] },
-      capability: "pos.sale.create", branchId, legacyAllowed: true,
-      entityType: "PosSale", entityId: createdSale.id,
-    });
-    await appendOutboxEvent(tx, {
-      topic: "pos.sale.completed", aggregate: "PosSale", aggregateId: createdSale.id,
-      operationId: clientOperationId, payload: { saleId: createdSale.id, branchId, code },
-    });
 
     return createdSale;
   }).catch(async (error: unknown) => {

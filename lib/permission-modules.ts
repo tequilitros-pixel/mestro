@@ -92,15 +92,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   {
     group: "Punto de Venta",
     modules: [
-      { key: "/pos", label: "Caja y cobros · Punto de Venta" },
-      { key: "/pospress/tables", label: "Mesas" },
+      { key: "/pos", label: "Caja y cobros · Punto de Venta (POSpress)" },
+      { key: "/pospress/tables", label: "Mesas y cuentas" },
       { key: "/pospress/pending-tabs", label: "Cuentas pendientes" },
-      { key: "/pos/sales", label: "Transacciones y resumen de ventas" },
       { key: "/pospress/catalog", label: "Editor de productos POS" },
       { key: "/pospress/recipes", label: "Recetas POS" },
-      { key: "/pospress/discounts", label: "Editor de descuentos" },
-      { key: "/pos/settings", label: "Configuración POS" },
-      { key: "/administration/pos2", label: "Administración POS v2" },
+      { key: "/pospress/discounts", label: "Editor de descuentos y promociones" },
     ],
   },
   {
@@ -149,14 +146,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
-    group: "Administración de Personal y Horarios (Workforce)",
+    group: "Administración de Personal y Horarios",
     modules: [
       { key: "/administration/personnel", label: "Directorio de personal" },
       { key: "/administration/schedule", label: "Programación de horarios" },
+      { key: "/timeclock/payroll", label: "Nómina semanal y recibos" },
       { key: "/administration/personnel/timeclock", label: "Supervisión de asistencia y checador" },
       { key: "/administration/personnel/notifications", label: "Avisos a personal" },
       { key: "/timeclock/geofences", label: "Geocercas de sucursales" },
-      { key: "/administration/workforce", label: "Portal Workforce y nómina" },
     ],
   },
 ];
@@ -196,10 +193,27 @@ export function canAccessModule(
     return true;
   }
 
-  // Compatibilidad histórica para usuarios sin configurar: checador personal básico
+  // Compatibilidad para usuarios sin configurar: checador personal básico
   if (
     !hasConfiguredPermissions &&
-    (moduleKey === "/timeclock" || moduleKey === "/timeclock/calendar")
+    (moduleKey === "/timeclock" ||
+      moduleKey === "/timeclock/calendar" ||
+      moduleKey === "/timeclock/availability" ||
+      moduleKey === "/timeclock/hours" ||
+      moduleKey === "/timeclock/history" ||
+      moduleKey === "/timeclock/requests")
+  ) {
+    return true;
+  }
+
+  // Si tiene permiso al checador (/timeclock), tiene acceso a sus vistas de autoconsulta
+  if (
+    moduleKeys.includes("/timeclock") &&
+    (moduleKey === "/timeclock/calendar" ||
+      moduleKey === "/timeclock/availability" ||
+      moduleKey === "/timeclock/hours" ||
+      moduleKey === "/timeclock/history" ||
+      moduleKey === "/timeclock/requests")
   ) {
     return true;
   }
@@ -227,12 +241,18 @@ export function getModuleKeyForPath(pathname: string): string | null {
     return "/administration/financial-categories";
   }
 
-  // 2. Personal, Horarios y Workforce
+  // 2. Personal y Horarios
   if (
     pathname === "/administration/schedule" ||
     pathname.startsWith("/administration/schedule/")
   ) {
     return "/administration/schedule";
+  }
+  if (
+    pathname === "/timeclock/payroll" ||
+    pathname.startsWith("/timeclock/payroll/")
+  ) {
+    return "/timeclock/payroll";
   }
   if (
     pathname === "/administration/personnel/timeclock" ||
@@ -252,42 +272,8 @@ export function getModuleKeyForPath(pathname: string): string | null {
   ) {
     return "/timeclock/geofences";
   }
-  if (pathname === "/timeclock/kiosk" || pathname === "/workforce/kiosk") {
+  if (pathname === "/timeclock/kiosk") {
     return "/timeclock/kiosk";
-  }
-  if (pathname === "/workforce/clock") {
-    return "/timeclock";
-  }
-  if (pathname === "/workforce/availability") {
-    return "/timeclock/availability";
-  }
-  if (pathname === "/workforce/timesheet" || pathname === "/workforce/payroll") {
-    return "/timeclock/hours";
-  }
-  if (pathname.startsWith("/administration/workforce")) {
-    const sub = pathname.replace("/administration/workforce", "");
-    if (sub === "/attendance" || sub.startsWith("/attendance/")) {
-      return "/administration/workforce/attendance";
-    }
-    if (sub === "/timesheets" || sub.startsWith("/timesheets/")) {
-      return "/administration/workforce/timesheets";
-    }
-    if (sub === "/clock-corrections" || sub.startsWith("/clock-corrections/")) {
-      return "/administration/workforce/clock-corrections";
-    }
-    if (sub === "/overtime" || sub.startsWith("/overtime/")) {
-      return "/administration/workforce/overtime";
-    }
-    if (sub === "/payroll" || sub.startsWith("/payroll/")) {
-      return "/administration/workforce/payroll";
-    }
-    if (sub === "/settings" || sub.startsWith("/settings/")) {
-      return "/administration/workforce/settings";
-    }
-    return "/administration/workforce";
-  }
-  if (pathname === "/workforce" || pathname.startsWith("/workforce/")) {
-    return "/administration/workforce";
   }
   if (
     pathname === "/administration/personnel" ||
@@ -353,15 +339,12 @@ export function getModuleKeyForPath(pathname: string): string | null {
     return "/liquors/inventory";
   }
 
-  // 6. Punto de Venta (POS)
+  // 6. Punto de Venta (POSpress)
   if (
     pathname === "/pospress/transactions" ||
     pathname.startsWith("/pospress/transactions/")
   ) {
-    return "/pos/sales";
-  }
-  if (pathname === "/pos/sales" || pathname.startsWith("/pos/sales/")) {
-    return "/pos/sales";
+    return "/pos";
   }
   if (
     pathname === "/pospress/catalog" ||
@@ -393,21 +376,11 @@ export function getModuleKeyForPath(pathname: string): string | null {
   ) {
     return "/pospress/pending-tabs";
   }
-  if (pathname === "/pos/settings" || pathname.startsWith("/pos/settings/")) {
-    return "/pos/settings";
-  }
-  if (
-    pathname === "/administration/pos2" ||
-    pathname.startsWith("/administration/pos2/") ||
-    pathname === "/pos2" ||
-    pathname.startsWith("/pos2/")
-  ) {
-    return "/administration/pos2";
-  }
   if (
     pathname === "/pospress" ||
     pathname.startsWith("/pospress/") ||
-    pathname === "/pos"
+    pathname === "/pos" ||
+    pathname.startsWith("/pos/")
   ) {
     return "/pos";
   }

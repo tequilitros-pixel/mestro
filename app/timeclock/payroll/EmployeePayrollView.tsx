@@ -13,6 +13,7 @@ import type { ApprovedPayrollHistoryItem } from "@/app/actions/employeePayrollHi
 import { getEmployeeSelfWeekDetail } from "@/app/actions/employeeSelfPayroll";
 import type { EmployeeSelfWeekDetail } from "@/app/actions/employeeSelfPayroll";
 import type { PayrollDayDetail } from "@/app/actions/payroll";
+import SignaturePadModal from "@/components/payroll/SignaturePadModal";
 
 export type EmployeePayrollSummary = {
   hourlyRate: number | null;
@@ -358,6 +359,8 @@ export default function EmployeePayrollView({
   const [activeTab, setActiveTab] = useState<"RESUMEN" | "PAGOS" | "SEMANA">(initialTab);
   const [selectedWeekStart, setSelectedWeekStart] = useState<string | null>(() => approvedHistory[0]?.weekStart ?? null);
   const selectedPayment = approvedHistory.find((p) => p.weekStart === selectedWeekStart) ?? approvedHistory[0] ?? null;
+  const [signingItem, setSigningItem] = useState<ApprovedPayrollHistoryItem | null>(null);
+  const [signedWeeks, setSignedWeeks] = useState<Record<string, { signatureData: string; signedAt: string }>>({});
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
@@ -536,19 +539,55 @@ export default function EmployeePayrollView({
                         </div>
                       </div>
 
-                      {isSelected && (
-                        <div className="mt-3 border-t border-outline-variant/60 pt-3 text-xs text-on-surface-variant">
-                          <p>
-                            {item.status === "PAGADA" && item.paidAt
-                              ? `Pagada el ${formatApprovalDate(item.paidAt)}`
-                              : item.status === "APROBADA" && item.approvedAt
-                                ? `Aprobada el ${formatApprovalDate(item.approvedAt)}`
-                                : item.status === "PENDIENTE"
-                                  ? "Horas calculadas según checador; el monto final se confirmará al aprobar la nómina."
-                                  : "Aprobada"}
-                          </p>
-                        </div>
-                      )}
+                      {isSelected && (() => {
+                        const isSigned = !!(item.signedAt || signedWeeks[item.weekStart]);
+                        const signedDate = signedWeeks[item.weekStart]?.signedAt || item.signedAt;
+
+                        return (
+                          <div className="mt-3 space-y-3 border-t border-outline-variant/60 pt-3 text-xs text-on-surface-variant">
+                            <p>
+                              {item.status === "PAGADA" && item.paidAt
+                                ? `Pagada el ${formatApprovalDate(item.paidAt)}`
+                                : item.status === "APROBADA" && item.approvedAt
+                                  ? `Aprobada el ${formatApprovalDate(item.approvedAt)}`
+                                  : item.status === "PENDIENTE"
+                                    ? "Horas calculadas según checador; el monto final se confirmará al aprobar la nómina."
+                                    : "Aprobada"}
+                            </p>
+
+                            {(item.status === "PAGADA" || item.status === "APROBADA") && (
+                              <div className="flex flex-wrap items-center gap-2 pt-1">
+                                {isSigned ? (
+                                  <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                                    ✓ Firmado de conformidad {signedDate && `el ${formatApprovalDate(signedDate)}`}
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSigningItem(item);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-on-primary shadow transition hover:opacity-95 active:scale-[0.98]"
+                                  >
+                                    ✍️ Firmar de conformidad
+                                  </button>
+                                )}
+
+                                <a
+                                  href={`/api/timeclock/payroll/statement?weekStart=${encodeURIComponent(item.weekStart)}&download=1`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-2 text-xs font-bold text-primary shadow-sm transition hover:bg-primary/20"
+                                >
+                                  📄 {isSigned ? "Descargar Recibo Firmado (PDF)" : "Descargar Recibo (PDF)"}
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}
@@ -557,6 +596,22 @@ export default function EmployeePayrollView({
           </Card>
         )}
       </div>
+
+      {signingItem && (
+        <SignaturePadModal
+          isOpen={true}
+          onClose={() => setSigningItem(null)}
+          onSigned={(signatureData, signedAt) => {
+            setSignedWeeks((prev) => ({
+              ...prev,
+              [signingItem.weekStart]: { signatureData, signedAt },
+            }));
+          }}
+          weekStart={signingItem.weekStart}
+          weekLabel={formatWeek(signingItem.weekStart, signingItem.weekEnd)}
+          totalPay={signingItem.totalPay}
+        />
+      )}
     </main>
   );
 }

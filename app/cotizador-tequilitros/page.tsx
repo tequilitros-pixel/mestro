@@ -68,6 +68,7 @@ export default async function CotizadorPage() {
     if (!rec.metadata || typeof rec.metadata !== "object") continue;
     const meta = rec.metadata as Record<string, unknown>;
     if (meta.isContractConfirmed || meta.status === "CONFIRMED") continue;
+    if (meta.status === "REJECTED" || meta.status === "CANCELLED") continue;
     if (typeof meta.eventDate !== "string") continue;
 
     const dateStr = meta.eventDate.slice(0, 10);

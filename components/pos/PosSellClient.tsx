@@ -15,6 +15,7 @@ import {
   ReceiptIcon,
   ChartLineIcon,
   ClockIcon,
+  MartiniIcon,
 } from "@/components/ui/icons";
 import { getProductVisual } from "@/lib/pos/productVisual";
 import { useToast } from "@/components/ui/Toast";
@@ -487,8 +488,8 @@ export default function PosSellClient({
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col lg:flex-row">
-      <div className="flex flex-1 flex-col overflow-hidden border-b border-outline-variant lg:border-b-0 lg:border-r">
+    <div className="flex h-[calc(100vh-4rem)] flex-col md:flex-row">
+      <div className="flex flex-1 flex-col overflow-hidden border-b border-outline-variant md:border-b-0 md:border-r">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant p-4">
           <div className="flex items-center gap-2">
             <CashRegisterIcon className="h-5 w-5 text-primary" />
@@ -609,24 +610,27 @@ export default function PosSellClient({
         )}
 
         {categories && categories.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto border-b border-outline-variant p-3">
+          <div className="flex gap-2 overflow-x-auto border-b border-outline-variant px-3 py-2.5 scrollbar-none">
             {categories.map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setActiveCategoryId(cat.id)}
-                className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                className={`shrink-0 rounded-xl px-3.5 py-1.5 text-xs sm:text-sm font-bold transition-all duration-150 ${
                   activeCategoryId === cat.id
-                    ? "bg-primary text-on-primary"
-                    : "bg-surface-container text-on-surface-variant hover:text-on-surface"
+                    ? "bg-primary text-on-primary shadow-xs"
+                    : "bg-surface-container/70 text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
                 }`}
               >
                 {cat.name}
+                <span className="ml-1.5 text-[11px] opacity-75 font-normal">
+                  ({cat.products.length})
+                </span>
               </button>
             ))}
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4">
           {categories && categories.length === 0 && (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
               <GridIcon className="h-8 w-8 text-on-surface-variant" />
@@ -645,43 +649,60 @@ export default function PosSellClient({
           )}
 
           {activeCategory && (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-              {activeCategory.products.map((product) => (
-                <button
-                  key={product.id}
-                  onClick={() => handleProductClick(product)}
-                  className="flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-surface-container/60 text-left transition hover:border-primary/40 hover:scale-[1.02]"
-                >
-                  {(() => {
-                    const visual = getProductVisual(product.icon);
-                    return visual.type === "image" ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={visual.url}
-                        alt={product.name}
-                        className="h-20 w-full object-cover"
-                      />
-                    ) : (
-                      <div
-                        className="flex h-20 w-full items-center justify-center text-lg font-bold text-white/90"
-                        style={{ backgroundColor: visual.hex }}
-                      >
-                        {product.name.slice(0, 1).toUpperCase()}
-                      </div>
-                    );
-                  })()}
-                  <div className="flex flex-1 flex-col items-start justify-between gap-1 p-3">
-                    <span className="text-sm font-semibold text-on-surface">
-                      {product.name}
-                    </span>
-                    <span className="text-xs text-on-surface-variant">
-                      {product.variants.filter((v) => v.active).length > 1
-                        ? "Varias opciones"
-                        : formatCurrency(product.variants[0]?.price ?? 0)}
-                    </span>
-                  </div>
-                </button>
-              ))}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3">
+              {activeCategory.products.map((product) => {
+                const visual = getProductVisual(product.icon, product.name);
+                const activeVariants = product.variants.filter((v) => v.active);
+                const hasMultipleVariants = activeVariants.length > 1;
+                const basePrice = activeVariants[0]?.price ?? 0;
+
+                return (
+                  <button
+                    key={product.id}
+                    onClick={() => handleProductClick(product)}
+                    className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-outline-variant/70 bg-surface-container-high/80 text-left transition-all duration-150 hover:border-primary/60 hover:shadow-md active:scale-[0.97] select-none h-32 sm:h-36"
+                  >
+                    {/* Visual / Fotografía */}
+                    <div className="relative h-20 sm:h-22 w-full overflow-hidden bg-surface-dim/40 flex items-center justify-center">
+                      {visual.type === "image" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={visual.url}
+                          alt={product.name}
+                          className="h-full w-full object-contain p-1.5 transition-transform duration-200 group-hover:scale-105"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div
+                          className="h-full w-full flex items-center justify-center transition-transform duration-200 group-hover:scale-105"
+                          style={{
+                            background: `linear-gradient(135deg, ${visual.hex}22, ${visual.hex}55)`,
+                          }}
+                        >
+                          <MartiniIcon className="h-8 w-8 text-on-surface/30 group-hover:scale-110 transition-transform" />
+                        </div>
+                      )}
+
+                      {/* Badge flotante de precio / opciones */}
+                      <span className="absolute top-2 right-2 rounded-full border border-outline-variant/60 bg-surface/90 px-2 py-0.5 text-[10px] sm:text-[11px] font-bold text-primary shadow-xs backdrop-blur-md">
+                        {hasMultipleVariants ? "Opciones" : formatCurrency(basePrice)}
+                      </span>
+                    </div>
+
+                    {/* Información de la bebida */}
+                    <div className="flex flex-1 flex-col justify-center px-2.5 py-1.5 border-t border-outline-variant/40 bg-surface-container/90">
+                      <span className="text-xs sm:text-[13px] font-bold leading-tight text-on-surface line-clamp-1 group-hover:text-primary transition-colors">
+                        {product.name}
+                      </span>
+                      <span className="text-[10px] text-on-surface-variant line-clamp-1 mt-0.5">
+                        {hasMultipleVariants
+                          ? `${activeVariants.length} tamaños`
+                          : product.description || "Bebida preparada"}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -697,7 +718,7 @@ export default function PosSellClient({
         </div>
       </div>
 
-      <div className="flex w-full flex-col lg:w-96">
+      <div className="flex w-full flex-col md:w-80 lg:w-96 shrink-0 bg-surface-container-low/40">
         <div className="flex items-center justify-between border-b border-outline-variant p-4">
           <h2 className="text-sm font-bold uppercase tracking-wide text-on-surface-variant">
             Carrito

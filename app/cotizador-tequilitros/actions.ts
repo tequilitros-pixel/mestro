@@ -7,6 +7,7 @@ import {
   DRINKS_CATALOG,
   EVENT_TYPES,
   type TequilitrosQuoteMetadata,
+  type QuoteStatus,
   type DayAvailability,
   type EmployeeLeaderboardItem,
   MAX_CONFIRMED_EVENTS_PER_DAY,
@@ -55,15 +56,50 @@ interface StoredQuoteData extends TequilitrosQuoteMetadata {
   eventDate: string;
   guestCount: number;
   saleAmount: number;
-  status: "DRAFT" | "CONFIRMED";
+  status: QuoteStatus;
   createdAt: string;
 }
 
 function parseStoredQuote(metadata: unknown): StoredQuoteData | null {
-  if (!metadata || typeof metadata !== "object") return null;
-  const obj = metadata as Record<string, unknown>;
-  if (obj.type !== "TEQUILITROS_QUOTE" || typeof obj.code !== "string") return null;
-  return obj as unknown as StoredQuoteData;
+  if (!metadata) return null;
+  let obj = metadata;
+  if (typeof obj === "string") {
+    try {
+      obj = JSON.parse(obj);
+    } catch {
+      return null;
+    }
+  }
+  if (!obj || typeof obj !== "object") return null;
+  const rec = obj as Record<string, unknown>;
+
+  const code =
+    typeof rec.code === "string"
+      ? rec.code
+      : typeof rec.folio === "string"
+        ? rec.folio
+        : null;
+  if (!code) return null;
+
+  const rawStatus = String(rec.status || (rec.isContractConfirmed ? "CONFIRMED" : "PENDING")).toUpperCase();
+  const status: QuoteStatus =
+    rawStatus === "CONFIRMED"
+      ? "CONFIRMED"
+      : rawStatus === "APPROVED"
+        ? "APPROVED"
+        : rawStatus === "REJECTED"
+          ? "REJECTED"
+          : rawStatus === "CANCELLED"
+            ? "CANCELLED"
+            : "PENDING";
+
+  return {
+    ...rec,
+    id: typeof rec.id === "string" ? rec.id : code,
+    code,
+    type: "TEQUILITROS_QUOTE",
+    status,
+  } as unknown as StoredQuoteData;
 }
 
 export type QuoteCreationInput = {
@@ -250,126 +286,249 @@ export async function createQuoteAction(input: QuoteCreationInput) {
   }
 }
 
-export async function registerDepositAction(input: {
-  eventId: string; // Folio o id de la cotización
-  depositPaid: number;
-  depositMethod: string;
+export type UpdateQuoteStatusInput = {
+  eventId: string; // Folio o id de la cotización (ej. COT-2026-0001)
+  status: QuoteStatus; // "PENDING" | "APPROVED" | "CONFIRMED" | "REJECTED" | "CANCELLED"
+  depositPaid?: number; // Monto entregado de anticipo
+  depositPaidAt?: string; // Cuándo pusieron el anticipo (YYYY-MM-DD o ISO)
+  depositMethod?: string; // Efectivo en Sucursal, Transferencia Bancaria, Tarjeta
   contractNotes?: string;
   branchName?: string;
-}) {
+};
+
+export async function updateQuoteStatusAndDepositAction(input: UpdateQuoteStatusInput) {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, error: "Debes iniciar sesión para registrar el anticipo." };
+      return { success: false, error: "Debes iniciar sesión para actualizar la cotización." };
     }
 
-    // Buscar la cotización en AuditEvent
-    const auditRecord = await prisma.auditEvent.findFirst({
+    const searchId = input.eventId?.trim();
+    if (!searchId) {
+      return { success: false, error: "Folio o ID de cotización no especificado." };
+    }
+
+    // 1. Buscar el registro en AuditEvent
+    let auditRecord = await prisma.auditEvent.findFirst({
       where: {
         entityType: "TequilitrosQuote",
-        OR: [{ entityId: input.eventId }, { id: input.eventId }],
+        OR: [{ entityId: searchId }, { id: searchId }],
       },
       orderBy: { createdAt: "desc" },
     });
 
     if (!auditRecord) {
-      return { success: false, error: "Cotización no encontrada." };
+      // Buscar en los últimos 200 registros si el folio está en metadata
+      const records = await prisma.auditEvent.findMany({
+        where: { entityType: "TequilitrosQuote" },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+      });
+
+      auditRecord =
+        records.find((rec) => {
+          const q = parseStoredQuote(rec.metadata);
+          if (!q) return false;
+          return (
+            q.code?.toUpperCase() === searchId.toUpperCase() ||
+            q.folio?.toUpperCase() === searchId.toUpperCase() ||
+            q.contractFolio?.toUpperCase() === searchId.toUpperCase()
+          );
+        }) ?? null;
+    }
+
+    if (!auditRecord) {
+      return { success: false, error: `No se encontró la cotización con folio: ${searchId}` };
     }
 
     const currentQuote = parseStoredQuote(auditRecord.metadata);
     if (!currentQuote) {
-      return { success: false, error: "Datos de cotización corruptos." };
+      return { success: false, error: "No se pudieron leer los datos de la cotización." };
     }
 
-    const depositPaid = Math.round(Number(input.depositPaid) * 100) / 100;
     const saleAmount = Number(currentQuote.saleAmount ?? 0);
-    if (!Number.isFinite(depositPaid) || depositPaid <= 0 || depositPaid > saleAmount) {
-      return { success: false, error: "Ingresa un anticipo válido que no exceda el total del servicio." };
+    const eventDate = new Date(currentQuote.eventDate);
+    const dateStr = !Number.isNaN(eventDate.getTime())
+      ? eventDate.toISOString().slice(0, 10).replace(/-/g, "")
+      : new Date().toISOString().slice(0, 10).replace(/-/g, "");
+
+    const codeNum = currentQuote.code.replace(/[^0-9]/g, "").slice(-4) || "0001";
+    const contractFolio = currentQuote.contractFolio || `CTR-${dateStr}-${codeNum}`;
+    const receiptFolio = currentQuote.receiptFolio || `REC-${dateStr}-${codeNum}`;
+
+    // Procesar fecha del anticipo (cuándo lo pusieron)
+    let depositPaidAt: string | undefined = undefined;
+    if (input.depositPaidAt) {
+      const parsedDate = new Date(
+        input.depositPaidAt.includes("T") ? input.depositPaidAt : `${input.depositPaidAt}T12:00:00Z`
+      );
+      depositPaidAt = !Number.isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : new Date().toISOString();
+    } else if (currentQuote.depositPaidAt) {
+      depositPaidAt = currentQuote.depositPaidAt;
+    } else {
+      depositPaidAt = new Date().toISOString();
     }
 
-    const eventDate = new Date(currentQuote.eventDate);
-    const dateStr = eventDate.toISOString().slice(0, 10).replace(/-/g, "");
-    const contractFolio = `CTR-${dateStr}-${currentQuote.code.replace(/[^0-9]/g, "").slice(-4) || "0001"}`;
+    // Procesar monto del anticipo
+    let depositPaid = currentQuote.depositPaid ?? 0;
+    if (input.depositPaid !== undefined && input.depositPaid !== null) {
+      const parsed = Math.round(Number(input.depositPaid) * 100) / 100;
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        depositPaid = parsed;
+      }
+    } else if (input.status === "CONFIRMED" && (!depositPaid || depositPaid <= 0)) {
+      depositPaid = currentQuote.modality === "consumo" ? saleAmount : Math.round(saleAmount * 0.5);
+    }
 
-    const { start, end } = getUtcDayBounds(eventDate);
+    const depositMethod = input.depositMethod?.trim() || currentQuote.depositMethod || "Efectivo en Sucursal";
+    const depositBranchName = input.branchName?.trim() || currentQuote.depositBranchName || user.name;
+    const contractNotes = input.contractNotes !== undefined ? input.contractNotes.trim() : currentQuote.contractNotes;
 
-    const result = await prisma.$transaction(
-      async (tx) => {
-        // Validar límite de 3 eventos confirmados para ese día
-        const sameDayConfirmed = await tx.serviceEvent.findMany({
-          where: {
-            eventDate: { gte: start, lte: end },
-            status: { notIn: ["CANCELLED", "DRAFT"] },
-          },
-          select: { notes: true },
-        });
+    const isConfirmed = input.status === "CONFIRMED";
+    const isApproved = input.status === "APPROVED";
+    const isRejected = input.status === "REJECTED";
+    const isCancelled = input.status === "CANCELLED";
 
-        if (
-          sameDayConfirmed.filter((event) => isTequilitrosEventMetadata(event.notes)).length >=
-          MAX_CONFIRMED_EVENTS_PER_DAY
-        ) {
-          throw new Error("Esta fecha ya cuenta con 3 eventos confirmados. No es posible confirmar otro evento.");
-        }
+    const updatedMetadata: StoredQuoteData = {
+      ...currentQuote,
+      status: input.status,
+      isContractConfirmed: isConfirmed,
+      contractFolio: isConfirmed ? contractFolio : currentQuote.contractFolio,
+      receiptFolio: isConfirmed || depositPaid > 0 ? receiptFolio : currentQuote.receiptFolio,
+      depositPaid: isConfirmed || depositPaid > 0 ? depositPaid : currentQuote.depositPaid,
+      depositPaidAt: isConfirmed || depositPaid > 0 ? depositPaidAt : currentQuote.depositPaidAt,
+      depositMethod: isConfirmed || depositPaid > 0 ? depositMethod : currentQuote.depositMethod,
+      depositReceivedById: isConfirmed || depositPaid > 0 ? user.id : currentQuote.depositReceivedById,
+      depositReceivedByName: isConfirmed || depositPaid > 0 ? user.name : currentQuote.depositReceivedByName,
+      depositBranchName: isConfirmed || depositPaid > 0 ? depositBranchName : currentQuote.depositBranchName,
+      contractNotes: contractNotes || undefined,
+      approvedAt: isApproved ? currentQuote.approvedAt || new Date().toISOString() : currentQuote.approvedAt,
+      rejectedAt: isRejected ? currentQuote.rejectedAt || new Date().toISOString() : currentQuote.rejectedAt,
+    };
 
-        const updatedMetadata: StoredQuoteData = {
-          ...currentQuote,
-          isContractConfirmed: true,
-          contractFolio,
-          depositPaid,
-          depositMethod: input.depositMethod || "Efectivo en Sucursal",
-          depositPaidAt: new Date().toISOString(),
-          depositReceivedById: user.id,
-          depositReceivedByName: user.name,
-          depositBranchName: input.branchName || user.name,
-          contractNotes: input.contractNotes?.trim() || undefined,
-          status: "CONFIRMED",
-        };
-
-        // 1. Actualizar el registro en AuditEvent
-        await tx.auditEvent.update({
-          where: { id: auditRecord.id },
-          data: {
-            action: "TEQUILITROS_QUOTE_CONFIRMED",
-            metadata: updatedMetadata as unknown as object,
-          },
-        });
-
-        // 2. AHORA Y SOLO AHORA QUE HAY ANTICIPO, CREAR EL EVENTO OFICIAL EN EL INVENTARIO DE EVENTOS
-        const serviceEvent = await tx.serviceEvent.create({
-          data: {
-            code: contractFolio,
-            clientName: currentQuote.clientName,
-            clientPhone: currentQuote.clientPhone || null,
-            location: currentQuote.location,
-            eventDate,
-            guestCount: currentQuote.guestCount,
-            saleAmount,
-            status: "PREPARING", // Oficialmente en preparación en el inventario
-            notes: JSON.stringify(updatedMetadata),
-          },
-        });
-
-        return { contractFolio, metadata: updatedMetadata, serviceEventId: serviceEvent.id };
+    // Actualizar registro en AuditEvent
+    await prisma.auditEvent.update({
+      where: { id: auditRecord.id },
+      data: {
+        action: isConfirmed
+          ? "TEQUILITROS_QUOTE_CONFIRMED"
+          : isApproved
+            ? "TEQUILITROS_QUOTE_APPROVED"
+            : isRejected
+              ? "TEQUILITROS_QUOTE_REJECTED"
+              : "TEQUILITROS_QUOTE_UPDATED",
+        metadata: updatedMetadata as unknown as object,
       },
-      { isolationLevel: "Serializable" },
-    );
+    });
 
-    revalidatePath("/cotizador-tequilitros");
-    revalidatePath("/cotizador-tequilitros/calendario");
-    revalidatePath("/cotizador-tequilitros/historial");
-    revalidatePath("/cotizador-tequilitros/contratos");
-    revalidatePath("/administration/inventory/eventos");
-    revalidatePath("/administration/inventory/events");
+    // Si está confirmada, crear o actualizar el ServiceEvent oficial en inventario
+    if (isConfirmed && !Number.isNaN(eventDate.getTime())) {
+      try {
+        const existingEvent = await prisma.serviceEvent.findFirst({
+          where: {
+            OR: [{ code: contractFolio }, { code: currentQuote.code }],
+          },
+        });
+
+        if (existingEvent) {
+          await prisma.serviceEvent.update({
+            where: { id: existingEvent.id },
+            data: {
+              code: contractFolio,
+              clientName: currentQuote.clientName,
+              clientPhone: currentQuote.clientPhone || null,
+              location: currentQuote.location,
+              eventDate,
+              guestCount: currentQuote.guestCount,
+              saleAmount,
+              status: "PREPARING",
+              notes: JSON.stringify(updatedMetadata),
+            },
+          });
+        } else {
+          await prisma.serviceEvent.create({
+            data: {
+              code: contractFolio,
+              clientName: currentQuote.clientName,
+              clientPhone: currentQuote.clientPhone || null,
+              location: currentQuote.location,
+              eventDate,
+              guestCount: currentQuote.guestCount,
+              saleAmount,
+              status: "PREPARING",
+              notes: JSON.stringify(updatedMetadata),
+            },
+          });
+        }
+      } catch (eventErr) {
+        console.warn("Aviso al sincronizar ServiceEvent:", eventErr);
+      }
+    } else if (isCancelled || isRejected) {
+      try {
+        const existingEvent = await prisma.serviceEvent.findFirst({
+          where: {
+            OR: [{ code: contractFolio }, { code: currentQuote.code }],
+          },
+        });
+        if (existingEvent) {
+          await prisma.serviceEvent.update({
+            where: { id: existingEvent.id },
+            data: { status: "CANCELLED" },
+          });
+        }
+      } catch {
+        // Continuar
+      }
+    }
+
+    // Revalidación protegida
+    const pathsToRevalidate = [
+      "/cotizador-tequilitros",
+      "/cotizador-tequilitros/calendario",
+      "/cotizador-tequilitros/historial",
+      "/cotizador-tequilitros/contratos",
+      "/administration/inventory/eventos",
+      "/administration/inventory/events",
+    ];
+    for (const p of pathsToRevalidate) {
+      try {
+        revalidatePath(p);
+      } catch {
+        // Ignorar
+      }
+    }
 
     return {
       success: true,
-      contractFolio: result.contractFolio,
-      metadata: result.metadata,
+      status: input.status,
+      contractFolio: updatedMetadata.contractFolio,
+      receiptFolio: updatedMetadata.receiptFolio,
+      metadata: updatedMetadata,
     };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Error al registrar anticipo.";
+    console.error("Error al actualizar estatus de cotización:", err);
+    const message = err instanceof Error ? err.message : "Error al actualizar la cotización.";
     return { success: false, error: message };
   }
+}
+
+export async function registerDepositAction(input: {
+  eventId: string; // Folio o id de la cotización
+  depositPaid: number;
+  depositPaidAt?: string;
+  depositMethod: string;
+  contractNotes?: string;
+  branchName?: string;
+}) {
+  return updateQuoteStatusAndDepositAction({
+    eventId: input.eventId,
+    status: "CONFIRMED",
+    depositPaid: input.depositPaid,
+    depositPaidAt: input.depositPaidAt,
+    depositMethod: input.depositMethod,
+    contractNotes: input.contractNotes,
+    branchName: input.branchName,
+  });
 }
 
 export async function getQuotesListAction() {
@@ -466,6 +625,7 @@ export async function getCalendarMonthAction(year: number, month: number) {
     const quote = parseStoredQuote(rec.metadata);
     if (!quote) continue;
     if (quote.isContractConfirmed || quote.status === "CONFIRMED") continue; // Ya contabilizado en ServiceEvent
+    if (quote.status === "REJECTED" || quote.status === "CANCELLED") continue; // Descartar canceladas y rechazadas
 
     const dateStr = quote.eventDate.slice(0, 10);
     const dayItem = mapByDay.get(dateStr);
@@ -477,7 +637,7 @@ export async function getCalendarMonthAction(year: number, month: number) {
       code: quote.code,
       clientName: quote.clientName,
       guestCount: quote.guestCount,
-      status: "PENDING",
+      status: quote.status || "PENDING",
       creatorName: quote.creatorName || "Sucursal",
       isConfirmed: false,
     });
@@ -540,4 +700,73 @@ export async function getEmployeeMetricsAction(): Promise<EmployeeLeaderboardIte
   return Array.from(workerMap.values()).sort(
     (a, b) => b.quotesCount - a.quotesCount || b.totalQuotedAmount - a.totalQuotedAmount
   );
+}
+
+export type PublicQuoteViewData = {
+  code: string;
+  clientName: string;
+  clientPhone?: string | null;
+  clientEmail?: string | null;
+  location: string;
+  eventDate: string;
+  guestCount: number;
+  saleAmount: number;
+  status: QuoteStatus;
+  isConfirmed: boolean;
+  createdAt: string;
+  metadata: TequilitrosQuoteMetadata;
+};
+
+export async function getPublicQuoteByCode(rawCode: string): Promise<PublicQuoteViewData | null> {
+  const code = decodeURIComponent(rawCode || "").trim().toUpperCase();
+  if (!code) return null;
+
+  // 1. Buscar coincidencia directa en AuditEvent (entityId)
+  let auditRecord = await prisma.auditEvent.findFirst({
+    where: {
+      entityType: "TequilitrosQuote",
+      OR: [{ entityId: code }, { id: code }],
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // 2. Si no coincide con entityId (por ejemplo si buscan por folio de contrato CTR-...)
+  if (!auditRecord) {
+    const records = await prisma.auditEvent.findMany({
+      where: { entityType: "TequilitrosQuote" },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+
+    auditRecord =
+      records.find((rec) => {
+        const q = parseStoredQuote(rec.metadata);
+        if (!q) return false;
+        return (
+          q.code.toUpperCase() === code ||
+          (q.contractFolio && q.contractFolio.toUpperCase() === code) ||
+          (q.folio && q.folio.toUpperCase() === code)
+        );
+      }) ?? null;
+  }
+
+  if (!auditRecord) return null;
+
+  const quote = parseStoredQuote(auditRecord.metadata);
+  if (!quote) return null;
+
+  return {
+    code: quote.code,
+    clientName: quote.clientName,
+    clientPhone: quote.clientPhone,
+    clientEmail: quote.clientEmail,
+    location: quote.location,
+    eventDate: quote.eventDate,
+    guestCount: quote.guestCount,
+    saleAmount: Number(quote.saleAmount ?? 0),
+    status: quote.status,
+    isConfirmed: Boolean(quote.isContractConfirmed || quote.status === "CONFIRMED"),
+    createdAt: quote.createdAt || auditRecord.createdAt.toISOString(),
+    metadata: quote,
+  };
 }

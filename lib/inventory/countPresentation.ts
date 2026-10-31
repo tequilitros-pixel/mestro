@@ -54,7 +54,7 @@ function asNumber(value: DecimalLike | null): number | null {
 
 export function buildInventoryCountItemClientView(
   item: InventoryCountItemRecord,
-  options: { status: "BORRADOR" | "CERRADO"; canViewHistory: boolean },
+  options: { status: "BORRADOR" | "CERRADO" | "ANULADO"; canViewHistory: boolean },
 ): InventoryCountItemClientView {
   const view: InventoryCountItemClientView = {
     id: item.id,

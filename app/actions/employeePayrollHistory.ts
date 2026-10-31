@@ -27,6 +27,8 @@ export type ApprovedPayrollHistoryItem = {
   overtimeHours: number;
   totalHours: number;
   totalPay: number;
+  signedAt: string | null;
+  signatureData: string | null;
 };
 
 /**
@@ -57,6 +59,8 @@ export async function getMyApprovedPayrollHistory(): Promise<
       overtimeHours: true,
       totalHours: true,
       totalPay: true,
+      signedAt: true,
+      signatureData: true,
       period: {
         select: {
           weekStart: true,
@@ -89,6 +93,8 @@ export async function getMyApprovedPayrollHistory(): Promise<
       overtimeHours: Number(entry.overtimeHours),
       totalHours: Number(entry.totalHours),
       totalPay: Number(entry.totalPay),
+      signedAt: entry.signedAt ? entry.signedAt.toISOString() : null,
+      signatureData: entry.signatureData ?? null,
     };
   });
 
@@ -156,6 +162,8 @@ export async function getMyApprovedPayrollHistory(): Promise<
         overtimeHours: 0,
         totalHours: weekHours,
         totalPay: Math.round(weekPay * 100) / 100,
+        signedAt: null,
+        signatureData: null,
       });
     }
   }

@@ -1,5 +1,5 @@
 import { applyEventInventoryMovement } from "@/lib/inventory/eventMovements";
-import { generateOperationId } from "@/lib/pos2/operationId";
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds } from "@/lib/auth";
@@ -236,6 +236,33 @@ export async function POST(request: Request) {
     if (eventId) await tx.$queryRaw`SELECT "id" FROM "ServiceEvent" WHERE "id"=${eventId} FOR UPDATE`;
     const lockedEvent = eventId ? await tx.serviceEvent.findUnique({ where: { id: eventId }, include: { items: { orderBy: { productId: "asc" } } } }) : null;
     if (eventId && (!lockedEvent || lockedEvent.stockDeductedAt || !lockedEvent.checkoutConfirmedAt || lockedEvent.returnConfirmedAt || lockedEvent.status === "CANCELLED")) throw new Error("Confirma la salida de un evento que no tenga inventario descontado antes de vincularlo al corte.");
+
+    // Validar que la sucursal no tenga ya un corte abierto
+    const existingBranchOpenCut = await tx.cashCut.findFirst({
+      where: { branchId, status: "ABIERTO" },
+      select: { id: true, code: true },
+    });
+    if (existingBranchOpenCut && (!clientOperationId || existingBranchOpenCut.id !== clientOperationId)) {
+      throw new Error(`Esta sucursal ya tiene un corte de caja abierto (${existingBranchOpenCut.code}). Debe cerrarse antes de abrir uno nuevo.`);
+    }
+
+    // Validar que el responsable o el usuario no tenga ya un corte abierto en OTRA sucursal
+    const targetResponsibleId = responsibleId ?? user.id;
+    const existingUserOpenCutElsewhere = await tx.cashCut.findFirst({
+      where: {
+        status: "ABIERTO",
+        branchId: { not: branchId },
+        OR: [
+          { responsibleId: targetResponsibleId },
+          { createdById: user.id },
+        ],
+      },
+      include: { branch: { select: { name: true } } },
+    });
+    if (existingUserOpenCutElsewhere && (!clientOperationId || existingUserOpenCutElsewhere.id !== clientOperationId)) {
+      throw new Error(`Ya tienes un corte de caja abierto en "${existingUserOpenCutElsewhere.branch.name}". Debes cerrarlo antes de abrir un corte en otra sucursal.`);
+    }
+
     const created = await tx.cashCut.create({
       data: {
         ...(clientOperationId ? { id: clientOperationId } : {}),
@@ -265,7 +292,7 @@ export async function POST(request: Request) {
     // sucursal lo que se cargó a ese evento (lo enviado, o lo
     // planeado si aún no se registró envío).
     if (lockedEvent) {
-      const operationId = generateOperationId();
+      const operationId = randomUUID();
       for (const item of lockedEvent.items) await applyEventInventoryMovement(tx, { item, branchId, actorId: user.id, operationId, eventId: lockedEvent.id, returning: false });
       await tx.serviceEvent.update({ where: { id: lockedEvent.id }, data: { stockDeductedAt: new Date() } });
     }

@@ -15,7 +15,7 @@ export interface QuotePdfData {
   eventDate: string;
   guestCount: number;
   saleAmount: number;
-  documentType: "QUOTE" | "CONTRACT";
+  documentType: "QUOTE" | "CONTRACT" | "RECEIPT";
   metadata: TequilitrosQuoteMetadata;
 }
 
@@ -25,7 +25,8 @@ export async function generateTequilitrosPdfBlob(data: QuotePdfData): Promise<Bl
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
 
   const { metadata } = data;
-  const isContract = data.documentType === "CONTRACT" || metadata.isContractConfirmed;
+  const isReceipt = data.documentType === "RECEIPT";
+  const isContract = data.documentType === "CONTRACT" || (!isReceipt && metadata.isContractConfirmed);
   const isConsumo = metadata.modality === "consumo";
 
   const brandOrange = rgb(0.88, 0.53, 0.21);
@@ -51,9 +52,309 @@ export async function generateTequilitrosPdfBlob(data: QuotePdfData): Promise<Bl
   const depositRequired = isConsumo
     ? data.saleAmount
     : metadata.depositRequired || Math.round(data.saleAmount * 0.5);
-  const balanceRemaining = isConsumo ? 0 : data.saleAmount - (metadata.depositPaid ?? depositRequired);
+  const depositPaid = metadata.depositPaid ?? depositRequired;
+  const balanceRemaining = isConsumo ? 0 : data.saleAmount - depositPaid;
 
-  // PÁGINA 1: Carátula, Ficha del Evento, Desglose Económico y Totales
+  // ==========================================
+  // DOCUMENTO TIPO: RECIBO OFICIAL DE ANTICIPO
+  // ==========================================
+  if (isReceipt) {
+    const pageReceipt = doc.addPage([612, 792]);
+    const { width } = pageReceipt.getSize();
+    let yR = 745;
+
+    // Encabezado
+    pageReceipt.drawText("TEQUILITROS®", {
+      x: 40,
+      y: yR,
+      size: 22,
+      font: fontBold,
+      color: brandOrange,
+    });
+
+    pageReceipt.drawText("RECIBO OFICIAL DE ANTICIPO", {
+      x: 200,
+      y: yR + 2,
+      size: 11,
+      font: fontBold,
+      color: greenColor,
+    });
+
+    yR -= 16;
+    pageReceipt.drawText("Destiladora del Norte · Coctelería Premium de Tequila", {
+      x: 40,
+      y: yR,
+      size: 9,
+      font: fontRegular,
+      color: mediumGray,
+    });
+
+    pageReceipt.drawText(`WhatsApp Oficial: ${OFFICIAL_WHATSAPP_DISPLAY}`, {
+      x: 40,
+      y: yR - 12,
+      size: 9,
+      font: fontRegular,
+      color: mediumGray,
+    });
+
+    // Cuadro superior derecho: Folios de recibo
+    const recFolio = metadata.receiptFolio || `REC-${data.code.replace(/[^0-9]/g, "") || "0001"}`;
+    const refFolio = metadata.contractFolio || data.code;
+
+    pageReceipt.drawText("COMPROBANTE DE PAGO", {
+      x: width - 230,
+      y: 747,
+      size: 9.5,
+      font: fontBold,
+      color: greenColor,
+    });
+    pageReceipt.drawText(`FOLIO: ${recFolio}`, {
+      x: width - 230,
+      y: 733,
+      size: 11,
+      font: fontBold,
+      color: darkGray,
+    });
+    pageReceipt.drawText(`Contrato/Cotización: ${refFolio}`, {
+      x: width - 230,
+      y: 719,
+      size: 8.5,
+      font: fontRegular,
+      color: mediumGray,
+    });
+    pageReceipt.drawText(`Emisión: ${formattedIssueDate}`, {
+      x: width - 230,
+      y: 706,
+      size: 8.5,
+      font: fontRegular,
+      color: mediumGray,
+    });
+
+    // Línea divisoria
+    yR = 690;
+    pageReceipt.drawLine({
+      start: { x: 40, y: yR },
+      end: { x: width - 40, y: yR },
+      thickness: 1,
+      color: rgb(0.85, 0.87, 0.9),
+    });
+
+    // Cuadro Ficha Técnica (Cliente y Evento)
+    yR -= 15;
+    const cardH = 80;
+    pageReceipt.drawRectangle({
+      x: 40,
+      y: yR - cardH,
+      width: width - 80,
+      height: cardH,
+      color: lightBg,
+      borderColor: rgb(0.85, 0.87, 0.9),
+      borderWidth: 1,
+    });
+
+    // Cliente
+    pageReceipt.drawText("DATOS DEL CLIENTE", { x: 55, y: yR - 18, size: 8, font: fontBold, color: mediumGray });
+    pageReceipt.drawText(data.clientName, { x: 55, y: yR - 34, size: 12, font: fontBold, color: darkGray });
+    pageReceipt.drawText(`Teléfono: ${data.clientPhone || "No especificado"}`, { x: 55, y: yR - 49, size: 8.5, font: fontRegular, color: darkGray });
+    pageReceipt.drawText(`Correo: ${metadata.clientEmail || "No especificado"}`, { x: 55, y: yR - 62, size: 8.5, font: fontRegular, color: darkGray });
+
+    // Evento
+    const colR2 = 320;
+    pageReceipt.drawText("EVENTO ASOCIADO", { x: colR2, y: yR - 18, size: 8, font: fontBold, color: mediumGray });
+    pageReceipt.drawText(`Fecha del Evento: ${formattedEventDate}`, { x: colR2, y: yR - 34, size: 9, font: fontBold, color: darkGray });
+    pageReceipt.drawText(`Sede: ${data.location} (${metadata.viaticosZone})`, { x: colR2, y: yR - 49, size: 8.5, font: fontRegular, color: darkGray });
+    pageReceipt.drawText(`Tipo: ${metadata.eventType} · ${data.guestCount} pers. · ${metadata.durationHours} hrs`, { x: colR2, y: yR - 62, size: 8.5, font: fontRegular, color: darkGray });
+
+    yR -= cardH + 25;
+
+    // RECUADRO PRINCIPAL DE ANTICIPO RECIBIDO
+    pageReceipt.drawText("DETALLE DE LA OPERACIÓN DE PAGO", {
+      x: 40,
+      y: yR,
+      size: 9.5,
+      font: fontBold,
+      color: greenColor,
+    });
+
+    yR -= 12;
+    const paymentCardH = 105;
+    pageReceipt.drawRectangle({
+      x: 40,
+      y: yR - paymentCardH,
+      width: width - 80,
+      height: paymentCardH,
+      color: rgb(0.94, 0.98, 0.95),
+      borderColor: rgb(0.5, 0.82, 0.62),
+      borderWidth: 1.5,
+    });
+
+    pageReceipt.drawText("MONTO TOTAL DEL ANTICIPO RECIBIDO:", {
+      x: 60,
+      y: yR - 22,
+      size: 9,
+      font: fontBold,
+      color: darkGray,
+    });
+
+    pageReceipt.drawText(`$${depositPaid.toLocaleString("es-MX")} MXN`, {
+      x: 60,
+      y: yR - 50,
+      size: 24,
+      font: fontBold,
+      color: greenColor,
+    });
+
+    const paymentDateStr = metadata.depositPaidAt
+      ? new Date(metadata.depositPaidAt).toLocaleDateString("es-MX", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : formattedIssueDate;
+
+    pageReceipt.drawText(`Fecha en que se cubrió: ${paymentDateStr}`, {
+      x: 60,
+      y: yR - 70,
+      size: 9,
+      font: fontRegular,
+      color: darkGray,
+    });
+
+    pageReceipt.drawText(`Forma de Pago: ${metadata.depositMethod || "Efectivo en Sucursal"}`, {
+      x: 60,
+      y: yR - 86,
+      size: 9,
+      font: fontBold,
+      color: darkGray,
+    });
+
+    // Columna lateral dentro del cuadro
+    pageReceipt.drawText(`Recibido por: ${metadata.depositReceivedByName || metadata.creatorName}`, {
+      x: 340,
+      y: yR - 70,
+      size: 8.5,
+      font: fontRegular,
+      color: darkGray,
+    });
+    pageReceipt.drawText(`Sucursal emisora: ${metadata.depositBranchName || metadata.branchName || "Matriz"}`, {
+      x: 340,
+      y: yR - 86,
+      size: 8.5,
+      font: fontRegular,
+      color: darkGray,
+    });
+
+    yR -= paymentCardH + 25;
+
+    // TABLA DE BALANCE FINANCIERO DEL EVENTO
+    pageReceipt.drawText("ESTADO DE CUENTA Y SALDO PENDIENTE", {
+      x: 40,
+      y: yR,
+      size: 9,
+      font: fontBold,
+      color: brandOrange,
+    });
+
+    yR -= 12;
+    pageReceipt.drawRectangle({
+      x: 40,
+      y: yR - 18,
+      width: width - 80,
+      height: 18,
+      color: rgb(0.9, 0.92, 0.95),
+    });
+
+    pageReceipt.drawText("Concepto Financiero", { x: 55, y: yR - 13, size: 8.5, font: fontBold, color: darkGray });
+    pageReceipt.drawText("Importe", { x: 480, y: yR - 13, size: 8.5, font: fontBold, color: darkGray });
+
+    yR -= 20;
+
+    // Fila 1: Total Presupuestado
+    pageReceipt.drawText("Inversión Total Contratada del Servicio", { x: 55, y: yR - 12, size: 9, font: fontRegular, color: darkGray });
+    pageReceipt.drawText(`$${data.saleAmount.toLocaleString("es-MX")} MXN`, { x: 470, y: yR - 12, size: 9, font: fontBold, color: darkGray });
+    yR -= 22;
+
+    // Fila 2: Anticipo
+    pageReceipt.drawText("(-) Anticipo Recibido para Congelamiento de Fecha", { x: 55, y: yR - 12, size: 9, font: fontBold, color: greenColor });
+    pageReceipt.drawText(`-$${depositPaid.toLocaleString("es-MX")} MXN`, { x: 466, y: yR - 12, size: 9, font: fontBold, color: greenColor });
+    yR -= 24;
+
+    // Fila 3: Saldo Restante
+    pageReceipt.drawRectangle({
+      x: 40,
+      y: yR - 26,
+      width: width - 80,
+      height: 26,
+      color: rgb(0.98, 0.96, 0.92),
+      borderColor: rgb(0.92, 0.78, 0.6),
+      borderWidth: 1,
+    });
+    pageReceipt.drawText("SALDO PENDIENTE A LIQUIDAR EL DÍA DEL EVENTO:", { x: 55, y: yR - 17, size: 9, font: fontBold, color: brandOrange });
+    pageReceipt.drawText(
+      isConsumo ? "Consumo de producto en evento" : `$${balanceRemaining.toLocaleString("es-MX")} MXN`,
+      { x: 450, y: yR - 17, size: 10, font: fontBold, color: brandOrange }
+    );
+
+    yR -= 50;
+
+    // NOTAS Y POLÍTICAS DEL RECIBO
+    pageReceipt.drawText("TÉRMINOS Y CONDICIONES DEL ANTICIPO", {
+      x: 40,
+      y: yR,
+      size: 8,
+      font: fontBold,
+      color: darkGray,
+    });
+
+    yR -= 12;
+    pageReceipt.drawText(
+      "1. Este recibo constituye el comprobante formal de reserva y apartado exclusivo de fecha en la agenda oficial de Tequilitros.",
+      { x: 40, y: yR, size: 7.2, font: fontRegular, color: mediumGray }
+    );
+    yR -= 11;
+    pageReceipt.drawText(
+      "2. El anticipo es estrictamente NO REEMBOLSABLE por bloqueo de fecha, asignación de equipo y rechazo de otros solicitantes para ese día.",
+      { x: 40, y: yR, size: 7.2, font: fontRegular, color: mediumGray }
+    );
+    yR -= 11;
+    pageReceipt.drawText(
+      "3. El saldo pendiente deberá ser liquidado en su totalidad previo al inicio del servicio el día del evento pactado.",
+      { x: 40, y: yR, size: 7.2, font: fontRegular, color: mediumGray }
+    );
+    yR -= 11;
+    pageReceipt.drawText(
+      "4. Solicitud de cambios de fecha sujeta a disponibilidad con mínimo 15 días naturales de anticipación.",
+      { x: 40, y: yR, size: 7.2, font: fontRegular, color: mediumGray }
+    );
+
+    // Enlace de validación
+    yR -= 25;
+    const recOnlineUrl = `https://maestro-destiladora.space/tequilitros/cotizacion/${data.code}`;
+    pageReceipt.drawText(`Verifica este recibo y los detalles de tu evento en línea: ${recOnlineUrl}`, {
+      x: 40,
+      y: yR,
+      size: 7,
+      font: fontRegular,
+      color: brandOrange,
+    });
+
+    // Firmas
+    yR -= 45;
+    pageReceipt.drawLine({ start: { x: 70, y: yR }, end: { x: 230, y: yR }, thickness: 1, color: rgb(0.7, 0.7, 0.7) });
+    pageReceipt.drawText("TEQUILITROS® EVENTOS", { x: 105, y: yR - 12, size: 7.5, font: fontBold, color: darkGray });
+    pageReceipt.drawText("Recibió (Firma y Sello)", { x: 110, y: yR - 22, size: 6.5, font: fontRegular, color: mediumGray });
+
+    pageReceipt.drawLine({ start: { x: 380, y: yR }, end: { x: 540, y: yR }, thickness: 1, color: rgb(0.7, 0.7, 0.7) });
+    pageReceipt.drawText(data.clientName, { x: 410, y: yR - 12, size: 7.5, font: fontBold, color: darkGray });
+    pageReceipt.drawText("Firma de Conformidad del Cliente", { x: 400, y: yR - 22, size: 6.5, font: fontRegular, color: mediumGray });
+
+    const receiptPdfBytes = await doc.save();
+    return new Blob([Uint8Array.from(receiptPdfBytes)], { type: "application/pdf" });
+  }
+
+  // ==========================================
+  // DOCUMENTO TIPO: COTIZACIÓN O CONTRATO
+  // ==========================================
   const page1 = doc.addPage([612, 792]); // Tamaño Carta US
   const { width } = page1.getSize();
   let y = 745;
@@ -435,7 +736,7 @@ export async function generateTequilitrosPdfBlob(data: QuotePdfData): Promise<Bl
 
   // Si es Barra a Consumo: Tabla Oficial de Precios
   if (isConsumo) {
-    y -= 85;
+    y -= 75;
     page1.drawText("TARIFARIO OFICIAL POR PRODUCTO (BARRA A CONSUMO - PÁG. 4 DEL MANUAL)", {
       x: 40,
       y,
@@ -445,7 +746,6 @@ export async function generateTequilitrosPdfBlob(data: QuotePdfData): Promise<Bl
     });
 
     y -= 10;
-    const itemColWidth = 260;
     CONSUMO_PRICES_CATALOG.forEach((item, index) => {
       const isCol2 = index >= 9;
       const rowInCol = isCol2 ? index - 9 : index;
@@ -469,10 +769,133 @@ export async function generateTequilitrosPdfBlob(data: QuotePdfData): Promise<Bl
       });
     });
 
-    y -= 9 * 13 + 15;
+    y -= 9 * 13 + 12;
   } else {
-    y -= 85;
+    // Barra Libre: Coctelería seleccionada y detalles
+    const drinksList =
+      metadata.selectedDrinks && metadata.selectedDrinks.length > 0
+        ? metadata.selectedDrinks.join("   ·   ")
+        : "Cantarito   ·   Paloma   ·   Vampiro   ·   Tequimiche   ·   Tequimora";
+
+    y -= 75;
+    const drinksCardHeight = 44;
+    page1.drawRectangle({
+      x: 40,
+      y: y - drinksCardHeight,
+      width: width - 80,
+      height: drinksCardHeight,
+      color: lightBg,
+      borderColor: rgb(0.85, 0.87, 0.9),
+      borderWidth: 1,
+    });
+
+    page1.drawText("COCTELERÍA OFICIAL SELECCIONADA (VASO 32 OZ / 946 ML)", {
+      x: 52,
+      y: y - 13,
+      size: 8,
+      font: fontBold,
+      color: brandOrange,
+    });
+
+    page1.drawText(drinksList, {
+      x: 52,
+      y: y - 26,
+      size: 7.8,
+      font: fontBold,
+      color: darkGray,
+    });
+
+    page1.drawText(
+      "Preparados con tequila artesanal de la casa, fruta fresca del día, refrescos, jugos y escarchados Tajín. Variantes sin alcohol disponibles.",
+      {
+        x: 52,
+        y: y - 37,
+        size: 6.8,
+        font: fontRegular,
+        color: mediumGray,
+      }
+    );
+
+    y -= drinksCardHeight + 10;
+
+    // Recibo de anticipo (si ya está confirmado) o notas especiales
+    if (isContract && metadata.depositPaid) {
+      const receiptHeight = 30;
+      page1.drawRectangle({
+        x: 40,
+        y: y - receiptHeight,
+        width: width - 80,
+        height: receiptHeight,
+        color: rgb(0.94, 0.98, 0.95),
+        borderColor: rgb(0.7, 0.9, 0.8),
+        borderWidth: 1,
+      });
+
+      page1.drawText("RECIBO DE ANTICIPO FORMALIZADO:", {
+        x: 52,
+        y: y - 11,
+        size: 7.5,
+        font: fontBold,
+        color: greenColor,
+      });
+
+      const receiptDetails = `Anticipo recibido: $${metadata.depositPaid.toLocaleString("es-MX")} MXN  |  Método: ${metadata.depositMethod || "Efectivo"}  |  Recibido por: ${metadata.depositReceivedByName || metadata.creatorName}`;
+      page1.drawText(receiptDetails, {
+        x: 52,
+        y: y - 22,
+        size: 7,
+        font: fontRegular,
+        color: darkGray,
+      });
+
+      y -= receiptHeight + 8;
+    } else if (metadata.specialNotes?.trim()) {
+      const notesHeight = 28;
+      page1.drawRectangle({
+        x: 40,
+        y: y - notesHeight,
+        width: width - 80,
+        height: notesHeight,
+        color: rgb(0.98, 0.98, 0.95),
+        borderColor: rgb(0.88, 0.85, 0.75),
+        borderWidth: 1,
+      });
+
+      page1.drawText("NOTAS Y ACUERDOS ESPECIALES:", {
+        x: 52,
+        y: y - 10,
+        size: 7.5,
+        font: fontBold,
+        color: darkGray,
+      });
+
+      const cleanNote =
+        metadata.specialNotes.trim().length > 115
+          ? metadata.specialNotes.trim().slice(0, 112) + "..."
+          : metadata.specialNotes.trim();
+      page1.drawText(cleanNote, {
+        x: 52,
+        y: y - 21,
+        size: 7,
+        font: fontRegular,
+        color: darkGray,
+      });
+
+      y -= notesHeight + 8;
+    }
   }
+
+  // Enlace web de verificación oficial
+  const onlineVerificationUrl = `https://maestro-destiladora.space/tequilitros/cotizacion/${data.code}`;
+  page1.drawText(`Verifica o consulta este documento digital en: ${onlineVerificationUrl}`, {
+    x: 40,
+    y: y - 2,
+    size: 7,
+    font: fontRegular,
+    color: brandOrange,
+  });
+
+  y -= 14;
 
   // Cláusulas resumidas al pie de página 1 o continuación
   page1.drawText("CONDICIONES DE CONTRATACIÓN Y RESERVA", {
