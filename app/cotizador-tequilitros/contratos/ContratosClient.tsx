@@ -50,7 +50,7 @@ export default function ContratosClient({ contracts }: ContratosClientProps) {
   );
   const totalSaldosPorCobrar = contracts.reduce((sum, c) => {
     const dep = c.metadata?.depositPaid ?? Math.round(c.saleAmount * 0.5);
-    return sum + (c.saleAmount - dep);
+    return sum + Math.max(0, c.saleAmount - dep);
   }, 0);
 
   const filtered = contracts.filter((c) => {
@@ -151,7 +151,8 @@ export default function ContratosClient({ contracts }: ContratosClientProps) {
                 const meta = c.metadata;
                 const contractFolio = meta?.contractFolio || `CTR-${c.code}`;
                 const depositPaid = meta?.depositPaid ?? Math.round(c.saleAmount * 0.5);
-                const saldo = c.saleAmount - depositPaid;
+                const saldo = Math.max(0, c.saleAmount - depositPaid);
+                const saldoAFavor = Math.max(0, depositPaid - c.saleAmount);
                 const formattedEventDate = new Date(c.eventDate).toLocaleDateString("es-MX", {
                   day: "2-digit",
                   month: "short",
@@ -185,7 +186,11 @@ export default function ContratosClient({ contracts }: ContratosClientProps) {
                     </td>
 
                     <td className="py-3 px-4 text-right font-mono font-bold text-primary">
-                      ${saldo.toLocaleString("es-MX")}
+                      {saldoAFavor > 0 ? (
+                        <span className="text-emerald-400">A favor ${saldoAFavor.toLocaleString("es-MX")}</span>
+                      ) : (
+                        `$${saldo.toLocaleString("es-MX")}`
+                      )}
                     </td>
 
                     <td className="py-3 px-4">

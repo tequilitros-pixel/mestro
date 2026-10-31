@@ -373,9 +373,13 @@ export async function updateQuoteStatusAndDepositAction(input: UpdateQuoteStatus
     let depositPaid = currentQuote.depositPaid ?? 0;
     if (input.depositPaid !== undefined && input.depositPaid !== null) {
       const parsed = Math.round(Number(input.depositPaid) * 100) / 100;
-      if (Number.isFinite(parsed) && parsed >= 0) {
-        depositPaid = parsed;
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        return { success: false, error: "Ingresa un monto recibido válido." };
       }
+      // Un cliente puede cubrir más del anticipo sugerido o adelantar pagos
+      // posteriores. Se conserva el monto real recibido; la vista muestra el
+      // excedente como saldo a favor en lugar de convertirlo en saldo negativo.
+      depositPaid = parsed;
     } else if (input.status === "CONFIRMED" && (!depositPaid || depositPaid <= 0)) {
       depositPaid = currentQuote.modality === "consumo" ? saleAmount : Math.round(saleAmount * 0.5);
     }

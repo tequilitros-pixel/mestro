@@ -105,7 +105,8 @@ export default function QuoteDocumentModal({
     ? fijoTotal
     : currentMetadata.depositRequired || Math.round(data.saleAmount * 0.5);
   const depositPaid = currentMetadata.depositPaid ?? (isConfirmed ? depositRequired : 0);
-  const balanceRemaining = isConsumo ? 0 : data.saleAmount - depositPaid;
+  const balanceRemaining = isConsumo ? 0 : Math.max(0, data.saleAmount - depositPaid);
+  const creditBalance = isConsumo ? 0 : Math.max(0, depositPaid - data.saleAmount);
 
   const displayFolio = isConfirmed
     ? currentMetadata.contractFolio || data.code
@@ -558,7 +559,7 @@ export default function QuoteDocumentModal({
               {/* Monto de Anticipo */}
               <div>
                 <label className="block text-[11px] font-bold text-on-surface mb-1">
-                  Monto del Anticipo (MXN)
+                  Monto Recibido (MXN)
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-2 text-xs text-on-surface-variant font-bold">$</span>
@@ -589,6 +590,9 @@ export default function QuoteDocumentModal({
                     Total (${data.saleAmount.toLocaleString("es-MX")})
                   </button>
                 </div>
+                <p className="mt-1 text-[10px] text-on-surface-variant">
+                  Puedes registrar el importe real recibido, aunque supere el anticipo sugerido.
+                </p>
               </div>
 
               {/* Cuándo pusieron el anticipo */}
@@ -1142,10 +1146,10 @@ export default function QuoteDocumentModal({
                   </div>
                   <div className="flex justify-between text-sm border-t border-outline-variant pt-2 print:border-gray-300">
                     <span className="text-on-surface-variant print:text-gray-600">
-                      Saldo a Liquidar en Evento:
+                      {creditBalance > 0 ? "Saldo a Favor del Cliente:" : "Saldo a Liquidar en Evento:"}
                     </span>
-                    <span className="font-mono font-bold text-primary print:text-black">
-                      {isConsumo ? "A liquidar en evento" : `$${balanceRemaining.toLocaleString("es-MX")} MXN`}
+                    <span className={`font-mono font-bold print:text-black ${creditBalance > 0 ? "text-emerald-400" : "text-primary"}`}>
+                      {isConsumo ? "A liquidar en evento" : creditBalance > 0 ? `$${creditBalance.toLocaleString("es-MX")} MXN` : `$${balanceRemaining.toLocaleString("es-MX")} MXN`}
                     </span>
                   </div>
                 </div>
