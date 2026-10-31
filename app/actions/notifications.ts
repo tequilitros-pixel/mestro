@@ -5,6 +5,7 @@ import * as webpush from "web-push";
 import type { Notification, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { canRoleReceiveNotification } from "@/lib/notifications/access";
 
 export type NotificationCategory =
   | "POS"
