@@ -51,6 +51,45 @@ export function canRoleReceiveNotification(
   );
 }
 
+function notificationBranchIds(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object") return [];
+  const record = metadata as Record<string, unknown>;
+  const ids = [
+    ...(typeof record.branchId === "string" ? [record.branchId] : []),
+    ...(Array.isArray(record.branchIds)
+      ? record.branchIds.filter((branchId): branchId is string => typeof branchId === "string")
+      : []),
+  ];
+  return [...new Set(ids)];
+}
+
+const BRANCH_SCOPED_CATEGORIES = new Set<NotificationAccessCategory>([
+  "POS",
+  "INVENTORY",
+  "PRODUCTION",
+]);
+
+/**
+ * Administración tiene alcance global. Los demás responsables operativos solo
+ * ven alertas de sus sucursales. Si un aviso operativo heredado no trae
+ * sucursal, se oculta fuera de Administración para evitar filtraciones.
+ */
+export function canUserViewNotification(input: {
+  role: NotificationAccessRole | string;
+  category: NotificationAccessCategory;
+  metadata?: unknown;
+  branchIds: readonly string[] | null;
+}) {
+  if (!canRoleReceiveNotification(input.role, input.category, input.metadata)) return false;
+  if (input.role === "ADMIN" || !BRANCH_SCOPED_CATEGORIES.has(input.category)) return true;
+
+  const notificationBranches = notificationBranchIds(input.metadata);
+  return (
+    notificationBranches.length > 0 &&
+    notificationBranches.some((branchId) => input.branchIds?.includes(branchId))
+  );
+}
+
 export function allowedNotificationRuleRecipientRoles(
   roles: readonly string[],
 ): NotificationAccessRole[] {

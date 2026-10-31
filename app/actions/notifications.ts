@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import * as webpush from "web-push";
 import type { Notification, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
-import { canRoleReceiveNotification } from "@/lib/notifications/access";
+import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { canUserViewNotification } from "@/lib/notifications/access";
 
 export type NotificationCategory =
   | "POS"

@@ -8,7 +8,7 @@ import {
   type NotificationCategory,
   type NotificationPriority,
 } from "@/app/actions/notifications";
-import { allowedNotificationRuleRecipientRoles } from "@/lib/notifications/access";
+import { allowedNotificationRuleRecipientRoles, canUserViewNotification } from "@/lib/notifications/access";
 import {
   checkStockBajo,
   checkLicorCaducidad,
@@ -178,12 +178,20 @@ export async function GET(request: Request) {
         continue;
       }
 
+      const notificationMetadata = { ruleId: rule.id, triggerType: rule.triggerType };
+      const recipients = await prisma.user.findMany({
+        where: { role: { in: recipientRoles }, active: true },
+        select: { id: true, role: true, branches: { select: { branchId: true } } },
+      });
+      const recipientUsers = recipients.filter((recipient) => canUserViewNotification({
+        role: recipient.role,
+        category: getTriggerCategory(rule.triggerType),
+        metadata: notificationMetadata,
+        branchIds: recipient.role === "ADMIN" ? null : recipient.branches.map((branch) => branch.branchId),
+      }));
+
       // Disparo In-App para la campanita del header
       try {
-        const recipientUsers = await prisma.user.findMany({
-          where: { role: { in: recipientRoles }, active: true },
-          select: { id: true },
-        });
         if (recipientUsers.length > 0) {
           await createNotificationsForUsers(
             recipientUsers.map((u) => u.id),
@@ -193,7 +201,7 @@ export async function GET(request: Request) {
               category: getTriggerCategory(rule.triggerType),
               priority: getTriggerPriority(rule.triggerType),
               href: result.url,
-              metadata: { ruleId: rule.id, triggerType: rule.triggerType },
+              metadata: notificationMetadata,
             }
           );
         }
@@ -202,7 +210,7 @@ export async function GET(request: Request) {
       }
 
       const subscriptions = await prisma.pushSubscription.findMany({
-        where: { user: { role: { in: recipientRoles }, active: true } },
+        where: { userId: { in: recipientUsers.map((user) => user.id) } },
       });
 
       const payload = JSON.stringify({
