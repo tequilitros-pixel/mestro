@@ -8,6 +8,7 @@ import {
   type ActionResult,
 } from "@/app/actions/notificationRules";
 import { ROLE_LABELS, type PersonnelRole } from "@/lib/personnelRoles";
+import { NOTIFICATION_RULE_RECIPIENT_ROLES } from "@/lib/notifications/access";
 import { useToast } from "@/components/ui/Toast";
 
 const TRIGGER_TYPE_LABELS: Record<string, string> = {
@@ -30,7 +31,7 @@ const TRIGGER_TYPE_HELP: Record<string, string> = {
     "Avisa cuando un proceso de producción (cocción, molienda, fermentación, destilación) lleva más de 1 hora sin registro.",
 };
 
-const ROLE_OPTIONS: PersonnelRole[] = ["ADMIN", "GERENTE", "ENCARGADO", "OPERATOR", "CONSULTA"];
+const ROLE_OPTIONS: readonly PersonnelRole[] = NOTIFICATION_RULE_RECIPIENT_ROLES;
 
 type ThresholdConfig = { daysBeforeExpiration?: number; minDifference?: number };
 
@@ -168,6 +169,9 @@ export default function NotificationRuleForm({
         <legend className="text-sm font-semibold text-on-surface-variant">
           ¿Quién debe recibirla?
         </legend>
+        <p className="text-xs text-on-surface-variant">
+          Las alertas operativas de caja, inventario y producción solo se envían a administración, gerencia o encargados.
+        </p>
         <div className="flex flex-wrap gap-3">
           {ROLE_OPTIONS.map((role) => (
             <label

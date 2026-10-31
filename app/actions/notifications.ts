@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import * as webpush from "web-push";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { canRoleReceiveNotification } from "@/lib/notifications/access";
 
 export type NotificationCategory =
   | "POS"
@@ -62,7 +63,7 @@ export async function getMyNotificationsAction(options?: {
 
       return {
         success: true,
-        data: records.map((r: any) => ({
+        data: records.filter((r: any) => canRoleReceiveNotification(user.role, r.category, r.metadata)).map((r: any) => ({
           id: r.id,
           userId: r.userId,
           title: r.title,
@@ -97,7 +98,7 @@ export async function getMyNotificationsAction(options?: {
 
     return {
       success: true,
-      data: (rows ?? []).map((r) => ({
+      data: (rows ?? []).filter((r) => canRoleReceiveNotification(user.role, r.category, r.metadata)).map((r) => ({
         id: r.id,
         userId: r.userId,
         title: r.title,
@@ -126,23 +127,19 @@ export async function getUnreadNotificationsCountAction(): Promise<number> {
     if (!user) return 0;
 
     const delegate = (prisma as any).notification;
-    if (delegate?.count) {
+    if (delegate?.count && user.role !== "OPERATOR" && user.role !== "CONSULTA") {
       return await delegate.count({
         where: { userId: user.id, read: false },
       });
     }
 
-    const rows = await prisma.$queryRaw<{ count: bigint | number }[]>`
-      SELECT COUNT(*)::bigint AS count
+    const rows = await prisma.$queryRaw<Array<{ category: NotificationCategory; metadata: unknown }>>`
+      SELECT category, metadata
       FROM "Notification"
       WHERE "userId" = ${user.id} AND read = false
     `;
 
-    if (rows && rows[0]) {
-      return Number(rows[0].count);
-    }
-
-    return 0;
+    return rows.filter((row) => canRoleReceiveNotification(user.role, row.category, row.metadata)).length;
   } catch (error) {
     console.error("[getUnreadNotificationsCountAction] Error:", error);
     return 0;
@@ -223,6 +220,14 @@ export async function createNotification(data: {
   href?: string;
   metadata?: any;
 }): Promise<NotificationItem> {
+  const recipient = await prisma.user.findUnique({
+    where: { id: data.userId },
+    select: { active: true, role: true },
+  });
+  if (!recipient?.active || !canRoleReceiveNotification(recipient.role, data.category, data.metadata)) {
+    throw new Error("NOTIFICATION_RECIPIENT_NOT_ALLOWED");
+  }
+
   const priority = data.priority ?? "NORMAL";
   const id = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const now = new Date();
@@ -303,10 +308,16 @@ export async function createNotificationsForUsers(
   }
 ) {
   const uniqueIds = Array.from(new Set(userIds)).filter(Boolean);
+  const recipients = await prisma.user.findMany({
+    where: { id: { in: uniqueIds }, active: true },
+    select: { id: true, role: true },
+  });
   return Promise.all(
-    uniqueIds.map((userId) =>
+    recipients
+      .filter((recipient) => canRoleReceiveNotification(recipient.role, data.category, data.metadata))
+      .map((recipient) =>
       createNotification({
-        userId,
+        userId: recipient.id,
         title: data.title,
         body: data.body,
         category: data.category,

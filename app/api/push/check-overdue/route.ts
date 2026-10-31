@@ -8,6 +8,7 @@ import {
   type NotificationCategory,
   type NotificationPriority,
 } from "@/app/actions/notifications";
+import { allowedNotificationRuleRecipientRoles } from "@/lib/notifications/access";
 import {
   checkStockBajo,
   checkLicorCaducidad,
@@ -168,11 +169,19 @@ export async function GET(request: Request) {
       }
 
       triggered += 1;
+      const recipientRoles = allowedNotificationRuleRecipientRoles(rule.recipientRoles);
+      if (recipientRoles.length === 0) {
+        await prisma.notificationRule.update({
+          where: { id: rule.id },
+          data: { lastCheckedAt: now },
+        });
+        continue;
+      }
 
       // Disparo In-App para la campanita del header
       try {
         const recipientUsers = await prisma.user.findMany({
-          where: { role: { in: rule.recipientRoles }, active: true },
+          where: { role: { in: recipientRoles }, active: true },
           select: { id: true },
         });
         if (recipientUsers.length > 0) {
@@ -193,7 +202,7 @@ export async function GET(request: Request) {
       }
 
       const subscriptions = await prisma.pushSubscription.findMany({
-        where: { user: { role: { in: rule.recipientRoles }, active: true } },
+        where: { user: { role: { in: recipientRoles }, active: true } },
       });
 
       const payload = JSON.stringify({
