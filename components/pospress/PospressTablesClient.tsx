@@ -3,20 +3,66 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { AlertIcon, CheckIcon, CashRegisterIcon, ReceiptIcon, TrashIcon, XIcon } from "@/components/ui/icons";
+import {
+  AlertIcon,
+  CheckIcon,
+  CashRegisterIcon,
+  ReceiptIcon,
+  TrashIcon,
+  XIcon,
+  TagIcon,
+} from "@/components/ui/icons";
 import { getProductVisual } from "@/lib/pos/productVisual";
 import { enqueueOperation } from "@/lib/offline/queue";
-import { deleteLocalTableOrder, listLocalTableOrders, saveLocalTableOrder, type LocalTableLine, type LocalTableOrder } from "@/lib/offline/table-orders";
+import {
+  deleteLocalTableOrder,
+  listLocalTableOrders,
+  saveLocalTableOrder,
+  type LocalTableLine,
+  type LocalTableOrder,
+} from "@/lib/offline/table-orders";
 import PosVariantPickerModal from "@/components/pos/PosVariantPickerModal";
+import PostSaleModal from "@/components/pos/PostSaleModal";
+import type { ReceiptData } from "@/components/pos/ReceiptTicket";
 
 type Variant = { id: string; name: string; price: number; active: boolean };
 type Product = { id: string; name: string; icon: string | null; active: boolean; variants: Variant[] };
 type Category = { id: string; name: string; active: boolean; products: Product[] };
 type Branch = { id: string; name: string; openCashCutId: string | null };
 
-const PAYMENT_METHODS = [{ value: "EFECTIVO", label: "Efectivo" }, { value: "TARJETA", label: "Tarjeta" }, { value: "TRANSFERENCIA", label: "Transferencia" }, { value: "DIDI", label: "DiDi" }, { value: "UBER", label: "Uber" }, { value: "RAPPI", label: "Rappi" }, { value: "VALES", label: "Vales" }, { value: "OTRO", label: "Otro" }];
-const currency = (value: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
-const TABLES = Array.from({ length: 12 }, (_, index) => ({ id: `mesa-${index + 1}`, label: `Mesa ${index + 1}` }));
+const PAYMENT_METHODS = [
+  { value: "EFECTIVO", label: "Efectivo" },
+  { value: "TARJETA", label: "Tarjeta" },
+  { value: "TRANSFERENCIA", label: "Transferencia" },
+  { value: "DIDI", label: "DiDi" },
+  { value: "UBER", label: "Uber" },
+  { value: "RAPPI", label: "Rappi" },
+  { value: "VALES", label: "Vales" },
+  { value: "OTRO", label: "Otro" },
+];
+
+const REASON_OPTIONS: { value: string; label: string }[] = [
+  { value: "CORTESIA", label: "Cortesía de la casa / Gerencia" },
+  { value: "CLIENTE_FRECUENTE", label: "Cliente frecuente / VIP" },
+  { value: "PROMOCION", label: "Promoción de sucursal" },
+  { value: "COMPENSACION", label: "Compensación / Atención a cliente" },
+  { value: "CONVENIO", label: "Convenio comercial" },
+  { value: "AUTORIZACION_GERENTE", label: "Autorización de gerente" },
+  { value: "CUMPLEANOS", label: "Cumpleaños" },
+  { value: "EVENTO", label: "Evento especial" },
+  { value: "INVITADO", label: "Invitado especial" },
+  { value: "OTRO", label: "Otro motivo" },
+];
+
+const QUICK_PERCENTS = [5, 10, 15, 20, 50];
+
+const currency = (value: number) =>
+  new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
+
+const TABLES = Array.from({ length: 16 }, (_, index) => ({
+  id: `mesa-${index + 1}`,
+  label: `Mesa ${index + 1}`,
+}));
 
 export default function PospressTablesClient({ branches }: { branches: Branch[] }) {
   const initialBranchId = branches[0]?.id ?? "";
@@ -41,6 +87,7 @@ export default function PospressTablesClient({ branches }: { branches: Branch[] 
         setLocalOpenCut(Boolean(localStorage.getItem(`maestro:open-cash-cut:${initialBranchId}`)));
       }
     });
+
     const online = () => setIsOnline(true);
     const offline = () => setIsOnline(false);
     window.addEventListener("online", online); window.addEventListener("offline", offline);
@@ -71,7 +118,9 @@ export default function PospressTablesClient({ branches }: { branches: Branch[] 
         setLocalOpenCut(Boolean(branchId && localStorage.getItem(`maestro:open-cash-cut:${branchId}`)));
       }
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [branchId]);
 
   const selectedTable = TABLES.find((table) => table.id === selectedTableId) ?? null;
@@ -87,7 +136,19 @@ export default function PospressTablesClient({ branches }: { branches: Branch[] 
     const current = activeOrder ?? { id: crypto.randomUUID(), branchId: branch.id, cashCutId: branch.openCashCutId ?? "", tableId: selectedTable.id, tableLabel: selectedTable.label, lines: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     const key = `variant:${variant.id}`;
     const existing = current.lines.find((line) => line.key === key);
-    const lines = existing ? current.lines.map((line) => line.key === key ? { ...line, quantity: line.quantity + 1 } : line) : [...current.lines, { key, variantId: variant.id, productName: product.name, variantName: variant.name, unitPrice: variant.price, quantity: 1 }];
+    const lines = existing
+      ? current.lines.map((line) => (line.key === key ? { ...line, quantity: line.quantity + 1 } : line))
+      : [
+          ...current.lines,
+          {
+            key,
+            variantId: variant.id,
+            productName: product.name,
+            variantName: variant.name,
+            unitPrice: variant.price,
+            quantity: 1,
+          },
+        ];
     await saveLocalTableOrder({ ...current, lines });
     await refreshOrders();
   }
@@ -100,15 +161,21 @@ export default function PospressTablesClient({ branches }: { branches: Branch[] 
 
   async function changeQuantity(line: LocalTableLine, delta: number) {
     if (!activeOrder) return;
-    const lines = activeOrder.lines.map((item) => item.key === line.key ? { ...item, quantity: item.quantity + delta } : item).filter((item) => item.quantity > 0);
-    if (!lines.length) await deleteLocalTableOrder(activeOrder.id); else await saveLocalTableOrder({ ...activeOrder, lines });
+    const lines = activeOrder.lines
+      .map((item) => (item.key === line.key ? { ...item, quantity: item.quantity + delta } : item))
+      .filter((item) => item.quantity > 0);
+    if (!lines.length) await deleteLocalTableOrder(activeOrder.id);
+    else await saveLocalTableOrder({ ...activeOrder, lines });
     await refreshOrders();
   }
 
   async function closeTable() {
     if (!activeOrder) return;
-    if (!window.confirm(`¿Cerrar ${activeOrder.tableLabel} sin cobrar? La cuenta se eliminará de este dispositivo.`)) return;
-    await deleteLocalTableOrder(activeOrder.id); await refreshOrders(); setSelectedTableId(null);
+    if (!window.confirm(`¿Cerrar ${activeOrder.tableLabel} sin cobrar? La cuenta se eliminará de este dispositivo.`))
+      return;
+    await deleteLocalTableOrder(activeOrder.id);
+    await refreshOrders();
+    setSelectedTableId(null);
   }
 
   return <main className="mx-auto max-w-7xl space-y-5 p-4 sm:p-6">

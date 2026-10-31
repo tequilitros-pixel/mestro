@@ -428,22 +428,15 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       permissionKey: "/pos",
     },
     {
-      href: "/pos/sales",
-      label: "Ventas resumen",
-      icon: ChartLineIcon,
-      iconVariant: "green",
-      permissionKeys: ["/pos", "/pos/sales"],
-    },
-    {
       href: "/pospress/transactions",
-      label: "Transacciones",
+      label: "Transacciones y ventas",
       icon: ReceiptIcon,
       iconVariant: "green",
-      permissionKey: "/pos/sales",
+      permissionKey: "/pos",
     },
     {
       href: "/pospress/tables",
-      label: "Mesas",
+      label: "Mesas y cuentas",
       icon: StoreIcon,
       iconVariant: "purple",
       permissionKeys: ["/pos", "/pospress/tables"],
@@ -475,20 +468,6 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: TagIcon,
       iconVariant: "blue",
       permissionKey: "/pospress/discounts",
-    },
-    {
-      href: "/pos/settings",
-      label: "Configuración POS",
-      icon: GearIcon,
-      iconVariant: "slate",
-      permissionKey: "/pos/settings",
-    },
-    {
-      href: "/administration/pos2",
-      label: "POS v2 Admin",
-      icon: CashRegisterIcon,
-      iconVariant: "cyan",
-      permissionKey: "/administration/pos2",
     },
   ],
 
@@ -681,6 +660,13 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       group: "Operación y configuración",
     },
     {
+      href: "/timeclock/payroll",
+      label: "Nómina semanal",
+      icon: DollarIcon,
+      iconVariant: "green",
+      permissionKey: "/timeclock/payroll",
+    },
+    {
       href: "/administration/personnel/timeclock",
       label: "Asistencia y correcciones",
       icon: ListChecksIcon,
@@ -720,6 +706,13 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: CalendarIcon,
       iconVariant: "purple",
       permissionKey: "/administration/schedule",
+    },
+    {
+      href: "/timeclock/payroll",
+      label: "Nómina semanal",
+      icon: DollarIcon,
+      iconVariant: "green",
+      permissionKey: "/timeclock/payroll",
     },
     {
       href: "/administration/personnel/notifications",
@@ -775,7 +768,10 @@ export function matchesRoute(pathname: string, href: string) {
 }
 
 export function getCurrentModule(pathname: string): AppModule {
-  if (matchesRoute(pathname, "/accounting")) {
+  if (
+    matchesRoute(pathname, "/accounting") ||
+    matchesRoute(pathname, "/administration/financial-categories")
+  ) {
     return "accounting";
   }
   if (matchesRoute(pathname, "/liquors")) {
@@ -788,15 +784,15 @@ export function getCurrentModule(pathname: string): AppModule {
 
   if (
     matchesRoute(pathname, "/pospress") ||
-    matchesRoute(pathname, "/pos2") ||
     matchesRoute(pathname, "/pos")
   ) {
     return "pos";
   }
 
   if (
-    matchesRoute(pathname, "/workforce") ||
-    matchesRoute(pathname, "/administration/workforce")
+    matchesRoute(pathname, "/administration/schedule") ||
+    matchesRoute(pathname, "/administration/personnel/timeclock") ||
+    matchesRoute(pathname, "/timeclock")
   ) {
     return "timeclock";
   }
@@ -815,10 +811,6 @@ export function getCurrentModule(pathname: string): AppModule {
 
   if (matchesRoute(pathname, "/administration")) {
     return "administration";
-  }
-
-  if (matchesRoute(pathname, "/timeclock")) {
-    return "timeclock";
   }
 
   if (matchesRoute(pathname, "/cotizador-tequilitros")) {

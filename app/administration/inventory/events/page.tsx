@@ -1,19 +1,8 @@
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { formatBusinessDateTime } from "@/lib/dateTime";
-
-const statusLabels: Record<string, string> = {
-  DRAFT: "Borrador",
-  PREPARING: "Preparando",
-  READY: "Listo",
-  IN_PROGRESS: "En curso",
-  RETURN_PENDING: "Pendiente de regreso",
-  COMPLETED: "Completado",
-  CANCELLED: "Cancelado",
-};
+import EventsListClient from "./EventsListClient";
 
 export default async function EventsPage() {
-  const events = await prisma.serviceEvent.findMany({
+  const rawEvents = await prisma.serviceEvent.findMany({
     where: {
       NOT: {
         AND: [
@@ -23,55 +12,38 @@ export default async function EventsPage() {
       },
     },
     orderBy: { eventDate: "desc" },
-    include: { package: true, equipmentKit: true },
+    include: {
+      package: { select: { id: true, name: true } },
+      equipmentKit: { select: { id: true, name: true } },
+    },
   });
+
+  const events = rawEvents.map((ev) => ({
+    id: ev.id,
+    code: ev.code,
+    clientName: ev.clientName,
+    clientPhone: ev.clientPhone,
+    location: ev.location,
+    eventDate: ev.eventDate,
+    guestCount: ev.guestCount,
+    saleAmount: ev.saleAmount !== null ? Number(ev.saleAmount) : null,
+    status: ev.status,
+    notes: ev.notes,
+    package: ev.package,
+    equipmentKit: ev.equipmentKit,
+  }));
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
-      <div className="mx-auto max-w-6xl space-y-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Eventos</h1>
-            <p className="mt-2 text-on-surface-variant">
-              Cotización, checklist de salida y regreso, consumo y utilidad.
-            </p>
-          </div>
-
-          <Link
-            href="/administration/inventory/events/new"
-            className="rounded-xl bg-primary px-5 py-3 font-semibold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
-          >
-            + Nuevo evento
-          </Link>
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Logística y Control de Eventos</h1>
+          <p className="mt-1.5 text-sm text-on-surface-variant">
+            Administración completa: carga de remolque, contralista de retorno, mermas, conciliación y utilidad en tiempo real.
+          </p>
         </div>
 
-        <div className="rounded-2xl border border-outline-variant bg-surface-container divide-y divide-outline-variant">
-          {events.length === 0 && (
-            <p className="p-6 text-sm text-on-surface-variant">Aún no hay eventos.</p>
-          )}
-
-          {events.map((event) => (
-            <Link
-              key={event.id}
-              href={`/administration/inventory/events/${event.id}`}
-              className="flex items-center justify-between p-6 transition hover:bg-surface-container-high/50"
-            >
-              <div>
-                <p className="font-semibold text-on-surface">{event.clientName}</p>
-                <p className="text-sm text-on-surface-variant">
-                  {event.location} ·{" "}
-                  {formatBusinessDateTime(event.eventDate)} ·{" "}
-                  {event.guestCount} invitados
-                  {event.package ? ` · ${event.package.name}` : ""}
-                  {event.equipmentKit ? ` · ${event.equipmentKit.name}` : ""}
-                </p>
-              </div>
-              <span className="rounded-full bg-surface-container-high px-3 py-1 text-xs text-on-surface-variant">
-                {statusLabels[event.status] ?? event.status}
-              </span>
-            </Link>
-          ))}
-        </div>
+        <EventsListClient events={events} />
       </div>
     </main>
   );

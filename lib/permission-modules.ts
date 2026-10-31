@@ -92,15 +92,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   {
     group: "Punto de Venta",
     modules: [
-      { key: "/pos", label: "Caja y cobros · Punto de Venta" },
-      { key: "/pospress/tables", label: "Mesas" },
+      { key: "/pos", label: "Caja y cobros · Punto de Venta (POSpress)" },
+      { key: "/pospress/tables", label: "Mesas y cuentas" },
       { key: "/pospress/pending-tabs", label: "Cuentas pendientes" },
-      { key: "/pos/sales", label: "Transacciones y resumen de ventas" },
       { key: "/pospress/catalog", label: "Editor de productos POS" },
       { key: "/pospress/recipes", label: "Recetas POS" },
-      { key: "/pospress/discounts", label: "Editor de descuentos" },
-      { key: "/pos/settings", label: "Configuración POS" },
-      { key: "/administration/pos2", label: "Administración POS v2" },
+      { key: "/pospress/discounts", label: "Editor de descuentos y promociones" },
     ],
   },
   {
@@ -154,6 +151,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     modules: [
       { key: "/administration/personnel", label: "Directorio de personal" },
       { key: "/administration/schedule", label: "Programación de horarios" },
+      { key: "/timeclock/payroll", label: "Nómina semanal y recibos" },
       { key: "/administration/personnel/timeclock", label: "Supervisión de asistencia y checador" },
       { key: "/administration/personnel/notifications", label: "Avisos a personal" },
       { key: "/timeclock/geofences", label: "Geocercas de sucursales" },
@@ -196,10 +194,27 @@ export function canAccessModule(
     return true;
   }
 
-  // Compatibilidad histórica para usuarios sin configurar: checador personal básico
+  // Compatibilidad para usuarios sin configurar: checador personal básico
   if (
     !hasConfiguredPermissions &&
-    (moduleKey === "/timeclock" || moduleKey === "/timeclock/calendar")
+    (moduleKey === "/timeclock" ||
+      moduleKey === "/timeclock/calendar" ||
+      moduleKey === "/timeclock/availability" ||
+      moduleKey === "/timeclock/hours" ||
+      moduleKey === "/timeclock/history" ||
+      moduleKey === "/timeclock/requests")
+  ) {
+    return true;
+  }
+
+  // Si tiene permiso al checador (/timeclock), tiene acceso a sus vistas de autoconsulta
+  if (
+    moduleKeys.includes("/timeclock") &&
+    (moduleKey === "/timeclock/calendar" ||
+      moduleKey === "/timeclock/availability" ||
+      moduleKey === "/timeclock/hours" ||
+      moduleKey === "/timeclock/history" ||
+      moduleKey === "/timeclock/requests")
   ) {
     return true;
   }
@@ -234,7 +249,7 @@ export function getModuleKeyForPath(pathname: string): string | null {
     return "/administration/financial-categories";
   }
 
-  // 2. Personal, Horarios y Workforce
+  // 2. Personal y Horarios
   if (
     pathname === "/administration/schedule" ||
     pathname.startsWith("/administration/schedule/")
@@ -350,15 +365,12 @@ export function getModuleKeyForPath(pathname: string): string | null {
     return "/liquors/inventory";
   }
 
-  // 6. Punto de Venta (POS)
+  // 6. Punto de Venta (POSpress)
   if (
     pathname === "/pospress/transactions" ||
     pathname.startsWith("/pospress/transactions/")
   ) {
-    return "/pos/sales";
-  }
-  if (pathname === "/pos/sales" || pathname.startsWith("/pos/sales/")) {
-    return "/pos/sales";
+    return "/pos";
   }
   if (
     pathname === "/pospress/catalog" ||
@@ -390,21 +402,11 @@ export function getModuleKeyForPath(pathname: string): string | null {
   ) {
     return "/pospress/pending-tabs";
   }
-  if (pathname === "/pos/settings" || pathname.startsWith("/pos/settings/")) {
-    return "/pos/settings";
-  }
-  if (
-    pathname === "/administration/pos2" ||
-    pathname.startsWith("/administration/pos2/") ||
-    pathname === "/pos2" ||
-    pathname.startsWith("/pos2/")
-  ) {
-    return "/administration/pos2";
-  }
   if (
     pathname === "/pospress" ||
     pathname.startsWith("/pospress/") ||
-    pathname === "/pos"
+    pathname === "/pos" ||
+    pathname.startsWith("/pos/")
   ) {
     return "/pos";
   }

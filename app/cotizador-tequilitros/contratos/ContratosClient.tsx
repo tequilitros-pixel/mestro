@@ -28,6 +28,7 @@ interface ContratosClientProps {
 
 export default function ContratosClient({ contracts }: ContratosClientProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [copiedContractId, setCopiedContractId] = useState<string | null>(null);
   const [selectedContract, setSelectedContract] = useState<{
     code: string;
     clientName: string;
@@ -38,6 +39,7 @@ export default function ContratosClient({ contracts }: ContratosClientProps) {
     guestCount: number;
     saleAmount: number;
     metadata: TequilitrosQuoteMetadata;
+    documentType?: "QUOTE" | "CONTRACT" | "RECEIPT";
   } | null>(null);
 
   // Estadísticas de contratos
@@ -195,7 +197,38 @@ export default function ContratosClient({ contracts }: ContratosClientProps) {
                       </p>
                     </td>
 
-                    <td className="py-3 px-4 text-right">
+                    <td className="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+                      {/* Botón Copiar Link */}
+                      <button
+                        onClick={async () => {
+                          const url = `${window.location.origin}/tequilitros/cotizacion/${encodeURIComponent(contractFolio)}`;
+                          try {
+                            await navigator.clipboard.writeText(url);
+                            setCopiedContractId(c.id);
+                            setTimeout(() => setCopiedContractId(null), 2000);
+                          } catch {
+                            // fallback
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg bg-surface-container border border-outline-variant px-2.5 py-1 text-[11px] font-bold text-on-surface hover:bg-surface-container-high transition"
+                        title="Copiar enlace web del contrato"
+                      >
+                        {copiedContractId === c.id ? (
+                          <>
+                            <CheckIcon className="h-3.5 w-3.5 text-emerald-400" />
+                            <span className="text-emerald-400">¡Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="h-3 w-3 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                            </svg>
+                            <span>Link</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Botón Ver Contrato */}
                       <button
                         onClick={() => {
                           if (meta) {
@@ -209,14 +242,54 @@ export default function ContratosClient({ contracts }: ContratosClientProps) {
                               guestCount: c.guestCount,
                               saleAmount: c.saleAmount,
                               metadata: meta,
+                              documentType: "CONTRACT",
                             });
                           }
                         }}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1 text-[11px] font-bold text-on-primary hover:opacity-90 transition shadow-sm"
+                        className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-bold text-on-primary hover:opacity-90 transition shadow-sm cursor-pointer"
+                        title="Ver Contrato Oficial en PDF"
                       >
-                        <PrinterIcon className="h-3.5 w-3.5" />
-                        <span>Ver Contrato PDF</span>
+                        <PrinterIcon className="h-3 w-3" />
+                        <span>Contrato</span>
                       </button>
+
+                      {/* Botón Ver Recibo */}
+                      <button
+                        onClick={() => {
+                          if (meta) {
+                            setSelectedContract({
+                              code: c.code,
+                              clientName: c.clientName,
+                              clientPhone: c.clientPhone,
+                              clientEmail: meta.clientEmail,
+                              location: c.location,
+                              eventDate: c.eventDate,
+                              guestCount: c.guestCount,
+                              saleAmount: c.saleAmount,
+                              metadata: meta,
+                              documentType: "RECEIPT",
+                            });
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg bg-surface-container border border-emerald-500/30 text-emerald-300 px-2 py-1 text-[11px] font-bold hover:bg-emerald-500/10 transition cursor-pointer"
+                        title="Ver Recibo Oficial de Anticipo"
+                      >
+                        <span>🧾</span>
+                        <span>Recibo</span>
+                      </button>
+
+                      {/* Abrir en nueva pestaña */}
+                      <a
+                        href={`/tequilitros/cotizacion/${encodeURIComponent(contractFolio)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center rounded-lg bg-surface-container border border-outline-variant p-1 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition align-middle"
+                        title="Abrir página web del cliente"
+                      >
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
                     </td>
                   </tr>
                 );
@@ -226,12 +299,12 @@ export default function ContratosClient({ contracts }: ContratosClientProps) {
         </table>
       </div>
 
-      {/* Modal para ver e imprimir Contrato */}
+      {/* Modal para ver e imprimir Contrato o Recibo */}
       {selectedContract && (
         <QuoteDocumentModal
           isOpen={Boolean(selectedContract)}
           onClose={() => setSelectedContract(null)}
-          documentType="CONTRACT"
+          documentType={selectedContract.documentType || "CONTRACT"}
           data={selectedContract}
         />
       )}

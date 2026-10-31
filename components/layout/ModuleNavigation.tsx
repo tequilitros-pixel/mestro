@@ -273,6 +273,7 @@ function ModuleItem({
   role,
   moduleKeys,
   collapsed,
+  allItems,
   onNavigate,
 }: {
   item: SubMenuItem;
@@ -280,9 +281,10 @@ function ModuleItem({
   role: string;
   moduleKeys: string[];
   collapsed: boolean;
+  allItems: SubMenuItem[];
   onNavigate?: () => void;
 }) {
-  const active = isActive(pathname, item);
+  const active = isActive(pathname, item, allItems);
   const hasChildren = !collapsed && Boolean(item.children?.length);
   const [expansionOverride, setExpansionOverride] = useState<{
     pathname: string;
@@ -361,9 +363,18 @@ function ModuleItem({
   );
 }
 
-function isActive(pathname: string, item: SubMenuItem) {
-  return (
-    matchesRoute(pathname, item.href) ||
-    Boolean(item.children?.some((child) => matchesRoute(pathname, child.href)))
+function isActive(pathname: string, item: SubMenuItem, allItems: SubMenuItem[]) {
+  if (pathname === item.href) return true;
+  if (item.children?.some((child) => child.href === pathname || matchesRoute(pathname, child.href))) {
+    return true;
+  }
+  if (!matchesRoute(pathname, item.href)) return false;
+
+  const hasMoreSpecificMatch = allItems.some(
+    (other) =>
+      other.href !== item.href &&
+      other.href.startsWith(item.href) &&
+      matchesRoute(pathname, other.href)
   );
+  return !hasMoreSpecificMatch;
 }

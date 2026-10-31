@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import CountItemsList from "./CountItemsList";
 import CloseCountButton from "./CloseCountButton";
+import VoidEmptyCountButton from "./VoidEmptyCountButton";
 import AddCountProduct from "./AddCountProduct";
 import { formatDateOnly } from "@/lib/dateOnly";
 import { getAccessibleBranchIds, requireInventoryCountCaptureAccess } from "@/lib/auth";
@@ -31,6 +32,7 @@ export default async function CountDetailPage({
     include: {
       branch: true,
       closedBy: { select: { name: true, username: true } },
+      voidedBy: { select: { name: true, username: true } },
       items: { include: { product: true }, orderBy: { product: { name: "asc" } } },
     },
   });
@@ -44,6 +46,7 @@ export default async function CountDetailPage({
   }
 
   const editable = count.status === "BORRADOR";
+  const isVoided = count.status === "ANULADO";
   const missingProducts = editable
     ? (await prisma.inventoryProduct.findMany({
         where: {
@@ -80,10 +83,12 @@ export default async function CountDetailPage({
             className={`rounded-full px-4 py-2 text-sm ${
               count.status === "CERRADO"
                 ? "bg-tertiary-fixed-dim/20 text-tertiary-fixed-dim"
-                : "bg-secondary/20 text-secondary"
+                : isVoided
+                  ? "bg-error/15 text-error"
+                  : "bg-secondary/20 text-secondary"
             }`}
           >
-            {count.status === "CERRADO" ? "Cerrado" : "Borrador"}
+            {count.status === "CERRADO" ? "Cerrado" : isVoided ? "Anulado" : "Borrador"}
           </span>
         </div>
 
@@ -91,6 +96,14 @@ export default async function CountDetailPage({
           <p className="-mt-5 text-sm text-on-surface-variant">
             Cerrado {count.closedAt ? formatBusinessDateTime(count.closedAt) : "sin fecha registrada"}
             {count.closedBy ? ` · ${count.closedBy.name} (${count.closedBy.username})` : " · usuario no registrado"}
+            {` · ID ${count.id}`}
+          </p>
+        )}
+
+        {isVoided && (
+          <p className="-mt-5 text-sm text-on-surface-variant">
+            Anulado {count.voidedAt ? formatBusinessDateTime(count.voidedAt) : "sin fecha registrada"}
+            {count.voidedBy ? ` · ${count.voidedBy.name} (${count.voidedBy.username})` : " · usuario no registrado"}
             {` · ID ${count.id}`}
           </p>
         )}
@@ -141,6 +154,12 @@ export default async function CountDetailPage({
         )}
 
         {editable && user.role === "ADMIN" && <CloseCountButton countId={count.id} operationId={generateOperationId()} />}
+        {editable && pendingItems.length === count.items.length && (
+          <VoidEmptyCountButton
+            countId={count.id}
+            nextHref={`/administration/inventory/branch-counts/new?type=${count.countType}`}
+          />
+        )}
       </div>
     </main>
   );

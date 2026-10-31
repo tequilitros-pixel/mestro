@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getProductionVolume } from "../lib/lots/productionVolume";
 import { getEffectiveLiquorBatchStatus } from "../lib/liquors/batchStatus";
-import { groupCalendarWeeks } from "../lib/workforce/calendarWeeks";
-import { addDaysToDateOnly, mondayOfWeek } from "../lib/dateOnly";
+import { addDaysToDateOnly, groupCalendarWeeks, mondayOfWeek } from "../lib/dateOnly";
 
 test("final volume overrides interim readings and all completed rectifications aggregate", () => {
   const distillations = [

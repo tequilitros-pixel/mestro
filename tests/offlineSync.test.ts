@@ -14,6 +14,8 @@ test("sincronización de Cocimiento usa el mismo permiso que la pantalla", () =>
 test("cada operación de producción exige el permiso de su pantalla", () => {
   assert.equal(getProductionOperationModuleKey("cooking.event.create"), "/cooking");
   assert.equal(getProductionOperationModuleKey("milling.discharge.create"), "/milling");
+  assert.equal(getProductionOperationModuleKey("liquor.batch.step.complete"), "/liquors/batches");
+  assert.equal(getProductionOperationModuleKey("liquor.bottling.create"), "/liquors/bottling");
   assert.equal(getProductionOperationModuleKey("pos.sale.create"), null);
 });
 

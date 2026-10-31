@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import ChecklistItemRow, { type EventChecklistItem } from "./ChecklistItemRow";
 import EventPhaseConfirm from "./EventPhaseConfirm";
+import { batchCheckEventItemsAction } from "../actions";
+import { useToast } from "@/components/ui/Toast";
 
 type Item = EventChecklistItem & { category: string; productCode?: string | null };
 
@@ -25,10 +27,30 @@ export default function EventChecklistTable({
   additionalPendingReturns?: number;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"todos" | "pendientes" | "revisados" | "diferencias">("todos");
   const [categoria, setCategoria] = useState<string>(TODOS);
+  const [batchLoading, setBatchLoading] = useState(false);
   const isReturn = phase === "regreso";
+
+  async function handleBatchAction(target: "ALL_PLANNED" | "EQUIPMENT_ALL" | "ALL_ITEMS") {
+    if (batchLoading) return;
+    setBatchLoading(true);
+    try {
+      const res = await batchCheckEventItemsAction({ eventId, phase, target });
+      if (res.success) {
+        showToast(res.message);
+        router.refresh();
+      } else {
+        showToast(res.error);
+      }
+    } catch {
+      showToast("Error al procesar la acción en lote.");
+    } finally {
+      setBatchLoading(false);
+    }
+  }
 
   // La categoria elegida sobrevive a recargas y a ir y volver de pestaña.
   const storageKey = `maestro:evento:${eventId}:${phase}:categoria`;
@@ -113,6 +135,60 @@ export default function EventChecklistTable({
         </div>
         <p className="mt-2 text-xs text-on-surface-variant">Avance: {progress}%</p>
       </div>
+
+      {/* Acciones Rápidas en 1-Toque (Load-out / Check-in Express) */}
+      {!confirmed && items.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-outline-variant bg-surface-container p-3">
+          <span className="text-xs font-bold text-on-surface">
+            {isReturn ? "Acciones rápidas de retorno:" : "Carga rápida al remolque:"}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {!isReturn ? (
+              <>
+                <button
+                  type="button"
+                  disabled={batchLoading}
+                  onClick={() => handleBatchAction("ALL_PLANNED")}
+                  className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-on-primary hover:opacity-90 active:scale-95 disabled:opacity-50 transition"
+                  title="Marca todos los insumos cargados exactamente con la cantidad planeada"
+                >
+                  {batchLoading ? "Procesando..." : "🚀 Cargar todo según plan (1-Toque)"}
+                </button>
+                <button
+                  type="button"
+                  disabled={batchLoading}
+                  onClick={() => handleBatchAction("EQUIPMENT_ALL")}
+                  className="rounded-lg border border-outline-variant bg-surface-container-high px-3 py-1.5 text-xs font-semibold text-on-surface hover:bg-surface-container-highest active:scale-95 disabled:opacity-50 transition"
+                  title="Marca todo el equipo y mobiliario como cargado"
+                >
+                  🚚 Cargar solo equipo
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={batchLoading}
+                  onClick={() => handleBatchAction("EQUIPMENT_ALL")}
+                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 active:scale-95 disabled:opacity-50 transition"
+                  title="Marca que el equipo y mobiliario regresó 100% completo e íntegro"
+                >
+                  {batchLoading ? "Procesando..." : "🛡️ Equipo completo (1-Toque)"}
+                </button>
+                <button
+                  type="button"
+                  disabled={batchLoading}
+                  onClick={() => handleBatchAction("ALL_ITEMS")}
+                  className="rounded-lg border border-outline-variant bg-surface-container-high px-3 py-1.5 text-xs font-semibold text-on-surface hover:bg-surface-container-highest active:scale-95 disabled:opacity-50 transition"
+                  title="Marca todo devuelto sin consumo"
+                >
+                  ✅ Todo regresó íntegro
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Pestañas de categoría. El scroll horizontal vive aquí, no en la página. */}
       {items.length > 0 && (

@@ -17,6 +17,16 @@ const STATIC_PRECACHE = [
   "/boiler",
   "/liquors/batches",
   "/liquors/bottling",
+  "/tequilitros/productos/vampiro.png",
+  "/tequilitros/productos/paloma.png",
+  "/tequilitros/productos/cantarito.png",
+  "/tequilitros/productos/tequimiche.png",
+  "/tequilitros/productos/tequimojito.png",
+  "/tequilitros/productos/tequimora.png",
+  "/tequilitros/tequimango.jpg",
+  "/tequilitros/blanco.jpg",
+  "/tequilitros/reposado.jpg",
+  "/tequilitros/zarzamora.jpg",
 ];
 
 // Rutas de API seguras de sólo lectura que soportan Stale-While-Revalidate offline

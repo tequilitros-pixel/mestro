@@ -1,5 +1,4 @@
-import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
 import PosSellClient from "@/components/pos/PosSellClient";
 import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
 
@@ -11,9 +10,8 @@ export default async function PosPressPage({
 }: {
   searchParams: Promise<{ branchId?: string }>;
 }) {
-  const [user, allowedBranchIds, query] = await Promise.all([
+  const [user, query] = await Promise.all([
     getCurrentUser(),
-    getAccessibleBranchIds(),
     searchParams,
   ]);
 
@@ -47,9 +45,14 @@ export default async function PosPressPage({
       openCutByBranch.set(cut.branchId, cut.id);
     }
   }
-  const selectedBranchId = branches.some((branch) => branch.id === query.branchId)
-    ? query.branchId
-    : undefined;
+
+  const scope = await getPospressActiveScope(user);
+
+  const initialBranchId =
+    scope.lockedBranchId ??
+    (query.branchId && scope.allowedBranches.some((b) => b.id === query.branchId)
+      ? query.branchId
+      : scope.allowedBranches[0]?.id);
 
   return (
     <PosSellClient

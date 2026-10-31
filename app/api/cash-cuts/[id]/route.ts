@@ -39,16 +39,26 @@ export async function GET(
         auditEntries: { orderBy: { createdAt: "desc" }, take: 20 },
         denominations: { orderBy: { value: "desc" } },
         posSales: {
-          where: { status: "COMPLETADA" },
-          orderBy: { createdAt: "asc" },
+          orderBy: { createdAt: "desc" },
           select: {
             id: true,
             code: true,
             subtotal: true,
             discountAmount: true,
+            discountReason: true,
             total: true,
+            status: true,
             createdAt: true,
+            cancelledAt: true,
+            cancelReason: true,
             soldBy: { select: { id: true, name: true } },
+            payments: {
+              select: {
+                id: true,
+                method: true,
+                amount: true,
+              },
+            },
             items: {
               select: {
                 id: true,
@@ -57,6 +67,28 @@ export async function GET(
                 quantity: true,
                 unitPrice: true,
                 lineTotal: true,
+                variant: {
+                  select: {
+                    id: true,
+                    name: true,
+                    ingredients: {
+                      select: {
+                        id: true,
+                        quantity: true,
+                        unit: true,
+                        inventoryProduct: {
+                          select: {
+                            id: true,
+                            name: true,
+                            code: true,
+                            unit: true,
+                            unitCost: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
               },
             },
           },

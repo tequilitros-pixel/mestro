@@ -15,6 +15,7 @@ import {
   ReceiptIcon,
   ChartLineIcon,
   ClockIcon,
+  MartiniIcon,
 } from "@/components/ui/icons";
 import { getProductVisual } from "@/lib/pos/productVisual";
 import { useToast } from "@/components/ui/Toast";
@@ -641,11 +642,14 @@ export default function PosSellClient({
                 onClick={() => setActiveCategoryId(cat.id)}
                 className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                   activeCategoryId === cat.id
-                    ? "bg-primary text-on-primary"
-                    : "bg-surface-container text-on-surface-variant hover:text-on-surface"
+                    ? "bg-primary text-on-primary shadow-xs"
+                    : "bg-surface-container/70 text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
                 }`}
               >
                 {cat.name}
+                <span className="ml-1.5 text-[11px] opacity-75 font-normal">
+                  ({cat.products.length})
+                </span>
               </button>
             ))}
           </div>

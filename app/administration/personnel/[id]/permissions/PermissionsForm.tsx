@@ -45,7 +45,7 @@ const GROUP_ICONS: Record<string, React.ComponentType<{ className?: string }>> =
   "Contabilidad y Finanzas": ReceiptIcon,
   "Cotizador Tequilitros": PartyIcon,
   "Checador y Asistencia Personal": ClockIcon,
-  "Administración de Personal y Horarios (Workforce)": UsersIcon,
+  "Administración de Personal y Horarios": UsersIcon,
 };
 
 export default function PermissionsForm({

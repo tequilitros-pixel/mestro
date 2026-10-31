@@ -34,7 +34,7 @@ export async function reconcileWeeklyCountCutover(
 ) {
   const lockedCount = await tx.$queryRaw<Array<{ id: string; status: string }>>`SELECT "id", "status"::text FROM "InventoryCount" WHERE "id"=${input.countId} FOR UPDATE`;
   if (!lockedCount[0]) throw new Error("COUNT_NOT_FOUND");
-  if (lockedCount[0].status === "CERRADO") throw new Error("COUNT_ALREADY_CLOSED");
+  if (lockedCount[0].status !== "BORRADOR") throw new Error("COUNT_NOT_DRAFT");
 
   const count = await tx.inventoryCount.findUnique({
     where: { id: input.countId },
