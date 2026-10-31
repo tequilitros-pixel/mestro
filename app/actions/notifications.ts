@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import * as webpush from "web-push";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
-import { canRoleReceiveNotification } from "@/lib/notifications/access";
+import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
+import { canUserViewNotification } from "@/lib/notifications/access";
 
 export type NotificationCategory =
   | "POS"
@@ -49,6 +49,7 @@ export async function getMyNotificationsAction(options?: {
 
     const limit = Math.min(Math.max(options?.limit ?? 30, 1), 100);
     const unreadOnly = Boolean(options?.unreadOnly);
+    const accessibleBranchIds = await getAccessibleBranchIds();
 
     const delegate = (prisma as any).notification;
     if (delegate?.findMany) {
@@ -63,7 +64,7 @@ export async function getMyNotificationsAction(options?: {
 
       return {
         success: true,
-        data: records.filter((r: any) => canRoleReceiveNotification(user.role, r.category, r.metadata)).map((r: any) => ({
+        data: records.filter((r: any) => canUserViewNotification({ role: user.role, category: r.category, metadata: r.metadata, branchIds: accessibleBranchIds })).map((r: any) => ({
           id: r.id,
           userId: r.userId,
           title: r.title,
@@ -98,7 +99,7 @@ export async function getMyNotificationsAction(options?: {
 
     return {
       success: true,
-      data: (rows ?? []).filter((r) => canRoleReceiveNotification(user.role, r.category, r.metadata)).map((r) => ({
+      data: (rows ?? []).filter((r) => canUserViewNotification({ role: user.role, category: r.category, metadata: r.metadata, branchIds: accessibleBranchIds })).map((r) => ({
         id: r.id,
         userId: r.userId,
         title: r.title,
@@ -127,7 +128,8 @@ export async function getUnreadNotificationsCountAction(): Promise<number> {
     if (!user) return 0;
 
     const delegate = (prisma as any).notification;
-    if (delegate?.count && user.role !== "OPERATOR" && user.role !== "CONSULTA") {
+    const accessibleBranchIds = await getAccessibleBranchIds();
+    if (delegate?.count && user.role === "ADMIN") {
       return await delegate.count({
         where: { userId: user.id, read: false },
       });
@@ -139,7 +141,7 @@ export async function getUnreadNotificationsCountAction(): Promise<number> {
       WHERE "userId" = ${user.id} AND read = false
     `;
 
-    return rows.filter((row) => canRoleReceiveNotification(user.role, row.category, row.metadata)).length;
+    return rows.filter((row) => canUserViewNotification({ role: user.role, category: row.category, metadata: row.metadata, branchIds: accessibleBranchIds })).length;
   } catch (error) {
     console.error("[getUnreadNotificationsCountAction] Error:", error);
     return 0;
@@ -222,9 +224,14 @@ export async function createNotification(data: {
 }): Promise<NotificationItem> {
   const recipient = await prisma.user.findUnique({
     where: { id: data.userId },
-    select: { active: true, role: true },
+    select: { active: true, role: true, branches: { select: { branchId: true } } },
   });
-  if (!recipient?.active || !canRoleReceiveNotification(recipient.role, data.category, data.metadata)) {
+  if (!recipient?.active || !canUserViewNotification({
+    role: recipient.role,
+    category: data.category,
+    metadata: data.metadata,
+    branchIds: recipient.role === "ADMIN" ? null : recipient.branches.map((branch) => branch.branchId),
+  })) {
     throw new Error("NOTIFICATION_RECIPIENT_NOT_ALLOWED");
   }
 
@@ -310,11 +317,16 @@ export async function createNotificationsForUsers(
   const uniqueIds = Array.from(new Set(userIds)).filter(Boolean);
   const recipients = await prisma.user.findMany({
     where: { id: { in: uniqueIds }, active: true },
-    select: { id: true, role: true },
+    select: { id: true, role: true, branches: { select: { branchId: true } } },
   });
   return Promise.all(
     recipients
-      .filter((recipient) => canRoleReceiveNotification(recipient.role, data.category, data.metadata))
+      .filter((recipient) => canUserViewNotification({
+        role: recipient.role,
+        category: data.category,
+        metadata: data.metadata,
+        branchIds: recipient.role === "ADMIN" ? null : recipient.branches.map((branch) => branch.branchId),
+      }))
       .map((recipient) =>
       createNotification({
         userId: recipient.id,

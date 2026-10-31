@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   allowedNotificationRuleRecipientRoles,
   canRoleReceiveNotification,
+  canUserViewNotification,
 } from "../lib/notifications/access";
 
 test("operadores no pueden recibir alertas operativas", () => {
@@ -23,4 +24,16 @@ test("las reglas operativas solo conservan roles responsables", () => {
     allowedNotificationRuleRecipientRoles(["ADMIN", "OPERATOR", "GERENTE", "CONSULTA", "ENCARGADO"]),
     ["ADMIN", "GERENTE", "ENCARGADO"],
   );
+});
+
+test("gerencia solo ve alertas operativas de sus sucursales", () => {
+  assert.equal(canUserViewNotification({
+    role: "GERENTE", category: "POS", metadata: { branchId: "altenango" }, branchIds: ["altenango"],
+  }), true);
+  assert.equal(canUserViewNotification({
+    role: "GERENTE", category: "POS", metadata: { branchId: "durango" }, branchIds: ["altenango"],
+  }), false);
+  assert.equal(canUserViewNotification({
+    role: "GERENTE", category: "INVENTORY", metadata: {}, branchIds: ["altenango"],
+  }), false);
 });
