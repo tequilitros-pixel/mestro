@@ -1,6 +1,7 @@
 "use client";
 
 import type { OfflineOperation } from "./types";
+import { needsPosSaleReconciliation } from "./syncPolicy";
 
 const DATABASE_NAME = "maestro-offline";
 const DATABASE_VERSION = 1;
@@ -82,6 +83,8 @@ export async function retryQueuedOperation(id: string) {
   const operations = await listOperations();
   const operation = operations.find((item) => item.id === id);
   if (!operation || operation.status === "syncing" || operation.status === "cancelled") return false;
+  // A conflicting identity or closed cash cut must be reconciled, not resent.
+  if (operation.kind === "pos.sale.create" && needsPosSaleReconciliation(operation.lastError)) return false;
   await updateOperation({ ...operation, status: "pending", lastError: undefined });
   return true;
 }
