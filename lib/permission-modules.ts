@@ -93,6 +93,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     group: "Punto de Venta",
     modules: [
       { key: "/pos", label: "Caja y cobros · Punto de Venta (POSpress)" },
+      { key: "/pos/sales", label: "Resumen de ventas" },
       { key: "/pospress/tables", label: "Mesas y cuentas" },
       { key: "/pospress/pending-tabs", label: "Cuentas pendientes" },
       { key: "/pospress/catalog", label: "Editor de productos POS" },
@@ -340,6 +341,11 @@ export function getModuleKeyForPath(pathname: string): string | null {
   }
 
   // 6. Punto de Venta (POSpress)
+  // El reporte se configura por separado de la caja: evaluar antes del
+  // fallback /pos evita que la ruta herede un permiso distinto.
+  if (pathname === "/pos/sales" || pathname.startsWith("/pos/sales/")) {
+    return "/pos/sales";
+  }
   if (
     pathname === "/pospress/transactions" ||
     pathname.startsWith("/pospress/transactions/")
