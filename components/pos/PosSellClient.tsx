@@ -547,6 +547,13 @@ export default function PosSellClient({
             )}
 
             <Link
+              href="/pos/sales"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+            >
+              <ChartLineIcon className="h-4 w-4" />
+              Resumen de ventas
+            </Link>
+            <Link
               href="/pospress/transactions"
               className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
             >
