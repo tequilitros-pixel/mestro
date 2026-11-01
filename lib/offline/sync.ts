@@ -44,7 +44,12 @@ async function runSync() {
     // Atomically check current state and claim this id; another tab may
     // have cancelled or started synchronizing it since listOperations().
     const syncing = await claimQueuedOperation(operation.id);
-    if (!syncing) continue;
+    if (!syncing) {
+      // Another tab may be uploading this sale (or have just changed its
+      // status). Never advance a queued cash-cut close past an unresolved sale.
+      if (operation.kind === "pos.sale.create") blocked = true;
+      continue;
+    }
 
     try {
       // Las colas antiguas podían asignar dos IDs al mismo cobro. No sabemos
