@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
@@ -101,6 +102,28 @@ function parseStoredQuote(metadata: unknown): StoredQuoteData | null {
     type: "TEQUILITROS_QUOTE",
     status,
   } as unknown as StoredQuoteData;
+}
+
+/** The audit ledger is append-only. Quote edits are new, owner-scoped
+ * revision entries instead of UPDATEs on existing AuditEvent rows.
+ * Each revision references the original AuditEvent PK, never the folio.
+ */
+const QUOTE_REVISION_ENTITY = "TequilitrosQuoteRevision";
+
+async function latestQuoteRevisions(db: Prisma.TransactionClient, quoteIds: string[]) {
+  const latest = new Map<string, StoredQuoteData>();
+  if (quoteIds.length === 0) return latest;
+  const revisions = await db.auditEvent.findMany({
+    where: { entityType: QUOTE_REVISION_ENTITY, entityId: { in: quoteIds } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { entityId: true, metadata: true },
+  });
+  for (const revision of revisions) {
+    if (!revision.entityId || latest.has(revision.entityId)) continue;
+    const quote = parseStoredQuote(revision.metadata);
+    if (quote) latest.set(revision.entityId, quote);
+  }
+  return latest;
 }
 
 export type QuoteCreationInput = {
@@ -340,7 +363,11 @@ export async function updateQuoteStatusAndDepositAction(input: UpdateQuoteStatus
       return { success: false, error: `No se encontró la cotización con folio: ${searchId}` };
     }
 
-    const currentQuote = parseStoredQuote(auditRecord.metadata);
+    const latestRevision = await prisma.auditEvent.findFirst({
+      where: { entityType: QUOTE_REVISION_ENTITY, entityId: auditRecord.id },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    const currentQuote = parseStoredQuote(latestRevision?.metadata ?? auditRecord.metadata);
     if (!currentQuote) {
       return { success: false, error: "No se pudieron leer los datos de la cotización." };
     }
@@ -416,6 +443,15 @@ export async function updateQuoteStatusAndDepositAction(input: UpdateQuoteStatus
 
     // No marcar como confirmada si falla el registro oficial en inventario.
     await prisma.$transaction(async (tx) => {
+      // Detect edits from another session before committing a payment/status.
+      const latestInTransaction = await tx.auditEvent.findFirst({
+        where: { entityType: QUOTE_REVISION_ENTITY, entityId: auditRecord.id },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: { id: true },
+      });
+      if ((latestInTransaction?.id ?? null) !== (latestRevision?.id ?? null)) {
+        throw new Error("Esta cotización cambió mientras la editabas. Recarga e inténtalo nuevamente.");
+      }
       if (isConfirmed) {
         const existingEvent = await tx.serviceEvent.findUnique({ where: { code: contractFolio } });
         if (existingEvent) {
@@ -459,19 +495,25 @@ export async function updateQuoteStatusAndDepositAction(input: UpdateQuoteStatus
         const existingEvent = await tx.serviceEvent.findUnique({ where: { code: contractFolio } });
         if (existingEvent) await tx.serviceEvent.update({ where: { id: existingEvent.id }, data: { status: "CANCELLED" } });
       }
-      await tx.auditEvent.update({
-        where: { id: auditRecord.id },
-        data: {
-          action: isConfirmed
-            ? "TEQUILITROS_QUOTE_CONFIRMED"
-            : isApproved
-              ? "TEQUILITROS_QUOTE_APPROVED"
-              : isRejected
-                ? "TEQUILITROS_QUOTE_REJECTED"
-                : "TEQUILITROS_QUOTE_UPDATED",
-          metadata: updatedMetadata as unknown as object,
-        },
-      });
+      // Preserve the immutable original audit record; a new revision is
+      // recorded only when the effective metadata actually changes.
+      if (JSON.stringify(updatedMetadata) !== JSON.stringify(currentQuote)) {
+        await tx.auditEvent.create({
+          data: {
+            actorId: user.id,
+            entityType: QUOTE_REVISION_ENTITY,
+            entityId: auditRecord.id,
+            action: isConfirmed
+              ? "TEQUILITROS_QUOTE_CONFIRMED"
+              : isApproved
+                ? "TEQUILITROS_QUOTE_APPROVED"
+                : isRejected
+                  ? "TEQUILITROS_QUOTE_REJECTED"
+                  : "TEQUILITROS_QUOTE_UPDATED",
+            metadata: updatedMetadata as unknown as object,
+          },
+        });
+      }
     }, { isolationLevel: "Serializable" });
 
     // Revalidación protegida
@@ -535,8 +577,9 @@ export async function getQuotesListAction() {
     take: 200,
   });
 
+  const revisions = await latestQuoteRevisions(prisma, records.map((rec) => rec.id));
   return records.flatMap((rec) => {
-    const quote = parseStoredQuote(rec.metadata);
+    const quote = revisions.get(rec.id) ?? parseStoredQuote(rec.metadata);
     if (!quote) return [];
 
     return [{
@@ -577,6 +620,7 @@ export async function getCalendarMonthAction(year: number, month: number) {
     where: { entityType: "TequilitrosQuote" },
   });
 
+  const revisions = await latestQuoteRevisions(prisma, quoteRecords.map((rec) => rec.id));
   const mapByDay = new Map<string, DayAvailability>();
 
   // Inicializar días del mes
@@ -615,7 +659,7 @@ export async function getCalendarMonthAction(year: number, month: number) {
 
   // Contabilizar cotizaciones tentativas
   for (const rec of quoteRecords) {
-    const quote = parseStoredQuote(rec.metadata);
+    const quote = revisions.get(rec.id) ?? parseStoredQuote(rec.metadata);
     if (!quote) continue;
     if (quote.isContractConfirmed || quote.status === "CONFIRMED") continue; // Ya contabilizado en ServiceEvent
     if (quote.status === "REJECTED" || quote.status === "CANCELLED") continue; // Descartar canceladas y rechazadas
@@ -657,15 +701,17 @@ export async function getEmployeeMetricsAction(): Promise<EmployeeLeaderboardIte
   const records = await prisma.auditEvent.findMany({
     where: { entityType: "TequilitrosQuote" },
     select: {
+      id: true,
       actorId: true,
       metadata: true,
     },
   });
+  const revisions = await latestQuoteRevisions(prisma, records.map((rec) => rec.id));
 
   const workerMap = new Map<string, EmployeeLeaderboardItem>();
 
   for (const rec of records) {
-    const quote = parseStoredQuote(rec.metadata);
+    const quote = revisions.get(rec.id) ?? parseStoredQuote(rec.metadata);
     if (!quote || !quote.createdById) continue;
 
     const key = quote.createdById;
