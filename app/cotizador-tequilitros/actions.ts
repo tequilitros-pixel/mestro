@@ -352,8 +352,9 @@ export async function updateQuoteStatusAndDepositAction(input: UpdateQuoteStatus
         orderBy: { createdAt: "desc" },
         take: 200,
       });
+      const revisions = await latestQuoteRevisions(prisma, records.map((rec) => rec.id));
       const matches = records.filter((rec) => {
-        const q = parseStoredQuote(rec.metadata);
+        const q = revisions.get(rec.id) ?? parseStoredQuote(rec.metadata);
         return q && [q.code, q.folio, q.contractFolio].some((folio) => folio?.toUpperCase() === searchId.toUpperCase());
       });
       if (matches.length > 1) return { success: false, error: "Este folio es ambiguo. Abre la cotización desde Historial para elegir el registro exacto." };
@@ -760,38 +761,35 @@ export async function getPublicQuoteByCode(rawCode: string): Promise<PublicQuote
   const code = decodeURIComponent(rawCode || "").trim().toUpperCase();
   if (!code) return null;
 
-  // 1. Buscar coincidencia directa en AuditEvent (entityId)
-  let auditRecord = await prisma.auditEvent.findFirst({
-    where: {
-      entityType: "TequilitrosQuote",
-      OR: [{ entityId: code }, { id: code }],
-    },
+  // Public codes created before the unique-folio fix can be duplicated.
+  // Never arbitrarily reveal or resolve one of several matching records.
+  const directMatches = await prisma.auditEvent.findMany({
+    where: { entityType: "TequilitrosQuote", OR: [{ entityId: code }, { id: code }] },
     orderBy: { createdAt: "desc" },
+    take: 2,
   });
+  if (directMatches.length > 1) return null;
+  let auditRecord = directMatches[0] ?? null;
 
-  // 2. Si no coincide con entityId (por ejemplo si buscan por folio de contrato CTR-...)
   if (!auditRecord) {
     const records = await prisma.auditEvent.findMany({
       where: { entityType: "TequilitrosQuote" },
       orderBy: { createdAt: "desc" },
       take: 200,
     });
-
-    auditRecord =
-      records.find((rec) => {
-        const q = parseStoredQuote(rec.metadata);
-        if (!q) return false;
-        return (
-          q.code.toUpperCase() === code ||
-          (q.contractFolio && q.contractFolio.toUpperCase() === code) ||
-          (q.folio && q.folio.toUpperCase() === code)
-        );
-      }) ?? null;
+    const revisions = await latestQuoteRevisions(prisma, records.map((rec) => rec.id));
+    const matches = records.filter((rec) => {
+      const q = revisions.get(rec.id) ?? parseStoredQuote(rec.metadata);
+      return q && [q.code, q.folio, q.contractFolio].some(
+        (folio) => folio?.toUpperCase() === code,
+      );
+    });
+    if (matches.length !== 1) return null;
+    auditRecord = matches[0];
   }
 
-  if (!auditRecord) return null;
-
-  const quote = parseStoredQuote(auditRecord.metadata);
+  const revisions = await latestQuoteRevisions(prisma, [auditRecord.id]);
+  const quote = revisions.get(auditRecord.id) ?? parseStoredQuote(auditRecord.metadata);
   if (!quote) return null;
 
   return {
