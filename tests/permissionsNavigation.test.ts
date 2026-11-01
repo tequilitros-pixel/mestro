@@ -170,6 +170,20 @@ test("permisos obsoletos no desactivan la compatibilidad del operador", () => {
   assert.equal(isSubmenuItemVisible("OPERATOR", ["/permiso-antiguo"], boiler), true);
 });
 
+test("ENCARGADO con permiso de conteo puede entrar desde Inventario sin ver administración extra", () => {
+  const countKey = "/administration/inventory/branch-counts";
+  const count = SUBMENUS.administration.find((item) => item.label === "Sucursales")!
+    .children!.find((item) => item.href === countKey)!;
+  const inventoryModule = MAIN_MODULES.find((module) => module.module === "administration")!;
+
+  assert.equal(isSubmenuItemVisible("ENCARGADO", [countKey], count), true);
+  assert.equal(isMainModuleVisible("ENCARGADO", [countKey], inventoryModule), true);
+  assert.equal(getMainModuleDestination("ENCARGADO", [countKey], inventoryModule), countKey);
+  assert.equal(isSubmenuItemVisible("ENCARGADO", [], count), false);
+  assert.equal(isSubmenuItemVisible("CONSULTA", [countKey], count), false);
+  assert.equal(isSubmenuItemVisible("ENCARGADO", [countKey], SUBMENUS.administration.find((item) => item.href === "/administration/inventory/branch-counts/statistics")!), false);
+});
+
 test("Gerente ve las superficies de inventario de solo lectura", () => {
   const products = SUBMENUS.administration.find(
     (item) => item.href === "/administration/inventory/products",
