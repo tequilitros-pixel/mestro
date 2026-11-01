@@ -75,7 +75,7 @@ async function transitionOperation(
   transition: (operation: OfflineOperation) => OfflineOperation | null,
 ): Promise<OfflineOperation | null> {
   const database = await openDatabase();
-  return new Promise((resolve, reject) => {
+  return new Promise<OfflineOperation | null>((resolve, reject) => {
     const tx = database.transaction(OPERATIONS_STORE, "readwrite");
     const store = tx.objectStore(OPERATIONS_STORE);
     const request = store.get(id);
