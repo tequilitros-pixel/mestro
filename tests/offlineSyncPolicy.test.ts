@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  canClaimForSync,
   describeSyncFailure,
   getUnconfirmedSaleIds,
   needsPosSaleReconciliation,
@@ -17,6 +18,22 @@ test("failed POS sales wait for manual retry while other legacy failed operation
   assert.equal(shouldAutomaticallySyncOperation({ id: "sale-2", kind: "pos.sale.create", status: "pending" }), true);
   assert.equal(shouldAutomaticallySyncOperation({ id: "sale-3", kind: "pos.sale.create", status: "syncing" }), true);
   assert.equal(shouldAutomaticallySyncOperation({ id: "boiler-1", kind: "boiler.event.create", status: "failed" }), true);
+});
+
+test("simultaneous tabs cannot claim a fresh in-flight sale; interrupted claims recover", () => {
+  const now = Date.parse("2026-11-01T20:00:00.000Z");
+  assert.equal(canClaimForSync({ id: "sale", kind: "pos.sale.create", status: "pending" }, now), true);
+  assert.equal(canClaimForSync({ id: "sale", kind: "pos.sale.create", status: "cancelled" }, now), false);
+  assert.equal(canClaimForSync({ id: "sale", kind: "pos.sale.create", status: "failed" }, now), false);
+  assert.equal(
+    canClaimForSync({ id: "sale", kind: "pos.sale.create", status: "syncing", syncStartedAt: "2026-11-01T19:59:30.000Z" }, now),
+    false,
+  );
+  assert.equal(
+    canClaimForSync({ id: "sale", kind: "pos.sale.create", status: "syncing", syncStartedAt: "2026-11-01T19:57:00.000Z" }, now),
+    true,
+  );
+  assert.equal(canClaimForSync({ id: "legacy-sale", kind: "pos.sale.create", status: "syncing" }, now), true);
 });
 
 test("receipt email is blocked until a failed or cancelled local sale is reconciled", () => {
