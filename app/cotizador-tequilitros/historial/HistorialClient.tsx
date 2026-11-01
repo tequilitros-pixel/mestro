@@ -123,7 +123,7 @@ export default function HistorialClient({
 
     try {
       const res = await updateQuoteStatusAndDepositAction({
-        eventId: statusModalQuote.code || statusModalQuote.id,
+        eventId: statusModalQuote.id, // Siempre editar el registro exacto, no el folio compartido.
         status: modalStatus,
         depositPaid: modalStatus === "CONFIRMED" || modalDepositAmount > 0 ? modalDepositAmount : 0,
         depositPaidAt: modalDepositDate,
