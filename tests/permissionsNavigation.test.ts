@@ -32,15 +32,19 @@ const allLeaves = Object.values(SUBMENUS).flatMap(leaves);
 test("Punto de Venta separa vender, transacciones y ventas resumen", () => {
   const main = MAIN_MODULES.find((module) => module.module === "pos");
   const sale = SUBMENUS.pos.find((item) => item.label === "Punto de Venta");
-  const transactions = SUBMENUS.pos.find((item) => item.label === "Transacciones");
-  const summary = SUBMENUS.pos.find((item) => item.label === "Ventas resumen");
+  const transactions = SUBMENUS.pos.find((item) => item.label === "Transacciones y ventas");
+  const summary = SUBMENUS.pos.find((item) => item.label === "Resumen de ventas");
 
   assert.equal(main?.href, "/pospress");
   assert.equal(main?.label, "Ventas");
   assert.equal(sale?.permissionKey, "/pos");
-  assert.equal(transactions?.permissionKey, "/pos/sales");
+  assert.equal(transactions?.permissionKey, "/pos");
   assert.equal(summary?.href, "/pos/sales");
   assert.deepEqual(summary?.permissionKeys, ["/pos", "/pos/sales"]);
+  assert.equal(isSubmenuItemVisible("ADMIN", [], summary!), true);
+  assert.equal(isSubmenuItemVisible("GERENTE", ["/pos"], summary!), true);
+  assert.equal(isSubmenuItemVisible("GERENTE", ["/pos/sales"], summary!), true);
+  assert.equal(isSubmenuItemVisible("GERENTE", ["/pospress/catalog"], summary!), false);
   assert.equal(getSubmenuItemDestination("GERENTE", ["/pos"], sale!), "/pospress");
   assert.equal(getMainModuleDestination("GERENTE", ["/pos"], main!), "/pospress");
   assert.equal(
@@ -105,20 +109,20 @@ test("cada pestaña delegable está representada en el catálogo de permisos", (
   }
 });
 
-test("Vender concede Punto de Venta y Ventas resumen, pero no Transacciones", () => {
+test("Vender muestra transacciones y resumen de ventas, sin conceder permisos de reportes a otros módulos", () => {
   const items = SUBMENUS.pos;
   const visible = (label: string) =>
     isSubmenuItemVisible("GERENTE", ["/pos"], items.find((item) => item.label === label)!);
 
   assert.equal(visible("Punto de Venta"), true);
-  assert.equal(visible("Mesas"), true);
-  assert.equal(visible("Transacciones"), false);
-  assert.equal(visible("Ventas resumen"), true);
+  assert.equal(visible("Mesas y cuentas"), true);
+  assert.equal(visible("Transacciones y ventas"), true);
+  assert.equal(visible("Resumen de ventas"), true);
   assert.equal(
     isSubmenuItemVisible(
       "GERENTE",
       ["/pos/sales"],
-      items.find((item) => item.label === "Ventas resumen")!,
+      items.find((item) => item.label === "Resumen de ventas")!,
     ),
     true,
   );
