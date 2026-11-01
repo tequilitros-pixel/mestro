@@ -13,6 +13,20 @@ export function shouldAutomaticallySyncOperation(operation: QueueOperation): boo
   return true;
 }
 
+/**
+ * Only one tab can hold a fresh claim. An interrupted browser session can
+ * recover a stale "syncing" item using the original idempotency key.
+ */
+export function canClaimForSync(
+  operation: QueueOperation & { syncStartedAt?: string },
+  now: number = Date.now(),
+): boolean {
+  if (!shouldAutomaticallySyncOperation(operation)) return false;
+  if (operation.status !== "syncing") return true;
+  const started = Date.parse(operation.syncStartedAt ?? "");
+  return !Number.isFinite(started) || now - started >= 2 * 60 * 1000;
+}
+
 /** Prevent sending receipts for a sale that is still failed or cancelled locally. */
 export function getUnconfirmedSaleIds(operations: readonly QueueOperation[]): Set<string> {
   return new Set(
