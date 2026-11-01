@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
@@ -213,7 +214,8 @@ export async function createQuoteAction(input: QuoteCreationInput) {
           where: { entityType: "TequilitrosQuote" },
         });
         const folioNumber = String(countTotal + 1).padStart(4, "0");
-        const code = `COT-${new Date().getFullYear()}-${folioNumber}`;
+        // count() está filtrado por RLS y puede repetir folios entre empleados.
+        const code = `COT-${new Date().getFullYear()}-${folioNumber}-${randomUUID().slice(0,8).toUpperCase()}`;
 
         const metadata: TequilitrosQuoteMetadata = {
           version: 1,
@@ -308,35 +310,32 @@ export async function updateQuoteStatusAndDepositAction(input: UpdateQuoteStatus
       return { success: false, error: "Folio o ID de cotización no especificado." };
     }
 
-    // 1. Buscar el registro en AuditEvent
+    // Preferir el ID inmutable: antes dos empleados podían tener el mismo folio.
     let auditRecord = await prisma.auditEvent.findFirst({
-      where: {
-        entityType: "TequilitrosQuote",
-        OR: [{ entityId: searchId }, { id: searchId }],
-      },
-      orderBy: { createdAt: "desc" },
+      where: { id: searchId, entityType: "TequilitrosQuote" },
     });
-
     if (!auditRecord) {
-      // Buscar en los últimos 200 registros si el folio está en metadata
+      const matches = await prisma.auditEvent.findMany({
+        where: { entityType: "TequilitrosQuote", entityId: searchId },
+        orderBy: { createdAt: "desc" },
+        take: 2,
+      });
+      if (matches.length > 1) return { success: false, error: "Folio duplicado. Abre la cotización desde Historial para elegir el registro correcto." };
+      auditRecord = matches[0] ?? null;
+    }
+    if (!auditRecord) {
       const records = await prisma.auditEvent.findMany({
         where: { entityType: "TequilitrosQuote" },
         orderBy: { createdAt: "desc" },
         take: 200,
       });
-
-      auditRecord =
-        records.find((rec) => {
-          const q = parseStoredQuote(rec.metadata);
-          if (!q) return false;
-          return (
-            q.code?.toUpperCase() === searchId.toUpperCase() ||
-            q.folio?.toUpperCase() === searchId.toUpperCase() ||
-            q.contractFolio?.toUpperCase() === searchId.toUpperCase()
-          );
-        }) ?? null;
+      const matches = records.filter((rec) => {
+        const q = parseStoredQuote(rec.metadata);
+        return q && [q.code, q.folio, q.contractFolio].some((folio) => folio?.toUpperCase() === searchId.toUpperCase());
+      });
+      if (matches.length > 1) return { success: false, error: "Este folio es ambiguo. Abre la cotización desde Historial para elegir el registro exacto." };
+      auditRecord = matches[0] ?? null;
     }
-
     if (!auditRecord) {
       return { success: false, error: `No se encontró la cotización con folio: ${searchId}` };
     }
@@ -352,9 +351,11 @@ export async function updateQuoteStatusAndDepositAction(input: UpdateQuoteStatus
       ? eventDate.toISOString().slice(0, 10).replace(/-/g, "")
       : new Date().toISOString().slice(0, 10).replace(/-/g, "");
 
-    const codeNum = currentQuote.code.replace(/[^0-9]/g, "").slice(-4) || "0001";
-    const contractFolio = currentQuote.contractFolio || `CTR-${dateStr}-${codeNum}`;
-    const receiptFolio = currentQuote.receiptFolio || `REC-${dateStr}-${codeNum}`;
+    const codeNum = currentQuote.code.match(/^COT-[0-9]{4}-([0-9]+)/)?.[1] || "0001";
+    // IDs de documento estables y únicos incluso para folios históricos duplicados.
+    const uniquePart = createHash("sha256").update(auditRecord.id).digest("hex").slice(0, 8).toUpperCase();
+    const contractFolio = currentQuote.contractFolio || `CTR-${dateStr}-${codeNum}-${uniquePart}`;
+    const receiptFolio = currentQuote.receiptFolio || `REC-${dateStr}-${codeNum}-${uniquePart}`;
 
     // Procesar fecha del anticipo (cuándo lo pusieron)
     let depositPaidAt: string | undefined = undefined;
@@ -392,6 +393,9 @@ export async function updateQuoteStatusAndDepositAction(input: UpdateQuoteStatus
     const isApproved = input.status === "APPROVED";
     const isRejected = input.status === "REJECTED";
     const isCancelled = input.status === "CANCELLED";
+    if (isConfirmed && (depositPaid <= 0 || Number.isNaN(eventDate.getTime()))) {
+      return { success: false, error: "Para confirmar registra un anticipo mayor a cero y una fecha de evento válida." };
+    }
 
     const updatedMetadata: StoredQuoteData = {
       ...currentQuote,
@@ -410,47 +414,34 @@ export async function updateQuoteStatusAndDepositAction(input: UpdateQuoteStatus
       rejectedAt: isRejected ? currentQuote.rejectedAt || new Date().toISOString() : currentQuote.rejectedAt,
     };
 
-    // Actualizar registro en AuditEvent
-    await prisma.auditEvent.update({
-      where: { id: auditRecord.id },
-      data: {
-        action: isConfirmed
-          ? "TEQUILITROS_QUOTE_CONFIRMED"
-          : isApproved
-            ? "TEQUILITROS_QUOTE_APPROVED"
-            : isRejected
-              ? "TEQUILITROS_QUOTE_REJECTED"
-              : "TEQUILITROS_QUOTE_UPDATED",
-        metadata: updatedMetadata as unknown as object,
-      },
-    });
-
-    // Si está confirmada, crear o actualizar el ServiceEvent oficial en inventario
-    if (isConfirmed && !Number.isNaN(eventDate.getTime())) {
-      try {
-        const existingEvent = await prisma.serviceEvent.findFirst({
-          where: {
-            OR: [{ code: contractFolio }, { code: currentQuote.code }],
-          },
-        });
-
+    // No marcar como confirmada si falla el registro oficial en inventario.
+    await prisma.$transaction(async (tx) => {
+      if (isConfirmed) {
+        const existingEvent = await tx.serviceEvent.findUnique({ where: { code: contractFolio } });
         if (existingEvent) {
-          await prisma.serviceEvent.update({
+          await tx.serviceEvent.update({
             where: { id: existingEvent.id },
             data: {
-              code: contractFolio,
               clientName: currentQuote.clientName,
               clientPhone: currentQuote.clientPhone || null,
               location: currentQuote.location,
               eventDate,
               guestCount: currentQuote.guestCount,
               saleAmount,
-              status: "PREPARING",
+              status: ["DRAFT", "CANCELLED"].includes(existingEvent.status) ? "PREPARING" : existingEvent.status,
               notes: JSON.stringify(updatedMetadata),
             },
           });
         } else {
-          await prisma.serviceEvent.create({
+          const { start, end } = getUtcDayBounds(eventDate);
+          const confirmedOnDate = await tx.serviceEvent.findMany({
+            where: { eventDate: { gte: start, lte: end }, status: { notIn: ["DRAFT", "CANCELLED"] } },
+            select: { notes: true },
+          });
+          if (confirmedOnDate.filter((event) => isTequilitrosEventMetadata(event.notes)).length >= MAX_CONFIRMED_EVENTS_PER_DAY) {
+            throw new Error("Esta fecha ya tiene el máximo de eventos confirmados.");
+          }
+          await tx.serviceEvent.create({
             data: {
               code: contractFolio,
               clientName: currentQuote.clientName,
@@ -464,26 +455,24 @@ export async function updateQuoteStatusAndDepositAction(input: UpdateQuoteStatus
             },
           });
         }
-      } catch (eventErr) {
-        console.warn("Aviso al sincronizar ServiceEvent:", eventErr);
+      } else if (isCancelled || isRejected) {
+        const existingEvent = await tx.serviceEvent.findUnique({ where: { code: contractFolio } });
+        if (existingEvent) await tx.serviceEvent.update({ where: { id: existingEvent.id }, data: { status: "CANCELLED" } });
       }
-    } else if (isCancelled || isRejected) {
-      try {
-        const existingEvent = await prisma.serviceEvent.findFirst({
-          where: {
-            OR: [{ code: contractFolio }, { code: currentQuote.code }],
-          },
-        });
-        if (existingEvent) {
-          await prisma.serviceEvent.update({
-            where: { id: existingEvent.id },
-            data: { status: "CANCELLED" },
-          });
-        }
-      } catch {
-        // Continuar
-      }
-    }
+      await tx.auditEvent.update({
+        where: { id: auditRecord.id },
+        data: {
+          action: isConfirmed
+            ? "TEQUILITROS_QUOTE_CONFIRMED"
+            : isApproved
+              ? "TEQUILITROS_QUOTE_APPROVED"
+              : isRejected
+                ? "TEQUILITROS_QUOTE_REJECTED"
+                : "TEQUILITROS_QUOTE_UPDATED",
+          metadata: updatedMetadata as unknown as object,
+        },
+      });
+    }, { isolationLevel: "Serializable" });
 
     // Revalidación protegida
     const pathsToRevalidate = [
@@ -551,7 +540,7 @@ export async function getQuotesListAction() {
     if (!quote) return [];
 
     return [{
-      id: quote.code || rec.id,
+      id: rec.id, // Usar la PK del AuditEvent, nunca el folio potencialmente duplicado.
       code: quote.code,
       clientName: quote.clientName,
       clientPhone: quote.clientPhone,
