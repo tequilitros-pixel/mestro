@@ -1,6 +1,7 @@
 "use client";
 
 import { listOperations, removeOperation, updateOperation } from "./queue";
+import { describeSyncFailure, getUnconfirmedSaleIds, shouldAutomaticallySyncOperation } from "./syncPolicy";
 
 let activeSync: Promise<void> | null = null;
 
@@ -20,10 +21,16 @@ async function runSync() {
 
   const operations = await listOperations();
   let blocked = false;
-  const failedSaleIds = new Set<string>();
+  const failedSaleIds = getUnconfirmedSaleIds(operations);
 
   for (const operation of operations) {
     if (!navigator.onLine) break;
+    // Cancelled sales are audit-only. Failed sales require an explicit retry
+    // rather than being re-sent by the 30-second background sync loop.
+    if (!shouldAutomaticallySyncOperation(operation)) {
+      if (operation.kind === "pos.sale.create" && operation.status === "failed") blocked = true;
+      continue;
+    }
     const saleId = String((operation.payload as Record<string, unknown>).saleId ?? "");
     // Un recibo electrónico sólo puede salir después de que su venta esté
     // confirmada. Nunca enviamos un comprobante de un cobro que el servidor
@@ -71,19 +78,19 @@ async function runSync() {
         body: JSON.stringify(body),
       });
 
-      if (response.status === 401 || response.status === 403) {
-        throw new Error("La sesión no está autorizada para sincronizar");
-      }
-
       const result = (await response.json().catch(() => null)) as
-        | { success?: boolean; error?: string }
+        | { success?: boolean; error?: unknown; message?: unknown }
         | null;
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(describeSyncFailure(result, response.status));
+      }
 
       const accepted = directApiOperation
         ? response.ok
         : response.ok && result?.success;
       if (!accepted) {
-        throw new Error(result?.error ?? `Error de sincronización (${response.status})`);
+        throw new Error(describeSyncFailure(result, response.status));
       }
 
       await removeOperation(operation.id);
