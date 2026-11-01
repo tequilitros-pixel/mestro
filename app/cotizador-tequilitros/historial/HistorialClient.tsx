@@ -15,6 +15,7 @@ import {
   CheckIcon,
   DollarIcon,
   ListChecksIcon,
+  XIcon,
 } from "@/components/ui/icons";
 
 interface QuoteItem {
