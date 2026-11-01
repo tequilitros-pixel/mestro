@@ -169,6 +169,19 @@ export function isConfigurablePermissionKey(key: string): boolean {
 }
 
 /** Regla unica de acceso por modulo para UI, Server Actions y APIs. */
+export const INVENTORY_COUNT_CAPTURE_MODULE_KEY = "/administration/inventory/branch-counts";
+
+/** Existing capture roles keep their access; ENCARGADO requires an explicit grant. */
+export function canCaptureInventoryCount(
+  role: string,
+  moduleKeys: readonly string[],
+): boolean {
+  return (
+    isInventoryCountCaptureRole(role) ||
+    (role === "ENCARGADO" && moduleKeys.includes(INVENTORY_COUNT_CAPTURE_MODULE_KEY))
+  );
+}
+
 export function canAccessModule(
   role: string,
   moduleKeys: readonly string[],
@@ -176,8 +189,8 @@ export function canAccessModule(
 ): boolean {
   if (role === "ADMIN") return true;
 
-  if (moduleKey === "/administration/inventory/branch-counts") {
-    return isInventoryCountCaptureRole(role);
+  if (moduleKey === INVENTORY_COUNT_CAPTURE_MODULE_KEY) {
+    return canCaptureInventoryCount(role, moduleKeys);
   }
 
   const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);

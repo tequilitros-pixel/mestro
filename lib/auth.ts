@@ -8,7 +8,8 @@ import {
   canAccessModule,
   isConfigurablePermissionKey,
   isAdminOnlyPath,
-  isInventoryCountCaptureRole,
+  canCaptureInventoryCount,
+  INVENTORY_COUNT_CAPTURE_MODULE_KEY,
 } from "@/lib/permission-modules";
 
 
@@ -48,17 +49,35 @@ export async function requireAdminAction() {
   return user;
 }
 
+async function hasInventoryCountCaptureAccess(user: { id: string; role: string }) {
+  if (canCaptureInventoryCount(user.role, [])) return true;
+  if (user.role !== "ENCARGADO") return false;
+
+  const grant = await prisma.modulePermission.findUnique({
+    where: {
+      userId_moduleKey: {
+        userId: user.id,
+        moduleKey: INVENTORY_COUNT_CAPTURE_MODULE_KEY,
+      },
+    },
+    select: { id: true },
+  });
+  return canCaptureInventoryCount(
+    user.role,
+    grant ? [INVENTORY_COUNT_CAPTURE_MODULE_KEY] : [],
+  );
+}
+
 export async function requireInventoryCountCaptureAccess() {
   const user = await getCurrentUser();
-  if (!user || !isInventoryCountCaptureRole(user.role)) {
-    redirect(user ? "/profile" : "/login");
-  }
+  if (!user) redirect("/login");
+  if (!(await hasInventoryCountCaptureAccess(user))) redirect("/profile");
   return user;
 }
 
 export async function requireInventoryCountCaptureActionAccess() {
   const user = await getCurrentUser();
-  if (!user || !isInventoryCountCaptureRole(user.role)) {
+  if (!user || !(await hasInventoryCountCaptureAccess(user))) {
     throw new Error("PERMISSION_DENIED");
   }
   return user;
