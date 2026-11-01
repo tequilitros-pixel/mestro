@@ -429,7 +429,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
     },
     {
       href: "/pos/sales",
-      label: "Ventas resumen",
+      label: "Resumen de ventas",
       icon: ChartBarIcon,
       iconVariant: "green",
       permissionKeys: ["/pos", "/pos/sales"],
