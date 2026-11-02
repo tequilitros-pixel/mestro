@@ -426,7 +426,7 @@ export default function PayrollWeekView() {
               {[
                 ["Usuarios activos", String(table.totals.activeEmployees)],
                 ["Horas trabajadas", hours(table.totals.totalHours)],
-                ["Total nómina", money(table.totals.finalPay)],
+                ["Total a pagar", money(table.totals.finalPay)],
                 ["Pago", formatPaymentDate(table.weekStart)],
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0 px-4 py-3">
@@ -489,7 +489,7 @@ export default function PayrollWeekView() {
                       ))}
                       <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Total horas</th>
                       <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Pago por hora</th>
-                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Pago total</th>
+                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Total a pagar</th>
                       <th className="border-b border-outline-variant px-3 py-3 text-center font-bold">Estado / Firma</th>
                     </tr>
                   </thead>
@@ -518,7 +518,12 @@ export default function PayrollWeekView() {
                           {hours(employee.totalHours)}
                         </td>
                         <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-semibold tabular-nums text-on-surface">
-                          {employee.variableRate ? "Varias" : employee.hourlyRate === null ? "—" : money(employee.hourlyRate)}
+                          {employee.variableRate ? "Varias tarifas" : employee.hourlyRate === null ? "—" : money(employee.hourlyRate)}
+                          {(employee.supplementTotal ?? 0) > 0 && (
+                            <span className="block text-[10px] font-normal text-on-surface-variant">
+                              +{money(employee.supplementTotal ?? 0)} adicional semanal
+                            </span>
+                          )}
                         </td>
                         <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-black tabular-nums text-on-surface">
                           {employee.missingRate && employee.adjustmentsTotal === 0
@@ -879,7 +884,7 @@ function EmployeeDetailModal({
                 <p className="text-lg font-bold text-on-surface">{hours(detail.totalHours)}</p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Pago por hora</CardLabel>
+                <CardLabel>Tarifa base por hora</CardLabel>
                 <p className="text-lg font-bold text-on-surface">
                   {new Set(detail.days.flatMap((day) => day.entries.filter((entry) => entry.clockOut && entry.hourlyRate !== undefined).map((entry) => entry.hourlyRate))).size > 1
                     ? "Varias tarifas"
@@ -887,15 +892,15 @@ function EmployeeDetailModal({
                 </p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Pago por horas</CardLabel>
+                <CardLabel>Sueldo base por horas</CardLabel>
                 <p className="text-lg font-bold text-on-surface">{money(detail.basePay)}</p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Total</CardLabel>
+                <CardLabel>Total a pagar</CardLabel>
                 <p className="text-lg font-bold text-on-surface">{money(detail.finalPay)}</p>
                 {detail.adjustmentsTotal !== 0 && (
                   <p className="text-[10px] text-on-surface-variant">
-                    {money(detail.totalPay)} horas{" "}
+                    {money(detail.totalPay)} sueldo y adicional{" "}
                     {detail.adjustmentsTotal > 0 ? "+" : "−"}{" "}
                     {money(Math.abs(detail.adjustmentsTotal))} ajustes
                   </p>
@@ -903,6 +908,24 @@ function EmployeeDetailModal({
               </Card>
             </div>
 
+            {(detail.supplement?.total ?? 0) > 0 && (
+              <div className="mt-4 rounded-xl border border-primary/30 bg-primary/[0.04] p-3">
+                <p className="text-sm font-bold text-on-surface">Desglose del adicional contractual</p>
+                <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                  <p>Sueldo base: <strong>{money(detail.basePay)}</strong></p>
+                  <p>Referencia presupuestal de aguinaldo: <strong>{money(detail.supplement?.aguinaldoReference ?? 0)}</strong></p>
+                  <p>Referencia presupuestal de vacaciones: <strong>{money(detail.supplement?.vacationsReference ?? 0)}</strong></p>
+                  <p>Referencia presupuestal de prima vacacional: <strong>{money(detail.supplement?.vacationPremiumReference ?? 0)}</strong></p>
+                  <p>Adicional total: <strong>{money(detail.supplement?.total ?? 0)}</strong></p>
+                  <p>Bonos/deducciones manuales: <strong>{money(detail.adjustmentsTotal)}</strong></p>
+                </div>
+                <p className="mt-2 text-[11px] text-on-surface-variant">
+                  Este adicional es un pago contractual y su distribución es presupuestal.
+                  No acredita por sí sola el pago legal de prestaciones. Descanso semanal,
+                  vacaciones, aguinaldo y demás derechos requieren conciliación independiente.
+                </p>
+              </div>
+            )}
             {detail.period.status !== "BORRADOR" && (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant bg-surface-container p-3">
                 <div>
@@ -1308,13 +1331,13 @@ function EmployeeDetailModal({
                 />
               )}
 
-              {detail.adjustments.length === 0 ? (
+              {detail.adjustments.filter((adj) => adj.origin !== "CONTRACTUAL_SUPPLEMENT").length === 0 ? (
                 <p className="mt-2 text-xs text-on-surface-variant">
                   Sin bonos ni deducciones esta semana.
                 </p>
               ) : (
                 <div className="mt-3 space-y-2">
-                  {detail.adjustments.map((adj) => (
+                  {detail.adjustments.filter((adj) => adj.origin !== "CONTRACTUAL_SUPPLEMENT").map((adj) => (
                     <div
                       key={adj.id}
                       className="flex items-start justify-between gap-2 rounded-lg bg-surface-container p-2.5 text-xs"

@@ -346,11 +346,13 @@ function DayRow({ day }: { day: PayrollDayDetail }) {
 
 export default function EmployeePayrollView({
   userName,
+  userId,
   summary,
   history,
   initialTab = "RESUMEN",
 }: {
   userName: string;
+  userId: string;
   summary: EmployeePayrollSummary | { error: string };
   history: ApprovedPayrollHistoryItem[] | { error: string };
   initialTab?: "RESUMEN" | "PAGOS" | "SEMANA";
