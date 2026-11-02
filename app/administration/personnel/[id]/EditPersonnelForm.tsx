@@ -2,6 +2,7 @@
 
 import { useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
+import { todayDateOnly } from "@/lib/dateOnly";
 import { updatePersonnel, updateHourlyRate, updateBranchHourlyRate, updatePayrollSupplementPercent } from "@/app/actions/personnel";
 import { setEmployeePinAction, clearEmployeePinAction } from "@/app/actions/kiosk";
 import {
@@ -60,6 +61,7 @@ export default function EditPersonnelForm({
   const [newPassword, setNewPassword] = useState("");
   const [hourlyRate, setHourlyRate] = useState(user.hourlyRate?.toString() ?? "");
   const [supplementPercent, setSupplementPercent] = useState(String(user.payrollSupplementPercent));
+  const [supplementEffectiveDate, setSupplementEffectiveDate] = useState(todayDateOnly());
   const [savingSupplement, setSavingSupplement] = useState(false);
   const [supplementMessage, setSupplementMessage] = useState<string | null>(null);
   const [savingRate, setSavingRate] = useState(false);
@@ -107,7 +109,7 @@ export default function EditPersonnelForm({
   async function handleSaveSupplement() {
     setSavingSupplement(true);
     setSupplementMessage(null);
-    const result = await updatePayrollSupplementPercent(user.id, Number(supplementPercent));
+    const result = await updatePayrollSupplementPercent(user.id, Number(supplementPercent), supplementEffectiveDate);
     setSavingSupplement(false);
     setSupplementMessage(result.error ?? "Adicional contractual guardado para las horas futuras.");
     if (!result.error) router.refresh();
@@ -365,7 +367,7 @@ export default function EditPersonnelForm({
           <p className="mb-2 text-sm font-semibold text-on-surface">Adicional contractual por hora (%)</p>
           <p className="mb-2 text-xs text-on-surface-variant">
             Configurable por persona; el ejemplo del contrato es 12% (40.00 base + 4.80 adicional = 44.80 por hora).
-            Se aplica desde que lo guardas; 0% lo desactiva. Aguinaldo, vacaciones, prima y descanso semanal
+            Se aplica desde la fecha que elijas; 0% lo desactiva. Aguinaldo, vacaciones, prima y descanso semanal
             deben revisarse por separado: este adicional no demuestra su liquidación legal.
           </p>
           <div className="flex items-center gap-2">
@@ -373,6 +375,9 @@ export default function EditPersonnelForm({
               value={supplementPercent} onChange={(e) => setSupplementPercent(e.target.value)}
               className="w-32 rounded-xl border border-outline-variant bg-background px-3 py-2 text-sm" />
             <span className="text-sm">%</span>
+            <input aria-label="Vigente desde" title="Vigente desde" type="date" value={supplementEffectiveDate}
+              onChange={(e) => setSupplementEffectiveDate(e.target.value)}
+              className="rounded-xl border border-outline-variant bg-background px-3 py-2 text-sm" />
             <button type="button" onClick={handleSaveSupplement} disabled={savingSupplement}
               className="rounded-xl border border-primary px-3 py-2 text-sm font-semibold text-primary disabled:opacity-60">
               {savingSupplement ? "Guardando..." : "Guardar adicional"}
