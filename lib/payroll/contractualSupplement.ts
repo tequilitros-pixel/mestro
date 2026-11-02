@@ -18,13 +18,17 @@ export function calculatePayrollSupplement(basePay: number, percent: number | nu
   if (!Number.isFinite(basePay) || basePay <= 0 || percent === null || !Number.isFinite(percent) || percent <= 0) {
     return { ...EMPTY_PAYROLL_SUPPLEMENT };
   }
-  const additional = basePay * percent / 100;
-  const aguinaldoReference = cents(additional * 0.5);
-  const vacationsReference = cents(additional * 0.4);
-  const vacationPremiumReference = cents(additional * 0.1);
+  // Redondear una sola vez el adicional total; distribuir sus centavos
+  // entre referencias sin generar una deducción compensatoria.
+  const totalCents = Math.round((basePay * percent / 100 + Number.EPSILON) * 100);
+  const aguinaldoCents = Math.round(totalCents * 0.5);
+  const vacacionesCents = Math.round(totalCents * 0.4);
+  const primaCents = totalCents - aguinaldoCents - vacacionesCents;
   return {
-    aguinaldoReference, vacationsReference, vacationPremiumReference,
-    total: cents(aguinaldoReference + vacationsReference + vacationPremiumReference),
+    aguinaldoReference: aguinaldoCents / 100,
+    vacationsReference: vacacionesCents / 100,
+    vacationPremiumReference: primaCents / 100,
+    total: totalCents / 100,
   };
 }
 export function sumPayrollSupplements(parts: PayrollSupplementBreakdown[]): PayrollSupplementBreakdown {
@@ -49,4 +53,9 @@ export function supplementFromSnapshotAdjustments(items: { origin?: string; conc
   const vacationsReference = amount("Referencia presupuestal: vacaciones");
   const vacationPremiumReference = amount("Referencia presupuestal: prima vacacional");
   return { aguinaldoReference, vacationsReference, vacationPremiumReference, total: cents(aguinaldoReference + vacationsReference + vacationPremiumReference) };
+}
+
+/** No permitir descuentos por redondeo/ajustes de centavos en nómina. */
+export function isPayrollRoundingDeduction(concept: string): boolean {
+  return /\b(?:ajuste\s+(?:de\s+)?centavos|ajuste\s+(?:por\s+)?redondeo|diferencia\s+de\s+redondeo)\b/i.test(concept.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
 }
