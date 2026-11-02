@@ -345,11 +345,13 @@ function DayRow({ day }: { day: PayrollDayDetail }) {
 
 export default function EmployeePayrollView({
   userName,
+  userId,
   summary,
   history,
   initialTab = "RESUMEN",
 }: {
   userName: string;
+  userId: string;
   summary: EmployeePayrollSummary | { error: string };
   history: ApprovedPayrollHistoryItem[] | { error: string };
   initialTab?: "RESUMEN" | "PAGOS" | "SEMANA";
@@ -547,6 +549,15 @@ export default function EmployeePayrollView({
                                   ? "Horas calculadas según checador; el monto final se confirmará al aprobar la nómina."
                                   : "Aprobada"}
                           </p>
+                          {item.status !== "PENDIENTE" && (
+                            <a
+                              href={`/api/timeclock/payroll/statement?userId=${encodeURIComponent(userId)}&weekStart=${encodeURIComponent(item.weekStart)}&download=1`}
+                              onClick={(event) => event.stopPropagation()}
+                              className="mt-2 inline-flex rounded-lg border border-primary/40 px-3 py-2 font-semibold text-primary"
+                            >
+                              Descargar mi recibo PDF
+                            </a>
+                          )}
                         </div>
                       )}
                     </div>
