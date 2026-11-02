@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardLabel } from "@/components/ui/Card";
 import { formatBusinessTime, formatBusinessDateTime } from "@/lib/dateTime";
+import type { InventoryProductUnitConfig } from "@/lib/inventory/units";
 import { RefreshIcon } from "@/components/ui/icons";
 
 export interface PosSaleItemDetail {
@@ -25,6 +26,11 @@ export interface PosSaleItemDetail {
         code: string;
         unit: string;
         unitCost?: number | string | null;
+        inventoryBaseUnit?: string | null;
+        handlingUnit?: string | null;
+        contentPerUnit?: number | string | null;
+        contentUnit?: string | null;
+        normalizedContentPerUnit?: number | string | null;
       };
     }>;
   } | null;
