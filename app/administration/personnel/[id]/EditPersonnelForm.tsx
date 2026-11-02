@@ -2,7 +2,8 @@
 
 import { useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
-import { updatePersonnel, updateHourlyRate, updateBranchHourlyRate } from "@/app/actions/personnel";
+import { todayDateOnly } from "@/lib/dateOnly";
+import { updatePersonnel, updateHourlyRate, updateBranchHourlyRate, updatePayrollSupplementPercent } from "@/app/actions/personnel";
 import { setEmployeePinAction, clearEmployeePinAction } from "@/app/actions/kiosk";
 import {
   ROLE_LABELS,
@@ -34,6 +35,7 @@ interface UserData {
   phone: string | null;
   role: UserRole;
   hourlyRate: number | null;
+  payrollSupplementPercent: number;
   salaryRates: { branchId: string; amount: number }[];
   hasPin: boolean;
   branches: { branch: Branch }[];
@@ -58,6 +60,10 @@ export default function EditPersonnelForm({
   );
   const [newPassword, setNewPassword] = useState("");
   const [hourlyRate, setHourlyRate] = useState(user.hourlyRate?.toString() ?? "");
+  const [supplementPercent, setSupplementPercent] = useState(String(user.payrollSupplementPercent));
+  const [supplementEffectiveDate, setSupplementEffectiveDate] = useState(todayDateOnly());
+  const [savingSupplement, setSavingSupplement] = useState(false);
+  const [supplementMessage, setSupplementMessage] = useState<string | null>(null);
   const [savingRate, setSavingRate] = useState(false);
   const [rateMessage, setRateMessage] = useState<string | null>(null);
   const [branchRates, setBranchRates] = useState<Record<string, string>>(
@@ -98,6 +104,15 @@ export default function EditPersonnelForm({
 
     setRateMessage("Tarifa guardada.");
     router.refresh();
+  }
+
+  async function handleSaveSupplement() {
+    setSavingSupplement(true);
+    setSupplementMessage(null);
+    const result = await updatePayrollSupplementPercent(user.id, Number(supplementPercent), supplementEffectiveDate);
+    setSavingSupplement(false);
+    setSupplementMessage(result.error ?? "Adicional contractual guardado para las horas futuras.");
+    if (!result.error) router.refresh();
   }
 
   async function handleSaveBranchRate(branchId: string) {
@@ -348,6 +363,28 @@ export default function EditPersonnelForm({
           <p className="text-xs text-on-surface-variant">{rateMessage}</p>
         )}
 
+        <div className="border-t border-outline-variant pt-4">
+          <p className="mb-2 text-sm font-semibold text-on-surface">Adicional contractual por hora (%)</p>
+          <p className="mb-2 text-xs text-on-surface-variant">
+            Configurable por persona; el ejemplo del contrato es 12% (40.00 base + 4.80 adicional = 44.80 por hora).
+            Se aplica desde la fecha que elijas; 0% lo desactiva. Aguinaldo, vacaciones, prima y descanso semanal
+            deben revisarse por separado: este adicional no demuestra su liquidación legal.
+          </p>
+          <div className="flex items-center gap-2">
+            <input aria-label="Porcentaje adicional contractual" type="number" min="0" max="30" step="0.01"
+              value={supplementPercent} onChange={(e) => setSupplementPercent(e.target.value)}
+              className="w-32 rounded-xl border border-outline-variant bg-background px-3 py-2 text-sm" />
+            <span className="text-sm">%</span>
+            <input aria-label="Vigente desde" title="Vigente desde" type="date" value={supplementEffectiveDate}
+              onChange={(e) => setSupplementEffectiveDate(e.target.value)}
+              className="rounded-xl border border-outline-variant bg-background px-3 py-2 text-sm" />
+            <button type="button" onClick={handleSaveSupplement} disabled={savingSupplement}
+              className="rounded-xl border border-primary px-3 py-2 text-sm font-semibold text-primary disabled:opacity-60">
+              {savingSupplement ? "Guardando..." : "Guardar adicional"}
+            </button>
+          </div>
+          {supplementMessage && <p className="mt-2 text-xs text-on-surface-variant">{supplementMessage}</p>}
+        </div>
         <div className="border-t border-outline-variant pt-4">
           <p className="mb-3 text-sm font-semibold text-on-surface">Tarifa por sucursal</p>
           <p className="mb-3 text-xs text-on-surface-variant">Deja el campo vacío para usar la tarifa general. Los cambios aplican a las entradas posteriores y conservan el historial anterior.</p>

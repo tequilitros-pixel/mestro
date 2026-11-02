@@ -14,6 +14,8 @@ import {
   payrollWeekInstantRange,
 } from "@/lib/payroll/legacyRules";
 import { resolveBranchHourlyRate } from "@/lib/payroll/branchRates";
+import { calculatePayrollSupplement, effectiveSupplementPercent } from "@/lib/payroll/contractualSupplement";
+import { computeHourlyPay } from "@/lib/payroll/legacyRules";
 import type { PayrollDayDetail } from "./payroll";
 
 // ─── Local helpers (mirrored from payroll.ts — not exported from there) ───────
@@ -86,7 +88,7 @@ export async function getEmployeeSelfWeekDetail(
   const { start: clockStart, end: clockEnd } = payrollWeekInstantRange(mondayStr);
 
   // ── Queries ──────────────────────────────────────────────────────────────
-  const [entries, shifts, justifications, existingEntry, salaryRates, dbUser] = await Promise.all([
+  const [entries, shifts, justifications, existingEntry, salaryRates, dbUser, supplementRates] = await Promise.all([
     prisma.timeClockEntry.findMany({
       where: { userId: user.id, clockIn: { gte: clockStart, lt: clockEnd } },
       include: { branch: { select: { name: true } } },
@@ -126,6 +128,11 @@ export async function getEmployeeSelfWeekDetail(
     prisma.user.findUnique({
       where: { id: user.id },
       select: { hourlyRate: true },
+    }),
+    prisma.payrollSupplementRate.findMany({
+      where: { userId: user.id },
+      select: { percent: true, effectiveFrom: true, effectiveTo: true },
+      orderBy: { effectiveFrom: "desc" },
     }),
   ]);
 
@@ -246,6 +253,7 @@ export async function getEmployeeSelfWeekDetail(
 
     let computedPay = 0;
     let hasApplicableRate = baseRate !== null;
+    const supplements = supplementRates.map((r) => ({ ...r, percent: Number(r.percent) }));
 
     for (const entry of entries) {
       if (!entry.clockOut) continue;
@@ -255,7 +263,8 @@ export async function getEmployeeSelfWeekDetail(
       const rate = resolveBranchHourlyRate(rates, entry.branchId, entry.clockIn, baseRate);
       if (rate !== null) {
         hasApplicableRate = true;
-        computedPay += hours * rate;
+        const base = computeHourlyPay(hours, rate);
+        computedPay += base + calculatePayrollSupplement(base, effectiveSupplementPercent(supplements, entry.clockIn)).total;
       }
     }
 

@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { getEmployeePayrollDetail } from "@/app/actions/payroll";
+import { reconcilePayrollReceipt } from "@/lib/payroll/contractualSupplement";
 
 export const runtime = "nodejs";
 
@@ -121,9 +122,9 @@ export async function GET(request: Request) {
     if (y - needed < 52) newPage();
   };
 
-  page.drawText("RESUMEN DE HORAS APROBADAS", { x: MARGIN, y, font: bold, size: 18, color: ACCENT });
+  page.drawText("RECIBO INFORMATIVO DE NOMINA", { x: MARGIN, y, font: bold, size: 18, color: ACCENT });
   y -= 27;
-  page.drawText("Explicacion semanal para revision del empleado", { x: MARGIN, y, font: regular, size: 10, color: MUTED });
+  page.drawText("Desglose de pagos aprobados - no es finiquito ni CFDI de nomina", { x: MARGIN, y, font: regular, size: 9, color: MUTED });
   y -= 28;
   page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_WIDTH - MARGIN, y }, thickness: 1.2, color: ACCENT });
   y -= 25;
@@ -141,11 +142,21 @@ export async function GET(request: Request) {
   page.drawText("Este resumen usa las horas congeladas al momento de la aprobacion.", { x: MARGIN + 14, y: y - 64, font: regular, size: 8, color: MUTED });
   y -= 105;
 
+  const supplement = detail.supplement ?? {
+    aguinaldoReference: 0, vacationsReference: 0, vacationPremiumReference: 0, total: 0,
+  };
+  const manualAdjustments = detail.adjustments.filter((item) => item.origin !== "CONTRACTUAL_SUPPLEMENT");
+  const reconciliation = reconcilePayrollReceipt(
+    detail.basePay, detail.overtimePay, supplement.total, detail.adjustments, detail.finalPay,
+  );
+  if (!reconciliation.matchesApproved) {
+    return new Response("El total aprobado no coincide con el desglose. Revisa el expediente; no se permiten ajustes de centavos para cuadrarlo.", { status: 409 });
+  }
   const metrics = [
     ["Horas aprobadas", hours(detail.totalHours)],
-    ["Pago por horas", money(detail.basePay)],
-    ["Ajustes", money(detail.adjustmentsTotal)],
-    ["Total", money(detail.finalPay)],
+    ["Sueldo base", money(detail.basePay)],
+    ["Adicional", money(supplement.total)],
+    ["Total a pagar", money(detail.finalPay)],
   ];
   const metricWidth = CONTENT_WIDTH / metrics.length;
   metrics.forEach(([label, value], index) => {
@@ -154,7 +165,44 @@ export async function GET(request: Request) {
     page.drawText(cleanText(value), { x, y: y - 17, font: bold, size: 12, color: INK });
   });
   y -= 48;
-
+  ensureSpace(180);
+  page.drawText("CONCEPTOS QUE INTEGRAN EL PAGO", { x: MARGIN, y, font: bold, size: 10, color: ACCENT });
+  y -= 20;
+  const paidRows = [
+    ["Sueldo base devengado", detail.basePay],
+    ["Horas extras devengadas", detail.overtimePay],
+    ["Adicional contractual pagado", supplement.total],
+    ["Bonos documentados", reconciliation.bonuses],
+    ["Deducciones documentadas", -reconciliation.deductions],
+    ["TOTAL A PAGAR", detail.finalPay],
+  ] as const;
+  for (const [name, amount] of paidRows) {
+    page.drawText(name, { x: MARGIN + 9, y, font: name === "TOTAL A PAGAR" ? bold : regular, size: 9, color: INK });
+    page.drawText(money(amount), { x: PAGE_WIDTH - MARGIN - 112, y, font: name === "TOTAL A PAGAR" ? bold : regular, size: 9, color: INK });
+    y -= 16;
+  }
+  y -= 16;
+  if (supplement.total > 0) {
+    ensureSpace(135);
+    page.drawText("Desglose del adicional contractual", { x: MARGIN, y, font: bold, size: 11, color: ACCENT });
+    y -= 20;
+    const lines = [
+      ["Referencia presupuestal aguinaldo", supplement.aguinaldoReference],
+      ["Referencia presupuestal vacaciones", supplement.vacationsReference],
+      ["Referencia presupuestal prima vacacional", supplement.vacationPremiumReference],
+      ["Adicional contractual total", supplement.total],
+    ] as const;
+    for (const [name, amount] of lines) {
+      page.drawText(name, { x: MARGIN + 10, y, font: regular, size: 9, color: INK });
+      page.drawText(money(amount), { x: PAGE_WIDTH - MARGIN - 95, y, font: bold, size: 9, color: INK });
+      y -= 17;
+    }
+    y = drawWrapped(page,
+      "Este adicional se paga pero la referencia no acredita por si sola aguinaldo, vacaciones ni prima legal. Conciliar conceptos y descanso semanal por separado.",
+      { x: MARGIN, y, width: CONTENT_WIDTH, font: regular, size: 8, color: MUTED, lineGap: 3 },
+    ) - 14;
+  }
+  ensureSpace(45);
   page.drawText("Detalle diario", { x: MARGIN, y, font: bold, size: 12, color: ACCENT });
   y -= 22;
   for (const day of detail.days) {
@@ -178,11 +226,11 @@ export async function GET(request: Request) {
     y -= rowHeight + 8;
   }
 
-  if (detail.adjustments.length > 0) {
+  if (manualAdjustments.length > 0) {
     ensureSpace(85);
-    page.drawText("Ajustes incluidos", { x: MARGIN, y, font: bold, size: 12, color: ACCENT });
+    page.drawText("Bonos y deducciones manuales", { x: MARGIN, y, font: bold, size: 12, color: ACCENT });
     y -= 19;
-    for (const adjustment of detail.adjustments) {
+    for (const adjustment of manualAdjustments) {
       const sign = adjustment.type === "BONO" ? "+" : "-";
       const line = `${adjustment.concept}: ${sign}${money(adjustment.amount)}${adjustment.notes ? ` - ${adjustment.notes}` : ""}`;
       y = drawWrapped(page, line, { x: MARGIN, y, width: CONTENT_WIDTH, font: regular, size: 8.5, color: INK, lineGap: 3 }) - 5;
@@ -190,7 +238,7 @@ export async function GET(request: Request) {
   }
 
   const bytes = await pdf.save();
-  const filename = `horas-aprobadas-${detail.employee.name.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "")}-${detail.weekStart}.pdf`;
+  const filename = `recibo-nomina-${detail.employee.name.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "")}-${detail.weekStart}.pdf`;
   const download = searchParams.get("download") === "1";
   return new Response(bytes as unknown as BodyInit, {
     headers: {
