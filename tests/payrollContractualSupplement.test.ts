@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculatePayrollSupplement, effectiveSupplementPercent, sumPayrollSupplements, supplementFromSnapshotAdjustments } from "../lib/payroll/contractualSupplement";
+import { calculatePayrollSupplement, effectiveSupplementPercent, sumPayrollSupplements, supplementFromSnapshotAdjustments, isPayrollRoundingDeduction } from "../lib/payroll/contractualSupplement";
 
 test("anexo de contrato: 40 pesos/h, 40 horas, adicional 12%", () => {
   const b = calculatePayrollSupplement(1600, 12);
@@ -22,4 +22,19 @@ test("tasa histórica no se aplica antes de su vigencia", () => {
 });
 test("snapshot antiguo sin adicional no se reinterpreta", () => {
   assert.equal(supplementFromSnapshotAdjustments([{ concept: "Bono", amount: 100 }]).total, 0);
+});
+
+test("centavos del adicional se distribuyen sin reducir el total calculado", () => {
+  for (let cents = 1; cents <= 1000; cents++) {
+    const result = calculatePayrollSupplement(cents / 100, 12);
+    const parts = [result.aguinaldoReference, result.vacationsReference, result.vacationPremiumReference];
+    assert.ok(parts.every((value) => value >= 0), `ningun concepto resta: ${cents}`);
+    assert.equal(Math.round(parts.reduce((sum, value) => sum + value, 0) * 100), Math.round(result.total * 100));
+    assert.equal(Math.round(result.total * 100), Math.round(cents * 0.12));
+  }
+});
+test("no permitir un ajuste de centavos como deduccion oculta", () => {
+  assert.equal(isPayrollRoundingDeduction("Ajuste de centavos"), true);
+  assert.equal(isPayrollRoundingDeduction("Ajuste por redondeo"), true);
+  assert.equal(isPayrollRoundingDeduction("Bono de puntualidad"), false);
 });
