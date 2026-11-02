@@ -48,7 +48,7 @@ async function main() {
     price: prices.get(variant.priceFrom)!.price,
     ingredients: [
       { code: "POS-ING-TORONJA-REF", quantity: variant.soda, unit: "ML" },
-      ...(variant.tequila ? [{ code: "POS-ING-TEQUILA", quantity: variant.tequila, unit: "ML" }] : []),
+      ...("tequila" in variant && variant.tequila ? [{ code: "POS-ING-TEQUILA", quantity: variant.tequila, unit: "ML" }] : []),
       { code: "EXTRA-HIELO", quantity: variant.ice, unit: "G" },
       { code: variant.cup, quantity: 1, unit: "UNIT" },
     ],
@@ -84,10 +84,10 @@ async function main() {
             baseUnit: paloma.baseUnit,
             ingredients: {
               create: [
-                { inventoryProductId: inventory.get("POS-ING-TORONJA-REF")!.id, quantity: variant.soda, unit: "ML", unitStatus: "RESOLVED" as const },
-                ...(variant.tequila ? [{ inventoryProductId: inventory.get("POS-ING-TEQUILA")!.id, quantity: variant.tequila, unit: "ML", unitStatus: "RESOLVED" as const }] : []),
-                { inventoryProductId: inventory.get("EXTRA-HIELO")!.id, quantity: variant.ice, unit: "G", unitStatus: "RESOLVED" as const },
-                { inventoryProductId: inventory.get(variant.cup)!.id, quantity: 1, unit: "UNIT", unitStatus: "RESOLVED" as const },
+                { inventoryProduct: { connect: { id: inventory.get("POS-ING-TORONJA-REF")!.id } }, quantity: variant.soda, unit: "ML" as const, unitStatus: "RESOLVED" as const },
+                ...("tequila" in variant && variant.tequila ? [{ inventoryProduct: { connect: { id: inventory.get("POS-ING-TEQUILA")!.id } }, quantity: variant.tequila, unit: "ML" as const, unitStatus: "RESOLVED" as const }] : []),
+                { inventoryProduct: { connect: { id: inventory.get("EXTRA-HIELO")!.id } }, quantity: variant.ice, unit: "G" as const, unitStatus: "RESOLVED" as const },
+                { inventoryProduct: { connect: { id: inventory.get(variant.cup)!.id } }, quantity: 1, unit: "UNIT" as const, unitStatus: "RESOLVED" as const },
               ],
             },
           })),
