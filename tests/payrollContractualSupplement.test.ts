@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculatePayrollSupplement, effectiveSupplementPercent, sumPayrollSupplements, supplementFromSnapshotAdjustments, isPayrollRoundingDeduction } from "../lib/payroll/contractualSupplement";
+import { calculatePayrollSupplement, effectiveSupplementPercent, sumPayrollSupplements, supplementFromSnapshotAdjustments, isPayrollRoundingDeduction, reconcilePayrollReceipt } from "../lib/payroll/contractualSupplement";
 
 test("anexo de contrato: 40 pesos/h, 40 horas, adicional 12%", () => {
   const b = calculatePayrollSupplement(1600, 12);
@@ -37,4 +37,21 @@ test("no permitir un ajuste de centavos como deduccion oculta", () => {
   assert.equal(isPayrollRoundingDeduction("Ajuste de centavos"), true);
   assert.equal(isPayrollRoundingDeduction("Ajuste por redondeo"), true);
   assert.equal(isPayrollRoundingDeduction("Bono de puntualidad"), false);
+});
+
+test("rechaza ajuste de centavos disfrazado como complemento con notas", () => {
+  assert.equal(isPayrollRoundingDeduction("Ajustes / Complementos de Nómina; Ajuste de centavos / incidencias del periodo"), true);
+  assert.equal(isPayrollRoundingDeduction("Vacaciones proporcionales"), false);
+});
+test("recibo sin deduccion artificial: $1908.33 + $144 son $2052.33", () => {
+  const correct = reconcilePayrollReceipt(1908.33, 0, 144, [], 2052.33);
+  assert.equal(correct.computedTotal, 2052.33);
+  assert.equal(correct.matchesApproved, true);
+  const artificial = reconcilePayrollReceipt(1908.33, 0, 144, [], 1908.33);
+  assert.equal(artificial.matchesApproved, false);
+});
+test("expediente historico aprobado sin adicional mantiene su importe", () => {
+  const result = reconcilePayrollReceipt(1908.33, 0, 0, [], 1908.33);
+  assert.equal(result.matchesApproved, true);
+  assert.equal(result.deductions, 0);
 });
