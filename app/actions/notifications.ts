@@ -5,6 +5,7 @@ import * as webpush from "web-push";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { canUserViewNotification } from "@/lib/notifications/access";
+import { canonicalNotificationHref } from "@/lib/notifications/links";
 
 export type NotificationCategory =
   | "POS"
@@ -71,7 +72,7 @@ export async function getMyNotificationsAction(options?: {
           body: r.body,
           category: r.category as NotificationCategory,
           priority: r.priority as NotificationPriority,
-          href: r.href,
+          href: canonicalNotificationHref(r.href),
           read: r.read,
           readAt: r.readAt ? r.readAt.toISOString() : null,
           metadata: r.metadata,
@@ -106,7 +107,7 @@ export async function getMyNotificationsAction(options?: {
         body: r.body,
         category: r.category as NotificationCategory,
         priority: r.priority as NotificationPriority,
-        href: r.href,
+        href: canonicalNotificationHref(r.href),
         read: Boolean(r.read),
         readAt: r.readAt ? new Date(r.readAt).toISOString() : null,
         metadata: r.metadata,
@@ -222,6 +223,7 @@ export async function createNotification(data: {
   href?: string;
   metadata?: any;
 }): Promise<NotificationItem> {
+  const href = canonicalNotificationHref(data.href);
   const recipient = await prisma.user.findUnique({
     where: { id: data.userId },
     select: { active: true, role: true, branches: { select: { branchId: true } } },
@@ -249,7 +251,7 @@ export async function createNotification(data: {
         body: data.body,
         category: data.category,
         priority,
-        href: data.href ?? null,
+        href,
         metadata: data.metadata ?? null,
       },
     });
@@ -261,7 +263,7 @@ export async function createNotification(data: {
       body: record.body,
       category: record.category as NotificationCategory,
       priority: record.priority as NotificationPriority,
-      href: record.href,
+      href: canonicalNotificationHref(record.href),
       read: record.read,
       readAt: record.readAt ? record.readAt.toISOString() : null,
       metadata: record.metadata,
@@ -278,7 +280,7 @@ export async function createNotification(data: {
       ${data.body},
       ${data.category}::"NotificationCategory",
       ${priority}::"NotificationPriority",
-      ${data.href ?? null},
+      ${href},
       ${data.metadata ? JSON.stringify(data.metadata) : null}::jsonb,
       false,
       ${now}
