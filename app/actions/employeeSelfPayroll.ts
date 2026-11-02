@@ -15,6 +15,7 @@ import {
 } from "@/lib/payroll/legacyRules";
 import { resolveBranchHourlyRate } from "@/lib/payroll/branchRates";
 import { calculatePayrollSupplement, effectiveSupplementPercent } from "@/lib/payroll/contractualSupplement";
+import { computeHourlyPay } from "@/lib/payroll/legacyRules";
 import type { PayrollDayDetail } from "./payroll";
 
 // ─── Local helpers (mirrored from payroll.ts — not exported from there) ───────
@@ -262,7 +263,7 @@ export async function getEmployeeSelfWeekDetail(
       const rate = resolveBranchHourlyRate(rates, entry.branchId, entry.clockIn, baseRate);
       if (rate !== null) {
         hasApplicableRate = true;
-        const base = hours * rate;
+        const base = computeHourlyPay(hours, rate);
         computedPay += base + calculatePayrollSupplement(base, effectiveSupplementPercent(supplements, entry.clockIn)).total;
       }
     }
