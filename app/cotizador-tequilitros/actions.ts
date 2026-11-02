@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
-import { prisma } from "@/lib/prisma";
+import { prisma, rawPrisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
   DRINKS_CATALOG,
@@ -761,35 +761,17 @@ export async function getPublicQuoteByCode(rawCode: string): Promise<PublicQuote
   const code = decodeURIComponent(rawCode || "").trim().toUpperCase();
   if (!code) return null;
 
-  // Public codes created before the unique-folio fix can be duplicated.
-  // Never arbitrarily reveal or resolve one of several matching records.
-  const directMatches = await prisma.auditEvent.findMany({
-    where: { entityType: "TequilitrosQuote", OR: [{ entityId: code }, { id: code }] },
-    orderBy: { createdAt: "desc" },
-    take: 2,
-  });
-  if (directMatches.length > 1) return null;
-  let auditRecord = directMatches[0] ?? null;
-
-  if (!auditRecord) {
-    const records = await prisma.auditEvent.findMany({
-      where: { entityType: "TequilitrosQuote" },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    });
-    const revisions = await latestQuoteRevisions(prisma, records.map((rec) => rec.id));
-    const matches = records.filter((rec) => {
-      const q = revisions.get(rec.id) ?? parseStoredQuote(rec.metadata);
-      return q && [q.code, q.folio, q.contractFolio].some(
-        (folio) => folio?.toUpperCase() === code,
-      );
-    });
-    if (matches.length !== 1) return null;
-    auditRecord = matches[0];
-  }
-
-  const revisions = await latestQuoteRevisions(prisma, [auditRecord.id]);
-  const quote = revisions.get(auditRecord.id) ?? parseStoredQuote(auditRecord.metadata);
+  // Public quote links are intentionally available without a session. AuditEvent
+  // is protected by RLS, so use the narrowly scoped SECURITY DEFINER lookup
+  // instead of bypassing row security for the whole table. The lookup also
+  // includes immutable quote revisions so confirmed contracts remain visible.
+  const rows = await rawPrisma.$queryRaw<Array<{ metadata: unknown; createdAt: Date }>>`
+    SELECT metadata, "createdAt"
+    FROM public.get_public_tequilitros_quote(${code})
+    LIMIT 1
+  `;
+  const row = rows[0];
+  const quote = parseStoredQuote(row?.metadata);
   if (!quote) return null;
 
   return {
@@ -803,7 +785,8 @@ export async function getPublicQuoteByCode(rawCode: string): Promise<PublicQuote
     saleAmount: Number(quote.saleAmount ?? 0),
     status: quote.status,
     isConfirmed: Boolean(quote.isContractConfirmed || quote.status === "CONFIRMED"),
-    createdAt: quote.createdAt || auditRecord.createdAt.toISOString(),
+    createdAt: quote.createdAt || (row?.createdAt instanceof Date ? row.createdAt.toISOString() : new Date().toISOString()),
     metadata: quote,
   };
 }
+
