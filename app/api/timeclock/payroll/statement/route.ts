@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts } from "pdf-lib";
 import { getCurrentUser } from "@/lib/auth";
 import { getEmployeePayrollDetail } from "@/app/actions/payroll";
 import { renderPayrollStatementPage } from "@/lib/payroll/statementRenderer";
+import { reconcilePayrollReceipt } from "@/lib/payroll/contractualSupplement";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,11 @@ export async function GET(request: Request) {
     return new Response("El expediente todavía no está aprobado para generar recibo formal.", { status: 409 });
   }
 
+  const supplement = detail.supplement ?? { total: 0 };
+  const reconciliation = reconcilePayrollReceipt(detail.basePay, detail.overtimePay, supplement.total, detail.adjustments, detail.finalPay);
+  if (!reconciliation.matchesApproved) {
+    return new Response("El desglose no coincide con el pago aprobado; revisa el expediente.", { status: 409 });
+  }
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
