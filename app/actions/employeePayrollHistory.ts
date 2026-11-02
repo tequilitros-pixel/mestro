@@ -8,7 +8,7 @@ import {
   addDaysToDateOnly,
 } from "@/lib/dateOnly";
 import { prisma } from "@/lib/prisma";
-import { payrollWeekInstantRange } from "@/lib/payroll/legacyRules";
+import { computeHourlyPay, payrollWeekInstantRange } from "@/lib/payroll/legacyRules";
 import { resolveBranchHourlyRate } from "@/lib/payroll/branchRates";
 import { calculatePayrollSupplement, effectiveSupplementPercent } from "@/lib/payroll/contractualSupplement";
 
@@ -149,7 +149,7 @@ export async function getMyApprovedPayrollHistory(): Promise<
 
       weekHours += hours;
       const appliedRate = resolveBranchHourlyRate(rates, entry.branchId, entry.clockIn, baseRate);
-      const base = hours * (appliedRate ?? 0);
+      const base = computeHourlyPay(hours, appliedRate);
       weekPay += base + calculatePayrollSupplement(base, effectiveSupplementPercent(supplements, entry.clockIn)).total;
     }
 
