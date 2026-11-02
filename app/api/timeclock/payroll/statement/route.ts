@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { getEmployeePayrollDetail } from "@/app/actions/payroll";
+import { reconcilePayrollReceipt } from "@/lib/payroll/contractualSupplement";
 
 export const runtime = "nodejs";
 
@@ -123,7 +124,7 @@ export async function GET(request: Request) {
 
   page.drawText("RECIBO INFORMATIVO DE NOMINA", { x: MARGIN, y, font: bold, size: 18, color: ACCENT });
   y -= 27;
-  page.drawText("Desglose de sueldo y adicional contractual - no es CFDI de nomina", { x: MARGIN, y, font: regular, size: 9, color: MUTED });
+  page.drawText("Desglose de pagos aprobados - no es finiquito ni CFDI de nomina", { x: MARGIN, y, font: regular, size: 9, color: MUTED });
   y -= 28;
   page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_WIDTH - MARGIN, y }, thickness: 1.2, color: ACCENT });
   y -= 25;
@@ -145,6 +146,12 @@ export async function GET(request: Request) {
     aguinaldoReference: 0, vacationsReference: 0, vacationPremiumReference: 0, total: 0,
   };
   const manualAdjustments = detail.adjustments.filter((item) => item.origin !== "CONTRACTUAL_SUPPLEMENT");
+  const reconciliation = reconcilePayrollReceipt(
+    detail.basePay, detail.overtimePay, supplement.total, detail.adjustments, detail.finalPay,
+  );
+  if (!reconciliation.matchesApproved) {
+    return new Response("El total aprobado no coincide con el desglose. Revisa el expediente; no se permiten ajustes de centavos para cuadrarlo.", { status: 409 });
+  }
   const metrics = [
     ["Horas aprobadas", hours(detail.totalHours)],
     ["Sueldo base", money(detail.basePay)],
@@ -158,6 +165,23 @@ export async function GET(request: Request) {
     page.drawText(cleanText(value), { x, y: y - 17, font: bold, size: 12, color: INK });
   });
   y -= 48;
+  ensureSpace(180);
+  page.drawText("CONCEPTOS QUE INTEGRAN EL PAGO", { x: MARGIN, y, font: bold, size: 10, color: ACCENT });
+  y -= 20;
+  const paidRows = [
+    ["Sueldo base devengado", detail.basePay],
+    ["Horas extras devengadas", detail.overtimePay],
+    ["Adicional contractual pagado", supplement.total],
+    ["Bonos documentados", reconciliation.bonuses],
+    ["Deducciones documentadas", -reconciliation.deductions],
+    ["TOTAL A PAGAR", detail.finalPay],
+  ] as const;
+  for (const [name, amount] of paidRows) {
+    page.drawText(name, { x: MARGIN + 9, y, font: name === "TOTAL A PAGAR" ? bold : regular, size: 9, color: INK });
+    page.drawText(money(amount), { x: PAGE_WIDTH - MARGIN - 112, y, font: name === "TOTAL A PAGAR" ? bold : regular, size: 9, color: INK });
+    y -= 16;
+  }
+  y -= 16;
   if (supplement.total > 0) {
     ensureSpace(135);
     page.drawText("Desglose del adicional contractual", { x: MARGIN, y, font: bold, size: 11, color: ACCENT });
