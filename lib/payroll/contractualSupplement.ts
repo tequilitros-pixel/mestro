@@ -57,5 +57,31 @@ export function supplementFromSnapshotAdjustments(items: { origin?: string; conc
 
 /** No permitir descuentos por redondeo/ajustes de centavos en nómina. */
 export function isPayrollRoundingDeduction(concept: string): boolean {
-  return /\b(?:ajuste\s+(?:de\s+)?centavos|ajuste\s+(?:por\s+)?redondeo|diferencia\s+de\s+redondeo)\b/i.test(concept.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  const plain = concept.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return /\b(?:ajuste\s+(?:de\s+)?centavos|ajuste\s+(?:por\s+)?redondeo|diferencia\s+de\s+redondeo)\b/.test(plain)
+    || (plain.includes("complementos de nomina") && /centavos|redondeo/.test(plain));
+}
+
+export type PayrollReceiptAdjustment = {
+  origin?: string;
+  type: "BONO" | "DEDUCCION";
+  amount: number;
+};
+/** Calcula importes visibles del recibo en centavos, sin compensaciones inventadas. */
+export function reconcilePayrollReceipt(
+  basePay: number, overtimePay: number, supplementTotal: number,
+  adjustments: PayrollReceiptAdjustment[], approvedTotal: number,
+) {
+  const toCents = (value: number) => Math.round(value * 100);
+  const recorded = adjustments.filter((item) => item.origin !== "CONTRACTUAL_SUPPLEMENT");
+  const bonusCents = recorded.filter((item) => item.type === "BONO").reduce((sum, row) => sum + toCents(row.amount), 0);
+  const deductionCents = recorded.filter((item) => item.type === "DEDUCCION").reduce((sum, row) => sum + toCents(row.amount), 0);
+  const totalCents = toCents(basePay) + toCents(overtimePay) + toCents(supplementTotal) + bonusCents - deductionCents;
+  return {
+    bonuses: bonusCents / 100,
+    deductions: deductionCents / 100,
+    computedTotal: totalCents / 100,
+    // Rechazar discrepancias materiales: no fabricar "ajuste de centavos".
+    matchesApproved: Math.abs(totalCents - toCents(approvedTotal)) <= 1,
+  };
 }
