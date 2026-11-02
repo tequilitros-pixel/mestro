@@ -1311,7 +1311,7 @@ export async function createPayrollAdjustmentAction(input: {
 
   const concept = input.concept.trim();
   if (!concept) return { error: "Escribe un concepto" };
-  if (input.type === "DEDUCCION" && isPayrollRoundingDeduction(concept)) {
+  if (input.type === "DEDUCCION" && isPayrollRoundingDeduction(`${concept} ${input.notes ?? ""}`)) {
     return { error: "No se permite descontar un ajuste de centavos o redondeo de la nómina." };
   }
   if (!(input.amount > 0)) return { error: "El monto debe ser mayor a cero" };
