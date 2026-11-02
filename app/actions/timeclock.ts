@@ -20,6 +20,7 @@ import {
 } from "@/lib/timeclockShared";
 import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/periodLock";
 import { resolveBranchHourlyRate, summarizeHourlyRates } from "@/lib/payroll/branchRates";
+import { calculatePayrollSupplement, effectiveSupplementPercent } from "@/lib/payroll/contractualSupplement";
 
 const FORGOTTEN_SHIFT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
@@ -976,6 +977,12 @@ export async function getMyTimeClockSummary() {
     orderBy: { effectiveFrom: "desc" },
   });
   const rates = salaryRates.map((item) => ({ ...item, amount: Number(item.amount) }));
+  const supplementaryRates = await prisma.payrollSupplementRate.findMany({
+    where: { userId: user.id },
+    select: { percent: true, effectiveFrom: true, effectiveTo: true },
+    orderBy: { effectiveFrom: "desc" },
+  });
+  const supplements = supplementaryRates.map((r) => ({ ...r, percent: Number(r.percent) }));
 
   const rate = user.hourlyRate !== null ? Number(user.hourlyRate) : null;
   const now = new Date();
@@ -996,11 +1003,16 @@ export async function getMyTimeClockSummary() {
     weekHours += hours;
     const appliedRate = resolveBranchHourlyRate(rates, entry.branchId, entry.clockIn, rate);
     appliedRates.push(appliedRate);
-    weekPay += hours * (appliedRate ?? 0);
+    const base = hours * (appliedRate ?? 0);
+    const additional = calculatePayrollSupplement(
+      base, effectiveSupplementPercent(supplements, entry.clockIn),
+    ).total;
+    const amount = base + additional;
+    weekPay += amount;
 
     if (entry.clockIn >= todayStart && entry.clockIn < todayEnd) {
       todayHours += hours;
-      todayPay += hours * (appliedRate ?? 0);
+      todayPay += amount;
     }
   }
 
