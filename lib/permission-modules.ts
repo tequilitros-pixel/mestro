@@ -438,9 +438,9 @@ export function isInventoryManagerReadPath(pathname: string): boolean {
   );
 }
 
-/** Roles autorizados a capturar conteo para su sucursal asignada. */
+/** Roles autorizados a capturar conteos para sus sucursales asignadas. */
 export function isInventoryCountCaptureRole(role: string): boolean {
-  return role === "ADMIN" || role === "GERENTE" || role === "OPERATOR";
+  return role === "ADMIN" || role === "GERENTE" || role === "ENCARGADO" || role === "OPERATOR";
 }
 
 /** Primera pantalla útil después de iniciar sesión, según los permisos asignados. */
