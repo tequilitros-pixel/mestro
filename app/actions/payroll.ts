@@ -1147,12 +1147,18 @@ export async function getEmployeePayrollDetail(
   userId: string,
   weekStart: string,
 ): Promise<{ error: string } | { success: true; data: PayrollEmployeeDetail }> {
-  const admin = await requireAdmin();
-  if (!admin) return { error: "No tienes permiso" };
+  const actor = await getCurrentUser();
+  const admin = actor?.role === "ADMIN";
+  if (!actor || (!admin && actor.id !== userId)) return { error: "No tienes permiso" };
 
   const mondayStr = mondayOfWeek(weekStart);
   const weekEnd = addDaysToDateOnly(mondayStr, 6);
   const period = await loadPeriodWithEntries(mondayStr);
+  // Un empleado solo consulta su propio snapshot formalmente aprobado/pagado.
+  // Nunca exponer el expediente en borrador o revisión individual.
+  if (!admin && (!period || !period.entries.some((e) =>
+    e.userId === actor.id && (e.status === "APROBADA" || e.status === "PAGADA")
+  ))) return { error: "El expediente todavía no está aprobado" };
 
   if (period && period.status !== "BORRADOR") {
     const employee = await prisma.user.findUnique({
