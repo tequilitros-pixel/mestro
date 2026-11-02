@@ -38,6 +38,7 @@ export async function getPersonnelById(userId: string) {
       role: true,
       active: true,
       hourlyRate: true,
+      payrollSupplementRates: { where: { effectiveTo: null }, select: { percent: true }, take: 1 },
       salaryRates: {
         where: { scheme: "HORA", branchId: { not: null }, effectiveTo: null },
         select: { branchId: true, amount: true },
@@ -268,5 +269,30 @@ export async function updatePersonnelActive(userId: string, active: boolean) {
 
   await prisma.user.update({ where: { id: userId }, data: { active } });
   revalidatePath("/administration/personnel");
+  return { success: true };
+}
+
+/**
+ * Porcentaje adicional contractual (no finiquito legal) por trabajador.
+ * Es opt-in y entra en vigor al guardarse; conserva periodos anteriores.
+ */
+export async function updatePayrollSupplementPercent(userId: string, percent: number) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser || currentUser.role !== "ADMIN") return { error: "No tienes permiso" };
+  if (!Number.isFinite(percent) || percent < 0 || percent > 30 || Math.abs(Math.round(percent * 100) - percent * 100) > 0.000001) {
+    return { error: "Captura un porcentaje entre 0 y 30, con hasta dos decimales." };
+  }
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.payrollSupplementRate.updateMany({
+      where: { userId, effectiveTo: null },
+      data: { effectiveTo: now },
+    });
+    await tx.payrollSupplementRate.create({
+      data: { userId, percent, effectiveFrom: now, createdById: currentUser.id },
+    });
+  });
+  revalidatePath("/timeclock/payroll");
+  revalidatePath(`/administration/personnel/${userId}`);
   return { success: true };
 }
