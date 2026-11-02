@@ -20,6 +20,7 @@ import {
 } from "@/lib/timeclockShared";
 import { isPayrollDateLocked, PAYROLL_LOCKED_MESSAGE } from "@/lib/payroll/periodLock";
 import { resolveBranchHourlyRate, summarizeHourlyRates } from "@/lib/payroll/branchRates";
+import { computeHourlyPay } from "@/lib/payroll/legacyRules";
 import { calculatePayrollSupplement, effectiveSupplementPercent } from "@/lib/payroll/contractualSupplement";
 
 const FORGOTTEN_SHIFT_THRESHOLD_MS = 24 * 60 * 60 * 1000;
@@ -1003,7 +1004,7 @@ export async function getMyTimeClockSummary() {
     weekHours += hours;
     const appliedRate = resolveBranchHourlyRate(rates, entry.branchId, entry.clockIn, rate);
     appliedRates.push(appliedRate);
-    const base = hours * (appliedRate ?? 0);
+    const base = computeHourlyPay(hours, appliedRate);
     const additional = calculatePayrollSupplement(
       base, effectiveSupplementPercent(supplements, entry.clockIn),
     ).total;
