@@ -149,7 +149,7 @@ export async function GET(request: Request) {
     ["Horas aprobadas", hours(detail.totalHours)],
     ["Sueldo base", money(detail.basePay)],
     ["Adicional", money(supplement.total)],
-    ["Total bruto", money(detail.finalPay)],
+    ["Total a pagar", money(detail.finalPay)],
   ];
   const metricWidth = CONTENT_WIDTH / metrics.length;
   metrics.forEach(([label, value], index) => {
