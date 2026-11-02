@@ -35,6 +35,7 @@ export default async function PayrollPage({
     return (
       <EmployeePayrollView
         userName={user.name}
+        userId={user.id}
         summary={summary}
         history={history}
         initialTab={initialTab}

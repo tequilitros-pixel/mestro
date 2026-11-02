@@ -75,6 +75,8 @@ model User {
   scheduledShifts           ScheduledShift[]           @relation("ScheduledShifts")
   scheduleWeeksPublished    ScheduleWeek[]             @relation("ScheduleWeekPublishedBy")
   geofenceAlerts            GeofenceAlert[]
+  payrollSupplementRates    PayrollSupplementRate[]    @relation("PayrollSupplementOwner")
+  payrollSupplementsCreated PayrollSupplementRate[]    @relation("PayrollSupplementCreatedBy")
   salaryRates               SalaryRate[]               @relation("SalaryRateOwner")
   salaryRatesCreated        SalaryRate[]               @relation("SalaryRateCreatedBy")
   cashTransfersCreated      CashTransfer[]             @relation("CashTransferCreatedBy")
@@ -2829,6 +2831,21 @@ enum ShiftType {
  * sincroniza automáticamente cada vez que se registra una tarifa
  * nueva de tipo HORA.
  */
+model PayrollSupplementRate {
+  id            String   @id @default(cuid())
+  userId        String
+  percent       Decimal  @db.Decimal(5, 2)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  user      User  @relation("PayrollSupplementOwner", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("PayrollSupplementCreatedBy", fields: [createdById], references: [id])
+
+  @@index([userId, effectiveFrom])
+}
+
 model SalaryRate {
   id     String           @id @default(cuid())
   userId String

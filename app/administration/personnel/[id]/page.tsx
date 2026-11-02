@@ -105,6 +105,7 @@ export default async function EditPersonnelPage({
           user={{
             ...user,
             hourlyRate: user.hourlyRate !== null ? Number(user.hourlyRate) : null,
+            payrollSupplementPercent: user.payrollSupplementRates.length ? Number(user.payrollSupplementRates[0].percent) : 0,
             salaryRates: user.salaryRates.map((rate) => ({ branchId: rate.branchId!, amount: Number(rate.amount) })),
           }}
           allBranches={branches}

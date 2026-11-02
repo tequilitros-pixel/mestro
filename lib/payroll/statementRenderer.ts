@@ -4,10 +4,10 @@ import {
   COMPANY_TRADE_NAME,
   COMPANY_ADDRESS,
   LEGAL_REPRESENTATIVE,
-  calculateCompositeSalary,
 } from "@/lib/payroll/compositeSalary";
 import { numberToMexicanCurrencyText } from "@/lib/payroll/numberToWords";
 import type { PayrollEmployeeDetail } from "@/app/actions/payroll";
+import { reconcilePayrollReceipt } from "@/lib/payroll/contractualSupplement";
 
 // Formato Carta (Letter): 612 x 792 puntos
 export const PAGE_WIDTH = 612;
@@ -209,21 +209,28 @@ export async function renderPayrollStatementPage(
 
   y -= infoBoxHeight + 8;
 
-  // ─── 3. CÁLCULO DE SALARIO COMPUESTO POR HORA ──────────────────────────────
-  const hourlyRate = detail.employee.hourlyRate && detail.employee.hourlyRate > 0
-    ? detail.employee.hourlyRate
-    : detail.totalHours > 0
-      ? Math.round((detail.basePay / detail.totalHours) * 100) / 100
-      : 40.00;
-
-  const composite = calculateCompositeSalary(hourlyRate, detail.totalHours);
-
-  page.drawText("DESGLOSE DE CUOTA DE SALARIO COMPUESTO POR HORA (CONTRATO CLÁUSULAS 6ª, 8ª Y 9ª)", {
-    x: MARGIN,
-    y,
-    font: bold,
-    size: 7.5,
-    color: BRAND_PRIMARY,
+  // ─── 3. TARIFA BASE Y ADICIONAL REAL DEL SNAPSHOT ────────────────────────
+  const supplement = detail.supplement ?? {
+    aguinaldoReference: 0, vacationsReference: 0, vacationPremiumReference: 0, total: 0,
+  };
+  const reconciliation = reconcilePayrollReceipt(
+    detail.basePay, detail.overtimePay, supplement.total, detail.adjustments, detail.finalPay,
+  );
+  if (!reconciliation.matchesApproved) {
+    throw new Error("PAYROLL_RECEIPT_TOTAL_MISMATCH: revisa los conceptos, sin compensaciones de centavos.");
+  }
+  const perHour = (amount: number) => detail.totalHours > 0
+    ? Math.round(amount / detail.totalHours * 100) / 100 : 0;
+  const hourlyBase = perHour(detail.basePay);
+  const composite = {
+    baseHourlyRate: hourlyBase,
+    aguinaldoHourly: perHour(supplement.aguinaldoReference),
+    vacacionesHourly: perHour(supplement.vacationsReference),
+    primaVacacionalHourly: perHour(supplement.vacationPremiumReference),
+    totalHourlyRate: perHour(detail.basePay + supplement.total),
+  };
+  page.drawText("DESGLOSE DE TARIFA POR HORA (BASE Y REFERENCIAS DEL ADICIONAL PAGADO)", {
+    x: MARGIN, y, font: bold, size: 7.5, color: BRAND_PRIMARY,
   });
   y -= 10;
 
@@ -240,11 +247,11 @@ export async function renderPayrollStatementPage(
   });
 
   const rateColumns = [
-    { title: "Sueldo Base / Hora", sub: "Cláusula 6ª", value: money(composite.baseHourlyRate) },
-    { title: "Aguinaldo Proporcional", sub: "15 días (4.11%) · Cl. 9ª", value: money(composite.aguinaldoHourly) },
-    { title: "Vacaciones Proporc.", sub: "12 días (3.29%) · Cl. 8ª", value: money(composite.vacacionesHourly) },
-    { title: "Prima Vacacional", sub: "25% s/ vac. (0.82%) · Cl. 8ª", value: money(composite.primaVacacionalHourly) },
-    { title: "TARIFA TOTAL / HORA", sub: "Salario Integrado Compuesto", value: money(composite.totalHourlyRate), highlight: true },
+    { title: "Sueldo Base / Hora", sub: "Según horas aprobadas", value: money(composite.baseHourlyRate) },
+    { title: "Ref. Aguinaldo", sub: "Adicional contractual", value: money(composite.aguinaldoHourly) },
+    { title: "Ref. Vacaciones", sub: "Adicional contractual", value: money(composite.vacacionesHourly) },
+    { title: "Ref. Prima Vac.", sub: "Adicional contractual", value: money(composite.primaVacacionalHourly) },
+    { title: "TARIFA TOTAL / HORA", sub: "Base + adicional pagado", value: money(composite.totalHourlyRate), highlight: true },
   ];
 
   rateColumns.forEach((col, index) => {
@@ -268,7 +275,7 @@ export async function renderPayrollStatementPage(
   y -= rateBoxHeight + 10;
 
   // ─── 4. LIQUIDACIÓN DE LA SEMANA ─────────────────────────────────────────────
-  page.drawText("LIQUIDACIÓN DE PERCEPCIONES DEVENGADAS EN EL PERIODO", {
+  page.drawText("DESGLOSE DE PERCEPCIONES EFECTIVAMENTE REGISTRADAS", {
     x: MARGIN,
     y,
     font: bold,
@@ -277,36 +284,25 @@ export async function renderPayrollStatementPage(
   });
   y -= 10;
 
-  const adjustedTotal = detail.finalPay > 0 ? detail.finalPay : composite.totalPay;
-  const baseRatio = composite.totalPay > 0 ? composite.basePay / composite.totalPay : 1;
-  const agRatio = composite.totalPay > 0 ? composite.aguinaldoPay / composite.totalPay : 0;
-  const vacRatio = composite.totalPay > 0 ? composite.vacacionesPay / composite.totalPay : 0;
-  const primaRatio = composite.totalPay > 0 ? composite.primaVacacionalPay / composite.totalPay : 0;
-
-  const finalBasePay = Math.round(detail.basePay > 0 ? detail.basePay : adjustedTotal * baseRatio);
-  const finalAguinaldo = Math.round(adjustedTotal * agRatio);
-  const finalVacaciones = Math.round(adjustedTotal * vacRatio);
-  const finalPrima = Math.round(adjustedTotal * primaRatio);
-  const sumItems = finalBasePay + finalAguinaldo + finalVacaciones + finalPrima;
-  const diffAdjustment = Math.round((adjustedTotal - sumItems) * 100) / 100;
-
-  const concepts = [
-    { num: "01", name: "Sueldo Ordinario Devengado", detail: `${hours(detail.totalHours)} laboradas a ${money(composite.baseHourlyRate)}/h`, amount: finalBasePay },
-    { num: "02", name: "Parte Proporcional de Aguinaldo Semanal", detail: "Proporción de 15 días anuales conforme a Cláusula 9ª", amount: finalAguinaldo },
-    { num: "03", name: "Parte Proporcional de Vacaciones Semanales", detail: "Proporción de 12 días anuales conforme a Cláusula 8ª", amount: finalVacaciones },
-    { num: "04", name: "Parte Proporcional de Prima Vacacional Semanal", detail: "25% sobre importe de vacaciones devengadas conforme a Cláusula 8ª", amount: finalPrima },
-  ];
-
-  if (detail.adjustmentsTotal !== 0 || diffAdjustment !== 0) {
-    const adjAmount = detail.adjustmentsTotal + diffAdjustment;
-    concepts.push({
-      num: "05",
-      name: "Ajustes / Complementos de Nómina",
-      detail: detail.adjustments.map((a) => a.concept).join(", ") || "Ajuste de centavos / incidencias del periodo",
-      amount: adjAmount,
-    });
+  // Solo se imprimen percepciones aprobadas. No ajustar centavos ni distribuir
+  // prestaciones que no estén registradas efectivamente en el snapshot.
+  const adjustedTotal = detail.finalPay;
+  const concepts: { num: string; name: string; detail: string; amount: number }[] = [];
+  const add = (name: string, detailText: string, amount: number) => {
+    if (Math.round(amount * 100) === 0) return;
+    concepts.push({ num: String(concepts.length + 1).padStart(2, "0"), name, detail: detailText, amount });
+  };
+  add("Sueldo Ordinario Devengado", `${hours(detail.totalHours)} laboradas a la tarifa base`, detail.basePay);
+  add("Horas Extraordinarias", "Importe efectivamente registrado", detail.overtimePay);
+  add("Referencia Aguinaldo (adicional)", "Parte informativa del adicional contractual pagado", supplement.aguinaldoReference);
+  add("Referencia Vacaciones (adicional)", "Parte informativa del adicional contractual pagado", supplement.vacationsReference);
+  add("Referencia Prima Vacacional", "Parte informativa del adicional contractual pagado", supplement.vacationPremiumReference);
+  for (const adj of detail.adjustments.filter((item) => item.origin !== "CONTRACTUAL_SUPPLEMENT")) {
+    add(adj.type === "DEDUCCION" ? "Deducción documentada" : "Bono documentado",
+      cleanText(adj.concept).slice(0, 48), adj.type === "DEDUCCION" ? -adj.amount : adj.amount);
   }
-
+  // El total anterior ya fue conciliado en centavos: no se inventa un
+  // renglón negativo para cuadrar conceptos.
   const tableHeight = 18 + concepts.length * 15 + 24;
   page.drawRectangle({
     x: MARGIN,
@@ -359,7 +355,7 @@ export async function renderPayrollStatementPage(
     borderColor: BRAND_PRIMARY,
     borderWidth: 0.8,
   });
-  page.drawText("TOTAL NETO DEVENGADO Y RECIBIDO EN LA SEMANA:", {
+  page.drawText("TOTAL APROBADO A PAGAR EN LA SEMANA:", {
     x: MARGIN + 12,
     y: y - tableHeight + 7,
     font: bold,
@@ -459,7 +455,7 @@ export async function renderPayrollStatementPage(
     borderWidth: 0.8,
   });
 
-  page.drawText("DECLARACIÓN DE CONFORMIDAD Y FINIQUITO LABORAL CONTINUO:", {
+  page.drawText("CONSTANCIA DE RECIBO (SIN RENUNCIA DE DERECHOS):", {
     x: MARGIN + 8,
     y: y - 10,
     font: bold,
@@ -467,7 +463,7 @@ export async function renderPayrollStatementPage(
     color: INK,
   });
 
-  const legalText = `Hago constar que recibí de ${COMPANY_NAME} la cantidad neta indicada en el presente recibo a mi entera conformidad, la cual cubre la totalidad del salario ordinario devengado y la parte proporcional que a la fecha me corresponde por concepto de aguinaldo, vacaciones y prima vacacional conforme a las Cláusulas Sexta, Octava y Novena de mi Contrato Individual de Trabajo y la Ley Federal del Trabajo. Manifiesto expresamente que a esta fecha no se me adeuda cantidad alguna por ningún concepto de salario, prestaciones ni tiempo extraordinario, extendiendo el más amplio finiquito que en derecho proceda respecto a las obligaciones derivadas del periodo laborado.`;
+  const legalText = `El presente recibo refleja las horas, importes y ajustes registrados en MAESTRO para el periodo. Su aprobación no acredita necesariamente pago bancario ni liquidación de aguinaldo, vacaciones, prima vacacional, descanso semanal u otros derechos laborales. La firma, si se recaba, reconoce la consulta del desglose y no representa finiquito, renuncia a prestaciones ni liberación general de obligaciones del patrón.`;
 
   drawWrapped(page, legalText, {
     x: MARGIN + 8,
