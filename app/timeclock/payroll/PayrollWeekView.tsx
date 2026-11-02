@@ -407,7 +407,7 @@ export default function PayrollWeekView() {
               {[
                 ["Usuarios activos", String(table.totals.activeEmployees)],
                 ["Horas trabajadas", hours(table.totals.totalHours)],
-                ["Total nómina", money(table.totals.finalPay)],
+                ["Total a pagar", money(table.totals.finalPay)],
                 ["Pago", formatPaymentDate(table.weekStart)],
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0 px-4 py-3">
@@ -468,7 +468,7 @@ export default function PayrollWeekView() {
                       ))}
                       <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Total horas</th>
                       <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Pago por hora</th>
-                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Pago total</th>
+                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Total a pagar</th>
                       <th className="border-b border-outline-variant px-3 py-3 text-center font-bold">Estado</th>
                     </tr>
                   </thead>
@@ -852,7 +852,7 @@ function EmployeeDetailModal({
                 <p className="text-lg font-bold text-on-surface">{hours(detail.totalHours)}</p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Pago por hora</CardLabel>
+                <CardLabel>Tarifa base por hora</CardLabel>
                 <p className="text-lg font-bold text-on-surface">
                   {new Set(detail.days.flatMap((day) => day.entries.filter((entry) => entry.clockOut && entry.hourlyRate !== undefined).map((entry) => entry.hourlyRate))).size > 1
                     ? "Varias tarifas"
@@ -864,7 +864,7 @@ function EmployeeDetailModal({
                 <p className="text-lg font-bold text-on-surface">{money(detail.basePay)}</p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Total</CardLabel>
+                <CardLabel>Total a pagar</CardLabel>
                 <p className="text-lg font-bold text-on-surface">{money(detail.finalPay)}</p>
                 {detail.adjustmentsTotal !== 0 && (
                   <p className="text-[10px] text-on-surface-variant">
