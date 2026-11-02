@@ -17,7 +17,7 @@ import {
 } from "@/lib/payroll/legacyRules";
 import { resolveBranchHourlyRate, summarizeHourlyRates, type HourlyRateRow } from "@/lib/payroll/branchRates";
 import { formatCivilDate } from "@/lib/dateTime";
-import { calculatePayrollSupplement, effectiveSupplementPercent, sumPayrollSupplements, supplementFromSnapshotAdjustments, type PayrollSupplementBreakdown } from "@/lib/payroll/contractualSupplement";
+import { calculatePayrollSupplement, effectiveSupplementPercent, sumPayrollSupplements, supplementFromSnapshotAdjustments, isPayrollRoundingDeduction, type PayrollSupplementBreakdown } from "@/lib/payroll/contractualSupplement";
 import { sendPayrollReviewEmail } from "@/lib/email";
 
 /**
@@ -1311,6 +1311,9 @@ export async function createPayrollAdjustmentAction(input: {
 
   const concept = input.concept.trim();
   if (!concept) return { error: "Escribe un concepto" };
+  if (input.type === "DEDUCCION" && isPayrollRoundingDeduction(concept)) {
+    return { error: "No se permite descontar un ajuste de centavos o redondeo de la nómina." };
+  }
   if (!(input.amount > 0)) return { error: "El monto debe ser mayor a cero" };
 
   const mondayStr = mondayOfWeek(input.weekStart);
