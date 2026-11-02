@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { businessDayStart } from "@/lib/dateOnly";
 import type { UserRole } from "@prisma/client";
 import { normalizeMexicanPhone } from "@/lib/phone";
 
@@ -276,20 +277,34 @@ export async function updatePersonnelActive(userId: string, active: boolean) {
  * Porcentaje adicional contractual (no finiquito legal) por trabajador.
  * Es opt-in y entra en vigor al guardarse; conserva periodos anteriores.
  */
-export async function updatePayrollSupplementPercent(userId: string, percent: number) {
+export async function updatePayrollSupplementPercent(userId: string, percent: number, effectiveDate: string) {
   const currentUser = await getCurrentUser();
   if (!currentUser || currentUser.role !== "ADMIN") return { error: "No tienes permiso" };
   if (!Number.isFinite(percent) || percent < 0 || percent > 30 || Math.abs(Math.round(percent * 100) - percent * 100) > 0.000001) {
     return { error: "Captura un porcentaje entre 0 y 30, con hasta dos decimales." };
   }
-  const now = new Date();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) return { error: "Fecha de vigencia inválida." };
+  let effectiveFrom: Date;
+  try {
+    effectiveFrom = businessDayStart(effectiveDate);
+  } catch {
+    return { error: "Fecha de vigencia inválida." };
+  }
+  if (effectiveFrom.getTime() > Date.now() + 24 * 60 * 60 * 1000) return { error: "La fecha futura no está permitida." };
+  const previous = await prisma.payrollSupplementRate.findFirst({
+    where: { userId, effectiveTo: null }, orderBy: { effectiveFrom: "desc" },
+    select: { effectiveFrom: true },
+  });
+  if (previous && effectiveFrom < previous.effectiveFrom) {
+    return { error: "La nueva vigencia debe ser igual o posterior a la anterior." };
+  }
   await prisma.$transaction(async (tx) => {
     await tx.payrollSupplementRate.updateMany({
       where: { userId, effectiveTo: null },
-      data: { effectiveTo: now },
+      data: { effectiveTo: effectiveFrom },
     });
     await tx.payrollSupplementRate.create({
-      data: { userId, percent, effectiveFrom: now, createdById: currentUser.id },
+      data: { userId, percent, effectiveFrom, createdById: currentUser.id },
     });
   });
   revalidatePath("/timeclock/payroll");
