@@ -24,6 +24,7 @@ import { isInventoryCountCaptureRole } from "@/lib/permission-modules";
 import {
   formatBusinessDate,
 } from "@/lib/dateTime";
+import { formatInventoryDashboardQuantity } from "@/lib/inventory/units";
 
 const formatDate = (value: Date) =>
   formatBusinessDate(value, { day: "2-digit", month: "short" });
@@ -82,7 +83,7 @@ export default async function SucursalesInventoryPage() {
   const [products, recentEntries, dashboard] = await Promise.all([
     prisma.inventoryProduct.findMany({
       where: { isActive: true, archivedAt: null, trackStock: true },
-      select: { id: true, name: true, unit: true, minimumStock: true },
+      select: { id: true, name: true, unit: true, minimumStock: true, inventoryBaseUnit: true, handlingUnit: true, contentPerUnit: true, contentUnit: true, normalizedContentPerUnit: true },
     }),
     prisma.inventoryEntry.findMany({
       where: branchFilter,
@@ -742,8 +743,7 @@ export default async function SucursalesInventoryPage() {
                               {product.name}
                             </span>
                             <span className="text-error">
-                              {product.stock.toFixed(1)} / min{" "}
-                              {Number(product.minimumStock)} {product.unit}
+                              {formatInventoryDashboardQuantity(product.stock, product)} / min{" "}{formatInventoryDashboardQuantity(product.minimumStock, product)}
                             </span>
                           </div>
                         ))}
