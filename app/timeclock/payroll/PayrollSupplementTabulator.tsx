@@ -1,5 +1,7 @@
 "use client";
 
+import { Card } from "@/components/ui/Card";
+
 import { useMemo, useState, useTransition } from "react";
 import {
   savePayrollSupplementRateAction,
