@@ -1389,6 +1389,56 @@ export async function deletePayrollAdjustmentAction(id: string) {
  * Envía la semana a revisión y crea los expedientes iniciales. Cada
  * pendiente puede seguir corrigiéndose; se congela al aprobarlo.
  */
+export async function savePayrollSupplementRateAction(input: { userId: string; percent: number; effectiveFrom: string }) {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "No tienes permiso" };
+
+  const percent = Number(input.percent);
+  if (!input.userId || !Number.isFinite(percent) || percent < 0 || percent > 100) {
+    return { error: "Captura un porcentaje entre 0 y 100." };
+  }
+
+  const effectiveFrom = parseDateOnly(input.effectiveFrom);
+  if (Number.isNaN(effectiveFrom.getTime())) {
+    return { error: "La fecha de vigencia no es válida." };
+  }
+
+  const employee = await prisma.user.findUnique({ where: { id: input.userId }, select: { id: true } });
+  if (!employee) return { error: "Empleado no encontrado." };
+
+  await prisma.$transaction(async (tx) => {
+    const sameDate = await tx.payrollSupplementRate.findFirst({
+      where: { userId: input.userId, effectiveFrom },
+      select: { id: true },
+    });
+
+    await tx.payrollSupplementRate.updateMany({
+      where: {
+        userId: input.userId,
+        effectiveFrom: { lt: effectiveFrom },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: effectiveFrom } }],
+      },
+      data: { effectiveTo: effectiveFrom },
+    });
+
+    if (sameDate) {
+      await tx.payrollSupplementRate.update({
+        where: { id: sameDate.id },
+        data: { percent, effectiveTo: null, createdById: admin.id },
+      });
+    } else {
+      await tx.payrollSupplementRate.create({
+        data: { userId: input.userId, percent, effectiveFrom, createdById: admin.id },
+      });
+    }
+  });
+
+  revalidatePath("/timeclock/payroll");
+  revalidatePath("/administration/workforce");
+  revalidateTag("payroll-analytics", "max");
+  return { success: true };
+}
+
 export async function submitPayrollPeriodAction(weekStart: string) {
   const admin = await requireAdmin();
   if (!admin) return { error: "No tienes permiso" };
