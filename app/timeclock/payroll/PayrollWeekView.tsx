@@ -46,6 +46,7 @@ import {
 import { useToast } from "@/components/ui/Toast";
 import { payrollApprovalProgress } from "@/lib/payroll/approvalProgress";
 import { PayrollSmartAudit } from "@/components/payroll/PayrollSmartAudit";
+import { PayrollSupplementTabulator } from "./PayrollSupplementTabulator";
 
 const STATUS_LABELS: Record<PayrollPeriodInfo["status"], string> = {
   BORRADOR: "Borrador",
@@ -457,6 +458,8 @@ export default function PayrollWeekView() {
               </Card>
             </section>
           )}
+
+          <PayrollSupplementTabulator employees={table.employees} effectiveFrom={table.weekStart} />
 
           <PayrollSmartAudit table={table} onFilterEmployee={(name) => setSearch(name)} />
 
