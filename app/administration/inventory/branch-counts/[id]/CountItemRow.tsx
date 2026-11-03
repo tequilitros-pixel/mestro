@@ -8,6 +8,7 @@ import {
   formatCommercialCaptureHint,
   formatCommercialPresentation,
   formatCommercialQuantity,
+  formatInventoryDashboardQuantity,
   getInventoryBaseUnitLabel,
   getInventoryCaptureDescriptor,
   getPiecePresentationSize,
@@ -36,7 +37,7 @@ const countNumberInputStyle = {
 };
 
 function formatCountQuantity(value: number, item: Item) {
-  return formatCommercialQuantity(value, item);
+  return formatInventoryDashboardQuantity(value, item);
 }
 
 function splitPackagesAndLoosePieces(item: Item, packageSize: number) {
