@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { InventoryEntryType, InventoryMovementTypeV2, Prisma, type CatalogBaseUnit } from "@prisma/client";
 import { appendAuditEvent } from "@/lib/pos2/audit";
+import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
 
 function declarationOperationId(countId: string, itemId: string, countDate: Date) {
   const entropy = createHash("sha256")
@@ -189,8 +190,8 @@ export async function reconcileWeeklyCountCutover(
         previousQuantity: balance.quantity,
         entriesQuantity: entriesByProduct.get(product.id) ?? new Prisma.Decimal(0),
         quantityConsumed: consumedByProduct.get(product.id) ?? new Prisma.Decimal(0),
-        unitCostAtTime: product.unitCost,
-        costTotal: (consumedByProduct.get(product.id) ?? new Prisma.Decimal(0)).mul(product.unitCost ?? 0),
+        unitCostAtTime: costPerInventoryBaseUnit(product) ?? product.unitCost,
+        costTotal: (consumedByProduct.get(product.id) ?? new Prisma.Decimal(0)).mul(costPerInventoryBaseUnit(product) ?? 0),
       },
     });
 
