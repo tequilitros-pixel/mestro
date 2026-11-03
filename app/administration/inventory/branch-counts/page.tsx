@@ -9,23 +9,33 @@ import { inventoryCountTypeLabel } from "@/lib/inventory/countScope";
 export default async function BranchCountsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; branchId?: string }>;
 }) {
   const user = await requireInventoryCountCaptureAccess();
   if (user.role !== "ADMIN") {
     redirect("/administration/inventory/branch-counts/new?type=WEEKLY");
   }
-  const requestedType = (await searchParams).type;
+  const params = await searchParams;
+  const requestedType = params.type;
   const countType = requestedType === "MONTHLY" ? "MONTHLY" : "WEEKLY";
   const allowedBranchIds = await getAccessibleBranchIds();
+  const branchWhere = {
+    active: true,
+    ...(allowedBranchIds === null ? {} : { id: { in: allowedBranchIds } }),
+  };
+  const branches = await prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } });
+  const selectedBranchId = params.branchId && branches.some((branch) => branch.id === params.branchId)
+    ? params.branchId
+    : null;
   const counts = await prisma.inventoryCount.findMany({
     where: {
       ...(allowedBranchIds === null ? {} : { branchId: { in: allowedBranchIds } }),
+      ...(selectedBranchId ? { branchId: selectedBranchId } : {}),
       countType,
     },
     orderBy: { countDate: "desc" },
     include: { branch: true },
-    take: 30,
+    take: 60,
   });
 
   return (
@@ -64,6 +74,30 @@ export default async function BranchCountsPage({
             </Link>
           </div>
         </div>
+
+        <section className="rounded-2xl border border-outline-variant bg-surface-container p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-outline">Selecciona una sucursal</p>
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            <Link
+              href={`/administration/inventory/branch-counts?type=${countType}`}
+              className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${selectedBranchId === null ? "bg-primary text-on-primary" : "border border-outline-variant bg-background text-on-surface-variant hover:border-primary/40"}`}
+            >
+              Todas
+            </Link>
+            {branches.map((branch) => (
+              <Link
+                key={branch.id}
+                href={`/administration/inventory/branch-counts?type=${countType}&branchId=${encodeURIComponent(branch.id)}`}
+                className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${selectedBranchId === branch.id ? "bg-primary text-on-primary" : "border border-outline-variant bg-background text-on-surface-variant hover:border-primary/40"}`}
+              >
+                {branch.name}
+              </Link>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-on-surface-variant">
+            {selectedBranchId ? `Mostrando únicamente los conteos de ${branches.find((branch) => branch.id === selectedBranchId)?.name ?? "la sucursal seleccionada"}.` : "Selecciona una sucursal para consultar únicamente sus conteos."}
+          </p>
+        </section>
 
         <div className="rounded-2xl border border-outline-variant bg-surface-container divide-y divide-outline-variant">
           {counts.length === 0 && (
