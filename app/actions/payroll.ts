@@ -1167,19 +1167,42 @@ export async function getEmployeePayrollDetail(
 ): Promise<{ error: string } | { success: true; data: PayrollEmployeeDetail }> {
   const currentUser = await getCurrentUser();
   if (!currentUser) return { error: "No autorizado" };
-  const isAdmin = currentUser.role === "ADMIN" || currentUser.permissions.includes("/timeclock/payroll");
-  if (!isAdmin && currentUser.id !== userId) {
+  // getCurrentUser() returns a User record, whose module permissions are stored separately.
+  // Read the persisted permission instead of accessing a property that User does not have.
+  const hasPayrollPermission =
+    currentUser.role === "ADMIN" ||
+    Boolean(
+      await prisma.modulePermission.findUnique({
+        where: {
+          userId_moduleKey: {
+            userId: currentUser.id,
+            moduleKey: "/timeclock/payroll",
+          },
+        },
+        select: { userId: true },
+      }),
+    );
+
+  if (!hasPayrollPermission && currentUser.id !== userId) {
     return { error: "No tienes permiso" };
   }
 
   const mondayStr = mondayOfWeek(weekStart);
   const weekEnd = addDaysToDateOnly(mondayStr, 6);
   const period = await loadPeriodWithEntries(mondayStr);
-  // Un empleado solo consulta su propio snapshot formalmente aprobado/pagado.
-  // Nunca exponer el expediente en borrador o revisión individual.
-  if (!admin && (!period || !period.entries.some((e) =>
-    e.userId === actor.id && (e.status === "APROBADA" || e.status === "PAGADA")
-  ))) return { error: "El expediente todavía no está aprobado" };
+  // An employee can only read their own formally approved or paid snapshot.
+  // Payroll managers may review any employee's draft or in-review record.
+  if (
+    !hasPayrollPermission &&
+    (!period ||
+      !period.entries.some(
+        (entry) =>
+          entry.userId === currentUser.id &&
+          (entry.status === "APROBADA" || entry.status === "PAGADA"),
+      ))
+  ) {
+    return { error: "El expediente todavía no está aprobado" };
+  }
 
   if (period && period.status !== "BORRADOR") {
     const employee = await prisma.user.findUnique({
