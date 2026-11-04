@@ -167,6 +167,7 @@ export default function PayrollWeekView() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [actionBusy, setActionBusy] = useState(false);
   const [search, setSearch] = useState("");
+  const [showSupplementTabulator, setShowSupplementTabulator] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -459,7 +460,30 @@ export default function PayrollWeekView() {
             </section>
           )}
 
-          <PayrollSupplementTabulator employees={table.employees} effectiveFrom={table.weekStart} />
+          <section className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest">
+            <button
+              type="button"
+              onClick={() => setShowSupplementTabulator((isOpen) => !isOpen)}
+              aria-expanded={showSupplementTabulator}
+              aria-controls="payroll-supplement-tabulator"
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-surface-container"
+            >
+              <span>
+                <span className="block text-sm font-bold text-on-surface">Tabulador de prestaciones</span>
+                <span className="mt-0.5 block text-xs text-on-surface-variant">
+                  Tarifas, adicional contractual y referencia semanal por empleado
+                </span>
+              </span>
+              <span className="shrink-0 rounded-lg border border-outline-variant px-3 py-1.5 text-xs font-bold text-primary">
+                {showSupplementTabulator ? "Ocultar" : "Abrir"}
+              </span>
+            </button>
+            {showSupplementTabulator && (
+              <div id="payroll-supplement-tabulator" className="border-t border-outline-variant p-3 sm:p-4">
+                <PayrollSupplementTabulator employees={table.employees} effectiveFrom={table.weekStart} />
+              </div>
+            )}
+          </section>
 
           <PayrollSmartAudit table={table} onFilterEmployee={(name) => setSearch(name)} />
 
