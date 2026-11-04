@@ -216,6 +216,11 @@ model Lot {
   totalLitersObtained Float?
   qrToken             String?               @unique
   observations        String?
+  /// Archivo administrativo para expedientes de prueba o capturas erróneas.
+  /// No marca producción como terminada ni crea movimientos de inventario.
+  archivedAt          DateTime?
+  archivedById        String?
+  archiveReason       String?
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
   ownerId             String
@@ -230,6 +235,8 @@ model Lot {
   publicQrProfiles    PublicQrProfile[]
   boilerProcessLinks   BoilerProcessLink[]
   sweetHoneyRecoveries SweetHoneyRecovery[]
+
+  @@index([archivedAt])
 }
 
 model Cooking {
