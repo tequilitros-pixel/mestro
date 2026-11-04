@@ -636,17 +636,29 @@ function EmployeeDetailModal({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
 
-    getEmployeePayrollDetail(userId, weekStart).then((result) => {
-      if (cancelled) return;
-      if ("error" in result) {
-        setError(result.error);
+    void getEmployeePayrollDetail(userId, weekStart)
+      .then((result) => {
+        if (cancelled) return;
+        if ("error" in result) {
+          setError(result.error);
+          setDetail(null);
+        } else {
+          setError(null);
+          setDetail(result.data);
+        }
+      })
+      .catch((loadError: unknown) => {
+        if (cancelled) return;
         setDetail(null);
-      } else {
-        setError(null);
-        setDetail(result.data);
-      }
-      setLoading(false);
-    });
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "No se pudo cargar el expediente de nómina.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
     return () => {
       cancelled = true;
