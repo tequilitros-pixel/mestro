@@ -16,7 +16,6 @@ import {
   formatBusinessDateTime,
 } from "@/lib/dateTime";
 import { notifyMillingAlert } from "@/lib/notifications/tequilaAlerts";
-import { calculateExtractedSugarKg, calculateSugarExtractionEfficiency } from "@/lib/processCalculations";
 import PageTabs from "@/components/ui/PageTabs";
 import OfflineOperationForm from "@/components/offline/OfflineOperationForm";
 import SuccessToast from "@/components/ui/SuccessToast";
