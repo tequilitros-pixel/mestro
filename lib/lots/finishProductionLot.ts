@@ -5,6 +5,7 @@ import { LotStage, Prisma, RawMaterialMovementType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { applyRawMaterialMovement } from "@/lib/liquors/rawMaterialMovements";
 import { getLotFinalization } from "@/lib/lots/finalization";
+import { notifyLotCompleted } from "@/lib/notifications/tequilaAlerts";
 
 export class FinishProductionLotError extends Error {
   constructor(readonly code: string) {
@@ -28,11 +29,15 @@ export async function finishProductionLot(input: {
         id: true,
         code: true,
         stage: true,
+        agaveKg: true,
         finishedAt: true,
         totalLitersObtained: true,
         qrToken: true,
         distillations: {
           select: { type: true, status: true, finalLiters: true },
+        },
+        expenses: {
+          select: { amount: true },
         },
       },
     });
@@ -91,6 +96,19 @@ export async function finishProductionLot(input: {
         notes: `Destilado obtenido del lote ${lot.code}.`,
       });
     }
+
+    const totalCost = lot.expenses.reduce((sum, e) => sum + e.amount, 0);
+    const yieldKgPerLiter = readiness.totalLiters > 0 ? lot.agaveKg / readiness.totalLiters : 0;
+    const costPerLiter = readiness.totalLiters > 0 ? totalCost / readiness.totalLiters : 0;
+
+    notifyLotCompleted({
+      lotCode: lot.code,
+      lotId: lot.id,
+      totalLiters: readiness.totalLiters,
+      agaveKg: lot.agaveKg,
+      yieldKgPerLiter,
+      costPerLiter,
+    }).catch((err) => console.error("Error dispatching lot finished notification:", err));
 
     return {
       alreadyFinished: false,

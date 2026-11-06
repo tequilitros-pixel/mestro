@@ -15,6 +15,8 @@ import {
   formatBusinessDateOnly,
   formatBusinessDateTime,
 } from "@/lib/dateTime";
+import { notifyMillingAlert } from "@/lib/notifications/tequilaAlerts";
+import { calculateExtractedSugarKg, calculateSugarExtractionEfficiency } from "@/lib/processCalculations";
 import PageTabs from "@/components/ui/PageTabs";
 import OfflineOperationForm from "@/components/offline/OfflineOperationForm";
 import SuccessToast from "@/components/ui/SuccessToast";
@@ -444,6 +446,17 @@ export default async function MillingDetailPage({
     if (result.count === 0) {
       redirect(`/milling/${id}`);
     }
+
+    const sugarKg = calculateExtractedSugarKg(finalMashLiters, finalAverageBrix);
+    const efficiency = calculateSugarExtractionEfficiency(sugarKg, milling.cookedKg, milling.lot.art ?? 26);
+    notifyMillingAlert({
+      lotCode: milling.lot.code,
+      millingId: id,
+      mashLiters: finalMashLiters,
+      brix: finalAverageBrix,
+      sugarKg,
+      efficiency,
+    }).catch((err) => console.error("Error dispatching milling alert:", err));
 
     redirect(`/milling/${id}?finished=1`);
   }

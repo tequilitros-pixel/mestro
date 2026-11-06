@@ -44,38 +44,30 @@ export default function LotMenu({
       icon: ClipboardIcon,
       iconVariant: "blueDeep",
     },
-    ...(processIds?.cooking
-      ? [{
-          href: `/cooking/${processIds.cooking}`,
-          label: "Cocción",
-          icon: FlameIcon,
-          iconVariant: "orange" as const,
-        }]
-      : []),
-    ...(processIds?.milling
-      ? [{
-          href: `/milling/${processIds.milling}`,
-          label: "Molienda",
-          icon: GearIcon,
-          iconVariant: "blue" as const,
-        }]
-      : []),
-    ...(processIds?.fermentation
-      ? [{
-          href: `/fermentation/${processIds.fermentation}`,
-          label: "Fermentación",
-          icon: FlaskIcon,
-          iconVariant: "green" as const,
-        }]
-      : []),
-    ...(processIds?.distillation
-      ? [{
-          href: `/distillation/${processIds.distillation}`,
-          label: "Destilación",
-          icon: GlassWaterIcon,
-          iconVariant: "purple" as const,
-        }]
-      : []),
+    {
+      href: processIds?.cooking ? `/cooking/${processIds.cooking}` : `/cooking/new?lotId=${id}`,
+      label: "Cocción",
+      icon: FlameIcon,
+      iconVariant: "orange" as const,
+    },
+    {
+      href: processIds?.milling ? `/milling/${processIds.milling}` : `/milling/new?lotId=${id}`,
+      label: "Molienda",
+      icon: GearIcon,
+      iconVariant: "blue" as const,
+    },
+    {
+      href: processIds?.fermentation ? `/fermentation/${processIds.fermentation}` : `/fermentation/new?lotId=${id}`,
+      label: "Fermentación",
+      icon: FlaskIcon,
+      iconVariant: "green" as const,
+    },
+    {
+      href: processIds?.distillation ? `/distillation/${processIds.distillation}` : `/distillation/new?lotId=${id}`,
+      label: "Destilación",
+      icon: GlassWaterIcon,
+      iconVariant: "purple" as const,
+    },
     {
       href: `/lots/${id}/costs`,
       label: "Costos",

@@ -5,7 +5,13 @@ import { advanceLotStage } from "@/lib/lotStage";
 import { findAvailableEquipment, reserveEquipment } from "@/lib/equipmentAvailability";
 import { requireModuleActionAccess } from "@/lib/auth";
 
-export default async function NewMillingPage() {
+export default async function NewMillingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ lotId?: string; error?: string }>;
+}) {
+  const { lotId: queryLotId, error } = (await searchParams) ?? {};
+
   const lots = await prisma.lot.findMany({
     where: {
       stage: {
@@ -26,6 +32,8 @@ export default async function NewMillingPage() {
       createdAt: "desc",
     },
   });
+
+  const selectedLot = lots.find((l) => l.id === queryLotId) ?? lots[0];
 
   const equipments = await findAvailableEquipment(["DESGARRADORA", "PRENSA"]);
 
@@ -122,6 +130,7 @@ export default async function NewMillingPage() {
             <select
               name="lotId"
               id="lotId"
+              defaultValue={queryLotId ?? ""}
               required
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             >
@@ -181,6 +190,7 @@ export default async function NewMillingPage() {
               step="0.01"
               name="cookedKg"
               id="cookedKg"
+              defaultValue={selectedLot?.cookings[0]?.finalAgaveKg ?? ""}
               required
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             />

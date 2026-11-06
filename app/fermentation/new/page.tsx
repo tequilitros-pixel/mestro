@@ -19,9 +19,9 @@ function weighted(items: Discharge[], key: "brix" | "ph" | "temperature") {
 export default async function NewFermentationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ lotId?: string; error?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { lotId: queryLotId, error } = (await searchParams) ?? {};
   const discharges = await prisma.millingDischarge.findMany({
     where: {
       tankId: { not: null },
@@ -31,8 +31,7 @@ export default async function NewFermentationPage({
     orderBy: { createdAt: "asc" },
   });
   const existing = await prisma.fermentation.findMany({
-    where: { tankId: { not: null } },
-    select: { lotId: true, tankId: true },
+    select: { lotId: true, tankId: true, mustLiters: true },
   });
   const used = new Set(existing.map((item) => `${item.lotId}:${item.tankId}`));
   const grouped = new Map<string, typeof discharges>();
@@ -41,7 +40,7 @@ export default async function NewFermentationPage({
     if (used.has(key)) continue;
     grouped.set(key, [...(grouped.get(key) ?? []), discharge]);
   }
-  const sources = Array.from(grouped.entries()).map(([key, items]) => ({
+  const dischargeSources = Array.from(grouped.entries()).map(([key, items]) => ({
     key,
     lotId: items[0].milling.lotId,
     lotCode: items[0].milling.lot.code,
@@ -53,6 +52,52 @@ export default async function NewFermentationPage({
     temperature: weighted(items, "temperature"),
   }));
 
+  // Fuentes desde moliendas terminadas directas (cuando no se desglosaron descargas intermedias)
+  const finishedMillings = await prisma.milling.findMany({
+    where: {
+      status: "TERMINADA",
+      finalMashLiters: { not: null, gt: 0 },
+    },
+    include: {
+      lot: { select: { id: true, code: true } },
+      discharges: { select: { id: true, litersRecovered: true } },
+    },
+    orderBy: { finishedAt: "desc" },
+  });
+
+  const availableTanks = await prisma.equipment.findMany({
+    where: { type: "TINA", active: true },
+    orderBy: { name: "asc" },
+  });
+
+  const millingSources: typeof dischargeSources = [];
+  for (const milling of finishedMillings) {
+    const totalDischargeLiters = milling.discharges.reduce((sum, d) => sum + d.litersRecovered, 0);
+    const existingLotFermentations = existing.filter((f) => f.lotId === milling.lot.id);
+    const totalFermentedLiters = existingLotFermentations.reduce((sum, f) => sum + f.mustLiters, 0);
+    const remainingLiters = (milling.finalMashLiters ?? 0) - totalFermentedLiters;
+
+    if (remainingLiters > 10 && totalDischargeLiters === 0) {
+      const freeTank = availableTanks.find((t) => !existingLotFermentations.some((f) => f.tankId === t.id));
+      if (freeTank) {
+        millingSources.push({
+          key: `${milling.lot.id}:${freeTank.id}`,
+          lotId: milling.lot.id,
+          lotCode: milling.lot.code,
+          tankId: freeTank.id,
+          tankName: freeTank.name,
+          liters: remainingLiters,
+          brix: milling.finalAverageBrix ?? 12,
+          ph: milling.finalAveragePh ?? 4.5,
+          temperature: milling.finalAverageTemp ?? 28,
+        });
+      }
+    }
+  }
+
+  const sources = [...dischargeSources, ...millingSources];
+  const defaultSource = sources.find((s) => s.lotId === queryLotId) ?? sources[0];
+
   async function createFermentation(formData: FormData) {
     "use server";
     await requireModuleActionAccess("/fermentation");
@@ -62,18 +107,33 @@ export default async function NewFermentationPage({
     try {
       const fermentation = await prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Equipment" WHERE "id" = ${tankId} FOR UPDATE`);
-        const [tank, sourceItems, duplicate] = await Promise.all([
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Lot" WHERE "id" = ${lotId} FOR UPDATE`);
+        const [tank, sourceItems, millingFallback, duplicate, existingLotUsage] = await Promise.all([
           tx.equipment.findFirst({ where: { id: tankId, type: "TINA", active: true } }),
           tx.millingDischarge.findMany({ where: { tankId, milling: { lotId, status: "TERMINADA" } } }),
+          tx.milling.findFirst({ where: { lotId, status: "TERMINADA", finalMashLiters: { not: null, gt: 0 } }, orderBy: { finishedAt: "desc" } }),
           tx.fermentation.findFirst({ where: { lotId, tankId } }),
+          tx.fermentation.aggregate({ where: { lotId }, _sum: { mustLiters: true } }),
         ]);
-        if (!tank || duplicate || sourceItems.length === 0) throw new Error("SOURCE_UNAVAILABLE");
-        const items = sourceItems.map((item) => ({
-          litersRecovered: item.litersRecovered,
-          brix: item.brix,
-          ph: item.ph,
-          temperature: item.temperature,
-        }));
+        if (!tank || duplicate || (sourceItems.length === 0 && !millingFallback)) throw new Error("SOURCE_UNAVAILABLE");
+        const remainingFallbackLiters = Math.max(
+          0,
+          (millingFallback?.finalMashLiters ?? 0) - (existingLotUsage._sum.mustLiters ?? 0),
+        );
+        if (sourceItems.length === 0 && remainingFallbackLiters <= 10) throw new Error("SOURCE_UNAVAILABLE");
+        const items = sourceItems.length > 0
+          ? sourceItems.map((item) => ({
+              litersRecovered: item.litersRecovered,
+              brix: item.brix,
+              ph: item.ph,
+              temperature: item.temperature,
+            }))
+          : [{
+              litersRecovered: remainingFallbackLiters,
+              brix: millingFallback!.finalAverageBrix ?? 12,
+              ph: millingFallback!.finalAveragePh ?? 4.5,
+              temperature: millingFallback!.finalAverageTemp ?? 28,
+            }];
         const liters = items.reduce((sum, item) => sum + item.litersRecovered, 0);
         const created = await tx.fermentation.create({
           data: {
@@ -110,7 +170,7 @@ export default async function NewFermentationPage({
         <form action={createFermentation} className="mt-8 grid gap-5 rounded-2xl bg-surface-container p-8">
           <label className="grid gap-2 text-sm font-semibold">
             Tina con mosto
-            <select name="source" required className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3">
+            <select name="source" defaultValue={defaultSource?.key ?? ""} required className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3">
               <option value="">Selecciona una tina</option>
               {sources.map((source) => (
                 <option key={source.key} value={source.key}>

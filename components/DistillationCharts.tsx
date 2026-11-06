@@ -80,6 +80,36 @@ export default function DistillationCharts({
       };
     });
 
+  let headsLiters = 0;
+  let headsLAA = 0;
+  let heartLiters = 0;
+  let heartLAA = 0;
+  let tailsLiters = 0;
+  let tailsLAA = 0;
+
+  events.forEach((e) => {
+    const lts = Number(e.liters ?? 0);
+    const alc = Number(e.alcoholCorrected ?? e.alcohol ?? 0);
+    const laa = (lts * alc) / 100;
+    if (e.type === "CORTE_CABEZAS") {
+      headsLiters += lts;
+      headsLAA += laa;
+    } else if (e.type === "INICIO_CORAZON" || e.type === "FIN_CORAZON") {
+      heartLiters += lts;
+      heartLAA += laa;
+    } else if (e.type === "INICIO_COLAS") {
+      tailsLiters += lts;
+      tailsLAA += laa;
+    }
+  });
+
+  const hasFractionData = (headsLiters + heartLiters + tailsLiters) > 0;
+  const fractionData = [
+    { name: "Cabezas", litros: Number(headsLiters.toFixed(1)), laa: Number(headsLAA.toFixed(1)) },
+    { name: "Corazón (Tequila)", litros: Number(heartLiters.toFixed(1)), laa: Number(heartLAA.toFixed(1)) },
+    { name: "Colas", litros: Number(tailsLiters.toFixed(1)), laa: Number(tailsLAA.toFixed(1)) },
+  ];
+
   return (
     <section className="mt-4 space-y-6 rounded-xl border border-outline-variant bg-surface-container p-4 sm:p-5">
       <div>
@@ -169,6 +199,23 @@ export default function DistillationCharts({
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend verticalAlign="top" height={36} />
                 <Bar dataKey="fraccion" name="Litros fracción (L)" fill="#10b981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </Chart>
+          </div>
+        )}
+
+        {/* Fraccionamiento de Cortes: Cabezas, Corazón, Colas */}
+        {hasFractionData && (
+          <div className="md:col-span-2">
+            <Chart title="Fraccionamiento de Cortes Maestros: Volumen (L) vs Alcohol Puro (LAA)">
+              <BarChart data={fractionData} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant, #333)" />
+                <XAxis dataKey="name" stroke="var(--color-outline, #888)" fontSize={11} tick={{ fill: "var(--color-outline, #888)" }} />
+                <YAxis stroke="var(--color-outline, #888)" fontSize={11} tick={{ fill: "var(--color-outline, #888)" }} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend verticalAlign="top" height={36} />
+                <Bar dataKey="litros" name="Volumen (L)" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="laa" name="Alcohol Puro (LAA)" fill="#ec4899" radius={[4, 4, 0, 0]} />
               </BarChart>
             </Chart>
           </div>

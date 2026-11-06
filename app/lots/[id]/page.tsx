@@ -6,6 +6,7 @@ import { requireModuleActionAccess } from "@/lib/auth";
 import { getLotEngine } from "@/lib/services/lotEngine";
 import { getLotFinalization } from "@/lib/lots/finalization";
 import { finishProductionLot } from "@/lib/lots/finishProductionLot";
+import { calculateLotMasterBalance } from "@/lib/processCalculations";
 import {
   PrinterIcon,
   BrainIcon,
@@ -58,6 +59,17 @@ export default async function LotDetailPage({ params }: Props) {
     finishedAt: lot.finishedAt,
     totalLitersObtained: lot.totalLitersObtained,
     runs: lot.distillations,
+  });
+
+  const masterBalance = calculateLotMasterBalance({
+    agaveKg: lot.agaveKg,
+    art: lot.art,
+    totalLitersObtained: lot.totalLitersObtained,
+    totalCost,
+    cookings: lot.cookings,
+    millings: lot.millings,
+    fermentations: lot.fermentations,
+    distillations: lot.distillations,
   });
 
   async function finishLotAction(_formData: FormData) {
@@ -299,6 +311,85 @@ export default async function LotDetailPage({ params }: Props) {
           <Kpi title="Agave" value={`${lot.agaveKg.toLocaleString()} kg`} />
           <Kpi title="ART" value={lot.art ?? "-"} />
           <Kpi title="Costo/L" value={costPerLiter > 0 ? `$${costPerLiter.toFixed(2)}` : "-"} />
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-primary/30 bg-surface-container p-6 sm:p-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-xl">
+                🥃
+              </span>
+              <div>
+                <p className="font-mono text-xs uppercase tracking-[0.3em] text-primary">
+                  DESTILADORA DEL NORTE
+                </p>
+                <h2 className="text-2xl font-bold text-on-surface">
+                  Balance y Rendimiento Tequilero
+                </h2>
+              </div>
+            </div>
+
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-bold ${
+                masterBalance.qualityRating === "EXCELENTE"
+                  ? "bg-tertiary-fixed-dim/20 text-tertiary-fixed-dim"
+                  : masterBalance.qualityRating === "BUENO"
+                  ? "bg-secondary/20 text-secondary"
+                  : masterBalance.qualityRating === "MEJORABLE"
+                  ? "bg-error/20 text-error"
+                  : "bg-surface-container-high text-on-surface-variant"
+              }`}
+            >
+              {masterBalance.qualityRating === "EXCELENTE" && "★ "}
+              {masterBalance.qualityRating}
+            </span>
+          </div>
+
+          <p className="mt-3 text-sm text-on-surface-variant">
+            {masterBalance.ratingMessage}
+          </p>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-outline-variant bg-surface-container-high p-4">
+              <p className="text-xs uppercase tracking-wider text-outline">Rendimiento Real</p>
+              <p className="mt-1 text-2xl font-bold text-primary">
+                {masterBalance.actualKgPerLiter ? `${masterBalance.actualKgPerLiter} kg/L` : "Pendiente"}
+              </p>
+              <p className="mt-1 text-xs text-on-surface-variant">
+                Meta: ~{masterBalance.theoretical.expectedKgPerLiter} kg/L
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant bg-surface-container-high p-4">
+              <p className="text-xs uppercase tracking-wider text-outline">Litros Tequila 40%</p>
+              <p className="mt-1 text-2xl font-bold text-on-surface">
+                {masterBalance.actualLiters > 0 ? `${masterBalance.actualLiters.toLocaleString()} L` : "En proceso"}
+              </p>
+              <p className="mt-1 text-xs text-on-surface-variant">
+                Teórico: ~{masterBalance.theoretical.theoreticalTequila40Liters.toLocaleString()} L
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant bg-surface-container-high p-4">
+              <p className="text-xs uppercase tracking-wider text-outline">Eficiencia Extracción</p>
+              <p className="mt-1 text-2xl font-bold text-on-surface">
+                {masterBalance.extractionEfficiency > 0 ? `${masterBalance.extractionEfficiency}%` : "—"}
+              </p>
+              <p className="mt-1 text-xs text-on-surface-variant">
+                {masterBalance.totalExtractedSugarKg > 0 ? `${masterBalance.totalExtractedSugarKg} kg azúcar` : "Molienda"}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-outline-variant bg-surface-container-high p-4">
+              <p className="text-xs uppercase tracking-wider text-outline">Alcohol Puro (LAA)</p>
+              <p className="mt-1 text-2xl font-bold text-secondary">
+                {masterBalance.totalHeartLAA > 0 ? `${masterBalance.totalHeartLAA} LAA` : "—"}
+              </p>
+              <p className="mt-1 text-xs text-on-surface-variant">
+                {masterBalance.costPerLAA > 0 ? `$${masterBalance.costPerLAA.toFixed(2)}/LAA` : "Rectificación"}
+              </p>
+            </div>
+          </div>
         </section>
 
         <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
