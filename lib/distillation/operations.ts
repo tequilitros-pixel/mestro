@@ -34,7 +34,7 @@ type Source = {
 export async function getDistillationSources(): Promise<Source[]> {
   const [fermentations, destrozados] = await Promise.all([
     prisma.fermentation.findMany({
-      where: { status: "TERMINADA" },
+      where: { status: "TERMINADA", lot: { archivedAt: null } },
       include: {
         lot: true,
         distillations: {
@@ -45,7 +45,7 @@ export async function getDistillationSources(): Promise<Source[]> {
       orderBy: { finishedAt: "desc" },
     }),
     prisma.distillation.findMany({
-      where: { status: DistillationStatus.TERMINADA, type: DistillationType.DESTROZADO },
+      where: { status: DistillationStatus.TERMINADA, type: DistillationType.DESTROZADO, lot: { archivedAt: null } },
       include: {
         lot: true,
         derivedDistillations: {
@@ -128,8 +128,8 @@ export async function startDistillationRun(input: {
 
     if (input.type === DistillationType.DESTROZADO) {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Fermentation" WHERE "id" = ${input.sourceId} FOR UPDATE`);
-      const source = await tx.fermentation.findUnique({ where: { id: input.sourceId } });
-      if (!source || source.status !== "TERMINADA") {
+      const source = await tx.fermentation.findUnique({ where: { id: input.sourceId }, include: { lot: { select: { archivedAt: true } } } });
+      if (!source || source.status !== "TERMINADA" || source.lot.archivedAt) {
         throw new DistillationOperationError("La fermentación ya no está disponible.", "SOURCE_UNAVAILABLE");
       }
       lotId = source.lotId;
@@ -137,8 +137,8 @@ export async function startDistillationRun(input: {
       sourceFermentationId = source.id;
     } else {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Distillation" WHERE "id" = ${input.sourceId} FOR UPDATE`);
-      const source = await tx.distillation.findUnique({ where: { id: input.sourceId } });
-      if (!source || source.status !== DistillationStatus.TERMINADA || source.type !== DistillationType.DESTROZADO) {
+      const source = await tx.distillation.findUnique({ where: { id: input.sourceId }, include: { lot: { select: { archivedAt: true } } } });
+      if (!source || source.status !== DistillationStatus.TERMINADA || source.type !== DistillationType.DESTROZADO || source.lot.archivedAt) {
         throw new DistillationOperationError("El destrozado ya no está disponible.", "SOURCE_UNAVAILABLE");
       }
       lotId = source.lotId;

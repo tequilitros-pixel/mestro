@@ -6,6 +6,8 @@ import { requireModuleActionAccess } from "@/lib/auth";
 import { getLotEngine } from "@/lib/services/lotEngine";
 import { getLotFinalization } from "@/lib/lots/finalization";
 import { finishProductionLot } from "@/lib/lots/finishProductionLot";
+import { archiveProductionLot, ArchiveProductionLotError } from "@/lib/lots/archiveProductionLot";
+import ArchiveLotControl from "@/components/lots/ArchiveLotControl";
 import { calculateLotMasterBalance } from "@/lib/processCalculations";
 import {
   PrinterIcon,
@@ -25,10 +27,21 @@ import SendToLiquorBatch from "./SendToLiquorBatch";
 
 type Props = {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ archiveError?: string }>;
 };
 
-export default async function LotDetailPage({ params }: Props) {
+const ARCHIVE_ERRORS: Record<string, string> = {
+  MISSING_CONFIRMATION: "Confirma que el lote es una prueba sin producto final real.",
+  MISSING_REASON: "Indica un motivo de al menos 10 caracteres.",
+  HAS_REAL_OUTPUT: "Este lote tiene salida real o inventario asociado; no se puede archivar como prueba.",
+  LOT_ALREADY_FINISHED: "Un lote finalizado no se puede archivar como prueba.",
+  ALREADY_ARCHIVED: "Este lote ya fue archivado.",
+  LOT_NOT_FOUND: "No se encontró el lote.",
+};
+
+export default async function LotDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const { archiveError } = (await searchParams) ?? {};
 
   const lot = await prisma.lot.findUnique({
     where: { id },
@@ -42,6 +55,27 @@ export default async function LotDetailPage({ params }: Props) {
   });
 
   if (!lot) notFound();
+
+  if (lot.archivedAt) {
+    return (
+      <main className="min-h-screen bg-background p-10 text-on-surface">
+        <div className="mx-auto max-w-4xl">
+          <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">MAESTRO</p>
+          <h1 className="mt-3 text-5xl font-bold text-primary">Lote {lot.code}</h1>
+          <section className="mt-8 rounded-2xl border border-outline-variant bg-surface-container p-6 sm:p-8">
+            <p className="font-mono text-sm uppercase tracking-[0.3em] text-on-surface-variant">Expediente archivado</p>
+            <h2 className="mt-2 text-2xl font-bold">Prueba anulada sin producción final</h2>
+            <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
+              <div><dt className="text-on-surface-variant">Archivado el</dt><dd className="mt-1 font-semibold">{lot.archivedAt.toLocaleString("es-MX")}</dd></div>
+              <div><dt className="text-on-surface-variant">Motivo</dt><dd className="mt-1 font-semibold">{lot.archiveReason}</dd></div>
+            </dl>
+            <p className="mt-6 text-sm text-on-surface-variant">Este registro se conserva para trazabilidad. No genera litros finales ni movimientos de inventario.</p>
+            <Link href="/lots?status=ARCHIVED" className="mt-6 inline-flex rounded-xl bg-primary px-5 py-3 font-bold text-on-primary">Ver lotes archivados</Link>
+          </section>
+        </div>
+      </main>
+    );
+  }
   const engine = getLotEngine(lot);
   const lastCooking = lot.cookings.at(-1);
   const lastMilling = lot.millings.at(-1);
@@ -79,6 +113,27 @@ export default async function LotDetailPage({ params }: Props) {
     const user = await requireModuleActionAccess("/lots");
     await finishProductionLot({ lotId: id, actorId: user.id });
     redirect(`/lots/${id}?finished=1`);
+  }
+
+  async function archiveLotAction(formData: FormData) {
+    "use server";
+    const user = await requireModuleActionAccess("/lots");
+    if (formData.get("confirmed") !== "on") {
+      redirect(`/lots/${id}?archiveError=MISSING_CONFIRMATION`);
+    }
+    try {
+      await archiveProductionLot({
+        lotId: id,
+        actorId: user.id,
+        reason: String(formData.get("reason") ?? ""),
+      });
+    } catch (caught) {
+      if (caught instanceof ArchiveProductionLotError) {
+        redirect(`/lots/${id}?archiveError=${caught.code}`);
+      }
+      throw caught;
+    }
+    redirect(`/lots/${id}`);
   }
 
   const costPerLiter = totalLiters > 0 ? totalCost / totalLiters : 0;
@@ -192,6 +247,14 @@ export default async function LotDetailPage({ params }: Props) {
             </form>
           </section>
         )}
+
+        {archiveError && (
+          <p className="mt-6 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">
+            {ARCHIVE_ERRORS[archiveError] ?? "No fue posible archivar este lote."}
+          </p>
+        )}
+
+        <ArchiveLotControl lotCode={lot.code} action={archiveLotAction} />
 
         <section className="mt-8 rounded-xl bg-surface-container p-8">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">

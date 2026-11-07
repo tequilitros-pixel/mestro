@@ -25,7 +25,7 @@ export default async function NewFermentationPage({
   const discharges = await prisma.millingDischarge.findMany({
     where: {
       tankId: { not: null },
-      milling: { status: "TERMINADA" },
+      milling: { status: "TERMINADA", lot: { archivedAt: null } },
     },
     include: { tank: true, milling: { include: { lot: true } } },
     orderBy: { createdAt: "asc" },
@@ -57,6 +57,7 @@ export default async function NewFermentationPage({
     where: {
       status: "TERMINADA",
       finalMashLiters: { not: null, gt: 0 },
+      lot: { archivedAt: null },
     },
     include: {
       lot: { select: { id: true, code: true } },
@@ -110,8 +111,8 @@ export default async function NewFermentationPage({
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Lot" WHERE "id" = ${lotId} FOR UPDATE`);
         const [tank, sourceItems, millingFallback, duplicate, existingLotUsage] = await Promise.all([
           tx.equipment.findFirst({ where: { id: tankId, type: "TINA", active: true } }),
-          tx.millingDischarge.findMany({ where: { tankId, milling: { lotId, status: "TERMINADA" } } }),
-          tx.milling.findFirst({ where: { lotId, status: "TERMINADA", finalMashLiters: { not: null, gt: 0 } }, orderBy: { finishedAt: "desc" } }),
+          tx.millingDischarge.findMany({ where: { tankId, milling: { lotId, status: "TERMINADA", lot: { archivedAt: null } } } }),
+          tx.milling.findFirst({ where: { lotId, status: "TERMINADA", finalMashLiters: { not: null, gt: 0 }, lot: { archivedAt: null } }, orderBy: { finishedAt: "desc" } }),
           tx.fermentation.findFirst({ where: { lotId, tankId } }),
           tx.fermentation.aggregate({ where: { lotId }, _sum: { mustLiters: true } }),
         ]);

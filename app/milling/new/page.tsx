@@ -14,6 +14,7 @@ export default async function NewMillingPage({
 
   const lots = await prisma.lot.findMany({
     where: {
+      archivedAt: null,
       stage: {
         in: ["COCCION", "MOLIENDA"],
       },
@@ -47,6 +48,8 @@ export default async function NewMillingPage({
     const cookedKg = Number(formData.get("cookedKg"));
 
     const milling = await prisma.$transaction(async (tx) => {
+      const lot = await tx.lot.findFirst({ where: { id: lotId, archivedAt: null }, select: { id: true } });
+      if (!lot) throw new Error("LOT_ARCHIVED");
       const duplicate = await tx.milling.findFirst({
         where: { lotId, status: { not: "TERMINADA" } },
         select: { id: true },

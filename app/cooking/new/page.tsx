@@ -18,7 +18,7 @@ export default async function NewCookingPage({
    * todos y se podía arrancar una cocción sobre un lote cerrado.
    */
   const lots = await prisma.lot.findMany({
-    where: { stage: { in: [LotStage.RECEPCION, LotStage.COCCION] } },
+    where: { archivedAt: null, stage: { in: [LotStage.RECEPCION, LotStage.COCCION] } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -40,6 +40,8 @@ export default async function NewCookingPage({
     // lo tomó mientras este formulario estaba abierto, no se crea
     // nada y se regresa al listado en vez de dejar dos lotes en el
     // mismo equipo.
+    const lot = await prisma.lot.findFirst({ where: { id: lotId, archivedAt: null, stage: { in: [LotStage.RECEPCION, LotStage.COCCION] } }, select: { id: true } });
+    if (!lot) redirect("/cooking/new?error=lote-no-disponible");
     const reserved = await reserveEquipment(prisma, equipmentId, agaveKg);
 
     if (!reserved) {
