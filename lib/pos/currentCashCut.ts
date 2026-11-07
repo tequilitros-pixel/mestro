@@ -1,6 +1,5 @@
 import "server-only";
 
-import type { Prisma } from "@prisma/client";
 import { getAccessibleBranchIds } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -173,22 +172,5 @@ export async function getCurrentPospressCashCut(
     return singleCut;
   }
 
-  const ownCut = await prisma.cashCut.findFirst({
-    where: { AND: [baseWhere, { responsibleId: user.id }] },
-    orderBy: { openedAt: "desc" },
-    select,
-  });
-  if (ownCut) return ownCut;
-
-  // Si el usuario no abrió un corte propio, sólo podemos inferir el contexto
-  // cuando hay uno único dentro de sus sucursales autorizadas. Elegir el más
-  // reciente entre dos sucursales abiertas podría mandar la operación al
-  // negocio equivocado.
-  const fallbackCuts = await prisma.cashCut.findMany({
-    where: baseWhere,
-    orderBy: { openedAt: "desc" },
-    select,
-    take: 2,
-  });
-  return fallbackCuts.length === 1 ? fallbackCuts[0] : null;
+  return null;
 }

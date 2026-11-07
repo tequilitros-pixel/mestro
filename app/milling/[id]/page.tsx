@@ -31,10 +31,6 @@ import {
   weightedAverage,
 } from "@/lib/milling/millingMetrics";
 import { millingWorkedMilliseconds, pauseMilling, resumeMilling } from "@/lib/milling/workSessions";
-import {
-  calculateExtractedSugarKg,
-  calculateSugarExtractionEfficiency,
-} from "@/lib/processCalculations";
 
 type Props = {
   params: Promise<{ id: string }>;

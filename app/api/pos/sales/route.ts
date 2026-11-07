@@ -279,25 +279,6 @@ export async function POST(request: NextRequest) {
     orderBy: { openedAt: "desc" },
   });
 
-  // Si tiene un corte abierto en una sucursal distinta a la que intenta vender, se bloquea estrictamente
-  if (userOpenCut && userOpenCut.branchId !== branchId) {
-    return NextResponse.json(
-      {
-        error: `Tienes un corte de caja abierto en la sucursal "${userOpenCut.branch.name}". Solo puedes vender en esa sucursal mientras tu corte siga abierto.`,
-      },
-      { status: 403 }
-    );
-  }
-
-  // El corte de caja a vincular es específicamente el corte abierto del usuario, o el de la sucursal
-  const openCashCut =
-    userOpenCut && userOpenCut.branchId === branchId
-      ? userOpenCut
-      : await prisma.cashCut.findFirst({
-          where: { branchId, status: "ABIERTO" },
-          orderBy: { openedAt: "desc" },
-        });
-
   if (!openCashCut) {
     return NextResponse.json(
       { error: "Esta sucursal no tiene un corte de caja abierto. Ábrelo antes de cobrar." },
