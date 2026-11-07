@@ -14,14 +14,14 @@ export default async function LotsPage({ searchParams }: { searchParams: SearchP
   const params = await searchParams;
   const filters: LotFilters = {
     query: firstValue(params.query),
-    status: ["ACTIVE", "TERMINATED"].includes(firstValue(params.status)) ? firstValue(params.status) as LotFilters["status"] : "ALL",
+    status: ["ACTIVE", "TERMINATED", "ARCHIVED"].includes(firstValue(params.status)) ? firstValue(params.status) as LotFilters["status"] : "ALL",
     sort: firstValue(params.sort) === "asc" ? "asc" : "desc",
     year: /^\d{4}$/.test(firstValue(params.year)) ? firstValue(params.year) : "",
     month: /^(?:[1-9]|1[0-2])$/.test(firstValue(params.month)) ? firstValue(params.month) : "",
     from: validDate(firstValue(params.from)) ? firstValue(params.from) : "",
     to: validDate(firstValue(params.to)) ? firstValue(params.to) : "",
   };
-  const where: Prisma.LotWhereInput = {};
+  const where: Prisma.LotWhereInput = filters.status === "ARCHIVED" ? { archivedAt: { not: null } } : { archivedAt: null };
   if (filters.query) where.code = { contains: filters.query, mode: "insensitive" };
   if (filters.status === "TERMINATED") where.stage = "TERMINADO";
   if (filters.status === "ACTIVE") where.stage = { not: "TERMINADO" };
@@ -42,7 +42,11 @@ export default async function LotsPage({ searchParams }: { searchParams: SearchP
           >
             Nuevo lote
           </Link>} />
-        <LotsTable key={JSON.stringify(filters)} lots={lots.map((lot) => ({ ...lot, startedAt: lot.startedAt.toISOString() }))} filters={filters} />
+        <LotsTable key={JSON.stringify(filters)} lots={lots.map((lot) => ({
+          ...lot,
+          startedAt: lot.startedAt.toISOString(),
+          archivedAt: lot.archivedAt?.toISOString() ?? null,
+        }))} filters={filters} />
       </div>
     </main>
   );

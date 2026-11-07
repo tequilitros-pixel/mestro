@@ -216,7 +216,24 @@ export async function renderPayrollStatementPage(
       ? Math.round((detail.basePay / detail.totalHours) * 100) / 100
       : 40.00;
 
-  const composite = calculateCompositeSalary(hourlyRate, detail.totalHours);
+  const legalComposite = calculateCompositeSalary(hourlyRate, detail.totalHours);
+  // Cuando existe un tabulador contractual vigente, el recibo debe mostrar
+  // exactamente los importes que se aprobaron en la nómina, no volver a
+  // calcularlos con el porcentaje legal de referencia.
+  const composite = detail.supplement && detail.supplement.total > 0
+    ? {
+        ...legalComposite,
+        aguinaldoHourly: detail.totalHours > 0 ? detail.supplement.aguinaldoReference / detail.totalHours : 0,
+        vacacionesHourly: detail.totalHours > 0 ? detail.supplement.vacationsReference / detail.totalHours : 0,
+        primaVacacionalHourly: detail.totalHours > 0 ? detail.supplement.vacationPremiumReference / detail.totalHours : 0,
+        totalHourlyRate: hourlyRate + (detail.totalHours > 0 ? detail.supplement.total / detail.totalHours : 0),
+        basePay: detail.basePay,
+        aguinaldoPay: detail.supplement.aguinaldoReference,
+        vacacionesPay: detail.supplement.vacationsReference,
+        primaVacacionalPay: detail.supplement.vacationPremiumReference,
+        totalPay: detail.basePay + detail.supplement.total,
+      }
+    : legalComposite;
 
   page.drawText("DESGLOSE DE CUOTA DE SALARIO COMPUESTO POR HORA (CONTRATO CLÁUSULAS 6ª, 8ª Y 9ª)", {
     x: MARGIN,
@@ -278,23 +295,18 @@ export async function renderPayrollStatementPage(
   y -= 10;
 
   const adjustedTotal = detail.finalPay > 0 ? detail.finalPay : composite.totalPay;
-  const baseRatio = composite.totalPay > 0 ? composite.basePay / composite.totalPay : 1;
-  const agRatio = composite.totalPay > 0 ? composite.aguinaldoPay / composite.totalPay : 0;
-  const vacRatio = composite.totalPay > 0 ? composite.vacacionesPay / composite.totalPay : 0;
-  const primaRatio = composite.totalPay > 0 ? composite.primaVacacionalPay / composite.totalPay : 0;
-
-  const finalBasePay = Math.round(detail.basePay > 0 ? detail.basePay : adjustedTotal * baseRatio);
-  const finalAguinaldo = Math.round(adjustedTotal * agRatio);
-  const finalVacaciones = Math.round(adjustedTotal * vacRatio);
-  const finalPrima = Math.round(adjustedTotal * primaRatio);
-  const sumItems = finalBasePay + finalAguinaldo + finalVacaciones + finalPrima;
+  const finalBasePay = detail.basePay > 0 ? detail.basePay : composite.basePay;
+  const finalAguinaldo = composite.aguinaldoPay;
+  const finalVacaciones = composite.vacacionesPay;
+  const finalPrima = composite.primaVacacionalPay;
+  const sumItems = finalBasePay + finalAguinaldo + finalVacaciones + finalPrima + detail.adjustmentsTotal;
   const diffAdjustment = Math.round((adjustedTotal - sumItems) * 100) / 100;
 
   const concepts = [
     { num: "01", name: "Sueldo Ordinario Devengado", detail: `${hours(detail.totalHours)} laboradas a ${money(composite.baseHourlyRate)}/h`, amount: finalBasePay },
-    { num: "02", name: "Parte Proporcional de Aguinaldo Semanal", detail: "Proporción de 15 días anuales conforme a Cláusula 9ª", amount: finalAguinaldo },
-    { num: "03", name: "Parte Proporcional de Vacaciones Semanales", detail: "Proporción de 12 días anuales conforme a Cláusula 8ª", amount: finalVacaciones },
-    { num: "04", name: "Parte Proporcional de Prima Vacacional Semanal", detail: "25% sobre importe de vacaciones devengadas conforme a Cláusula 8ª", amount: finalPrima },
+    { num: "02", name: "Aguinaldo proporcional (tabulador)", detail: "Adicional contractual aprobado para este periodo", amount: finalAguinaldo },
+    { num: "03", name: "Vacaciones proporcionales (tabulador)", detail: "Adicional contractual aprobado para este periodo", amount: finalVacaciones },
+    { num: "04", name: "Prima vacacional (tabulador)", detail: "Adicional contractual aprobado para este periodo", amount: finalPrima },
   ];
 
   if (detail.adjustmentsTotal !== 0 || diffAdjustment !== 0) {

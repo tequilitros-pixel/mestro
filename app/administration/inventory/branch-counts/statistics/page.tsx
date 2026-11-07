@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { InventoryMovementTypeV2, Prisma } from "@prisma/client";
+import { InventoryEntryType, InventoryMovementTypeV2, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds } from "@/lib/auth";
 import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
@@ -140,7 +140,7 @@ export default async function BranchCountStatisticsPage({
   };
   const branchWhere = allowedBranchIds === null ? { active: true } : { active: true, id: { in: allowedBranchIds } };
 
-  const [branches, employees, counts, consumptionGroups] = await Promise.all([
+  const [branches, employees, counts, consumptionGroups, legacyConsumptionGroups] = await Promise.all([
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.user.findMany({
       where: {
@@ -196,6 +196,20 @@ export default async function BranchCountStatisticsPage({
       _sum: { quantityDelta: true },
       _count: { _all: true },
     }),
+    // El POS histórico registra el consumo en InventoryEntry. Se incluye
+    // aquí para que los conteos semanales no aparezcan en cero mientras la
+    // sucursal todavía tenga movimientos del libro anterior.
+    prisma.inventoryEntry.groupBy({
+      where: {
+        branchId: branchFilter,
+        type: { in: [InventoryEntryType.VENTA_POS, InventoryEntryType.SALIDA_EVENTO] },
+        quantity: { lt: 0 },
+        ...(dateFilter ? { entryDate: dateFilter } : {}),
+      },
+      by: ["branchId", "productId", "type"],
+      _sum: { quantity: true },
+      _count: { _all: true },
+    }),
   ]);
 
   // Análisis por renglón con costo unitario en moneda real ($ MXN)
@@ -246,10 +260,32 @@ export default async function BranchCountStatisticsPage({
     _sum: { quantityDelta: Prisma.Decimal | null };
     _count: { _all: number };
   }>;
+  const legacyConsumptionGroupRows = legacyConsumptionGroups as Array<{
+    branchId: string;
+    productId: string;
+    type: InventoryEntryType;
+    _sum: { quantity: Prisma.Decimal | null };
+    _count: { _all: number };
+  }>;
+  const v2ConsumptionKeys = new Set(
+    consumptionGroupRows.map((row) => `${row.branchId}:${row.inventoryProductId}`),
+  );
+  const allConsumptionGroups = [
+    ...consumptionGroupRows,
+    ...legacyConsumptionGroupRows
+      .filter((row) => !v2ConsumptionKeys.has(`${row.branchId}:${row.productId}`))
+      .map((row) => ({
+        branchId: row.branchId,
+        inventoryProductId: row.productId,
+        unit: "BASE",
+        _sum: { quantityDelta: row._sum.quantity },
+        _count: row._count,
+      })),
+  ];
   const productIds = [
     ...new Set([
       ...rows.map((row) => row.productId),
-      ...consumptionGroupRows.map((row) => row.inventoryProductId),
+      ...allConsumptionGroups.map((row) => row.inventoryProductId),
     ]),
   ];
   const productCodes = await prisma.inventoryProduct.findMany({
@@ -271,7 +307,7 @@ export default async function BranchCountStatisticsPage({
   const productConfigs = new Map(productCodes.map((p) => [p.id, p]));
 
   // 1. TOP CONSUMO: Ordenado por valor financiero consumido ($) y velocidad de agotamiento
-  const consumption = consumptionGroupRows
+  const consumption = allConsumptionGroups
     .map((group) => {
       // A historical movement can remain after its catalog item was removed. Keep
       // it visible with a neutral cost/unit configuration instead of inventing a
@@ -297,7 +333,7 @@ export default async function BranchCountStatisticsPage({
 
   const branchNames = new Map(branches.map((b) => [b.id, b.name]));
   const consumptionByBranch = [
-    ...consumptionGroupRows
+    ...allConsumptionGroups
       .reduce((map, group) => {
         const current = map.get(group.branchId) ?? {
           name: branchNames.get(group.branchId) ?? "Sucursal histórica",

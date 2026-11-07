@@ -6,6 +6,7 @@ import type { Notification, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { canUserViewNotification } from "@/lib/notifications/access";
+import { canonicalNotificationHref } from "@/lib/notifications/links";
 
 export type NotificationCategory =
   | "POS"

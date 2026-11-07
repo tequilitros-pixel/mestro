@@ -254,7 +254,7 @@ export async function POST(
                 body: `${user.name} cerró un corte con diferencia de ${formattedDiff}. Revisa el arqueo y desglose.`,
                 category: "POS",
                 priority: "URGENT",
-                href: `/cash-cuts/${cashCutId}`,
+                href: `/cash-cuts/daily/${cashCutId}`,
                 metadata: { cashCutId, difference: diff, branchId: updated.branchId },
               }
             );

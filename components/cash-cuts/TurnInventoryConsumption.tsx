@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 import type { PosSaleTransaction } from "./TurnTransactionsLive";
+import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
+import { formatInventoryDashboardQuantity, type InventoryProductUnitConfig } from "@/lib/inventory/units";
 
 const formatMoney = (v: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(v);
@@ -15,6 +17,7 @@ interface ConsumedIngredient {
   quantity: number;
   unitCost: number;
   totalCost: number;
+  unitConfig: InventoryProductUnitConfig;
 }
 
 export function TurnInventoryConsumption({
@@ -45,7 +48,16 @@ export function TurnInventoryConsumption({
 
           const key = `${invProd.id}:${ing.unit ?? invProd.unit}`;
           const qty = Number(ing.quantity) * item.quantity;
-          const unitCost = Number(invProd.unitCost ?? 0);
+          const unitCost = costPerInventoryBaseUnit(invProd) ?? 0;
+          const unitConfig: InventoryProductUnitConfig = {
+            productName: invProd.name,
+            unit: invProd.unit,
+            inventoryBaseUnit: invProd.inventoryBaseUnit,
+            handlingUnit: invProd.handlingUnit,
+            contentPerUnit: invProd.contentPerUnit,
+            contentUnit: invProd.contentUnit,
+            normalizedContentPerUnit: invProd.normalizedContentPerUnit,
+          };
 
           const existing = map.get(key);
           if (existing) {
@@ -60,6 +72,7 @@ export function TurnInventoryConsumption({
               quantity: qty,
               unitCost,
               totalCost: qty * unitCost,
+              unitConfig,
             });
           }
         }
@@ -156,7 +169,7 @@ export function TurnInventoryConsumption({
                     <p className="font-mono text-[10px] text-on-surface-variant">{ing.code}</p>
                   </div>
                   <div className="col-span-3 text-right font-mono font-bold text-on-surface">
-                    {ing.quantity.toLocaleString("es-MX", { maximumFractionDigits: 3 })} {ing.unit}
+                    {formatInventoryDashboardQuantity(ing.quantity, ing.unitConfig)}
                   </div>
                   <div className="col-span-2 text-right font-mono text-on-surface-variant">
                     {ing.unitCost > 0 ? formatMoney(ing.unitCost) : "—"}

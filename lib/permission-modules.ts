@@ -93,6 +93,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     group: "Punto de Venta",
     modules: [
       { key: "/pos", label: "Caja y cobros · Punto de Venta (POSpress)" },
+      { key: "/pos/sales", label: "Resumen de ventas" },
       { key: "/pospress/tables", label: "Mesas y cuentas" },
       { key: "/pospress/pending-tabs", label: "Cuentas pendientes" },
       { key: "/pospress/catalog", label: "Editor de productos POS" },
@@ -222,6 +223,8 @@ export function canAccessModule(
   // Compatibilidad bidireccional /pos <-> /pospress
   if (moduleKey === "/pos" && moduleKeys.includes("/pospress")) return true;
   if (moduleKey === "/pospress" && moduleKeys.includes("/pos")) return true;
+  // El permiso de caja siempre ha incluido la consulta del resumen de ventas.
+  if (moduleKey === "/pos/sales" && moduleKeys.includes("/pos")) return true;
 
   // Compatibilidad bidireccional /administration <-> /administration/inventory
   if (moduleKey === "/administration" && moduleKeys.includes("/administration/inventory")) return true;
@@ -366,6 +369,9 @@ export function getModuleKeyForPath(pathname: string): string | null {
   }
 
   // 6. Punto de Venta (POSpress)
+  if (pathname === "/pos/sales" || pathname.startsWith("/pos/sales/")) {
+    return "/pos/sales";
+  }
   if (
     pathname === "/pospress/transactions" ||
     pathname.startsWith("/pospress/transactions/")
@@ -458,9 +464,9 @@ export function isInventoryManagerReadPath(pathname: string): boolean {
   );
 }
 
-/** Roles autorizados a capturar conteo para su sucursal asignada. */
+/** Roles autorizados a capturar conteos para sus sucursales asignadas. */
 export function isInventoryCountCaptureRole(role: string): boolean {
-  return role === "ADMIN" || role === "GERENTE" || role === "OPERATOR";
+  return role === "ADMIN" || role === "GERENTE" || role === "ENCARGADO" || role === "OPERATOR";
 }
 
 /** Primera pantalla útil después de iniciar sesión, según los permisos asignados. */
@@ -479,6 +485,6 @@ export function getDefaultPathForModuleKeys(moduleKeys: string[]): string {
   );
 
   if (defaultKey === "/pos") return "/pospress";
-  if (defaultKey === "/pos/sales") return "/pospress/transactions";
+  if (defaultKey === "/pos/sales") return "/pos/sales";
   return defaultKey ?? "/profile";
 }

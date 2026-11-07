@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
+import { prisma, rawPrisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
   DRINKS_CATALOG,
@@ -725,38 +725,16 @@ export async function getPublicQuoteByCode(rawCode: string): Promise<PublicQuote
   const code = decodeURIComponent(rawCode || "").trim().toUpperCase();
   if (!code) return null;
 
-  // 1. Buscar coincidencia directa en AuditEvent (entityId)
-  let auditRecord = await prisma.auditEvent.findFirst({
-    where: {
-      entityType: "TequilitrosQuote",
-      OR: [{ entityId: code }, { id: code }],
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  // 2. Si no coincide con entityId (por ejemplo si buscan por folio de contrato CTR-...)
-  if (!auditRecord) {
-    const records = await prisma.auditEvent.findMany({
-      where: { entityType: "TequilitrosQuote" },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    });
-
-    auditRecord =
-      records.find((rec) => {
-        const q = parseStoredQuote(rec.metadata);
-        if (!q) return false;
-        return (
-          q.code.toUpperCase() === code ||
-          (q.contractFolio && q.contractFolio.toUpperCase() === code) ||
-          (q.folio && q.folio.toUpperCase() === code)
-        );
-      }) ?? null;
-  }
-
-  if (!auditRecord) return null;
-
-  const quote = parseStoredQuote(auditRecord.metadata);
+  // Public quote links are intentionally available without a session. AuditEvent
+  // is protected by RLS, so use the narrowly scoped SECURITY DEFINER lookup
+  // instead of bypassing row security for the whole table.
+  const rows = await rawPrisma.$queryRaw<Array<{ metadata: unknown }>>`
+    SELECT metadata
+    FROM public.get_public_tequilitros_quote(${code})
+    LIMIT 1
+  `;
+  const metadata = rows[0]?.metadata;
+  const quote = parseStoredQuote(metadata);
   if (!quote) return null;
 
   return {
@@ -770,7 +748,7 @@ export async function getPublicQuoteByCode(rawCode: string): Promise<PublicQuote
     saleAmount: Number(quote.saleAmount ?? 0),
     status: quote.status,
     isConfirmed: Boolean(quote.isContractConfirmed || quote.status === "CONFIRMED"),
-    createdAt: quote.createdAt || auditRecord.createdAt.toISOString(),
+    createdAt: quote.createdAt || new Date().toISOString(),
     metadata: quote,
   };
 }

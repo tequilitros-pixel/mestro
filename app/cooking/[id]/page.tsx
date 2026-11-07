@@ -10,6 +10,7 @@ import { startSteamAction, changeSteamPressureAction, stopSteamAction, createSwe
 import { notFound, redirect } from "next/navigation";
 import { advanceLotStage } from "@/lib/lotStage";
 import { businessDayStart, formatBusinessDateOnly } from "@/lib/dateTime";
+import { notifyCookingAlert } from "@/lib/notifications/tequilaAlerts";
 
 import CookingCharts from "@/components/CookingCharts";
 import FinishCookingModal from "@/components/FinishCookingModal";
@@ -317,6 +318,17 @@ export default async function CookingDetailPage({
       },
     });
 
+    const maxTemp = Math.max(temperatureTop, temperatureMiddle, temperatureBottom);
+    if (maxTemp > 105 || (hasStartedVapor && maxTemp < 75)) {
+      notifyCookingAlert({
+        lotCode: cooking.lot.code,
+        cookingId: id,
+        ovenName: cooking.equipment.name,
+        type: "TEMP_WARNING",
+        temperature: maxTemp,
+      }).catch((err) => console.error("Error dispatching cooking temp alert:", err));
+    }
+
     redirect(`/cooking/${id}?saved=1`);
   }
 
@@ -441,6 +453,15 @@ export default async function CookingDetailPage({
     if (result.count === 0) {
       redirect(`/cooking/${id}`);
     }
+
+    notifyCookingAlert({
+      lotCode: cooking.lot.code,
+      cookingId: id,
+      ovenName: cooking.equipment.name,
+      type: "FINISHED",
+      finalAgaveKg,
+      sweetHoneyLiters: finalSweetHoneyLiters,
+    }).catch((err) => console.error("Error dispatching cooking finished alert:", err));
 
     redirect(`/cooking/${id}?finished=1`);
   }

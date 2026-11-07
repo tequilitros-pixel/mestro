@@ -11,13 +11,15 @@ import {
 export default async function NewDistillationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ lotId?: string; error?: string }>;
 }) {
-  const [{ error }, sources, equipments] = await Promise.all([
+  const [{ lotId: queryLotId, error }, sources, equipments] = await Promise.all([
     searchParams,
     getDistillationSources(),
     findAvailableEquipment(["ALAMBIQUE"]),
   ]);
+
+  const defaultSource = sources.find((s) => s.lotId === queryLotId) ?? sources[0];
 
   async function createDistillation(formData: FormData) {
     "use server";
@@ -67,7 +69,7 @@ export default async function NewDistillationPage({
           <form action={createDistillation} className="mt-8 grid gap-5 rounded-2xl bg-surface-container p-8">
             <label className="grid gap-2 text-sm font-semibold">
               Fuente y volumen restante
-              <select name="source" required className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3">
+              <select name="source" defaultValue={defaultSource ? `${defaultSource.type}:${defaultSource.id}` : ""} required className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3">
                 <option value="">Selecciona una tina o destrozado</option>
                 {sources.map((source) => (
                   <option key={`${source.type}:${source.id}`} value={`${source.type}:${source.id}`}>
@@ -91,11 +93,11 @@ export default async function NewDistillationPage({
             </label>
             <label className="grid gap-2 text-sm font-semibold">
               Litros a cargar
-              <input name="loadedLiters" type="number" min="0.01" step="0.01" required className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3" />
+              <input name="loadedLiters" type="number" min="0.01" step="0.01" defaultValue={defaultSource ? defaultSource.availableLiters : ""} required className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3" />
             </label>
             <label className="grid gap-2 text-sm font-semibold">
               Alcohol inicial % (opcional)
-              <input name="initialAlcohol" type="number" min="0" max="100" step="0.01" className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3" />
+              <input name="initialAlcohol" type="number" min="0" max="100" step="0.01" defaultValue={defaultSource?.initialAlcohol ?? ""} className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3" />
             </label>
             <p className="text-xs text-on-surface-variant">El servidor vuelve a comprobar el saldo y la capacidad al guardar; nunca permite sobreasignar una tina.</p>
             <button className="rounded-xl bg-primary px-6 py-3 font-bold text-on-primary">Abrir corrida</button>

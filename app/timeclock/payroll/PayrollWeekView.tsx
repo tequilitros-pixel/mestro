@@ -477,8 +477,106 @@ export default function PayrollWeekView() {
                 Nadie registró horas en esta semana.
               </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1220px] border-separate border-spacing-0 text-sm">
+              <>
+                <div className="grid gap-2 p-2 sm:grid-cols-2 xl:hidden">
+                  {visibleEmployees.map((employee) => {
+                    const approvalLabel =
+                      employee.approval.status === "PAGADA"
+                        ? "Pagado"
+                        : employee.approval.status === "APROBADA"
+                          ? "Aprobado"
+                          : employee.approval.status === "REVISION"
+                            ? "En revisión"
+                            : "Borrador";
+                    const actionLabel = table.period.status === "BORRADOR" ? "Editar turnos" : "Ver detalle";
+
+                    return (
+                      <article
+                        key={employee.id}
+                        className="rounded-xl border border-outline-variant bg-surface-container-lowest p-3 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => openEmployeeReview(employee.id)}
+                              className="truncate text-left text-sm font-bold text-on-surface hover:text-primary hover:underline"
+                            >
+                              {employee.name}
+                            </button>
+                            {employee.missingRate && (
+                              <span className="mt-1 inline-flex rounded-full bg-error/15 px-2 py-0.5 text-[9px] font-bold text-error">
+                                Sin tarifa
+                              </span>
+                            )}
+                          </div>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wide ${
+                              employee.approval.status === "APROBADA" || employee.approval.status === "PAGADA"
+                                ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
+                                : "bg-secondary/15 text-secondary"
+                            }`}
+                          >
+                            {approvalLabel}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-7 gap-1" aria-label={`Horas de ${employee.name}`}>
+                          {employee.hoursByDay.map((dayHours, index) => (
+                            <div
+                              key={DAY_LABELS[index]}
+                              className={`rounded-md px-1 py-1.5 text-center ${
+                                dayHours > 0
+                                  ? "bg-tertiary-fixed-dim/12 text-tertiary-fixed-dim"
+                                  : "bg-surface-container text-outline"
+                              }`}
+                            >
+                              <span className="block text-[9px] font-bold uppercase">{DAY_LABELS[index]}</span>
+                              <span className="block font-mono text-[11px] font-black tabular-nums">
+                                {dayHours > 0 ? hours(dayHours) : "—"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-3 gap-2 border-t border-outline-variant pt-2.5 text-xs">
+                          <div>
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-outline">Horas</p>
+                            <p className="mt-0.5 font-mono font-black tabular-nums text-on-surface">{hours(employee.totalHours)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-outline">Tarifa</p>
+                            <p className="mt-0.5 truncate font-semibold tabular-nums text-on-surface">
+                              {employee.variableRate ? "Varias" : employee.hourlyRate === null ? "—" : money(employee.hourlyRate)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-outline">A pagar</p>
+                            <p className="mt-0.5 truncate font-black tabular-nums text-on-surface">
+                              {employee.missingRate && employee.adjustmentsTotal === 0 ? "—" : money(employee.finalPay)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => openEmployeeReview(employee.id)}
+                          className="mt-3 min-h-11 w-full rounded-lg border border-primary/30 bg-primary/5 px-3 text-xs font-bold text-primary hover:bg-primary/10"
+                        >
+                          {actionLabel}
+                        </button>
+                      </article>
+                    );
+                  })}
+                  {visibleEmployees.length === 0 && (
+                    <p className="col-span-full p-8 text-center text-sm text-on-surface-variant">
+                      No encontramos empleados con ese nombre.
+                    </p>
+                  )}
+                </div>
+
+                <div className="hidden overflow-x-auto xl:block">
+                <table className="w-full min-w-[1120px] border-separate border-spacing-0 text-xs">
                   <thead className="bg-surface-container-high">
                     <tr className="text-left text-[11px] uppercase tracking-wide text-outline">
                       <th className="sticky left-0 z-20 w-56 border-b border-r border-outline-variant bg-surface-container-high px-4 py-3 font-bold">Empleado</th>
@@ -551,7 +649,8 @@ export default function PayrollWeekView() {
                   </tbody>
                 </table>
                 {visibleEmployees.length === 0 && <p className="p-8 text-center text-sm text-on-surface-variant">No encontramos empleados con ese nombre.</p>}
-              </div>
+                </div>
+              </>
             )}
           </section>
         </>
@@ -628,17 +727,29 @@ function EmployeeDetailModal({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
 
-    getEmployeePayrollDetail(userId, weekStart).then((result) => {
-      if (cancelled) return;
-      if ("error" in result) {
-        setError(result.error);
+    void getEmployeePayrollDetail(userId, weekStart)
+      .then((result) => {
+        if (cancelled) return;
+        if ("error" in result) {
+          setError(result.error);
+          setDetail(null);
+        } else {
+          setError(null);
+          setDetail(result.data);
+        }
+      })
+      .catch((loadError: unknown) => {
+        if (cancelled) return;
         setDetail(null);
-      } else {
-        setError(null);
-        setDetail(result.data);
-      }
-      setLoading(false);
-    });
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "No se pudo cargar el expediente de nómina.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
     return () => {
       cancelled = true;

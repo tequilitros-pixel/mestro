@@ -5,7 +5,13 @@ import { advanceLotStage } from "@/lib/lotStage";
 import { findAvailableEquipment, reserveEquipment } from "@/lib/equipmentAvailability";
 import { requireModuleActionAccess } from "@/lib/auth";
 
-export default async function NewCookingPage() {
+export default async function NewCookingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ lotId?: string; error?: string }>;
+}) {
+  const { lotId: queryLotId, error } = (await searchParams) ?? {};
+
   /*
    * Solo lotes que todavía pueden entrar al horno. Un lote ya
    * molido, fermentado o terminado no debe aparecer: antes salían
@@ -15,6 +21,8 @@ export default async function NewCookingPage() {
     where: { stage: { in: [LotStage.RECEPCION, LotStage.COCCION] } },
     orderBy: { createdAt: "desc" },
   });
+
+  const selectedLot = lots.find((l) => l.id === queryLotId) ?? lots[0];
 
   const ovens = await findAvailableEquipment(["HORNO"]);
 
@@ -100,7 +108,7 @@ export default async function NewCookingPage() {
       <form action={createCooking} className="mt-8 space-y-6 rounded-2xl bg-surface-container p-8">
         <div>
           <label className="mb-2 block text-sm font-semibold text-on-surface-variant">Lote</label>
-          <select name="lotId" required className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary">
+          <select name="lotId" defaultValue={queryLotId ?? lots[0]?.id} required className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary">
             {lots.map((lot) => (
               <option key={lot.id} value={lot.id}>
                 {lot.code} — {lot.agaveKg.toLocaleString()} kg
@@ -122,7 +130,7 @@ export default async function NewCookingPage() {
 
         <div>
           <label className="mb-2 block text-sm font-semibold text-on-surface-variant">Kg de agave cargados</label>
-          <input name="agaveKg" type="number" required className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary" />
+          <input name="agaveKg" type="number" defaultValue={selectedLot?.agaveKg} required className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary" />
         </div>
 
         <div>

@@ -1,7 +1,9 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
-import { Prisma, type CatalogBaseUnit } from "@prisma/client";
+import { InventoryEntryType, InventoryMovementTypeV2, Prisma, type CatalogBaseUnit } from "@prisma/client";
 import { appendAuditEvent } from "@/lib/pos2/audit";
+import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
+import { calculateCountCutoverBalance } from "@/lib/inventory/countCutoverMath";
 
 function declarationOperationId(countId: string, itemId: string, countDate: Date) {
   const entropy = createHash("sha256")
@@ -22,6 +24,7 @@ function declarationOperationId(countId: string, itemId: string, countDate: Date
 type ReconciledItem = {
   productId: string;
   before: string;
+  counted: string;
   after: string;
   unit: CatalogBaseUnit;
   movementId: string | null;
@@ -64,6 +67,89 @@ export async function reconcileWeeklyCountCutover(
     throw new Error(`COUNT_ITEMS_PENDING:${pendingItems.length}`);
   }
 
+  // El consumo mostrado en el conteo es el movimiento real entre el conteo
+  // cerrado anterior y la fecha de este conteo. Incluimos ambos libros
+  // (V2 y legado) porque varias sucursales todavía tienen ventas históricas
+  // en InventoryEntry.
+  const previousCount = await tx.inventoryCount.findFirst({
+    where: {
+      branchId: count.branchId,
+      countType: count.countType,
+      status: "CERRADO",
+      countDate: { lt: count.countDate },
+    },
+    orderBy: { countDate: "desc" },
+    select: { countDate: true },
+  });
+  const intervalStart = previousCount?.countDate ?? new Date(0);
+  const intervalEnd = new Date(count.countDate);
+  intervalEnd.setUTCDate(intervalEnd.getUTCDate() + 1);
+  const productIds = [...new Set(count.items.map((item) => item.productId))];
+  const [movements, legacyEntries] = await Promise.all([
+    tx.inventoryMovement.findMany({
+      where: {
+        branchId: count.branchId,
+        inventoryProductId: { in: productIds },
+        createdAt: { gte: intervalStart, lt: intervalEnd },
+        movementType: {
+          in: [
+            InventoryMovementTypeV2.SALE_CONSUMPTION,
+            InventoryMovementTypeV2.SALE_REVERSAL,
+            InventoryMovementTypeV2.EVENT_LOAD,
+            InventoryMovementTypeV2.EVENT_RETURN,
+            InventoryMovementTypeV2.RECEIPT,
+            InventoryMovementTypeV2.TRANSFER_IN,
+            InventoryMovementTypeV2.ADJUSTMENT_IN,
+          ],
+        },
+      },
+      select: { inventoryProductId: true, movementType: true, quantityDelta: true },
+    }),
+    tx.inventoryEntry.findMany({
+      where: {
+        branchId: count.branchId,
+        productId: { in: productIds },
+        entryDate: { gte: intervalStart, lt: intervalEnd },
+        type: {
+          in: [
+            InventoryEntryType.VENTA_POS,
+            InventoryEntryType.DEVOLUCION_POS,
+            InventoryEntryType.SALIDA_EVENTO,
+            InventoryEntryType.REGRESO_EVENTO,
+            InventoryEntryType.COMPRA,
+            InventoryEntryType.TRASPASO,
+          ],
+        },
+      },
+      select: { productId: true, type: true, quantity: true },
+    }),
+  ]);
+  const consumedByProduct = new Map<string, Prisma.Decimal>();
+  const entriesByProduct = new Map<string, Prisma.Decimal>();
+  const addAmount = (map: Map<string, Prisma.Decimal>, productId: string, amount: Prisma.Decimal) => {
+    map.set(productId, (map.get(productId) ?? new Prisma.Decimal(0)).plus(amount));
+  };
+  for (const movement of movements) {
+    const quantity = new Prisma.Decimal(movement.quantityDelta);
+    if ([InventoryMovementTypeV2.SALE_CONSUMPTION, InventoryMovementTypeV2.EVENT_LOAD].includes(movement.movementType)) {
+      addAmount(consumedByProduct, movement.inventoryProductId, quantity.abs());
+    } else if ([InventoryMovementTypeV2.SALE_REVERSAL, InventoryMovementTypeV2.EVENT_RETURN].includes(movement.movementType)) {
+      addAmount(consumedByProduct, movement.inventoryProductId, quantity.abs().neg());
+    } else {
+      addAmount(entriesByProduct, movement.inventoryProductId, quantity.abs());
+    }
+  }
+  for (const entry of legacyEntries) {
+    const quantity = new Prisma.Decimal(entry.quantity);
+    if ([InventoryEntryType.VENTA_POS, InventoryEntryType.SALIDA_EVENTO].includes(entry.type)) {
+      addAmount(consumedByProduct, entry.productId, quantity.abs());
+    } else if ([InventoryEntryType.DEVOLUCION_POS, InventoryEntryType.REGRESO_EVENTO].includes(entry.type)) {
+      addAmount(consumedByProduct, entry.productId, quantity.abs().neg());
+    } else if (quantity.gt(0)) {
+      addAmount(entriesByProduct, entry.productId, quantity);
+    }
+  }
+
   for (const productId of [...new Set(count.items.map((item) => item.productId))].sort()) {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${count.branchId}:${productId}`},0))::text`;
   }
@@ -81,18 +167,38 @@ export async function reconcileWeeklyCountCutover(
     const balance = locked[0];
     if (!balance) throw new Error("BALANCE_NOT_FOUND");
 
-    const delta = counted.minus(balance.quantity);
+    // `quantityCounted` is the physical stock at the exact time this row was
+    // captured. A count can remain open while the branch keeps operating, so
+    // closing it must not undo sales, receipts, transfers, or reversals that
+    // were posted after `countedAt`.
+    const postCaptureMovements = await tx.inventoryMovement.findMany({
+      where: {
+        branchId: count.branchId,
+        inventoryProductId: product.id,
+        createdAt: { gt: item.countedAt! },
+      },
+      select: { quantityDelta: true },
+    });
+    const postCaptureDelta = postCaptureMovements.reduce(
+      (sum, movement) => sum.plus(movement.quantityDelta),
+      new Prisma.Decimal(0),
+    );
+    const { balanceAfter, correctionDelta } = calculateCountCutoverBalance({
+      currentBalance: balance.quantity,
+      countedQuantity: counted,
+      postCaptureDelta,
+    });
     let movementId: string | null = null;
-    if (!delta.isZero()) {
+    if (!correctionDelta.isZero()) {
       const movement = await tx.inventoryMovement.create({
         data: {
           branchId: count.branchId,
           inventoryProductId: product.id,
           movementType: "COUNT_CORRECTION",
-          quantityDelta: delta,
+          quantityDelta: correctionDelta,
           unit: product.inventoryBaseUnit,
           balanceBefore: balance.quantity,
-          balanceAfter: counted,
+          balanceAfter,
           sourceType: "COUNT",
           sourceId: input.countId,
           actorId: input.actorId,
@@ -104,6 +210,10 @@ export async function reconcileWeeklyCountCutover(
             countId: input.countId,
             countType: count.countType,
             authoritative: true,
+            countedQuantity: counted.toFixed(6),
+            countedAt: item.countedAt!.toISOString(),
+            postCaptureDelta: postCaptureDelta.toFixed(6),
+            postCaptureMovementCount: postCaptureMovements.length,
             ...(item.notes?.trim() ? { notes: item.notes.trim() } : {}),
           },
         },
@@ -111,7 +221,7 @@ export async function reconcileWeeklyCountCutover(
       movementId = movement.id;
       await tx.inventoryBalance.update({
         where: { id: balance.id },
-        data: { quantity: counted, version: { increment: 1 } },
+        data: { quantity: balanceAfter, version: { increment: 1 } },
       });
     }
 
@@ -136,17 +246,18 @@ export async function reconcileWeeklyCountCutover(
       where: { id: item.id },
       data: {
         previousQuantity: balance.quantity,
-        entriesQuantity: 0,
-        quantityConsumed: 0,
-        unitCostAtTime: product.unitCost,
-        costTotal: 0,
+        entriesQuantity: entriesByProduct.get(product.id) ?? new Prisma.Decimal(0),
+        quantityConsumed: consumedByProduct.get(product.id) ?? new Prisma.Decimal(0),
+        unitCostAtTime: costPerInventoryBaseUnit(product) ?? product.unitCost,
+        costTotal: (consumedByProduct.get(product.id) ?? new Prisma.Decimal(0)).mul(costPerInventoryBaseUnit(product) ?? 0),
       },
     });
 
     reconciled.push({
       productId: product.id,
       before: balance.quantity.toFixed(6),
-      after: counted.toFixed(6),
+      counted: counted.toFixed(6),
+      after: balanceAfter.toFixed(6),
       unit: product.inventoryBaseUnit,
       movementId,
       declarationId: declaration.id,
