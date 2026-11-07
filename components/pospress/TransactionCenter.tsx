@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertIcon, PrinterIcon, RefreshIcon } from "@/components/ui/icons";
 import { cancelQueuedOperation, listOperations, retryQueuedOperation } from "@/lib/offline/queue";
 import type { OfflineOperation } from "@/lib/offline/types";
+import { needsPosSaleReconciliation } from "@/lib/offline/syncPolicy";
 import { useOfflineSync } from "@/components/offline/OfflineProvider";
 import { todayDateOnly } from "@/lib/dateOnly";
 import PostSaleModal from "@/components/pos/PostSaleModal";
@@ -161,15 +162,34 @@ export default function TransactionCenter({ branches, workers, initialSales, can
 
   async function actLocal(item: ViewItem, action: "cancel" | "retry") {
     setBusyId(item.id);
-    if (action === "cancel") {
-      const reason = window.prompt("Motivo de cancelación local (opcional):");
-      if (reason !== null) await cancelQueuedOperation(item.id, reason);
-    } else {
-      await retryQueuedOperation(item.id);
-      if (navigator.onLine) await syncNow();
+    try {
+      if (action === "cancel") {
+        const confirmed = window.confirm(
+          "Cancelar aquí solo impide que la venta local se sincronice; NO devuelve dinero. Primero comprueba que no esté registrada en el servidor. ¿Continuar?",
+        );
+        if (!confirmed) return;
+        const reason = window.prompt("Motivo de cancelación local (opcional):");
+        if (reason === null) return;
+        const cancelled = await cancelQueuedOperation(item.id, reason);
+        if (!cancelled) window.alert("La operación cambió de estado y no se puede cancelar localmente.");
+      } else {
+        const confirmed = window.confirm(
+          "Antes de reintentar, verifica que este cobro no aparezca completado en el servidor. Se conservará el mismo identificador de venta. ¿Reintentar?",
+        );
+        if (!confirmed) return;
+        const retried = await retryQueuedOperation(item.id);
+        if (!retried) {
+          window.alert("Esta transacción requiere conciliación manual o ya cambió de estado. No se reenviará.");
+          return;
+        }
+        if (navigator.onLine) await syncNow();
+      }
+      await refresh();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "No se pudo actualizar la transacción local.");
+    } finally {
+      setBusyId(null);
     }
-    await refresh();
-    setBusyId(null);
   }
 
   async function resolveSale(item: ViewItem, resolutionType: "CANCELACION" | "REEMBOLSO") {
@@ -194,12 +214,20 @@ export default function TransactionCenter({ branches, workers, initialSales, can
         const selected = selectedId === item.id;
         const local = item.source === "local";
         const terminal = local ? item.operation!.status === "failed" ? "Error de sincronización" : item.operation!.status === "cancelled" ? "Cancelada en dispositivo" : item.operation!.status === "syncing" ? "Subiendo…" : "Pendiente de subir" : item.status === "CANCELADA" ? "Cancelada / reembolsada" : "Subida a la nube";
+        const requiresReview = local && needsPosSaleReconciliation(item.operation!.lastError);
         return <article key={`${item.source}-${item.id}`} className={`rounded-2xl border bg-surface-container p-4 ${item.status === "CANCELADA" || (local && item.operation!.status === "cancelled") ? "border-outline-variant opacity-70" : "border-outline-variant"}`}>
           <button type="button" onClick={() => setSelectedId(selected ? null : item.id)} className="flex w-full items-center justify-between gap-3 text-left"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-on-surface">{item.code}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${local && item.operation!.status === "failed" ? "bg-error/15 text-error" : item.status === "CANCELADA" || (local && item.operation!.status === "cancelled") ? "bg-outline-variant text-on-surface-variant" : local ? "bg-secondary/15 text-secondary" : "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"}`}>{terminal}</span></div><p className="mt-1 truncate text-xs text-on-surface-variant">{time(item.createdAt)} · {item.branch} · {item.detail || "Sin detalle"}</p></div><span className="shrink-0 text-lg font-bold text-on-surface">{item.total === null ? "Por confirmar" : currency(item.total)}</span></button>
-          {selected && <div className="mt-4 border-t border-outline-variant pt-3 text-sm"><div className="grid gap-2 text-on-surface-variant sm:grid-cols-3"><span>Origen: <b className="text-on-surface">{local ? "Este dispositivo" : "Servidor"}</b></span><span>Estado: <b className="text-on-surface">{terminal}</b></span><span>{local ? `Intentos: ${item.operation!.attempts}` : `Cajero: ${item.sale!.soldBy.name}`}</span></div>{!local && item.sale!.payments.length > 0 && <p className="mt-2 text-xs text-on-surface-variant">Pagos: {item.sale!.payments.map((payment) => `${payment.method} ${currency(payment.amount)}`).join(" · ")}</p>}<div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => openReceipt(item)} className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/20 transition"><PrinterIcon className="h-3.5 w-3.5" />Ticket / Imprimir</button>{local && item.operation!.status === "failed" && <button onClick={() => void actLocal(item, "retry")} disabled={busyId === item.id} className="rounded-lg border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface">Reintentar</button>}{local && ["pending", "failed"].includes(item.operation!.status) && <button onClick={() => void actLocal(item, "cancel")} disabled={busyId === item.id} className="rounded-lg border border-error/30 px-3 py-2 text-xs font-bold text-error">Cancelar localmente</button>}{!local && canCancel && item.sale!.status !== "CANCELADA" && <><button onClick={() => void resolveSale(item, "CANCELACION")} disabled={busyId === item.id} className="rounded-lg border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface">Cancelar</button><button onClick={() => void resolveSale(item, "REEMBOLSO")} disabled={busyId === item.id} className="rounded-lg bg-secondary px-3 py-2 text-xs font-bold text-on-secondary">Reembolsar</button></>}</div>{!local && item.sale!.cancelReason && <p className="mt-3 rounded-lg bg-surface p-2 text-xs text-on-surface-variant">{item.sale!.cancelReason}</p>}</div>}
+          {local && item.operation!.status === "failed" && (
+            <div role="alert" className="mt-3 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+              <p className="font-semibold">Motivo de la falla: {item.operation!.lastError || "El servidor no informó un motivo; conserva la operación para revisarla."}</p>
+              <p className="mt-1 text-xs">Esta venta no se reintentará automáticamente. Revisa si ya se registró antes de volver a enviarla.</p>
+              {requiresReview && <p className="mt-1 text-xs font-semibold">Requiere conciliación manual; no se permite el reintento.</p>}
+            </div>
+          )}
+          {selected && <div className="mt-4 border-t border-outline-variant pt-3 text-sm"><div className="grid gap-2 text-on-surface-variant sm:grid-cols-3"><span>Origen: <b className="text-on-surface">{local ? "Este dispositivo" : "Servidor"}</b></span><span>Estado: <b className="text-on-surface">{terminal}</b></span><span>{local ? `Intentos: ${item.operation!.attempts}` : `Cajero: ${item.sale!.soldBy.name}`}</span></div>{!local && item.sale!.payments.length > 0 && <p className="mt-2 text-xs text-on-surface-variant">Pagos: {item.sale!.payments.map((payment) => `${payment.method} ${currency(payment.amount)}`).join(" · ")}</p>}<div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => openReceipt(item)} className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/20 transition"><PrinterIcon className="h-3.5 w-3.5" />Ticket / Imprimir</button>{local && item.operation!.status === "failed" && !requiresReview && <button onClick={() => void actLocal(item, "retry")} disabled={busyId === item.id} className="rounded-lg border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface">Reintentar</button>}{local && ["pending", "failed"].includes(item.operation!.status) && <button onClick={() => void actLocal(item, "cancel")} disabled={busyId === item.id} className="rounded-lg border border-error/30 px-3 py-2 text-xs font-bold text-error">Cancelar localmente</button>}{!local && canCancel && item.sale!.status !== "CANCELADA" && <><button onClick={() => void resolveSale(item, "CANCELACION")} disabled={busyId === item.id} className="rounded-lg border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface">Cancelar</button><button onClick={() => void resolveSale(item, "REEMBOLSO")} disabled={busyId === item.id} className="rounded-lg bg-secondary px-3 py-2 text-xs font-bold text-on-secondary">Reembolsar</button></>}</div>{!local && item.sale!.cancelReason && <p className="mt-3 rounded-lg bg-surface p-2 text-xs text-on-surface-variant">{item.sale!.cancelReason}</p>}</div>}
         </article>;
       })}</div>
-      <p className="flex items-center gap-2 text-xs text-on-surface-variant"><AlertIcon className="h-4 w-4" />Las operaciones pendientes se conservan con el mismo identificador; no se duplica el cobro al reintentar.</p>
+      <p className="flex items-center gap-2 text-xs text-on-surface-variant"><AlertIcon className="h-4 w-4" />Las operaciones fallidas requieren revisión y reintento manual. Se conserva el identificador original para la conciliación; evita cobrar una segunda vez antes de verificar la venta.</p>
       {viewingReceipt && (
         <PostSaleModal
           receipt={viewingReceipt}
