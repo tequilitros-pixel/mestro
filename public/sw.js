@@ -1,7 +1,10 @@
 // Service Worker de Maestro — Destiladora del Norte
 // Estrategia Offline-First para App Store y PWA Standalone
 
-const CACHE_NAME = "maestro-shell-v13";
+const CACHE_NAME = "maestro-shell-v14";
+
+// Las páginas de autenticación nunca deben guardarse ni mostrarse desde caché.
+const AUTH_NAVIGATION_PATH = /^\/(?:login|forgot-password|reset-password|api\/session)(?:\/|$)/;
 
 const STATIC_PRECACHE = [
   "/manifest.json",
@@ -70,17 +73,26 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // Solo interceptar peticiones de nuestro propio origen
+  // No interceptar POST (incluidas las Server Actions del login) ni otros métodos.
+  if (request.method !== "GET") return;
+
+  // Solo interceptar peticiones de nuestro propio origen.
   if (url.origin !== self.location.origin) return;
+
+  // Nunca servir un estado previo del login (?error=1) desde almacenamiento local.
+  if (AUTH_NAVIGATION_PATH.test(url.pathname)) return;
 
   // 1. Navegación (Páginas HTML): Network-First con Fallback a Caché de App Shell
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) {
+          // Un redirect a /login puede terminar con HTTP 200. No cachear
+          // la respuesta de autenticación bajo la URL privada original.
+          const resolvedUrl = response.url || request.url;
+          if (response.ok && !AUTH_NAVIGATION_PATH.test(new URL(resolvedUrl).pathname)) {
             const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)));
           }
           return response;
         })
