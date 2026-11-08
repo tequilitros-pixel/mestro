@@ -40,7 +40,7 @@ test("Punto de Venta separa vender, transacciones y ventas resumen", () => {
   assert.equal(sale?.permissionKey, "/pos");
   assert.equal(transactions?.permissionKey, "/pos/sales");
   assert.equal(summary?.href, "/pos/sales");
-  assert.deepEqual(summary?.permissionKeys, ["/pos", "/pos/sales"]);
+  assert.equal(summary?.permissionKey, "/pos/sales");
   assert.equal(getSubmenuItemDestination("GERENTE", ["/pos"], sale!), "/pospress");
   assert.equal(getMainModuleDestination("GERENTE", ["/pos"], main!), "/pospress");
   assert.equal(
@@ -105,7 +105,7 @@ test("cada pestaña delegable está representada en el catálogo de permisos", (
   }
 });
 
-test("Vender concede Punto de Venta y Ventas resumen, pero no Transacciones", () => {
+test("Vender no concede Ventas resumen ni Transacciones", () => {
   const items = SUBMENUS.pos;
   const visible = (label: string) =>
     isSubmenuItemVisible("GERENTE", ["/pos"], items.find((item) => item.label === label)!);
@@ -113,7 +113,7 @@ test("Vender concede Punto de Venta y Ventas resumen, pero no Transacciones", ()
   assert.equal(visible("Punto de Venta"), true);
   assert.equal(visible("Mesas"), true);
   assert.equal(visible("Transacciones"), false);
-  assert.equal(visible("Ventas resumen"), true);
+  assert.equal(visible("Ventas resumen"), false);
   assert.equal(
     isSubmenuItemVisible(
       "GERENTE",

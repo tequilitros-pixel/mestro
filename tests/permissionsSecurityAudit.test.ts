@@ -36,6 +36,8 @@ test("POSpress conserva permisos separados para venta y transacciones", () => {
     getDefaultPathForModuleKeys(["/pos/sales"]),
     "/pospress/transactions",
   );
+  assert.equal(canAccessModule("GERENTE", ["/pos"], "/pos/sales"), false);
+  assert.equal(canAccessModule("GERENTE", ["/pos/sales"], "/pos/sales"), true);
 });
 
 test("Apple puede abrir soporte y documentos legales sin sesión", () => {

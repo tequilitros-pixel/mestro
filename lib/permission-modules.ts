@@ -222,9 +222,6 @@ export function canAccessModule(
   // Compatibilidad bidireccional /pos <-> /pospress
   if (moduleKey === "/pos" && moduleKeys.includes("/pospress")) return true;
   if (moduleKey === "/pospress" && moduleKeys.includes("/pos")) return true;
-  // El permiso de caja siempre ha incluido la consulta del resumen de ventas.
-  if (moduleKey === "/pos/sales" && moduleKeys.includes("/pos")) return true;
-
   // Compatibilidad bidireccional /administration <-> /administration/inventory
   if (moduleKey === "/administration" && moduleKeys.includes("/administration/inventory")) return true;
   if (moduleKey === "/administration/inventory" && moduleKeys.includes("/administration")) return true;
