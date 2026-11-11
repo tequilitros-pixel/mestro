@@ -4,10 +4,10 @@ import { LotStage } from "@prisma/client";
 import { advanceLotStage } from "@/lib/lotStage";
 import { findAvailableEquipment, reserveEquipment } from "@/lib/equipmentAvailability";
 import { requireModuleActionAccess } from "@/lib/auth";
-import { MILLING_ALLOWED_LOT_STAGES, suggestedMillingCookedKg } from "@/lib/milling/eligibleLots";
+import { MILLING_ALLOWED_LOT_STAGES } from "@/lib/milling/eligibleLots";
 
-export default async function NewMillingPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await searchParams;
+export default async function NewMillingPage({ searchParams }: { searchParams: Promise<{ error?: string; lotId?: string }> }) {
+  const { error, lotId: selectedLotId } = await searchParams;
   const lots = await prisma.lot.findMany({
     where: {
       stage: { in: MILLING_ALLOWED_LOT_STAGES },
@@ -161,6 +161,7 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
             <select
               name="lotId"
               id="lotId"
+              defaultValue={lots.some((lot) => lot.id === selectedLotId) ? selectedLotId : ""}
               required
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             >
@@ -170,14 +171,11 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
                 const totalCookedKg = lot.cookings.reduce(
                   (sum, cooking) => sum + (cooking.finalAgaveKg ?? cooking.agaveKg), 0
                 );
-                const suggestedKg = suggestedMillingCookedKg(totalCookedKg, lot.millings.length);
-
                 return (
                   <option
                     key={lot.id}
                     value={lot.id}
-                    data-cooked-kg={suggestedKg ?? ""}
-                  >
+                                      >
                     {lot.code}
                     {totalCookedKg > 0
                       ? ` — ${totalCookedKg.toLocaleString("es-MX")} kg cocidos en el lote`
@@ -224,14 +222,15 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
               step="0.01"
               min="0.01"
               name="cookedKg"
+              placeholder="Kilos realmente procesados en esta jornada"
               id="cookedKg"
               required
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             />
 
             <p className="mt-1 text-xs text-outline">
-              Captura solamente los kilos de esta molienda, no los kilos totales del lote.
-              En jornadas posteriores se deja vacío para evitar duplicaciones.
+              Captura solamente los kilos reales de esta jornada, no los kilos totales del lote.
+              Nunca se precarga el total para evitar duplicaciones.
             </p>
           </div>
 
@@ -241,24 +240,7 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
 
         </form>
 
-        <script
-          // Sugiere el kg cocido real de la cocción terminada
-          // del lote seleccionado, sin necesitar un componente cliente.
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function () {
-                var lotSelect = document.getElementById("lotId");
-                var cookedKgInput = document.getElementById("cookedKg");
-                if (!lotSelect || !cookedKgInput) return;
-                lotSelect.addEventListener("change", function () {
-                  var option = lotSelect.options[lotSelect.selectedIndex];
-                  var suggested = option ? option.getAttribute("data-cooked-kg") : "";
-                  cookedKgInput.value = suggested || "";
-                });
-              })();
-            `,
-          }}
-        />
+
       </div>
     </main>
   );
