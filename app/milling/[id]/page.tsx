@@ -9,6 +9,7 @@ import {
   MillingStatus,
 } from "@prisma/client";
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { advanceLotStage } from "@/lib/lotStage";
 import {
   businessDayStart,
@@ -785,8 +786,9 @@ export default async function MillingDetailPage({
 
             <div className="mt-6 border-t border-outline-variant pt-6">
               <p className="mb-3 text-sm text-on-surface-variant">
-                Finaliza únicamente después de confirmar
-                todas las descargas y resultados oficiales.
+                Finaliza esta molienda después de confirmar
+                las descargas y mediciones de la jornada. Podrás crear otra molienda
+                para el mismo lote y enviar mosto a una tina diferente.
               </p>
 
               <FinishMillingModal
@@ -817,12 +819,20 @@ export default async function MillingDetailPage({
             {hasFinished && (
           <section className="rounded-2xl border border-outline-variant bg-surface-container p-8 text-center">
             <h2 className="text-xl font-bold text-on-surface">
-              Esta etapa ya está cerrada
+              Esta molienda ya está cerrada
             </h2>
 
             <p className="mx-auto mt-2 max-w-md text-sm text-on-surface-variant">
-              Ya no se pueden registrar más datos. Consulta lo capturado en las
-              pestañas Home, Gráficas y Bitácora.
+              No puedes agregar descargas a este registro. El mismo lote puede
+              tener otras moliendas en días posteriores.
+            </p>
+            {milling.lot.finishedAt === null && (
+              <Link href="/milling/new" className="mt-5 inline-flex rounded-xl bg-primary px-5 py-3 font-bold text-on-primary">
+                Crear otra molienda del mismo lote
+              </Link>
+            )}
+            <p className="mx-auto mt-4 max-w-md text-sm text-on-surface-variant">
+              Consulta las mediciones anteriores en Home, Gráficas y Bitácora.
             </p>
           </section>
         )}
