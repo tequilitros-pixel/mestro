@@ -47,7 +47,7 @@ export default function FinishMillingModal({
         onClick={() => setIsOpen(true)}
         className="w-full rounded-xl bg-tertiary-fixed-dim px-6 py-4 text-lg font-bold text-on-primary transition hover:opacity-90"
       >
-        Finalizar molienda
+        Finalizar esta molienda
       </button>
 
       {isOpen && (
@@ -65,7 +65,7 @@ export default function FinishMillingModal({
                   </h2>
 
                   <p className="mt-2 text-sm text-on-surface-variant">
-                    Confirma los resultados oficiales antes de cerrar el proceso.
+                    Confirma los resultados de esta molienda. El lote puede continuar con otra molienda en los próximos días.
                   </p>
                 </div>
 
@@ -263,8 +263,8 @@ export default function FinishMillingModal({
                   </p>
 
                   <p className="mt-1 text-sm text-error/70">
-                    Después de confirmar ya no podrán registrarse nuevas
-                    descargas ni eventos de molienda.
+                    Este registro se cierra definitivamente y no admite más descargas.
+                    Podrás iniciar una nueva molienda para el mismo lote y otra tina.
                   </p>
                 </div>
 
@@ -281,7 +281,7 @@ export default function FinishMillingModal({
                     type="submit"
                     className="rounded-xl bg-tertiary-fixed-dim px-6 py-3 font-bold text-on-primary transition hover:opacity-90"
                   >
-                    Confirmar y cerrar molienda
+                    Cerrar esta molienda
                   </button>
                 </div>
               </form>
