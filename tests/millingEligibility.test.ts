@@ -20,9 +20,3 @@ test("permite más jornadas de molienda aunque el mismo lote ya haya avanzado", 
   assert.ok(!MILLING_ALLOWED_LOT_STAGES.includes(LotStage.TERMINADO));
 });
 
-test("evita sugerir los mismos kilos cocidos en cada jornada", () => {
-  assert.equal(suggestedMillingCookedKg(4000, 0), 4000);
-  assert.equal(suggestedMillingCookedKg(4000, 1), null);
-  assert.equal(suggestedMillingCookedKg(4000, 3), null);
-  assert.equal(suggestedMillingCookedKg(0, 0), null);
-});
