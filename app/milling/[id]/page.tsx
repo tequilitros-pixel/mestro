@@ -827,7 +827,7 @@ export default async function MillingDetailPage({
               tener otras moliendas en días posteriores.
             </p>
             {milling.lot.finishedAt === null && (
-              <Link href="/milling/new" className="mt-5 inline-flex rounded-xl bg-primary px-5 py-3 font-bold text-on-primary">
+              <Link href={`/milling/new?lotId=${milling.lotId}`} className="mt-5 inline-flex rounded-xl bg-primary px-5 py-3 font-bold text-on-primary">
                 Crear otra molienda del mismo lote
               </Link>
             )}
