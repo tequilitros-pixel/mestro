@@ -3,7 +3,6 @@ import test from "node:test";
 import { LotStage } from "@prisma/client";
 import {
   MILLING_ALLOWED_LOT_STAGES,
-  suggestedMillingCookedKg,
 } from "../lib/milling/eligibleLots";
 
 test("permite más jornadas de molienda aunque el mismo lote ya haya avanzado", () => {
