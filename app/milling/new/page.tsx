@@ -175,7 +175,7 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
                   <option
                     key={lot.id}
                     value={lot.id}
-                                      >
+                  >
                     {lot.code}
                     {totalCookedKg > 0
                       ? ` — ${totalCookedKg.toLocaleString("es-MX")} kg cocidos en el lote`
@@ -239,8 +239,6 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
           </button>
 
         </form>
-
-
       </div>
     </main>
   );
