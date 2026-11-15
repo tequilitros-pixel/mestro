@@ -59,7 +59,7 @@ export default async function NewDistillationPage({
         <p className="mt-3 text-on-surface-variant">
           Puedes abrir varias corridas del mismo lote. Cada carga descuenta litros de su tina o destrozado de origen.
         </p>
-        {error && <div className="mt-6 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">{decodeURIComponent(error)}</div>}
+        {error && <div className="mt-6 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">{error}</div>}
 
         {blockers.length > 0 ? (
           <div className="mt-8 space-y-2 rounded-2xl border border-secondary/30 bg-secondary/10 p-8">
@@ -93,7 +93,7 @@ export default async function NewDistillationPage({
             </label>
             <label className="grid gap-2 text-sm font-semibold">
               Litros a cargar
-              <input name="loadedLiters" type="number" min="0.01" step="0.01" defaultValue={defaultSource ? defaultSource.availableLiters : ""} required className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3" />
+              <input name="loadedLiters" type="number" min="0.01" step="0.01" placeholder="Litros de esta corrida" required className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3" />
             </label>
             <label className="grid gap-2 text-sm font-semibold">
               Alcohol inicial % (opcional)
