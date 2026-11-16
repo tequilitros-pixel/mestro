@@ -26,14 +26,20 @@ export default function CloseCountButton({ countId, operationId }: { countId: st
 
   async function handleClose() {
     if (hasUnsavedChanges()) return;
+    if (saving || submitted) return;
     setSaving(true);
-    const response = await closeInventoryCountAction(countId, operationId);
-    setResult(response);
-    setSaving(false);
-
-    if (response.success) {
-      setSubmitted(true);
-      showToast("Inventario enviado correctamente.");
+    try {
+      const response = await closeInventoryCountAction(countId, operationId);
+      setResult(response);
+      if (response.success) {
+        setSubmitted(true);
+        showToast("Conteo finalizado correctamente.");
+        router.refresh();
+      }
+    } catch {
+      setResult({ success: false, error: "No fue posible confirmar el cierre. Revisa tu conexión e inténtalo de nuevo." });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -42,7 +48,7 @@ export default function CloseCountButton({ countId, operationId }: { countId: st
       {submitted && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
           <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-2xl">
-            <h2 className="text-xl font-bold text-on-surface">Inventario enviado correctamente</h2>
+            <h2 className="text-xl font-bold text-on-surface">Conteo finalizado correctamente</h2>
             <p className="mt-2 text-sm text-on-surface-variant">
               El conteo quedó cerrado y el stock actual de la sucursal fue actualizado.
             </p>
@@ -79,12 +85,12 @@ export default function CloseCountButton({ countId, operationId }: { countId: st
           }}
           className="rounded-xl bg-tertiary-fixed-dim px-5 py-3 font-semibold text-on-surface transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
         >
-          Cerrar conteo y calcular consumo
+          Finalizar conteo
         </button>
       ) : (
         <div className="flex items-center gap-3">
           <span className="text-sm text-on-surface-variant">
-            ¿Confirmas cerrar? Ya no podrás editar cantidades.
+            ¿Confirmas finalizar? Se actualizará el stock de la sucursal y ya no podrás editar cantidades.
           </span>
           <button
             onClick={handleClose}
@@ -95,6 +101,7 @@ export default function CloseCountButton({ countId, operationId }: { countId: st
           </button>
           <button
             onClick={() => setConfirming(false)}
+            disabled={saving}
             className="text-sm text-on-surface-variant hover:text-on-surface-variant"
           >
             Cancelar

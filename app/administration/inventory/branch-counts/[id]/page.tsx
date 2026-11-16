@@ -39,7 +39,7 @@ export default async function CountDetailPage({
     notFound();
   }
 
-  if (user.role !== "ADMIN" && count.status !== "BORRADOR") {
+  if (user.role !== "ADMIN" && count.status !== "BORRADOR" && count.countType !== "WEEKLY") {
     notFound();
   }
 
@@ -95,7 +95,7 @@ export default async function CountDetailPage({
           </p>
         )}
 
-        {count.status === "CERRADO" && (
+        {isAdmin && count.status === "CERRADO" && (
           <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
             <p className="text-xs text-on-surface-variant">Costo total consumido esta semana</p>
             <p className="mt-1 text-2xl font-bold text-tertiary-fixed-dim">
@@ -140,7 +140,7 @@ export default async function CountDetailPage({
           <AddCountProduct key={missingProducts.map(({ id }) => id).join(",")} countId={count.id} products={missingProducts.map(({ id, name }) => ({ id, name }))} />
         )}
 
-        {editable && user.role === "ADMIN" && <CloseCountButton countId={count.id} operationId={generateOperationId()} />}
+        {editable && (user.role === "ADMIN" || count.countType === "WEEKLY") && <CloseCountButton countId={count.id} operationId={generateOperationId()} />}
       </div>
     </main>
   );
