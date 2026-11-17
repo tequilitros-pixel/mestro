@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getAccessibleBranchIds, requireAdminAction, requireInventoryCountCaptureActionAccess } from "@/lib/auth";
+import { getAccessibleBranchIds, requireInventoryCountCaptureActionAccess } from "@/lib/auth";
 import { isBranchAllowed } from "@/lib/branches/access";
 import { parseDateOnly } from "@/lib/dateOnly";
 import { executeIdempotent } from "@/lib/pos2/idempotency";
@@ -335,9 +335,16 @@ export async function closeInventoryCountAction(
   operationId: string,
 ): Promise<ActionResult> {
   try {
-    const actor = await requireAdminAction();
-    const scopedCount = await prisma.inventoryCount.findUnique({ where: { id: countId }, select: { branchId: true } });
+    const actor = await requireInventoryCountCaptureActionAccess();
+    const scopedCount = await prisma.inventoryCount.findUnique({
+      where: { id: countId },
+      select: { branchId: true, countType: true },
+    });
     if (!scopedCount) return { success: false, error: "Conteo no encontrado." };
+    await authorizeCountBranch(scopedCount.branchId);
+    if (actor.role !== "ADMIN" && scopedCount.countType !== "WEEKLY") {
+      throw new Error("PERMISSION_DENIED");
+    }
     await executeIdempotent({
       operationId,
       command: "CloseInventoryCountV2",
@@ -354,6 +361,9 @@ export async function closeInventoryCountAction(
     return { success: true, message: "Conteo cerrado y consumo calculado." };
   } catch (error) {
     console.error("Error closing inventory count:", error);
+    if (error instanceof Error && error.message === "PERMISSION_DENIED") {
+      return { success: false, error: "No tienes permiso para finalizar este conteo en esta sucursal." };
+    }
     if (error instanceof Error && error.message === "COUNT_ALREADY_CLOSED") {
       return { success: false, error: "Este conteo ya está cerrado." };
     }
