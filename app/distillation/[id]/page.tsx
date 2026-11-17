@@ -1031,11 +1031,13 @@ export default async function DistillationDetailPage({
         <div className="mt-8">
           <ProcessSwitcher
             title="Alambiques de este lote"
+            filterActive
             basePath="/distillation"
             currentId={id}
             items={siblingDistillations.map((item) => ({
               id: item.id,
               label: item.equipment.name,
+              active: item.status === DistillationStatus.ACTIVA,
               detail: `${item.sourceFermentation?.tank ?? item.sourceDistillation?.sourceFermentation?.tank ?? "Sin tina"} · ${formatNumber(item.loadedLiters)} L`,
               status: item.status === DistillationStatus.TERMINADA ? "Terminada" : item.status === DistillationStatus.CANCELADA ? "Cancelada" : "Activa",
             }))}
