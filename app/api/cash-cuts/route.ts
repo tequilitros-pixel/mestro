@@ -2,6 +2,7 @@ import { applyEventInventoryMovement } from "@/lib/inventory/eventMovements";
 import { generateOperationId } from "@/lib/pos2/operationId";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { assertCashCutBranch, lockCashCutOwner } from "@/lib/pos/cashCutBranchGuard";
 import { getAccessibleBranchIds } from "@/lib/auth";
 import { getCashCutScope, withCashCutReadScope, withCashCutScope } from "@/lib/cash-cuts/access";
 import { isBranchAllowed } from "@/lib/branches/access";
@@ -225,7 +226,8 @@ export async function POST(request: Request) {
 
   try {
   const cashCut = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT "id" FROM "Branch" WHERE "id"=${branchId} FOR UPDATE`;
+    const cutResponsibleId = responsibleId ?? user.id;
+    await lockCashCutOwner(tx, cutResponsibleId);
     if (clientOperationId) {
       const existing = await tx.cashCut.findUnique({ where: { id: clientOperationId } });
       if (existing) {
@@ -233,6 +235,8 @@ export async function POST(request: Request) {
         return existing;
       }
     }
+    await assertCashCutBranch(tx, cutResponsibleId, branchId);
+    await tx.$queryRaw`SELECT "id" FROM "Branch" WHERE "id"=${branchId} FOR UPDATE`;
     if (eventId) await tx.$queryRaw`SELECT "id" FROM "ServiceEvent" WHERE "id"=${eventId} FOR UPDATE`;
     const lockedEvent = eventId ? await tx.serviceEvent.findUnique({ where: { id: eventId }, include: { items: { orderBy: { productId: "asc" } } } }) : null;
     if (eventId && (!lockedEvent || lockedEvent.stockDeductedAt || !lockedEvent.checkoutConfirmedAt || lockedEvent.returnConfirmedAt || lockedEvent.status === "CANCELLED")) throw new Error("Confirma la salida de un evento que no tenga inventario descontado antes de vincularlo al corte.");
@@ -243,7 +247,7 @@ export async function POST(request: Request) {
         branchId,
         date: parseDateOnly(date),
         startingFund,
-        responsibleId: responsibleId ?? user.id,
+        responsibleId: cutResponsibleId,
         createdById: user.id,
         status: "ABIERTO",
         openedAt,
