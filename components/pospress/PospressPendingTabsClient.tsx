@@ -1038,7 +1038,7 @@ function PendingTabPaymentModal({
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
-        throw new Error(data?.error ?? "No fue posible cobrar la cuenta.");
+        throw new Error(typeof data?.error === "string" ? data.error : data?.error?.message ?? "No fue posible cobrar la cuenta.");
       }
 
       const saleData = await response.json();

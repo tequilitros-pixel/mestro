@@ -18,6 +18,7 @@ import { appendAuditEvent } from "@/lib/pos2/audit";
 import { appendOutboxEvent } from "@/lib/pos2/outbox";
 import { evaluateCapabilityShadow } from "@/lib/pos2/capabilities";
 import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
+import { assertCashCutBranch, lockCashCutOwner } from "@/lib/pos/cashCutBranchGuard";
 
 const ROLES_QUE_PUEDEN_VENDER = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -541,6 +542,8 @@ export async function POST(request: NextRequest) {
   try {
     const sale = await prisma.$transaction(async (tx) => {
     await setRlsContext(tx, user);
+    await lockCashCutOwner(tx, user.id);
+    await assertCashCutBranch(tx, user.id, branchId);
     const lockedCuts = await tx.$queryRaw<Array<{ status: string }>>`
       SELECT "status" FROM "CashCut" WHERE "id" = ${openCashCut.id} FOR UPDATE
     `;

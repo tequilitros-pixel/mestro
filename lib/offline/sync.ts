@@ -76,14 +76,15 @@ async function runSync() {
       }
 
       const result = (await response.json().catch(() => null)) as
-        | { success?: boolean; error?: string }
+        | { success?: boolean; error?: string | { message?: string } }
         | null;
 
       const accepted = directApiOperation
         ? response.ok
         : response.ok && result?.success;
       if (!accepted) {
-        throw new Error(result?.error ?? `Error de sincronización (${response.status})`);
+        const message = typeof result?.error === "string" ? result.error : result?.error?.message;
+        throw new Error(message ?? `Error de sincronización (${response.status})`);
       }
 
       await removeOperation(operation.id);

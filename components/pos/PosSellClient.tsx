@@ -147,12 +147,14 @@ export default function PosSellClient({
   branchOptions,
   canManageCatalog,
   initialBranchId,
+  branchLockMessage,
   title = "Punto de Venta",
   inventoryMode = "legacy",
 }: {
   branchOptions: BranchOption[];
   canManageCatalog: boolean;
   initialBranchId?: string;
+  branchLockMessage?: string | null;
   title?: string;
   inventoryMode?: "legacy" | "v2";
 }) {
@@ -457,7 +459,9 @@ export default function PosSellClient({
 
           <div className="flex items-center gap-2">
             <select
+              aria-label="Sucursal de venta"
               value={branchId}
+              disabled={branchOptions.length <= 1}
               onChange={(e) => setBranchId(e.target.value)}
               className="rounded-xl border border-outline-variant bg-surface-container px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
             >
@@ -532,6 +536,11 @@ export default function PosSellClient({
           </div>
         </div>
 
+        {branchLockMessage && (
+          <p role="status" className="border-b border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface-variant">
+            {branchLockMessage}
+          </p>
+        )}
         {!hasOpenCut && branch && (
           <div className="mx-4 mt-4 flex items-center gap-3 rounded-xl border border-secondary/30 bg-secondary/10 p-4">
             <AlertIcon className="h-5 w-5 shrink-0 text-secondary" />

@@ -1,39 +1,20 @@
 import { getCurrentUser, getAccessibleBranchIds } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getPosSaleBranchOptions } from "@/lib/pos/cashCutBranchGuard";
 import PosSellClient from "@/components/pos/PosSellClient";
 
 export default async function PosSellPage() {
   const user = await getCurrentUser();
   const allowedBranchIds = await getAccessibleBranchIds();
 
-  const branches = await prisma.branch.findMany({
-    where: {
-      active: true,
-      ...(allowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
-    },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
-
-  const openCuts = await prisma.cashCut.findMany({
-    where: {
-      status: "ABIERTO",
-      branchId: { in: branches.map((b) => b.id) },
-    },
-    select: { id: true, branchId: true },
-  });
-
-  const openCutByBranch = new Map(openCuts.map((c) => [c.branchId, c.id]));
-
-  const branchOptions = branches.map((b) => ({
-    id: b.id,
-    name: b.name,
-    openCashCutId: openCutByBranch.get(b.id) ?? null,
-  }));
+  if (!user) return null;
+  const { branches, branchLockMessage } = await getPosSaleBranchOptions(prisma, user.id, allowedBranchIds);
 
   return (
     <PosSellClient
-      branchOptions={branchOptions}
+      key={branches.map((branch) => branch.id).join(",")}
+      branchLockMessage={branchLockMessage}
+      branchOptions={branches}
       canManageCatalog={user?.role === "ADMIN"}
     />
   );

@@ -117,3 +117,24 @@ test("localStorage failure after acknowledgment does not reject or resurrect sal
   await assert.doesNotReject(syncOfflineQueue());
   assert.equal(rows.size, 0);
 });
+
+test("venta de otra sucursal conserva el rechazo legible y no envía su recibo ni cierra caja", async () => {
+  const sale = operation("1");
+  sale.payload = { clientOperationId: "1", branchId: "canoas" };
+  const receipt = operation("2", "pos.sale.email");
+  receipt.payload = { saleId: "1" };
+  reset(sale, receipt, operation("3", "cash-cut.close"));
+  const message = "Tienes un corte abierto en Colotlán Centro. Cierra ese corte antes de operar en otra sucursal.";
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests++;
+    return Response.json({ error: { code: "CASH_SESSION_NOT_OPEN", message, retryable: false } }, { status: 409 });
+  };
+  await syncOfflineQueue();
+  assert.equal(requests, 1);
+  assert.equal(rows.get("1")?.status, "failed");
+  assert.equal(rows.get("1")?.lastError, message);
+  assert.deepEqual(rows.get("1")?.payload, sale.payload);
+  assert.equal(rows.get("2")?.status, "pending");
+  assert.equal(rows.get("3")?.status, "pending");
+});
