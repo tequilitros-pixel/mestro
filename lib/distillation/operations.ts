@@ -30,9 +30,9 @@ type Source = {
 };
 
 export async function getDistillationSources(): Promise<Source[]> {
-  const [fermentations, destrozados, receivers] = await Promise.all([
+  const [fermentations, receivers] = await Promise.all([
     prisma.fermentation.findMany({
-      where: { status: "TERMINADA" },
+      where: { status: "TERMINADA", lot: { stage: { not: LotStage.TERMINADO } } },
       include: {
         lot: true,
         distillations: {
@@ -42,21 +42,8 @@ export async function getDistillationSources(): Promise<Source[]> {
       },
       orderBy: { finishedAt: "desc" },
     }),
-    prisma.distillation.findMany({
-      where: { status: DistillationStatus.TERMINADA, type: DistillationType.DESTROZADO },
-      include: {
-        lot: true,
-        derivedDistillations: {
-          where: { status: { not: DistillationStatus.CANCELADA } },
-          select: { loadedLiters: true },
-        },
-        sourceFermentation: { select: { tank: true } },
-        receiverTransfer: true,
-      },
-      orderBy: { finishedAt: "desc" },
-    }),
     prisma.distillationReceiver.findMany({
-      where: { status: DistillationReceiverStatus.READY },
+      where: { status: DistillationReceiverStatus.READY, lot: { stage: { not: LotStage.TERMINADO } } },
       include: {
         lot: { select: { code: true } },
         transfers: true,
@@ -66,8 +53,23 @@ export async function getDistillationSources(): Promise<Source[]> {
     }),
   ]);
 
+  // Una fuente marcada como tina vacía no es inventario físico disponible.
+  // El ajuste se conserva en la bitácora de AuditEvent, sin modificar litros históricos.
+  const drained = fermentations.length
+    ? await prisma.auditEvent.findMany({
+        where: {
+          entityType: "Fermentation",
+          action: "FERMENTATION_SOURCE_EMPTIED",
+          entityId: { in: fermentations.map((source) => source.id) },
+        },
+        select: { entityId: true },
+      })
+    : [];
+  const drainedIds = new Set(drained.map((entry) => entry.entityId));
+
   const result: Source[] = [];
   for (const fermentation of fermentations) {
+    if (drainedIds.has(fermentation.id)) continue;
     const allocated = fermentation.distillations.reduce((sum, run) => sum + run.loadedLiters, 0);
     const availableLiters = Math.max(0, fermentation.mustLiters - allocated);
     if (availableLiters > EPSILON) {
@@ -86,29 +88,8 @@ export async function getDistillationSources(): Promise<Source[]> {
     }
   }
 
-  for (const destrozado of destrozados) {
-    if (destrozado.receiverTransfer) continue;
-    const sourceLiters =
-      destrozado.finalHeartLiters && destrozado.finalHeartLiters > 0
-        ? destrozado.finalHeartLiters
-        : destrozado.finalLiters ?? 0;
-    const allocated = destrozado.derivedDistillations.reduce((sum, run) => sum + run.loadedLiters, 0);
-    const availableLiters = Math.max(0, sourceLiters - allocated);
-    if (availableLiters > EPSILON) {
-      result.push({
-        id: destrozado.id,
-        lotId: destrozado.lotId,
-        lotCode: destrozado.lot.code,
-        type: DistillationType.RECTIFICACION,
-        sourceKind: "DISTILLATION",
-        label: "Rectificación individual",
-        tankName: destrozado.sourceFermentation?.tank ?? null,
-        availableLiters,
-        sourceLiters,
-        initialAlcohol: destrozado.finalAlcohol,
-      });
-    }
-  }
+  // El destrozado terminado debe pasar por el tanque receptor.
+  // No ofrecer corridas individuales como fuente directa para rectificación.
 
   for (const receiver of receivers) {
     const stock = receiverTotals(receiver);
@@ -164,6 +145,16 @@ export async function startDistillationRun(input: {
       const source = await tx.fermentation.findUnique({ where: { id: input.sourceId } });
       if (!source || source.status !== "TERMINADA") {
         throw new DistillationOperationError("La fermentación ya no está disponible.", "SOURCE_UNAVAILABLE");
+      }
+      const [lot, drained] = await Promise.all([
+        tx.lot.findUnique({ where: { id: source.lotId }, select: { stage: true } }),
+        tx.auditEvent.findFirst({
+          where: { entityType: "Fermentation", entityId: source.id, action: "FERMENTATION_SOURCE_EMPTIED" },
+          select: { id: true },
+        }),
+      ]);
+      if (!lot || lot.stage === LotStage.TERMINADO || drained) {
+        throw new DistillationOperationError("Esta tina ya fue cerrada o el lote está terminado.", "SOURCE_CLOSED");
       }
       lotId = source.lotId;
       sourceLiters = source.mustLiters;
@@ -330,9 +321,17 @@ export async function reconcileLotDistillationStage(
       where: { lotId, status: "TERMINADA" },
       include: { distillations: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true, status: true } } },
     });
+    const closedSources = sources.length
+      ? await tx.auditEvent.findMany({
+          where: { entityType: "Fermentation", action: "FERMENTATION_SOURCE_EMPTIED", entityId: { in: sources.map((source) => source.id) } },
+          select: { entityId: true },
+        })
+      : [];
+    const closedIds = new Set(closedSources.map((row) => row.entityId));
     const complete = sources.length > 0 && sources.every((source) => {
       const allocated = source.distillations.reduce((sum, run) => sum + run.loadedLiters, 0);
-      return source.mustLiters - allocated <= EPSILON && source.distillations.every((run) => run.status === DistillationStatus.TERMINADA);
+      return (closedIds.has(source.id) || source.mustLiters - allocated <= EPSILON)
+        && source.distillations.every((run) => run.status === DistillationStatus.TERMINADA);
     });
     if (complete) await advanceLotStage(tx, lotId, LotStage.RECTIFICACION);
     return complete;
@@ -376,4 +375,73 @@ export async function reconcileLotDistillationStage(
   const complete = activeDestrozados === 0 && sourcesComplete && receiversComplete;
   if (complete) await advanceLotStage(tx, lotId, LotStage.TERMINADO);
   return complete;
+}
+
+/**
+ * Marca una tina como físicamente vacía, sin falsear el mosto original ni
+ * los litros de destrozado registrados. Una diferencia pendiente conserva
+ * su magnitud, actor y motivo en AuditEvent.
+ */
+export async function closeEmptyFermentationSource(input: {
+  fermentationId: string;
+  actorId: string;
+  reason: string;
+}) {
+  const reason = input.reason.trim();
+  if (reason.length < 12 || reason.length > 500) {
+    throw new DistillationOperationError("Escribe un motivo de conciliación (mínimo 12 caracteres).", "REASON_REQUIRED");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Fermentation" WHERE "id" = ${input.fermentationId} FOR UPDATE`);
+    const source = await tx.fermentation.findUnique({
+      where: { id: input.fermentationId },
+      include: {
+        lot: { select: { stage: true, code: true } },
+        distillations: {
+          where: { status: { not: DistillationStatus.CANCELADA } },
+          select: { id: true, loadedLiters: true, status: true },
+        },
+      },
+    });
+    if (!source || source.status !== "TERMINADA" || source.lot.stage === LotStage.TERMINADO) {
+      throw new DistillationOperationError("No se puede conciliar esta tina.", "SOURCE_UNAVAILABLE");
+    }
+    if (source.distillations.some((run) => run.status === DistillationStatus.ACTIVA)) {
+      throw new DistillationOperationError("Termina primero las corridas activas de esta tina.", "ACTIVE_RUNS");
+    }
+    const previous = await tx.auditEvent.findFirst({
+      where: {
+        entityType: "Fermentation",
+        entityId: source.id,
+        action: "FERMENTATION_SOURCE_EMPTIED",
+      },
+      select: { id: true },
+    });
+    if (previous) throw new DistillationOperationError("Esta tina ya fue conciliada.", "ALREADY_CLOSED");
+    const loadedLiters = source.distillations.reduce((sum, run) => sum + run.loadedLiters, 0);
+    const residualLiters = Math.max(0, source.mustLiters - loadedLiters);
+    if (residualLiters <= EPSILON) {
+      throw new DistillationOperationError("Esta tina ya no tiene saldo contable pendiente.", "NO_RESIDUAL");
+    }
+    await tx.auditEvent.create({
+      data: {
+        actorId: input.actorId,
+        action: "FERMENTATION_SOURCE_EMPTIED",
+        entityType: "Fermentation",
+        entityId: source.id,
+        metadata: {
+          reason,
+          lotCode: source.lot.code,
+          tank: source.tank,
+          mustLiters: source.mustLiters,
+          destrozadoLoadedLiters: loadedLiters,
+          unregisteredResidualLiters: residualLiters,
+          physicallyEmptyConfirmed: true,
+        },
+      },
+    });
+    await reconcileLotDistillationStage(tx, source.lotId, DistillationType.DESTROZADO);
+    return { residualLiters, lotCode: source.lot.code, tank: source.tank };
+  });
 }
