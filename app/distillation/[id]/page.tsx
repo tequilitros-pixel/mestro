@@ -450,11 +450,24 @@ export default async function DistillationDetailPage({
           return updated;
         }
 
-        if (currentDistillation.type === "DESTROZADO" && currentDistillation.plannedReceiverId) {
-          await transferDestrozadoToReceiver(transaction, {
-            receiverId: currentDistillation.plannedReceiverId,
-            distillationId: id,
-          });
+        if (currentDistillation.type === "DESTROZADO") {
+          let receiverId = currentDistillation.plannedReceiverId;
+          if (!receiverId) {
+            // Si el lote tiene un único tanque abierto, no exigir que el
+            // operario recuerde seleccionarlo antes de cerrar la corrida.
+            const openReceivers = await transaction.distillationReceiver.findMany({
+              where: { lotId: currentDistillation.lotId, status: "OPEN" },
+              select: { id: true },
+              take: 2,
+            });
+            if (openReceivers.length === 1) receiverId = openReceivers[0].id;
+          }
+          if (receiverId) {
+            await transferDestrozadoToReceiver(transaction, {
+              receiverId,
+              distillationId: id,
+            });
+          }
         }
 
         await transaction.distillationEvent.create({
