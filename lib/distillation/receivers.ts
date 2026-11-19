@@ -92,11 +92,19 @@ export async function registerReceiver(input: { lotId: string; name: string; cap
     const lot = await tx.lot.findUnique({ where: { id: input.lotId }, select: { id: true } });
     if (!lot) throw new DistillationOperationError("El lote no existe.", "INVALID_LOT");
     // A physical tank cannot concurrently be used by an open receiver from another lot.
-    await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${name}))`);
-    const active = await tx.distillationReceiver.findFirst({
+    await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${name}))::text AS "lock"`);
+    const assignments = await tx.distillationReceiver.findMany({
       where: { name, status: { in: [DistillationReceiverStatus.OPEN, DistillationReceiverStatus.READY] } },
+      include: {
+        transfers: true,
+        rectifications: { select: { loadedLiters: true, status: true } },
+      },
     });
-    if (active) throw new DistillationOperationError("Ese tanque ya está asignado a un lote en proceso.", "TANK_BUSY");
+    const occupied = assignments.some((assignment) =>
+      assignment.status === DistillationReceiverStatus.OPEN
+      || receiverTotals(assignment).availableLiters > EPSILON
+    );
+    if (occupied) throw new DistillationOperationError("Ese tanque todavía contiene destrozado de otro lote.", "TANK_BUSY");
     return tx.distillationReceiver.create({ data: { lotId: input.lotId, name, capacityLiters: input.capacityLiters } });
   });
 }
