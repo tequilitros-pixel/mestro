@@ -189,7 +189,7 @@ export default async function DistillationDetailPage({
       }
       throw caught;
     }
-    redirect("/distillation?cancelled=1");
+    redirect(`/distillation/lots/${distillationLotId}?cancelled=1`);
   }
 
   async function addEvent(formData: FormData) {
@@ -1041,7 +1041,11 @@ export default async function DistillationDetailPage({
 
       <div className="mx-auto max-w-6xl">
         {error && <div role="alert" className="rounded-xl border border-error/40 bg-error/10 p-4 text-error">{error}</div>}
-        <div className="mt-3"><Link href="/distillation/receivers" className="text-sm font-semibold text-primary underline">Tanques de recepción de destrozado</Link></div>
+        <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold text-primary">
+          <Link href={`/distillation/lots/${distillation.lotId}`} className="underline">← Volver a las corridas del lote</Link>
+          <Link href={`/distillation/new?lotId=${distillation.lotId}`} className="underline">Nueva destilación de este lote</Link>
+          <Link href={`/distillation/receivers?lotId=${distillation.lotId}`} className="underline">Tanque receptor de este lote</Link>
+        </div>
         <header className="mt-8">
           <p className="font-mono text-sm uppercase tracking-[0.4em] text-outline">
             MAESTRO

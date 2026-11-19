@@ -26,12 +26,15 @@ function displayLiters(value: number) {
 export default async function DestrozadoReceiversPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{ lotId?: string; error?: string; saved?: string }>;
 }) {
   await requireModuleActionAccess("/distillation");
-  const { error, saved } = await searchParams;
+  const { lotId, error, saved } = await searchParams;
+  const returnUrl = lotId ? `/distillation/receivers?lotId=${encodeURIComponent(lotId)}` : "/distillation/receivers";
+  const separator = lotId ? "&" : "?";
   const [receivers, lots, availableDestrozados, availableAlambiques] = await Promise.all([
     prisma.distillationReceiver.findMany({
+      where: lotId ? { lotId } : undefined,
       include: {
         lot: { select: { code: true } },
         transfers: {
@@ -43,12 +46,13 @@ export default async function DestrozadoReceiversPage({
       orderBy: { createdAt: "desc" },
     }),
     prisma.lot.findMany({
-      where: { stage: { in: ["DESTILACION", "RECTIFICACION"] } },
+      where: { stage: { in: ["DESTILACION", "RECTIFICACION"] }, ...(lotId ? { id: lotId } : {}) },
       select: { id: true, code: true },
       orderBy: { startedAt: "desc" },
     }),
     prisma.distillation.findMany({
       where: {
+        ...(lotId ? { lotId } : {}),
         type: "DESTROZADO",
         status: "TERMINADA",
         receiverTransfer: { is: null },
@@ -71,15 +75,18 @@ export default async function DestrozadoReceiversPage({
     "use server";
     await requireModuleActionAccess("/distillation");
     try {
+      if (lotId && String(formData.get("lotId") ?? "") !== lotId) {
+        throw new DistillationOperationError("El tanque debe pertenecer al lote seleccionado.", "DIFFERENT_LOT");
+      }
       await registerReceiver({
         lotId: String(formData.get("lotId") ?? ""),
         name: String(formData.get("name") ?? ""),
         capacityLiters: Number(formData.get("capacityLiters")),
       });
     } catch (caught) {
-      redirect(`/distillation/receivers?error=${encodeURIComponent(detailError(caught))}`);
+      redirect(`${returnUrl}${separator}error=${encodeURIComponent(detailError(caught))}`);
     }
-    redirect("/distillation/receivers?saved=tank");
+    redirect(`${returnUrl}${separator}saved=tank`);
   }
 
   async function receive(formData: FormData) {
@@ -91,9 +98,9 @@ export default async function DestrozadoReceiversPage({
         distillationId: String(formData.get("distillationId") ?? ""),
       });
     } catch (caught) {
-      redirect(`/distillation/receivers?error=${encodeURIComponent(detailError(caught))}`);
+      redirect(`${returnUrl}${separator}error=${encodeURIComponent(detailError(caught))}`);
     }
-    redirect("/distillation/receivers?saved=transfer");
+    redirect(`${returnUrl}${separator}saved=transfer`);
   }
 
   async function receiveAll(formData: FormData) {
@@ -102,9 +109,9 @@ export default async function DestrozadoReceiversPage({
     try {
       await receiveAllCompletedDestrozados(String(formData.get("receiverId") ?? ""));
     } catch (caught) {
-      redirect(`/distillation/receivers?error=${encodeURIComponent(detailError(caught))}`);
+      redirect(`${returnUrl}${separator}error=${encodeURIComponent(detailError(caught))}`);
     }
-    redirect("/distillation/receivers?saved=all");
+    redirect(`${returnUrl}${separator}saved=all`);
   }
 
   async function makeReady(formData: FormData) {
@@ -113,9 +120,9 @@ export default async function DestrozadoReceiversPage({
     try {
       await sealReceiver(String(formData.get("receiverId") ?? ""));
     } catch (caught) {
-      redirect(`/distillation/receivers?error=${encodeURIComponent(detailError(caught))}`);
+      redirect(`${returnUrl}${separator}error=${encodeURIComponent(detailError(caught))}`);
     }
-    redirect("/distillation/receivers?saved=ready");
+    redirect(`${returnUrl}${separator}saved=ready`);
   }
 
   async function reopen(formData: FormData) {
@@ -124,9 +131,9 @@ export default async function DestrozadoReceiversPage({
     try {
       await reuseEmptyReceiver(String(formData.get("receiverId") ?? ""));
     } catch (caught) {
-      redirect(`/distillation/receivers?error=${encodeURIComponent(detailError(caught))}`);
+      redirect(`${returnUrl}${separator}error=${encodeURIComponent(detailError(caught))}`);
     }
-    redirect("/distillation/receivers?saved=reopened");
+    redirect(`${returnUrl}${separator}saved=reopened`);
   }
 
   async function loadPair(formData: FormData) {
@@ -146,17 +153,17 @@ export default async function DestrozadoReceiversPage({
         fillPercent: Number(formData.get("fillPercent") ?? 80),
       });
     } catch (caught) {
-      redirect(`/distillation/receivers?error=${encodeURIComponent(detailError(caught))}`);
+      redirect(`${returnUrl}${separator}error=${encodeURIComponent(detailError(caught))}`);
     }
-    redirect("/distillation/receivers?saved=pair");
+    redirect(`${returnUrl}${separator}saved=pair`);
   }
 
   return (
     <main className="min-h-screen bg-background p-4 text-on-surface sm:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
         <header>
-          <Link href="/distillation" className="text-sm text-primary underline">Volver a destilación</Link>
-          <h1 className="mt-3 text-3xl font-bold">Tanques de recepción de destrozado</h1>
+          <Link href={lotId ? `/distillation/lots/${lotId}` : "/distillation"} className="text-sm text-primary underline">← Volver a destilación</Link>
+          <h1 className="mt-3 text-3xl font-bold">Tanques de recepción de destrozado{lotId && lots[0] ? ` · ${lots[0].code}` : ""}</h1>
           <p className="mt-2 text-on-surface-variant">
             Reúne las descargas terminadas del mismo lote y, cuando termines de recibirlas,
             marca el tanque como listo para rectificar. Puedes cargar dos alambiques al mismo tiempo; cuando el saldo llega a cero el tanque físico queda libre para otro uso.
@@ -174,7 +181,7 @@ export default async function DestrozadoReceiversPage({
           <form action={createTank} className="mt-4 grid gap-3 sm:grid-cols-4">
             <label className="grid gap-1 text-sm font-semibold">
               Lote
-              <select name="lotId" required className="rounded-xl border border-outline-variant bg-surface-container-high p-3">
+              <select name="lotId" required defaultValue={lotId ?? ""} className="rounded-xl border border-outline-variant bg-surface-container-high p-3">
                 <option value="">Selecciona un lote</option>
                 {lots.map((lot) => <option key={lot.id} value={lot.id}>{lot.code}</option>)}
               </select>
