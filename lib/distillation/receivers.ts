@@ -11,6 +11,8 @@ import {
 import { prisma } from "@/lib/prisma";
 import { DistillationOperationError } from "@/lib/distillation/errors";
 import { advanceLotStage } from "@/lib/lotStage";
+import { receiverTotals } from "@/lib/distillation/receiverMath";
+export { receiverTotals } from "@/lib/distillation/receiverMath";
 
 const EPSILON = 0.005;
 
@@ -21,22 +23,6 @@ export function destrozadoProducedLiters(run: {
   return run.finalHeartLiters && run.finalHeartLiters > 0
     ? run.finalHeartLiters
     : run.finalLiters ?? 0;
-}
-
-/** The stock and ABV are derived from real transfers, never edited by hand. */
-export function receiverTotals(receiver: {
-  transfers: { liters: number; alcohol: number | null }[];
-  rectifications: { loadedLiters: number; status: DistillationStatus }[];
-}) {
-  const receivedLiters = receiver.transfers.reduce((sum, item) => sum + item.liters, 0);
-  const allocatedLiters = receiver.rectifications
-    .filter((item) => item.status !== DistillationStatus.CANCELADA)
-    .reduce((sum, item) => sum + item.loadedLiters, 0);
-  const allMeasured = receiver.transfers.every((item) => item.alcohol !== null);
-  const initialAlcohol = receivedLiters > 0 && allMeasured
-    ? receiver.transfers.reduce((sum, item) => sum + item.liters * (item.alcohol ?? 0), 0) / receivedLiters
-    : null;
-  return { receivedLiters, allocatedLiters, availableLiters: Math.max(0, receivedLiters - allocatedLiters), initialAlcohol };
 }
 
 /** Safe for both retroactive allocations and automatically on closing a run. */
