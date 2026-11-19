@@ -162,6 +162,7 @@ export async function startDistillationRun(input: {
     let sourceFermentationId: string | null = null;
     let sourceDistillationId: string | null = null;
     let sourceReceiverId: string | null = null;
+    let measuredSourceAlcohol: number | null = null;
 
     if (input.type === DistillationType.DESTROZADO) {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Fermentation" WHERE "id" = ${input.sourceId} FOR UPDATE`);
@@ -184,6 +185,7 @@ export async function startDistillationRun(input: {
       lotId = receiver.lotId;
       sourceLiters = receiver.transfers.reduce((sum, transfer) => sum + transfer.liters, 0);
       sourceReceiverId = receiver.id;
+      measuredSourceAlcohol = receiverTotals(receiver).initialAlcohol;
     } else if (!input.sourceKind || input.sourceKind === "DISTILLATION") {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Distillation" WHERE "id" = ${input.sourceId} FOR UPDATE`);
       const source = await tx.distillation.findUnique({ where: { id: input.sourceId } });
@@ -257,7 +259,7 @@ export async function startDistillationRun(input: {
         type: input.type,
         loadedLiters: input.loadedLiters,
         fillPercent: input.fillPercent,
-        initialAlcohol: input.initialAlcohol,
+        initialAlcohol: input.initialAlcohol ?? measuredSourceAlcohol,
         sourceFermentationId,
         sourceDistillationId,
         sourceReceiverId,
@@ -325,7 +327,7 @@ export async function reconcileLotDistillationStage(
     return complete;
   }
 
-  const [sources, receivers] = await Promise.all([
+  const [sources, receivers, activeDestrozados] = await Promise.all([
     tx.distillation.findMany({
       where: { lotId, type: DistillationType.DESTROZADO, status: DistillationStatus.TERMINADA },
       include: {
@@ -343,6 +345,7 @@ export async function reconcileLotDistillationStage(
         rectifications: { select: { loadedLiters: true, status: true } },
       },
     }),
+    tx.distillation.count({ where: { lotId, type: DistillationType.DESTROZADO, status: DistillationStatus.ACTIVA } }),
   ]);
   const sourcesComplete = sources.length > 0 && sources.every((source) => {
     const sourceLiters = destrozadoProducedLiters(source);
@@ -359,7 +362,7 @@ export async function reconcileLotDistillationStage(
       && receiver.rectifications.filter((run) => run.status !== DistillationStatus.CANCELADA)
         .every((run) => run.status === DistillationStatus.TERMINADA);
   });
-  const complete = sourcesComplete && receiversComplete;
+  const complete = activeDestrozados === 0 && sourcesComplete && receiversComplete;
   if (complete) await advanceLotStage(tx, lotId, LotStage.TERMINADO);
   return complete;
 }
