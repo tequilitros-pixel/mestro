@@ -1,5 +1,7 @@
 import { DistillationType } from "@prisma/client";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 import { requireModuleActionAccess } from "@/lib/auth";
 import { findAvailableEquipment } from "@/lib/equipmentAvailability";
 import {
@@ -13,24 +15,28 @@ export default async function NewDistillationPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const [{ error }, sources, equipments] = await Promise.all([
+  const [{ error }, sources, equipments, receivers] = await Promise.all([
     searchParams,
     getDistillationSources(),
     findAvailableEquipment(["ALAMBIQUE"]),
+    prisma.distillationReceiver.findMany({ where: { status: "OPEN" }, include: { lot: { select: { code: true } } }, orderBy: { createdAt: "desc" } }),
   ]);
 
   async function createDistillation(formData: FormData) {
     "use server";
     await requireModuleActionAccess("/distillation");
-    const [typeValue, sourceId] = String(formData.get("source") ?? "").split(":");
-    const type = typeValue as DistillationType;
-    if (!sourceId || !Object.values(DistillationType).includes(type)) {
+    const [kind, sourceId] = String(formData.get("source") ?? "").split(":");
+    const sourceKind = kind as "FERMENTATION" | "DISTILLATION" | "RECEIVER";
+    const type = sourceKind === "FERMENTATION" ? DistillationType.DESTROZADO : DistillationType.RECTIFICACION;
+    if (!sourceId || !["FERMENTATION", "DISTILLATION", "RECEIVER"].includes(sourceKind)) {
       redirect("/distillation/new?error=Fuente%20inválida");
     }
     try {
       const run = await startDistillationRun({
         sourceId,
         type,
+        sourceKind,
+        plannedReceiverId: type === DistillationType.DESTROZADO ? String(formData.get("plannedReceiverId") ?? "") || null : null,
         equipmentId: String(formData.get("equipmentId") ?? ""),
         loadedLiters: Number(formData.get("loadedLiters")),
         fillPercent: Number(formData.get("fillPercent")),
@@ -55,8 +61,9 @@ export default async function NewDistillationPage({
         <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">MAESTRO</p>
         <h1 className="mt-3 text-4xl font-bold">Nueva corrida de alambique</h1>
         <p className="mt-3 text-on-surface-variant">
-          Puedes abrir varias corridas del mismo lote. Cada carga descuenta litros de su tina o destrozado de origen.
+          Puedes abrir varias corridas del mismo lote. Cada carga descuenta litros de su tina o tanque receptor de origen.
         </p>
+        <p className="mt-3 text-sm"><Link className="font-semibold text-primary underline" href="/distillation/receivers">Administrar tanques receptores de destrozado</Link></p>
         {error && <div className="mt-6 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">{decodeURIComponent(error)}</div>}
 
         {blockers.length > 0 ? (
@@ -68,13 +75,25 @@ export default async function NewDistillationPage({
             <label className="grid gap-2 text-sm font-semibold">
               Fuente y volumen restante
               <select name="source" required className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3">
-                <option value="">Selecciona una tina o destrozado</option>
+                <option value="">Selecciona una tina, destrozado o tanque receptor</option>
                 {sources.map((source) => (
-                  <option key={`${source.type}:${source.id}`} value={`${source.type}:${source.id}`}>
+                  <option key={`${source.sourceKind}:${source.id}`} value={`${source.sourceKind}:${source.id}`}>
                     {source.lotCode} · {source.tankName ?? "Sin tina"} · {source.label} · quedan {source.availableLiters.toLocaleString("es-MX", { maximumFractionDigits: 2 })} L de {source.sourceLiters.toLocaleString("es-MX")} L
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="grid gap-2 text-sm font-semibold">
+              Destino del destrozado al finalizar (opcional, solo para corridas de destrozado)
+              <select name="plannedReceiverId" className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3">
+                <option value="">Sin tanque asignado (puedes transferir después)</option>
+                {receivers.map((receiver) => (
+                  <option key={receiver.id} value={receiver.id}>
+                    {receiver.lot.code} · {receiver.name} · máximo {receiver.capacityLiters.toLocaleString("es-MX")} L
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs font-normal text-on-surface-variant">Si eliges un tanque de tu mismo lote, el volumen final se registrará automáticamente al cerrar la corrida.</span>
             </label>
             <label className="grid gap-2 text-sm font-semibold">
               Alambique disponible
