@@ -4,11 +4,13 @@ import {
   DistillationStatus,
   DistillationType,
   EquipmentStatus,
+  DistillationReceiverStatus,
   LotStage,
   Prisma,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { advanceLotStage } from "@/lib/lotStage";
+import { receiverTotals, destrozadoProducedLiters } from "@/lib/distillation/receivers";
 
 const EPSILON = 0.005;
 
@@ -24,6 +26,7 @@ type Source = {
   lotId: string;
   lotCode: string;
   type: DistillationType;
+  sourceKind: "FERMENTATION" | "DISTILLATION" | "RECEIVER";
   label: string;
   tankName: string | null;
   availableLiters: number;
@@ -32,7 +35,7 @@ type Source = {
 };
 
 export async function getDistillationSources(): Promise<Source[]> {
-  const [fermentations, destrozados] = await Promise.all([
+  const [fermentations, destrozados, receivers] = await Promise.all([
     prisma.fermentation.findMany({
       where: { status: "TERMINADA" },
       include: {
@@ -53,8 +56,18 @@ export async function getDistillationSources(): Promise<Source[]> {
           select: { loadedLiters: true },
         },
         sourceFermentation: { select: { tank: true } },
+        receiverTransfer: true,
       },
       orderBy: { finishedAt: "desc" },
+    }),
+    prisma.distillationReceiver.findMany({
+      where: { status: DistillationReceiverStatus.READY },
+      include: {
+        lot: { select: { code: true } },
+        transfers: true,
+        rectifications: { select: { loadedLiters: true, status: true } },
+      },
+      orderBy: { createdAt: "desc" },
     }),
   ]);
 
@@ -68,6 +81,7 @@ export async function getDistillationSources(): Promise<Source[]> {
         lotId: fermentation.lotId,
         lotCode: fermentation.lot.code,
         type: DistillationType.DESTROZADO,
+        sourceKind: "FERMENTATION",
         label: "Destrozado",
         tankName: fermentation.tank,
         availableLiters,
@@ -78,6 +92,7 @@ export async function getDistillationSources(): Promise<Source[]> {
   }
 
   for (const destrozado of destrozados) {
+    if (destrozado.receiverTransfer) continue;
     const sourceLiters =
       destrozado.finalHeartLiters && destrozado.finalHeartLiters > 0
         ? destrozado.finalHeartLiters
@@ -90,11 +105,30 @@ export async function getDistillationSources(): Promise<Source[]> {
         lotId: destrozado.lotId,
         lotCode: destrozado.lot.code,
         type: DistillationType.RECTIFICACION,
-        label: "Rectificación",
+        sourceKind: "DISTILLATION",
+        label: "Rectificación individual",
         tankName: destrozado.sourceFermentation?.tank ?? null,
         availableLiters,
         sourceLiters,
         initialAlcohol: destrozado.finalAlcohol,
+      });
+    }
+  }
+
+  for (const receiver of receivers) {
+    const stock = receiverTotals(receiver);
+    if (stock.availableLiters > EPSILON) {
+      result.push({
+        id: receiver.id,
+        lotId: receiver.lotId,
+        lotCode: receiver.lot.code,
+        type: DistillationType.RECTIFICACION,
+        sourceKind: "RECEIVER",
+        label: "Rectificación desde tanque receptor",
+        tankName: receiver.name,
+        availableLiters: stock.availableLiters,
+        sourceLiters: stock.receivedLiters,
+        initialAlcohol: stock.initialAlcohol,
       });
     }
   }
@@ -105,6 +139,8 @@ export async function getDistillationSources(): Promise<Source[]> {
 export async function startDistillationRun(input: {
   sourceId: string;
   type: DistillationType;
+  sourceKind?: "FERMENTATION" | "DISTILLATION" | "RECEIVER";
+  plannedReceiverId?: string | null;
   equipmentId: string;
   loadedLiters: number;
   fillPercent: number;
@@ -125,6 +161,7 @@ export async function startDistillationRun(input: {
     let sourceLiters: number;
     let sourceFermentationId: string | null = null;
     let sourceDistillationId: string | null = null;
+    let sourceReceiverId: string | null = null;
 
     if (input.type === DistillationType.DESTROZADO) {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Fermentation" WHERE "id" = ${input.sourceId} FOR UPDATE`);
@@ -135,10 +172,22 @@ export async function startDistillationRun(input: {
       lotId = source.lotId;
       sourceLiters = source.mustLiters;
       sourceFermentationId = source.id;
-    } else {
+    } else if (input.sourceKind === "RECEIVER" && input.type === DistillationType.RECTIFICACION) {
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "DistillationReceiver" WHERE "id" = ${input.sourceId} FOR UPDATE`);
+      const receiver = await tx.distillationReceiver.findUnique({
+        where: { id: input.sourceId },
+        include: { transfers: true, rectifications: { select: { loadedLiters: true, status: true } } },
+      });
+      if (!receiver || receiver.status !== DistillationReceiverStatus.READY) {
+        throw new DistillationOperationError("El tanque aún no está listo para rectificación.", "RECEIVER_NOT_READY");
+      }
+      lotId = receiver.lotId;
+      sourceLiters = receiver.transfers.reduce((sum, transfer) => sum + transfer.liters, 0);
+      sourceReceiverId = receiver.id;
+    } else if (!input.sourceKind || input.sourceKind === "DISTILLATION") {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Distillation" WHERE "id" = ${input.sourceId} FOR UPDATE`);
       const source = await tx.distillation.findUnique({ where: { id: input.sourceId } });
-      if (!source || source.status !== DistillationStatus.TERMINADA || source.type !== DistillationType.DESTROZADO) {
+      if (!source || source.status !== DistillationStatus.TERMINADA || source.type !== DistillationType.DESTROZADO || await tx.distillationReceiverTransfer.findUnique({ where: { distillationId: input.sourceId } })) {
         throw new DistillationOperationError("El destrozado ya no está disponible.", "SOURCE_UNAVAILABLE");
       }
       lotId = source.lotId;
@@ -146,12 +195,28 @@ export async function startDistillationRun(input: {
         ? source.finalHeartLiters
         : source.finalLiters ?? 0;
       sourceDistillationId = source.id;
+    } else {
+      throw new DistillationOperationError("La fuente seleccionada no es válida.", "INVALID_SOURCE");
+    }
+
+    let plannedReceiverId: string | null = null;
+    if (input.plannedReceiverId) {
+      if (input.type !== DistillationType.DESTROZADO) {
+        throw new DistillationOperationError("Solo el destrozado se envía al tanque receptor.", "INVALID_RECEIVER");
+      }
+      const receiver = await tx.distillationReceiver.findUnique({ where: { id: input.plannedReceiverId } });
+      if (!receiver || receiver.status !== DistillationReceiverStatus.OPEN || receiver.lotId !== lotId) {
+        throw new DistillationOperationError("El tanque no está abierto o pertenece a otro lote.", "RECEIVER_UNAVAILABLE");
+      }
+      plannedReceiverId = receiver.id;
     }
 
     const allocated = await tx.distillation.aggregate({
       where: input.type === DistillationType.DESTROZADO
         ? { sourceFermentationId, status: { not: DistillationStatus.CANCELADA } }
-        : { sourceDistillationId, status: { not: DistillationStatus.CANCELADA } },
+        : sourceReceiverId
+          ? { sourceReceiverId, status: { not: DistillationStatus.CANCELADA } }
+          : { sourceDistillationId, status: { not: DistillationStatus.CANCELADA } },
       _sum: { loadedLiters: true },
     });
     const remaining = sourceLiters - (allocated._sum.loadedLiters ?? 0);
@@ -195,6 +260,8 @@ export async function startDistillationRun(input: {
         initialAlcohol: input.initialAlcohol,
         sourceFermentationId,
         sourceDistillationId,
+        sourceReceiverId,
+        plannedReceiverId,
       },
     });
 
@@ -258,15 +325,41 @@ export async function reconcileLotDistillationStage(
     return complete;
   }
 
-  const sources = await tx.distillation.findMany({
-    where: { lotId, type: DistillationType.DESTROZADO, status: DistillationStatus.TERMINADA },
-    include: { derivedDistillations: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true, status: true } } },
+  const [sources, receivers] = await Promise.all([
+    tx.distillation.findMany({
+      where: { lotId, type: DistillationType.DESTROZADO, status: DistillationStatus.TERMINADA },
+      include: {
+        receiverTransfer: true,
+        derivedDistillations: {
+          where: { status: { not: DistillationStatus.CANCELADA } },
+          select: { loadedLiters: true, status: true },
+        },
+      },
+    }),
+    tx.distillationReceiver.findMany({
+      where: { lotId },
+      include: {
+        transfers: true,
+        rectifications: { select: { loadedLiters: true, status: true } },
+      },
+    }),
+  ]);
+  const sourcesComplete = sources.length > 0 && sources.every((source) => {
+    const sourceLiters = destrozadoProducedLiters(source);
+    const allocatedDirect = source.derivedDistillations.reduce((sum, run) => sum + run.loadedLiters, 0);
+    const received = source.receiverTransfer?.liters ?? 0;
+    return sourceLiters - allocatedDirect - received <= EPSILON
+      && source.derivedDistillations.every((run) => run.status === DistillationStatus.TERMINADA);
   });
-  const complete = sources.length > 0 && sources.every((source) => {
-    const sourceLiters = source.finalHeartLiters && source.finalHeartLiters > 0 ? source.finalHeartLiters : source.finalLiters ?? 0;
-    const allocated = source.derivedDistillations.reduce((sum, run) => sum + run.loadedLiters, 0);
-    return sourceLiters - allocated <= EPSILON && source.derivedDistillations.length > 0 && source.derivedDistillations.every((run) => run.status === DistillationStatus.TERMINADA);
+  const receiversComplete = receivers.every((receiver) => {
+    const stock = receiverTotals(receiver);
+    return stock.receivedLiters > EPSILON
+      && stock.availableLiters <= EPSILON
+      && receiver.rectifications.length > 0
+      && receiver.rectifications.filter((run) => run.status !== DistillationStatus.CANCELADA)
+        .every((run) => run.status === DistillationStatus.TERMINADA);
   });
+  const complete = sourcesComplete && receiversComplete;
   if (complete) await advanceLotStage(tx, lotId, LotStage.TERMINADO);
   return complete;
 }
