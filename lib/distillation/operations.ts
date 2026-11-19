@@ -284,6 +284,22 @@ export async function cancelDistillationRun(input: {
     if (!run || run.status !== DistillationStatus.ACTIVA) {
       throw new DistillationOperationError("La corrida ya no se puede cancelar.", "NOT_ACTIVE");
     }
+    if (run.type === DistillationType.RECTIFICACION && run.sourceReceiverId) {
+      const source = await tx.distillationReceiver.findUnique({ where: { id: run.sourceReceiverId } });
+      if (source) {
+        await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${source.name}))::text AS "lock"`);
+        const subsequentCycle = await tx.distillationReceiver.findFirst({
+          where: { name: source.name, createdAt: { gt: source.createdAt } },
+          select: { id: true },
+        });
+        if (subsequentCycle) {
+          throw new DistillationOperationError(
+            "Este tanque físico ya se reutilizó. No se puede devolver automáticamente la carga cancelada a su recepción anterior; requiere conciliación de volumen.",
+            "RECEIVER_REUSED",
+          );
+        }
+      }
+    }
     await tx.distillation.update({
       where: { id: run.id },
       data: {
