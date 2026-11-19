@@ -61,7 +61,7 @@ export default async function DistillationDetailPage({
       lot: true,
       equipment: true,
       finishedBy: true,
-      sourceReceiver: { select: { name: true } },
+      sourceReceiver: { include: { transfers: true, rectifications: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true } } } },
       sourceFermentation: {
         include: { distillations: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true } } },
       },
@@ -93,12 +93,14 @@ export default async function DistillationDetailPage({
   const distillationLotId = distillation.lotId;
   const distillationType = distillation.type;
   const sourceName = distillation.sourceReceiver?.name ?? distillation.sourceFermentation?.tank ?? distillation.sourceDistillation?.sourceFermentation?.tank ?? "Fuente histórica";
-  const sourceVolume = distillation.sourceFermentation?.mustLiters
+  const sourceVolume = (distillation.sourceReceiver?.transfers.reduce((sum, transfer) => sum + transfer.liters, 0))
+    ?? distillation.sourceFermentation?.mustLiters
     ?? (distillation.sourceDistillation?.finalHeartLiters && distillation.sourceDistillation.finalHeartLiters > 0
       ? distillation.sourceDistillation.finalHeartLiters
       : distillation.sourceDistillation?.finalLiters)
     ?? distillation.loadedLiters;
-  const sourceAllocated = distillation.sourceFermentation?.distillations.reduce((sum, run) => sum + run.loadedLiters, 0)
+  const sourceAllocated = (distillation.sourceReceiver?.rectifications.reduce((sum, run) => sum + run.loadedLiters, 0))
+    ?? distillation.sourceFermentation?.distillations.reduce((sum, run) => sum + run.loadedLiters, 0)
     ?? distillation.sourceDistillation?.derivedDistillations.reduce((sum, run) => sum + run.loadedLiters, 0)
     ?? distillation.loadedLiters;
   const sourceRemaining = Math.max(0, sourceVolume - sourceAllocated);
