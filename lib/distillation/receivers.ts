@@ -102,6 +102,51 @@ export async function receiveExistingDestrozado(input: { receiverId: string; dis
   return prisma.$transaction((tx) => transferDestrozadoToReceiver(tx, input));
 }
 
+/**
+ * Agrupa en una sola operación TODOS los destrozados terminados de este lote
+ * que aún no se han transferido, sin duplicar ni inventar litros. Si alguno
+ * excede la capacidad, no se transfiere ninguno.
+ */
+export async function receiveAllCompletedDestrozados(receiverId: string) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "DistillationReceiver" WHERE "id" = ${receiverId} FOR UPDATE`);
+    const receiver = await tx.distillationReceiver.findUnique({
+      where: { id: receiverId },
+      include: {
+        transfers: true,
+        rectifications: { select: { loadedLiters: true, status: true } },
+      },
+    });
+    if (!receiver || receiver.status !== DistillationReceiverStatus.OPEN) {
+      throw new DistillationOperationError("Abre primero una recepción para este lote.", "RECEIVER_NOT_OPEN");
+    }
+    const candidates = await tx.distillation.findMany({
+      where: {
+        lotId: receiver.lotId,
+        type: DistillationType.DESTROZADO,
+        status: DistillationStatus.TERMINADA,
+        receiverTransfer: { is: null },
+        derivedDistillations: { none: { status: { not: DistillationStatus.CANCELADA } } },
+      },
+      select: { id: true, finalHeartLiters: true, finalLiters: true },
+      orderBy: { finishedAt: "asc" },
+    });
+    const eligible = candidates.filter((run) => destrozadoProducedLiters(run) > EPSILON);
+    if (!eligible.length) throw new DistillationOperationError("No hay destrozados terminados pendientes de recepción.", "NO_PENDING_RUNS");
+    const incoming = eligible.reduce((sum, run) => sum + destrozadoProducedLiters(run), 0);
+    if (receiverTotals(receiver).availableLiters + incoming - receiver.capacityLiters > EPSILON) {
+      throw new DistillationOperationError(
+        `Las corridas suman ${incoming.toFixed(2)} L y sobrepasan la capacidad libre del tanque. Registra las descargas individualmente.`,
+        "RECEIVER_CAPACITY",
+      );
+    }
+    for (const run of eligible) {
+      await transferDestrozadoToReceiver(tx, { receiverId: receiver.id, distillationId: run.id });
+    }
+    return { count: eligible.length, liters: incoming };
+  });
+}
+
 export async function sealReceiver(receiverId: string) {
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "DistillationReceiver" WHERE "id" = ${receiverId} FOR UPDATE`);
