@@ -63,12 +63,13 @@ export default async function DistillationsByLotPage({ params }: { params: Promi
           <ProcessTable
             emptyLabel="Todavía no hay corridas en este lote. Puedes iniciar una nueva destilación desde aquí."
             columns={[
-              { key: "code", label: "Lote", width: "19%" },
-              { key: "type", label: "Proceso", width: "16%" },
-              { key: "equipment", label: "Alambique", width: "17%" },
-              { key: "source", label: "Origen", width: "17%" },
-              { key: "liters", label: "Carga", width: "12%" },
-              { key: "startedAt", label: "Inicio", width: "19%" },
+              { key: "code", label: "Lote", width: "17%" },
+              { key: "type", label: "Proceso", width: "14%" },
+              { key: "equipment", label: "Alambique", width: "16%" },
+              { key: "source", label: "Origen", width: "16%" },
+              { key: "liters", label: "Carga", width: "10%" },
+              { key: "startedAt", label: "Inicio", width: "14%" },
+              { key: "status", label: "Estado", width: "13%" },
             ]}
             filters={[
               { key: "type", label: "Proceso", options: ["Destrozado", "Rectificación"] },
