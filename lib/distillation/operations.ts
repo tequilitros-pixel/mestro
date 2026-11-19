@@ -37,7 +37,7 @@ export async function getDistillationSources(): Promise<Source[]> {
         lot: true,
         distillations: {
           where: { status: { not: DistillationStatus.CANCELADA } },
-          select: { loadedLiters: true },
+          select: { loadedLiters: true, status: true, finishedAt: true },
         },
       },
       orderBy: { finishedAt: "desc" },
@@ -55,24 +55,38 @@ export async function getDistillationSources(): Promise<Source[]> {
 
   // Una fuente marcada como tina vacía no es inventario físico disponible.
   // El ajuste se conserva en la bitácora de AuditEvent, sin modificar litros históricos.
-  const drained = fermentations.length
+  const sourceEvents = fermentations.length
     ? await prisma.auditEvent.findMany({
         where: {
           entityType: "Fermentation",
-          action: "FERMENTATION_SOURCE_EMPTIED",
+          action: { in: ["FERMENTATION_SOURCE_EMPTIED", "FERMENTATION_SOURCE_AVAILABLE"] },
           entityId: { in: fermentations.map((source) => source.id) },
         },
-        select: { entityId: true },
+        select: { entityId: true, action: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
       })
     : [];
-  const drainedIds = new Set(drained.map((entry) => entry.entityId));
+  const drainedIds = new Set(sourceEvents.filter((event) => event.action === "FERMENTATION_SOURCE_EMPTIED").map((event) => event.entityId));
+  const verifiedAt = new Map<string, Date>();
+  for (const event of sourceEvents) {
+    if (event.action === "FERMENTATION_SOURCE_AVAILABLE" && !verifiedAt.has(event.entityId)) {
+      verifiedAt.set(event.entityId, event.createdAt);
+    }
+  }
 
   const result: Source[] = [];
   for (const fermentation of fermentations) {
     if (drainedIds.has(fermentation.id)) continue;
     const allocated = fermentation.distillations.reduce((sum, run) => sum + run.loadedLiters, 0);
     const availableLiters = Math.max(0, fermentation.mustLiters - allocated);
-    if (availableLiters > EPSILON) {
+    const completedRuns = fermentation.distillations.filter((run) => run.status === DistillationStatus.TERMINADA);
+    const hasActive = fermentation.distillations.some((run) => run.status === DistillationStatus.ACTIVA);
+    const lastCompletedAt = completedRuns.reduce((last, run) => run.finishedAt && run.finishedAt > last ? run.finishedAt : last, new Date(0));
+    // Después de terminar corridas, cualquier saldo residual solo es CONTABLE
+    // hasta que el operario confirme que hay mosto físico todavía.
+    const verified = verifiedAt.get(fermentation.id);
+    const physicalStockConfirmed = !completedRuns.length || hasActive || (verified && verified >= lastCompletedAt);
+    if (availableLiters > EPSILON && physicalStockConfirmed) {
       result.push({
         id: fermentation.id,
         lotId: fermentation.lotId,
@@ -155,6 +169,24 @@ export async function startDistillationRun(input: {
       ]);
       if (!lot || lot.stage === LotStage.TERMINADO || drained) {
         throw new DistillationOperationError("Esta tina ya fue cerrada o el lote está terminado.", "SOURCE_CLOSED");
+      }
+      const currentRuns = await tx.distillation.findMany({
+        where: { sourceFermentationId: source.id, status: { not: DistillationStatus.CANCELADA } },
+        select: { status: true, loadedLiters: true, finishedAt: true },
+      });
+      const completedRuns = currentRuns.filter((run) => run.status === DistillationStatus.TERMINADA);
+      if (completedRuns.length > 0 && !currentRuns.some((run) => run.status === DistillationStatus.ACTIVA)) {
+        const verified = await tx.auditEvent.findFirst({
+          where: { entityType: "Fermentation", entityId: source.id, action: "FERMENTATION_SOURCE_AVAILABLE" },
+          orderBy: { createdAt: "desc" },
+          select: { createdAt: true },
+        });
+        if (!verified || completedRuns.some((run) => run.finishedAt && run.finishedAt > verified.createdAt)) {
+          throw new DistillationOperationError(
+            "Esta tina tiene saldo contable pendiente. Confirma que todavía tiene mosto en la conciliación de fuentes.",
+            "PHYSICAL_STOCK_NOT_CONFIRMED",
+          );
+        }
       }
       lotId = source.lotId;
       sourceLiters = source.mustLiters;
@@ -443,5 +475,89 @@ export async function closeEmptyFermentationSource(input: {
     });
     await reconcileLotDistillationStage(tx, source.lotId, DistillationType.DESTROZADO);
     return { residualLiters, lotCode: source.lot.code, tank: source.tank };
+  });
+}
+
+/**
+ * Confirma que queda mosto real después de terminar destrozados previos.
+ * La bitácora registra quién lo revisó y cuánto saldo contable había.
+ */
+export async function verifyFermentationSourceHasMust(input: {
+  fermentationId: string;
+  actorId: string;
+  reason: string;
+}) {
+  const reason = input.reason.trim();
+  if (reason.length < 12 || reason.length > 500) {
+    throw new DistillationOperationError("Escribe una observación de verificación (mínimo 12 caracteres).", "REASON_REQUIRED");
+  }
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Fermentation" WHERE "id" = ${input.fermentationId} FOR UPDATE`);
+    const source = await tx.fermentation.findUnique({
+      where: { id: input.fermentationId },
+      include: {
+        lot: { select: { stage: true, code: true } },
+        distillations: {
+          where: { status: { not: DistillationStatus.CANCELADA } },
+          select: { loadedLiters: true, status: true },
+        },
+      },
+    });
+    if (!source || source.status !== "TERMINADA" || source.lot.stage === LotStage.TERMINADO) {
+      throw new DistillationOperationError("No se puede verificar esta tina.", "SOURCE_UNAVAILABLE");
+    }
+    const alreadyClosed = await tx.auditEvent.findFirst({
+      where: { entityType: "Fermentation", entityId: source.id, action: "FERMENTATION_SOURCE_EMPTIED" },
+      select: { id: true },
+    });
+    if (alreadyClosed) throw new DistillationOperationError("La tina ya fue conciliada como vacía.", "SOURCE_CLOSED");
+    const allocated = source.distillations.reduce((sum, run) => sum + run.loadedLiters, 0);
+    const remaining = source.mustLiters - allocated;
+    if (remaining <= EPSILON) throw new DistillationOperationError("No queda mosto contable pendiente.", "NO_RESIDUAL");
+    await tx.auditEvent.create({
+      data: {
+        actorId: input.actorId,
+        action: "FERMENTATION_SOURCE_AVAILABLE",
+        entityType: "Fermentation",
+        entityId: source.id,
+        metadata: { reason, lotCode: source.lot.code, tank: source.tank, ledgerAvailableLiters: remaining, physicalStockConfirmed: true },
+      },
+    });
+    return { remaining };
+  });
+}
+
+export async function getFermentationSourceDiscrepancies() {
+  const rows = await prisma.fermentation.findMany({
+    where: { status: "TERMINADA", lot: { stage: { not: LotStage.TERMINADO } } },
+    include: {
+      lot: { select: { code: true } },
+      distillations: {
+        where: { status: { not: DistillationStatus.CANCELADA } },
+        select: { loadedLiters: true, status: true, finishedAt: true },
+      },
+    },
+    orderBy: { finishedAt: "desc" },
+  });
+  if (!rows.length) return [];
+  const events = await prisma.auditEvent.findMany({
+    where: { entityType: "Fermentation", entityId: { in: rows.map((row) => row.id) },
+      action: { in: ["FERMENTATION_SOURCE_EMPTIED", "FERMENTATION_SOURCE_AVAILABLE"] } },
+    select: { action: true, entityId: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.flatMap((row) => {
+    const allocated = row.distillations.reduce((sum, run) => sum + run.loadedLiters, 0);
+    const remaining = row.mustLiters - allocated;
+    const lastFinished = row.distillations
+      .filter((run) => run.status === DistillationStatus.TERMINADA)
+      .reduce((last, run) => run.finishedAt && run.finishedAt > last ? run.finishedAt : last, new Date(0));
+    const sourceEvents = events.filter((event) => event.entityId === row.id);
+    const closed = sourceEvents.some((event) => event.action === "FERMENTATION_SOURCE_EMPTIED");
+    const verified = sourceEvents.find((event) => event.action === "FERMENTATION_SOURCE_AVAILABLE");
+    if (remaining <= EPSILON || closed || !row.distillations.length ||
+        row.distillations.some((run) => run.status === DistillationStatus.ACTIVA) ||
+        (verified && verified.createdAt >= lastFinished)) return [];
+    return [{ id: row.id, lotCode: row.lot.code, tank: row.tank, remainingLiters: remaining, allocatedLiters: allocated, originalLiters: row.mustLiters }];
   });
 }
