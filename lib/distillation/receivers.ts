@@ -183,7 +183,7 @@ export async function startPairRectification(input: {
     throw new DistillationOperationError("Selecciona dos alambiques diferentes.", "INVALID_EQUIPMENT");
   }
   if (!Number.isFinite(fillPercent) || fillPercent <= 0 || fillPercent > 100 ||
-    liters.some((value) => !Number.isFinite(value) || value <= EPSILON || Math.round(value * 100) !== value * 100)) {
+    liters.some((value) => !Number.isFinite(value) || value <= EPSILON || Math.abs(Math.round(value * 100) - value * 100) > 0.000001)) {
     throw new DistillationOperationError("Revisa los litros y el porcentaje de carga.", "INVALID_LOAD");
   }
   return prisma.$transaction(async (tx) => {
