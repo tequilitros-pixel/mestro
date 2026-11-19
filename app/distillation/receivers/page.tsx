@@ -6,6 +6,7 @@ import { findAvailableEquipment } from "@/lib/equipmentAvailability";
 import {
   destrozadoProducedLiters,
   receiveExistingDestrozado,
+  receiveAllCompletedDestrozados,
   receiverTotals,
   registerReceiver,
   reuseEmptyReceiver,
@@ -93,6 +94,17 @@ export default async function DestrozadoReceiversPage({
       redirect(`/distillation/receivers?error=${encodeURIComponent(detailError(caught))}`);
     }
     redirect("/distillation/receivers?saved=transfer");
+  }
+
+  async function receiveAll(formData: FormData) {
+    "use server";
+    await requireModuleActionAccess("/distillation");
+    try {
+      await receiveAllCompletedDestrozados(String(formData.get("receiverId") ?? ""));
+    } catch (caught) {
+      redirect(`/distillation/receivers?error=${encodeURIComponent(detailError(caught))}`);
+    }
+    redirect("/distillation/receivers?saved=all");
   }
 
   async function makeReady(formData: FormData) {
@@ -223,6 +235,14 @@ export default async function DestrozadoReceiversPage({
               )}
               {receiver.status === "OPEN" ? (
                 <div className="mt-4 space-y-3">
+                  <p className="text-sm text-on-surface-variant">La recepción permanece abierta hasta que confirmes que terminaron todas las descargas. Si faltan corridas por registrar, no cierres el tanque todavía.</p>
+                  {eligible.length > 0 && (
+                    <form action={receiveAll} className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+                      <input type="hidden" name="receiverId" value={receiver.id} />
+                      <p className="mb-2 text-sm">Hay {eligible.length} corridas de destrozado terminadas aún sin recibir. Solo se registrarán sus litros finales guardados en Maestro.</p>
+                      <button className="w-full rounded-xl bg-primary px-5 py-3 font-semibold text-on-primary">Recibir juntas las {eligible.length} corridas terminadas</button>
+                    </form>
+                  )}
                   {eligible.length > 0 && (
                     <form action={receive} className="flex flex-wrap items-end gap-2">
                       <input type="hidden" name="receiverId" value={receiver.id} />
