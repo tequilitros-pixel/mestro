@@ -243,6 +243,7 @@ model Lot {
   ownerId             String
   cookings            Cooking[]
   distillations       Distillation[]
+  distillationReceivers DistillationReceiver[]
   fermentations       Fermentation[]
   owner               User                  @relation(fields: [ownerId], references: [id])
   expenses            LotExpense[]
@@ -663,6 +664,8 @@ model Distillation {
   finishedById     String?
   sourceFermentationId String?
   sourceDistillationId String?
+  plannedReceiverId String?
+  sourceReceiverId String?
   cancelledAt      DateTime?
   cancelledById    String?
   cancellationReason String?
@@ -673,6 +676,9 @@ model Distillation {
   sourceFermentation Fermentation?      @relation("FermentationDistillations", fields: [sourceFermentationId], references: [id])
   sourceDistillation Distillation?      @relation("DistillationLineage", fields: [sourceDistillationId], references: [id])
   derivedDistillations Distillation[]   @relation("DistillationLineage")
+  plannedReceiver DistillationReceiver? @relation("PlannedDistillationReceiver", fields: [plannedReceiverId], references: [id])
+  sourceReceiver DistillationReceiver? @relation("ReceiverRectifications", fields: [sourceReceiverId], references: [id])
+  receiverTransfer DistillationReceiverTransfer?
   events           DistillationEvent[]
 
   @@index([lotId])
@@ -681,6 +687,38 @@ model Distillation {
   @@index([cancelledById])
   @@index([sourceFermentationId])
   @@index([sourceDistillationId])
+  @@index([sourceReceiverId])
+  @@index([plannedReceiverId])
+}
+
+model DistillationReceiver {
+  id String @id @default(cuid())
+  lotId String
+  name String
+  capacityLiters Float
+  status DistillationReceiverStatus @default(OPEN)
+  createdAt DateTime @default(now())
+  readyAt DateTime?
+  lot Lot @relation(fields: [lotId], references: [id])
+  transfers DistillationReceiverTransfer[]
+  plannedRuns Distillation[] @relation("PlannedDistillationReceiver")
+  rectifications Distillation[] @relation("ReceiverRectifications")
+
+  @@index([lotId, name])
+  @@index([status])
+}
+
+model DistillationReceiverTransfer {
+  id String @id @default(cuid())
+  receiverId String
+  distillationId String @unique
+  liters Float
+  alcohol Float?
+  createdAt DateTime @default(now())
+  receiver DistillationReceiver @relation(fields: [receiverId], references: [id])
+  distillation Distillation @relation(fields: [distillationId], references: [id])
+
+  @@index([receiverId])
 }
 
 model DistillationEvent {
@@ -1892,6 +1930,11 @@ enum DistillationStatus {
   ACTIVA
   TERMINADA
   CANCELADA
+}
+
+enum DistillationReceiverStatus {
+  OPEN
+  READY
 }
 
 enum DistillationType {

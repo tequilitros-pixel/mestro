@@ -38,18 +38,22 @@ import { getMasterAdvice } from "@/lib/services/maestroDistillation";
 import { Suspense } from "react";
 import { formatBusinessDateTime } from "@/lib/dateTime";
 import ProcessSwitcher from "@/components/production/ProcessSwitcher";
-import { cancelDistillationRun, reconcileLotDistillationStage } from "@/lib/distillation/operations";
+import { cancelDistillationRun, reconcileLotDistillationStage, DistillationOperationError } from "@/lib/distillation/operations";
+import { transferDestrozadoToReceiver } from "@/lib/distillation/receivers";
 import ProcessBoilerUsage from "@/components/boiler/ProcessBoilerUsage";
 import { finishProductionLot } from "@/lib/lots/finishProductionLot";
 
 type Props = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 };
 
 export default async function DistillationDetailPage({
   params,
+  searchParams,
 }: Props) {
   const { id } = await params;
+  const { error } = await searchParams;
 
   const distillation = await prisma.distillation.findUnique({
     where: { id },
@@ -57,6 +61,7 @@ export default async function DistillationDetailPage({
       lot: true,
       equipment: true,
       finishedBy: true,
+      sourceReceiver: { include: { transfers: true, rectifications: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true } } } },
       sourceFermentation: {
         include: { distillations: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true } } },
       },
@@ -79,6 +84,7 @@ export default async function DistillationDetailPage({
       equipment: { select: { name: true } },
       sourceFermentation: { select: { tank: true } },
       sourceDistillation: { include: { sourceFermentation: { select: { tank: true } } } },
+      sourceReceiver: { select: { name: true } },
     },
     orderBy: { startedAt: "asc" },
   });
@@ -86,13 +92,15 @@ export default async function DistillationDetailPage({
   const distillationEquipmentId = distillation.equipmentId;
   const distillationLotId = distillation.lotId;
   const distillationType = distillation.type;
-  const sourceName = distillation.sourceFermentation?.tank ?? distillation.sourceDistillation?.sourceFermentation?.tank ?? "Fuente histórica";
-  const sourceVolume = distillation.sourceFermentation?.mustLiters
+  const sourceName = distillation.sourceReceiver?.name ?? distillation.sourceFermentation?.tank ?? distillation.sourceDistillation?.sourceFermentation?.tank ?? "Fuente histórica";
+  const sourceVolume = (distillation.sourceReceiver?.transfers.reduce((sum, transfer) => sum + transfer.liters, 0))
+    ?? distillation.sourceFermentation?.mustLiters
     ?? (distillation.sourceDistillation?.finalHeartLiters && distillation.sourceDistillation.finalHeartLiters > 0
       ? distillation.sourceDistillation.finalHeartLiters
       : distillation.sourceDistillation?.finalLiters)
     ?? distillation.loadedLiters;
-  const sourceAllocated = distillation.sourceFermentation?.distillations.reduce((sum, run) => sum + run.loadedLiters, 0)
+  const sourceAllocated = (distillation.sourceReceiver?.rectifications.reduce((sum, run) => sum + run.loadedLiters, 0))
+    ?? distillation.sourceFermentation?.distillations.reduce((sum, run) => sum + run.loadedLiters, 0)
     ?? distillation.sourceDistillation?.derivedDistillations.reduce((sum, run) => sum + run.loadedLiters, 0)
     ?? distillation.loadedLiters;
   const sourceRemaining = Math.max(0, sourceVolume - sourceAllocated);
@@ -169,11 +177,18 @@ export default async function DistillationDetailPage({
   async function cancelRun(formData: FormData) {
     "use server";
     const user = await requireModuleActionAccess("/distillation");
-    await cancelDistillationRun({
-      id,
-      actorId: user.id,
-      reason: String(formData.get("reason") ?? ""),
-    });
+    try {
+      await cancelDistillationRun({
+        id,
+        actorId: user.id,
+        reason: String(formData.get("reason") ?? ""),
+      });
+    } catch (caught) {
+      if (caught instanceof DistillationOperationError) {
+        redirect(`/distillation/${id}?error=${encodeURIComponent(caught.message)}`);
+      }
+      throw caught;
+    }
     redirect("/distillation?cancelled=1");
   }
 
@@ -401,7 +416,9 @@ export default async function DistillationDetailPage({
         finishedAt
       );
 
-    const result = await prisma.$transaction(
+    let result;
+    try {
+      result = await prisma.$transaction(
       async (transaction) => {
         const updated =
           await transaction.distillation.updateMany({
@@ -431,6 +448,13 @@ export default async function DistillationDetailPage({
 
         if (updated.count === 0) {
           return updated;
+        }
+
+        if (currentDistillation.type === "DESTROZADO" && currentDistillation.plannedReceiverId) {
+          await transferDestrozadoToReceiver(transaction, {
+            receiverId: currentDistillation.plannedReceiverId,
+            distillationId: id,
+          });
         }
 
         await transaction.distillationEvent.create({
@@ -463,6 +487,12 @@ export default async function DistillationDetailPage({
         return updated;
       }
     );
+    } catch (caught) {
+      if (caught instanceof DistillationOperationError) {
+        redirect(`/distillation/${id}?error=${encodeURIComponent(caught.message)}`);
+      }
+      throw caught;
+    }
 
     if (result.count === 0) {
       redirect(`/distillation/${id}`);
@@ -997,6 +1027,8 @@ export default async function DistillationDetailPage({
       </Suspense>
 
       <div className="mx-auto max-w-6xl">
+        {error && <div role="alert" className="rounded-xl border border-error/40 bg-error/10 p-4 text-error">{error}</div>}
+        <div className="mt-3"><Link href="/distillation/receivers" className="text-sm font-semibold text-primary underline">Tanques de recepción de destrozado</Link></div>
         <header className="mt-8">
           <p className="font-mono text-sm uppercase tracking-[0.4em] text-outline">
             MAESTRO
@@ -1038,7 +1070,7 @@ export default async function DistillationDetailPage({
               id: item.id,
               label: item.equipment.name,
               active: item.status === DistillationStatus.ACTIVA,
-              detail: `${item.sourceFermentation?.tank ?? item.sourceDistillation?.sourceFermentation?.tank ?? "Sin tina"} · ${formatNumber(item.loadedLiters)} L`,
+              detail: `${item.sourceReceiver?.name ?? item.sourceFermentation?.tank ?? item.sourceDistillation?.sourceFermentation?.tank ?? "Sin tina"} · ${formatNumber(item.loadedLiters)} L`,
               status: item.status === DistillationStatus.TERMINADA ? "Terminada" : item.status === DistillationStatus.CANCELADA ? "Cancelada" : "Activa",
             }))}
           />
