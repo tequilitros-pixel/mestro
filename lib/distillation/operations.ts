@@ -29,10 +29,10 @@ type Source = {
   initialAlcohol: number | null;
 };
 
-export async function getDistillationSources(): Promise<Source[]> {
+export async function getDistillationSources(lotId?: string): Promise<Source[]> {
   const [fermentations, receivers] = await Promise.all([
     prisma.fermentation.findMany({
-      where: { status: "TERMINADA", lot: { stage: { not: LotStage.TERMINADO } } },
+      where: { status: "TERMINADA", ...(lotId ? { lotId } : {}), lot: { stage: { not: LotStage.TERMINADO } } },
       include: {
         lot: true,
         distillations: {
@@ -43,7 +43,7 @@ export async function getDistillationSources(): Promise<Source[]> {
       orderBy: { finishedAt: "desc" },
     }),
     prisma.distillationReceiver.findMany({
-      where: { status: DistillationReceiverStatus.READY, lot: { stage: { not: LotStage.TERMINADO } } },
+      where: { status: DistillationReceiverStatus.READY, ...(lotId ? { lotId } : {}), lot: { stage: { not: LotStage.TERMINADO } } },
       include: {
         lot: { select: { code: true } },
         transfers: true,
@@ -128,6 +128,7 @@ export async function getDistillationSources(): Promise<Source[]> {
 
 export async function startDistillationRun(input: {
   sourceId: string;
+  expectedLotId?: string;
   type: DistillationType;
   sourceKind?: "FERMENTATION" | "DISTILLATION" | "RECEIVER";
   plannedReceiverId?: string | null;
@@ -217,6 +218,15 @@ export async function startDistillationRun(input: {
       sourceDistillationId = source.id;
     } else {
       throw new DistillationOperationError("La fuente seleccionada no es válida.", "INVALID_SOURCE");
+    }
+
+    // La selección del lote no es solo un filtro visual: rechazar formularios
+    // antiguos o manipulados que intenten cargar producto de otro lote.
+    if (input.expectedLotId && lotId !== input.expectedLotId) {
+      throw new DistillationOperationError(
+        "La tina o el tanque seleccionado no pertenece al lote actual.",
+        "DIFFERENT_LOT",
+      );
     }
 
     let plannedReceiverId: string | null = null;
@@ -527,9 +537,9 @@ export async function verifyFermentationSourceHasMust(input: {
   });
 }
 
-export async function getFermentationSourceDiscrepancies() {
+export async function getFermentationSourceDiscrepancies(lotId?: string) {
   const rows = await prisma.fermentation.findMany({
-    where: { status: "TERMINADA", lot: { stage: { not: LotStage.TERMINADO } } },
+    where: { status: "TERMINADA", ...(lotId ? { lotId } : {}), lot: { stage: { not: LotStage.TERMINADO } } },
     include: {
       lot: { select: { code: true } },
       distillations: {
