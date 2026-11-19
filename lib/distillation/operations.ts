@@ -426,6 +426,7 @@ export async function reconcileLotDistillationStage(
  */
 export async function closeEmptyFermentationSource(input: {
   fermentationId: string;
+  expectedLotId?: string;
   actorId: string;
   reason: string;
 }) {
@@ -446,8 +447,9 @@ export async function closeEmptyFermentationSource(input: {
         },
       },
     });
-    if (!source || source.status !== "TERMINADA" || source.lot.stage === LotStage.TERMINADO) {
-      throw new DistillationOperationError("No se puede conciliar esta tina.", "SOURCE_UNAVAILABLE");
+    if (!source || source.status !== "TERMINADA" || source.lot.stage === LotStage.TERMINADO ||
+      (input.expectedLotId && input.expectedLotId !== source.lotId)) {
+      throw new DistillationOperationError("No se puede conciliar esta tina o pertenece a otro lote.", "SOURCE_UNAVAILABLE");
     }
     if (source.distillations.some((run) => run.status === DistillationStatus.ACTIVA)) {
       throw new DistillationOperationError("Termina primero las corridas activas de esta tina.", "ACTIVE_RUNS");
@@ -494,6 +496,7 @@ export async function closeEmptyFermentationSource(input: {
  */
 export async function verifyFermentationSourceHasMust(input: {
   fermentationId: string;
+  expectedLotId?: string;
   actorId: string;
   reason: string;
 }) {
@@ -513,8 +516,9 @@ export async function verifyFermentationSourceHasMust(input: {
         },
       },
     });
-    if (!source || source.status !== "TERMINADA" || source.lot.stage === LotStage.TERMINADO) {
-      throw new DistillationOperationError("No se puede verificar esta tina.", "SOURCE_UNAVAILABLE");
+    if (!source || source.status !== "TERMINADA" || source.lot.stage === LotStage.TERMINADO ||
+      (input.expectedLotId && input.expectedLotId !== source.lotId)) {
+      throw new DistillationOperationError("No se puede verificar esta tina o pertenece a otro lote.", "SOURCE_UNAVAILABLE");
     }
     const alreadyClosed = await tx.auditEvent.findFirst({
       where: { entityType: "Fermentation", entityId: source.id, action: "FERMENTATION_SOURCE_EMPTIED" },
