@@ -6,20 +6,24 @@ import { requireModuleActionAccess } from "@/lib/auth";
 import { findAvailableEquipment } from "@/lib/equipmentAvailability";
 import {
   DistillationOperationError,
+  closeEmptyFermentationSource,
   getDistillationSources,
+  getFermentationSourceDiscrepancies,
   startDistillationRun,
+  verifyFermentationSourceHasMust,
 } from "@/lib/distillation/operations";
 
 export default async function NewDistillationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; verified?: string; reconciled?: string }>;
 }) {
-  const [{ error }, sources, equipments, receivers] = await Promise.all([
+  const [{ error, verified, reconciled }, sources, equipments, receivers, discrepancies] = await Promise.all([
     searchParams,
     getDistillationSources(),
     findAvailableEquipment(["ALAMBIQUE"]),
     prisma.distillationReceiver.findMany({ where: { status: "OPEN" }, include: { lot: { select: { code: true } } }, orderBy: { createdAt: "desc" } }),
+    getFermentationSourceDiscrepancies(),
   ]);
 
   async function createDistillation(formData: FormData) {
@@ -51,8 +55,44 @@ export default async function NewDistillationPage({
     }
   }
 
+  async function markTinaEmpty(formData: FormData) {
+    "use server";
+    const actor = await requireModuleActionAccess("/distillation");
+    try {
+      await closeEmptyFermentationSource({
+        fermentationId: String(formData.get("fermentationId") ?? ""),
+        actorId: actor.id,
+        reason: String(formData.get("reason") ?? ""),
+      });
+    } catch (caught) {
+      if (caught instanceof DistillationOperationError) {
+        redirect(`/distillation/new?error=${encodeURIComponent(caught.message)}`);
+      }
+      throw caught;
+    }
+    redirect("/distillation/new?reconciled=1");
+  }
+
+  async function confirmTinaHasMust(formData: FormData) {
+    "use server";
+    const actor = await requireModuleActionAccess("/distillation");
+    try {
+      await verifyFermentationSourceHasMust({
+        fermentationId: String(formData.get("fermentationId") ?? ""),
+        actorId: actor.id,
+        reason: String(formData.get("reason") ?? ""),
+      });
+    } catch (caught) {
+      if (caught instanceof DistillationOperationError) {
+        redirect(`/distillation/new?error=${encodeURIComponent(caught.message)}`);
+      }
+      throw caught;
+    }
+    redirect("/distillation/new?verified=1");
+  }
+
   const blockers: string[] = [];
-  if (sources.length === 0) blockers.push("No hay volumen pendiente en fermentaciones o destrozados terminados.");
+  if (sources.length === 0) blockers.push("No hay tinas con mosto verificado ni tanques de recepción listos para rectificar. Revisa los saldos por conciliar o cierra la recepción.");
   if (equipments.length === 0) blockers.push("Todos los alambiques están ocupados o fuera de servicio.");
 
   return (
@@ -61,10 +101,43 @@ export default async function NewDistillationPage({
         <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">MAESTRO</p>
         <h1 className="mt-3 text-4xl font-bold">Nueva corrida de alambique</h1>
         <p className="mt-3 text-on-surface-variant">
-          Puedes abrir varias corridas del mismo lote. Cada carga descuenta litros de su tina o tanque receptor de origen.
+          Solo aparecen tinas con mosto disponible y tanques receptores listos para rectificar. Las salidas de destrozado se reúnen primero en el tanque receptor.
         </p>
         <p className="mt-3 text-sm"><Link className="font-semibold text-primary underline" href="/distillation/receivers">Administrar tanques receptores de destrozado</Link></p>
-        {error && <div className="mt-6 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">{decodeURIComponent(error)}</div>}
+        {error && <div className="mt-6 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">{error}</div>}
+        {(verified || reconciled) && <div role="status" className="mt-5 rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm">
+          {verified ? "Mosto confirmado. La tina vuelve a aparecer como fuente disponible." : "Tina conciliada como vacía. El saldo contable pendiente quedó registrado en bitácora."}
+        </div>}
+        {discrepancies.length > 0 && (
+          <section className="mt-6 space-y-4 rounded-2xl border border-outline-variant bg-surface-container p-5">
+            <h2 className="text-lg font-bold">Tinas con saldo pendiente de conciliación</h2>
+            <p className="text-sm text-on-surface-variant">
+              El volumen restante es contable, no significa que siga habiendo mosto en la tina.
+              Por seguridad estas fuentes no se ofrecen para una nueva corrida hasta confirmar si hay producto.
+              Los registros originales de destrozado se conservan.
+            </p>
+            {discrepancies.map((source) => (
+              <div key={source.id} className="rounded-xl border border-outline-variant bg-surface-container-low p-4">
+                <p className="font-semibold">{source.lotCode} · {source.tank}</p>
+                <p className="mt-1 text-sm">Registrados: {source.originalLiters.toLocaleString("es-MX")} L · cargados a destrozado: {source.allocatedLiters.toLocaleString("es-MX")} L · diferencia: <strong>{source.remainingLiters.toLocaleString("es-MX")} L</strong></p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <form action={markTinaEmpty} className="grid gap-2">
+                    <input name="fermentationId" type="hidden" value={source.id} />
+                    <label className="text-xs font-semibold" htmlFor={`empty-${source.id}`}>Si la tina está físicamente vacía, escribe el motivo</label>
+                    <textarea id={`empty-${source.id}`} name="reason" required minLength={12} maxLength={500} placeholder="Ej. Tina vacía, se revisaron las descargas y falta conciliar volumen de proceso" className="min-h-20 rounded-xl border border-outline-variant bg-surface-container-high p-3 text-sm" />
+                    <button className="rounded-xl border border-outline-variant px-4 py-3 font-semibold">Confirmar tina vacía y guardar diferencia</button>
+                  </form>
+                  <form action={confirmTinaHasMust} className="grid gap-2">
+                    <input name="fermentationId" type="hidden" value={source.id} />
+                    <label className="text-xs font-semibold" htmlFor={`still-${source.id}`}>Si todavía hay mosto, deja constancia de la verificación</label>
+                    <textarea id={`still-${source.id}`} name="reason" required minLength={12} maxLength={500} placeholder="Ej. Se midió la tina, aún hay mosto para cargar a destrozado" className="min-h-20 rounded-xl border border-outline-variant bg-surface-container-high p-3 text-sm" />
+                    <button className="rounded-xl border border-primary px-4 py-3 font-semibold text-primary">Confirmar que queda mosto</button>
+                  </form>
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
 
         {blockers.length > 0 ? (
           <div className="mt-8 space-y-2 rounded-2xl border border-secondary/30 bg-secondary/10 p-8">
@@ -75,7 +148,7 @@ export default async function NewDistillationPage({
             <label className="grid gap-2 text-sm font-semibold">
               Fuente y volumen restante
               <select name="source" required className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3">
-                <option value="">Selecciona una tina, destrozado o tanque receptor</option>
+                <option value="">Selecciona una tina con mosto o un tanque receptor listo</option>
                 {sources.map((source) => (
                   <option key={`${source.sourceKind}:${source.id}`} value={`${source.sourceKind}:${source.id}`}>
                     {source.lotCode} · {source.tankName ?? "Sin tina"} · {source.label} · quedan {source.availableLiters.toLocaleString("es-MX", { maximumFractionDigits: 2 })} L de {source.sourceLiters.toLocaleString("es-MX")} L
