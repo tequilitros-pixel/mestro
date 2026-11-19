@@ -11,16 +11,11 @@ import {
 import { prisma } from "@/lib/prisma";
 import { advanceLotStage } from "@/lib/lotStage";
 import { receiverTotals, destrozadoProducedLiters } from "@/lib/distillation/receivers";
+import { DistillationOperationError } from "@/lib/distillation/errors";
 
 const EPSILON = 0.005;
 
-export class DistillationOperationError extends Error {
-  constructor(message: string, readonly code: string) {
-    super(message);
-    this.name = "DistillationOperationError";
-  }
-}
-
+export { DistillationOperationError } from "@/lib/distillation/errors";
 type Source = {
   id: string;
   lotId: string;
