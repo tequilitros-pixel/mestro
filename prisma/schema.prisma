@@ -704,7 +704,7 @@ model DistillationReceiver {
   plannedRuns Distillation[] @relation("PlannedDistillationReceiver")
   rectifications Distillation[] @relation("ReceiverRectifications")
 
-  @@unique([lotId, name])
+  @@index([lotId, name])
   @@index([status])
 }
 
