@@ -12,7 +12,7 @@ CREATE TABLE "DistillationReceiver" (
     CONSTRAINT "DistillationReceiver_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "DistillationReceiver_capacity_positive" CHECK ("capacityLiters" > 0)
 );
-CREATE UNIQUE INDEX "DistillationReceiver_lotId_name_key" ON "DistillationReceiver"("lotId", "name");
+CREATE INDEX "DistillationReceiver_lotId_name_idx" ON "DistillationReceiver"("lotId", "name");
 CREATE INDEX "DistillationReceiver_status_idx" ON "DistillationReceiver"("status");
 ALTER TABLE "DistillationReceiver" ADD CONSTRAINT "DistillationReceiver_lotId_fkey" FOREIGN KEY ("lotId") REFERENCES "Lot"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
