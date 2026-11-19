@@ -7,7 +7,7 @@ import {
   Prisma,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { DistillationOperationError } from "@/lib/distillation/operations";
+import { DistillationOperationError } from "@/lib/distillation/errors";
 
 const EPSILON = 0.005;
 
