@@ -177,11 +177,18 @@ export default async function DistillationDetailPage({
   async function cancelRun(formData: FormData) {
     "use server";
     const user = await requireModuleActionAccess("/distillation");
-    await cancelDistillationRun({
-      id,
-      actorId: user.id,
-      reason: String(formData.get("reason") ?? ""),
-    });
+    try {
+      await cancelDistillationRun({
+        id,
+        actorId: user.id,
+        reason: String(formData.get("reason") ?? ""),
+      });
+    } catch (caught) {
+      if (caught instanceof DistillationOperationError) {
+        redirect(`/distillation/${id}?error=${encodeURIComponent(caught.message)}`);
+      }
+      throw caught;
+    }
     redirect("/distillation?cancelled=1");
   }
 
