@@ -1,6 +1,6 @@
 import { DistillationType } from "@prisma/client";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireModuleActionAccess } from "@/lib/auth";
 import { findAvailableEquipment } from "@/lib/equipmentAvailability";
@@ -16,15 +16,31 @@ import {
 export default async function NewDistillationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; verified?: string; reconciled?: string }>;
+  searchParams: Promise<{ lotId?: string; error?: string; verified?: string; reconciled?: string }>;
 }) {
-  const [{ error, verified, reconciled }, sources, equipments, receivers, discrepancies] = await Promise.all([
-    searchParams,
-    getDistillationSources(),
+  const { lotId, error, verified, reconciled } = await searchParams;
+  // No se permite abrir corridas sin seleccionar lote.
+  if (!lotId) redirect("/distillation");
+  const [lot, sources, equipments, receivers, discrepancies] = await Promise.all([
+    prisma.lot.findUnique({
+      where: { id: lotId },
+      select: { id: true, code: true, stage: true, fermentations: {
+        select: { id: true, tank: true, mustLiters: true, status: true },
+        orderBy: { startedAt: "desc" },
+      } },
+    }),
+    getDistillationSources(lotId),
     findAvailableEquipment(["ALAMBIQUE"]),
-    prisma.distillationReceiver.findMany({ where: { status: "OPEN" }, include: { lot: { select: { code: true } } }, orderBy: { createdAt: "desc" } }),
-    getFermentationSourceDiscrepancies(),
+    prisma.distillationReceiver.findMany({
+      where: { status: "OPEN", lotId },
+      include: { lot: { select: { code: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    getFermentationSourceDiscrepancies(lotId),
   ]);
+  if (!lot) notFound();
+  if (lot.stage === "TERMINADO") redirect(`/distillation/lots/${lotId}`);
+  const newUrl = `/distillation/new?lotId=${encodeURIComponent(lotId)}`;
 
   async function createDistillation(formData: FormData) {
     "use server";
@@ -33,11 +49,12 @@ export default async function NewDistillationPage({
     const sourceKind = kind as "FERMENTATION" | "DISTILLATION" | "RECEIVER";
     const type = sourceKind === "FERMENTATION" ? DistillationType.DESTROZADO : DistillationType.RECTIFICACION;
     if (!sourceId || !["FERMENTATION", "DISTILLATION", "RECEIVER"].includes(sourceKind)) {
-      redirect("/distillation/new?error=Fuente%20inválida");
+      redirect(`${newUrl}&error=Fuente%20inválida`);
     }
     try {
       const run = await startDistillationRun({
         sourceId,
+        expectedLotId: lotId,
         type,
         sourceKind,
         plannedReceiverId: type === DistillationType.DESTROZADO ? String(formData.get("plannedReceiverId") ?? "") || null : null,
@@ -49,7 +66,7 @@ export default async function NewDistillationPage({
       redirect(`/distillation/${run.id}?created=1`);
     } catch (caught) {
       if (caught instanceof DistillationOperationError) {
-        redirect(`/distillation/new?error=${encodeURIComponent(caught.message)}`);
+        redirect(`${newUrl}&error=${encodeURIComponent(caught.message)}`);
       }
       throw caught;
     }
@@ -61,16 +78,17 @@ export default async function NewDistillationPage({
     try {
       await closeEmptyFermentationSource({
         fermentationId: String(formData.get("fermentationId") ?? ""),
+        expectedLotId: lotId,
         actorId: actor.id,
         reason: String(formData.get("reason") ?? ""),
       });
     } catch (caught) {
       if (caught instanceof DistillationOperationError) {
-        redirect(`/distillation/new?error=${encodeURIComponent(caught.message)}`);
+        redirect(`${newUrl}&error=${encodeURIComponent(caught.message)}`);
       }
       throw caught;
     }
-    redirect("/distillation/new?reconciled=1");
+    redirect(`${newUrl}&reconciled=1`);
   }
 
   async function confirmTinaHasMust(formData: FormData) {
@@ -79,16 +97,17 @@ export default async function NewDistillationPage({
     try {
       await verifyFermentationSourceHasMust({
         fermentationId: String(formData.get("fermentationId") ?? ""),
+        expectedLotId: lotId,
         actorId: actor.id,
         reason: String(formData.get("reason") ?? ""),
       });
     } catch (caught) {
       if (caught instanceof DistillationOperationError) {
-        redirect(`/distillation/new?error=${encodeURIComponent(caught.message)}`);
+        redirect(`${newUrl}&error=${encodeURIComponent(caught.message)}`);
       }
       throw caught;
     }
-    redirect("/distillation/new?verified=1");
+    redirect(`${newUrl}&verified=1`);
   }
 
   const blockers: string[] = [];
@@ -98,12 +117,18 @@ export default async function NewDistillationPage({
   return (
     <main className="min-h-screen bg-background p-6 text-on-surface sm:p-10">
       <div className="mx-auto max-w-4xl">
-        <p className="font-mono text-sm uppercase tracking-[0.4em] text-on-surface-variant">MAESTRO</p>
-        <h1 className="mt-3 text-4xl font-bold">Nueva corrida de alambique</h1>
+        <Link href={`/distillation/lots/${lotId}`} className="text-sm font-semibold text-primary underline">← Volver a las destilaciones del lote</Link>
+        <p className="mt-4 font-mono text-sm uppercase tracking-[0.3em] text-on-surface-variant">MAESTRO · LOTE {lot.code}</p>
+        <h1 className="mt-2 text-3xl font-bold sm:text-4xl">Nueva destilación</h1>
+        <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <p className="text-xs uppercase tracking-wider text-on-surface-variant">Lote seleccionado</p>
+          <p className="mt-1 break-words font-mono text-lg font-bold">{lot.code}</p>
+          <p className="mt-1 text-sm text-on-surface-variant">Solo podrás registrar tinas y destrozado pertenecientes a este lote. Para trabajar en otro lote, vuelve a la lista.</p>
+        </div>
         <p className="mt-3 text-on-surface-variant">
           Solo aparecen tinas con mosto disponible y tanques receptores listos para rectificar. Las salidas de destrozado se reúnen primero en el tanque receptor.
         </p>
-        <p className="mt-3 text-sm"><Link className="font-semibold text-primary underline" href="/distillation/receivers">Administrar tanques receptores de destrozado</Link></p>
+        <p className="mt-3 text-sm"><Link className="font-semibold text-primary underline" href={`/distillation/receivers?lotId=${lotId}`}>Administrar tanque receptor de este lote</Link></p>
         {error && <div className="mt-6 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">{error}</div>}
         {(verified || reconciled) && <div role="status" className="mt-5 rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm">
           {verified ? "Mosto confirmado. La tina vuelve a aparecer como fuente disponible." : "Tina conciliada como vacía. El saldo contable pendiente quedó registrado en bitácora."}
@@ -139,6 +164,30 @@ export default async function NewDistillationPage({
           </section>
         )}
 
+        <section className="mt-5 rounded-2xl border border-outline-variant bg-surface-container p-4">
+          <h2 className="font-bold">Tinas registradas en este lote</h2>
+          {lot.fermentations.length === 0 ? (
+            <p className="mt-2 text-sm text-on-surface-variant">Este lote aún no tiene tinas de fermentación registradas.</p>
+          ) : (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {lot.fermentations.map((tank) => {
+                const source = sources.find((item) => item.sourceKind === "FERMENTATION" && item.id === tank.id);
+                const pending = discrepancies.find((item) => item.id === tank.id);
+                return (
+                  <div key={tank.id} className="rounded-xl border border-outline-variant bg-surface-container-high p-3 text-sm">
+                    <p className="font-semibold">{tank.tank}</p>
+                    <p className="mt-1 text-on-surface-variant">{tank.mustLiters.toLocaleString("es-MX")} L de mosto registrados</p>
+                    <p className="mt-1 font-medium">{source
+                      ? `${source.availableLiters.toLocaleString("es-MX")} L disponibles para destrozado`
+                      : pending
+                        ? `${pending.remainingLiters.toLocaleString("es-MX")} L pendientes de conciliación`
+                        : tank.status !== "TERMINADA" ? "Fermentación en proceso" : "Sin mosto disponible para carga"}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
         {blockers.length > 0 ? (
           <div className="mt-8 space-y-2 rounded-2xl border border-secondary/30 bg-secondary/10 p-8">
             {blockers.map((blocker) => <p key={blocker}>{blocker}</p>)}
