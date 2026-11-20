@@ -253,7 +253,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Sucursal no encontrada" }, { status: 404 });
   }
 
+  // Cuando hay varias cajas en la misma sucursal, nunca mandar la venta
+  // del cajero al corte (o evento) de otro empleado por elegir el más reciente.
   const openCashCut = await prisma.cashCut.findFirst({
+    where: { branchId, status: "ABIERTO", responsibleId: user.id },
+    orderBy: { openedAt: "desc" },
+  }) ?? await prisma.cashCut.findFirst({
     where: { branchId, status: "ABIERTO" },
     orderBy: { openedAt: "desc" },
   });
