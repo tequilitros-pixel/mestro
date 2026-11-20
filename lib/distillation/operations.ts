@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { advanceLotStage } from "@/lib/lotStage";
 import { receiverTotals, destrozadoProducedLiters } from "@/lib/distillation/receivers";
 import { DistillationOperationError } from "@/lib/distillation/errors";
+import { allocatedFermentationLiters, fermentationHasActiveLoad, fermentationHasCompletedLoad, fermentationLatestFinishedLoad } from "@/lib/distillation/loadLedger";
 
 const EPSILON = 0.005;
 
@@ -38,6 +39,10 @@ export async function getDistillationSources(lotId?: string): Promise<Source[]> 
         distillations: {
           where: { status: { not: DistillationStatus.CANCELADA } },
           select: { loadedLiters: true, status: true, finishedAt: true },
+        },
+        supplementalLoads: {
+          where: { distillation: { status: { not: DistillationStatus.CANCELADA } } },
+          select: { liters: true, distillation: { select: { status: true, finishedAt: true } } },
         },
       },
       orderBy: { finishedAt: "desc" },
@@ -77,15 +82,15 @@ export async function getDistillationSources(lotId?: string): Promise<Source[]> 
   const result: Source[] = [];
   for (const fermentation of fermentations) {
     if (drainedIds.has(fermentation.id)) continue;
-    const allocated = fermentation.distillations.reduce((sum, run) => sum + run.loadedLiters, 0);
+    const allocated = allocatedFermentationLiters(fermentation);
     const availableLiters = Math.max(0, fermentation.mustLiters - allocated);
-    const completedRuns = fermentation.distillations.filter((run) => run.status === DistillationStatus.TERMINADA);
-    const hasActive = fermentation.distillations.some((run) => run.status === DistillationStatus.ACTIVA);
-    const lastCompletedAt = completedRuns.reduce((last, run) => run.finishedAt && run.finishedAt > last ? run.finishedAt : last, new Date(0));
+    const hasCompleted = fermentationHasCompletedLoad(fermentation);
+    const hasActive = fermentationHasActiveLoad(fermentation);
+    const lastCompletedAt = fermentationLatestFinishedLoad(fermentation);
     // Después de terminar corridas, cualquier saldo residual solo es CONTABLE
     // hasta que el operario confirme que hay mosto físico todavía.
     const verified = verifiedAt.get(fermentation.id);
-    const physicalStockConfirmed = !completedRuns.length || hasActive || (verified && verified >= lastCompletedAt);
+    const physicalStockConfirmed = !hasCompleted || hasActive || Boolean(verified && verified >= lastCompletedAt);
     if (availableLiters > EPSILON && physicalStockConfirmed) {
       result.push({
         id: fermentation.id,
@@ -550,6 +555,10 @@ export async function getFermentationSourceDiscrepancies(lotId?: string) {
         where: { status: { not: DistillationStatus.CANCELADA } },
         select: { loadedLiters: true, status: true, finishedAt: true },
       },
+      supplementalLoads: {
+        where: { distillation: { status: { not: DistillationStatus.CANCELADA } } },
+        select: { liters: true, distillation: { select: { status: true, finishedAt: true } } },
+      },
     },
     orderBy: { finishedAt: "desc" },
   });
@@ -561,16 +570,14 @@ export async function getFermentationSourceDiscrepancies(lotId?: string) {
     orderBy: { createdAt: "desc" },
   });
   return rows.flatMap((row) => {
-    const allocated = row.distillations.reduce((sum, run) => sum + run.loadedLiters, 0);
+    const allocated = allocatedFermentationLiters(row);
     const remaining = row.mustLiters - allocated;
-    const lastFinished = row.distillations
-      .filter((run) => run.status === DistillationStatus.TERMINADA)
-      .reduce((last, run) => run.finishedAt && run.finishedAt > last ? run.finishedAt : last, new Date(0));
+    const lastFinished = fermentationLatestFinishedLoad(row);
     const sourceEvents = events.filter((event) => event.entityId === row.id);
     const closed = sourceEvents.some((event) => event.action === "FERMENTATION_SOURCE_EMPTIED");
     const verified = sourceEvents.find((event) => event.action === "FERMENTATION_SOURCE_AVAILABLE");
-    if (remaining <= EPSILON || closed || !row.distillations.length ||
-        row.distillations.some((run) => run.status === DistillationStatus.ACTIVA) ||
+    if (remaining <= EPSILON || closed || (!row.distillations.length && !row.supplementalLoads.length) ||
+        fermentationHasActiveLoad(row) ||
         (verified && verified.createdAt >= lastFinished)) return [];
     return [{ id: row.id, lotCode: row.lot.code, tank: row.tank, remainingLiters: remaining, allocatedLiters: allocated, originalLiters: row.mustLiters }];
   });
