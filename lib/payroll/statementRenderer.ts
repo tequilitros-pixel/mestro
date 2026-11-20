@@ -147,7 +147,7 @@ export async function renderPayrollStatementPage(
     color: MUTED,
   });
 
-  page.drawText("RECIBO INDIVIDUAL DE PAGO SEMANAL", {
+  page.drawText("RECIBO INDIVIDUAL DE NÓMINA SEMANAL", {
     x: MARGIN + 12,
     y: y - 46,
     font: bold,
@@ -538,7 +538,7 @@ export async function renderPayrollStatementPage(
     thickness: 0.8,
     color: INK,
   });
-  page.drawText("FIRMA DE CONFORMIDAD DEL TRABAJADOR(A)", {
+  page.drawText("FIRMA DEL TRABAJADOR(A) - RECIBO", {
     x: xTrabajador,
     y: y - 10,
     font: bold,
@@ -566,7 +566,7 @@ export async function renderPayrollStatementPage(
       size: 6.2,
       color: BRAND_PRIMARY,
     });
-    page.drawText(`Acreditación de consentimiento continuo · Art. 108 LFT`, {
+    page.drawText(`Acuse de revisión del desglose de nómina`, {
       x: xTrabajador,
       y: y - 37,
       font: regular,
@@ -574,7 +574,7 @@ export async function renderPayrollStatementPage(
       color: MUTED,
     });
   } else {
-    page.drawText("Recibí en efectivo / transferencia bancaria a entera conformidad", {
+    page.drawText("Pendiente de firma del trabajador", {
       x: xTrabajador,
       y: y - 29,
       font: regular,
@@ -591,7 +591,7 @@ export async function renderPayrollStatementPage(
     color: LINE,
   });
   page.drawText(
-    `Documento oficial de control interno y liquidación de nómina · Generado desde MAESTRO el ${new Date().toLocaleDateString("es-MX")}`,
+    `Documento interno de control y desglose de nómina · Generado desde MAESTRO el ${new Date().toLocaleDateString("es-MX")}`,
     {
       x: MARGIN,
       y: 12,
