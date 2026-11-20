@@ -247,7 +247,7 @@ function WeeklyDetailTab() {
                   {detail.status === "PAGADA"
                     ? "Pagada"
                     : detail.status === "APROBADA"
-                      ? "Aprobada"
+                      ? "Autorizada · pendiente de firma"
                       : "Calculado"}
                 </span>
               </div>
@@ -532,10 +532,10 @@ export default function EmployeePayrollView({
                                   : "bg-secondary/15 text-secondary"
                             }`}
                           >
-                            {item.status === "PAGADA"
+                            {(item.status === "PAGADA" || !!signedWeeks[item.weekStart])
                               ? "Pagada"
                               : item.status === "APROBADA"
-                                ? "Aprobada"
+                                ? "Autorizada · pendiente de firma"
                                 : "Pendiente de corte"}
                           </span>
                         </div>
@@ -548,8 +548,8 @@ export default function EmployeePayrollView({
                         return (
                           <div className="mt-3 space-y-3 border-t border-outline-variant/60 pt-3 text-xs text-on-surface-variant">
                             <p>
-                              {item.status === "PAGADA" && item.paidAt
-                                ? `Pagada el ${formatApprovalDate(item.paidAt)}`
+                              {(item.status === "PAGADA" || !!signedWeeks[item.weekStart]) && (signedWeeks[item.weekStart]?.signedAt || item.paidAt)
+                                ? `Recibo pagado y firmado el ${formatApprovalDate(signedWeeks[item.weekStart]?.signedAt || item.paidAt)}`
                                 : item.status === "APROBADA" && item.approvedAt
                                   ? `Aprobada el ${formatApprovalDate(item.approvedAt)}`
                                   : item.status === "PENDIENTE"
@@ -572,7 +572,7 @@ export default function EmployeePayrollView({
                                     }}
                                     className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-on-primary shadow transition hover:opacity-95 active:scale-[0.98]"
                                   >
-                                    ✍️ Firmar de conformidad
+                                    ✍️ Firmar de recibido
                                   </button>
                                 )}
 
