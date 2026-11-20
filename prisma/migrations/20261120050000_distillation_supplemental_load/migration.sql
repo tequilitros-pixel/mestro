@@ -1,6 +1,6 @@
 -- Registro aditivo y auditable de cargas de distintas tinas en una misma
 -- corrida de destrozado. Sin modificaciones ni backfill sobre corridas previas.
-CREATE TABLE "DistillationSupplementalLoad" (
+CREATE TABLE IF NOT EXISTS "DistillationSupplementalLoad" (
     "id" TEXT NOT NULL,
     "distillationId" TEXT NOT NULL,
     "fermentationId" TEXT NOT NULL,
@@ -12,19 +12,37 @@ CREATE TABLE "DistillationSupplementalLoad" (
     CONSTRAINT "DistillationSupplementalLoad_positive_liters" CHECK ("liters" > 0)
 );
 
-CREATE UNIQUE INDEX "DistillationSupplementalLoad_idempotencyKey_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "DistillationSupplementalLoad_idempotencyKey_key"
 ON "DistillationSupplementalLoad"("idempotencyKey");
-CREATE INDEX "DistillationSupplementalLoad_distillationId_idx"
+CREATE INDEX IF NOT EXISTS "DistillationSupplementalLoad_distillationId_idx"
 ON "DistillationSupplementalLoad"("distillationId");
-CREATE INDEX "DistillationSupplementalLoad_fermentationId_idx"
+CREATE INDEX IF NOT EXISTS "DistillationSupplementalLoad_fermentationId_idx"
 ON "DistillationSupplementalLoad"("fermentationId");
 
-ALTER TABLE "DistillationSupplementalLoad"
-ADD CONSTRAINT "DistillationSupplementalLoad_distillationId_fkey"
-FOREIGN KEY ("distillationId") REFERENCES "Distillation"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "DistillationSupplementalLoad"
-ADD CONSTRAINT "DistillationSupplementalLoad_fermentationId_fkey"
-FOREIGN KEY ("fermentationId") REFERENCES "Fermentation"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "DistillationSupplementalLoad"
-ADD CONSTRAINT "DistillationSupplementalLoad_recordedById_fkey"
-FOREIGN KEY ("recordedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $constraint$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'DistillationSupplementalLoad_distillationId_fkey') THEN
+    ALTER TABLE "DistillationSupplementalLoad"
+      ADD CONSTRAINT "DistillationSupplementalLoad_distillationId_fkey"
+      FOREIGN KEY ("distillationId") REFERENCES "Distillation"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END
+$constraint$;
+DO $constraint$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'DistillationSupplementalLoad_fermentationId_fkey') THEN
+    ALTER TABLE "DistillationSupplementalLoad"
+      ADD CONSTRAINT "DistillationSupplementalLoad_fermentationId_fkey"
+      FOREIGN KEY ("fermentationId") REFERENCES "Fermentation"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END
+$constraint$;
+DO $constraint$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'DistillationSupplementalLoad_recordedById_fkey') THEN
+    ALTER TABLE "DistillationSupplementalLoad"
+      ADD CONSTRAINT "DistillationSupplementalLoad_recordedById_fkey"
+      FOREIGN KEY ("recordedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END
+$constraint$;
