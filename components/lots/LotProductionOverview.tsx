@@ -94,7 +94,13 @@ export default async function LotProductionOverview({ lotId, nextAction, nextHre
     ...activeDistillation.map((item) => ({ label: "Registrar salida y terminar " + item.equipment.name, href: "/distillation/" + item.id })),
   ];
   if (!pending.length && lot.stage !== "TERMINADO") {
-    pending.push({ label: nextAction, href: nextHref });
+    const scopedHref = nextHref === "/cooking" ? "/cooking/new?lotId=" + lotId
+      : nextHref === "/milling" ? "/milling/new?lotId=" + lotId
+      : nextHref === "/fermentation" ? "/fermentation/new?lotId=" + lotId
+      : nextHref === "/distillation" ? "/distillation/lots/" + lotId
+      : nextHref === "/distillation/new" ? "/distillation/new?lotId=" + lotId
+      : nextHref;
+    pending.push({ label: nextAction, href: scopedHref });
   }
 
   const cookingHours = lot.cookings.reduce((sum, item) => sum + hours(item.startedAt, item.finishedAt ?? now), 0);
