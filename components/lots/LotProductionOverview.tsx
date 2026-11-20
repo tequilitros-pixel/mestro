@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { TARGET_BRIX } from "@/lib/fermentation/fermentationMetrics";
+import { totalRunLoadedLiters } from "@/lib/distillation/loadLedger";
 
 const fmt = (value: number, digits = 1) =>
   value.toLocaleString("es-MX", { maximumFractionDigits: digits });
@@ -72,10 +73,18 @@ export default async function LotProductionOverview({ lotId, nextAction, nextHre
           distillations: { select: {
             id: true, type: true, status: true, loadedLiters: true,
             finalLiters: true, finalAlcohol: true, startedAt: true,
+            supplementalLoads: { select: { liters: true } },
           } },
+          supplementalLoads: {
+            where: { distillation: { status: { not: "CANCELADA" } } },
+            select: { liters: true, distillation: { select: { status: true } } },
+          },
         },
       },
-      distillations: { orderBy: { startedAt: "asc" }, include: { equipment: { select: { name: true } } } },
+      distillations: { orderBy: { startedAt: "asc" }, include: {
+        equipment: { select: { name: true } },
+        supplementalLoads: { select: { liters: true } },
+      } },
       boilerProcessLinks: { orderBy: { startedAt: "asc" }, include: {
         boilerSession: { select: { equipment: { select: { name: true } } } },
       } },
@@ -172,10 +181,16 @@ export default async function LotProductionOverview({ lotId, nextAction, nextHre
             const sac = lastValue(tina.readings, "saccharometer");
             const warnings = fermentationWarnings(tina.readings, active, tina.initialTemperature, tina.initialPh);
             const destrozados = tina.distillations.filter((run) => run.type === "DESTROZADO" && run.status !== "CANCELADA");
-            const charged = destrozados.reduce((sum, run) => sum + run.loadedLiters, 0);
-            const done = destrozados.filter((run) => run.status === "TERMINADA");
-            const produced = done.reduce((sum, run) => sum + (run.finalLiters ?? 0), 0);
-            const hasMeasuredOutput = done.length > 0 && done.every((run) => run.finalLiters !== null);
+            const charged = destrozados.reduce((sum, run) => sum + run.loadedLiters, 0)
+              + tina.supplementalLoads.reduce((sum, load) => sum + load.liters, 0);
+            // La salida de una mezcla NO se puede atribuir a una tina sin medición independiente.
+            const blended = destrozados.some((run) => run.supplementalLoads.length > 0)
+              || tina.supplementalLoads.length > 0;
+            const attributable = destrozados.filter((run) =>
+              run.status === "TERMINADA" && run.supplementalLoads.length === 0);
+            const produced = attributable.reduce((sum, run) => sum + (run.finalLiters ?? 0), 0);
+            const hasMeasuredOutput = attributable.length > 0
+              && attributable.every((run) => run.finalLiters !== null);
             const expected = active && averageFermentationHours !== null
               ? new Date(tina.startedAt.getTime() + averageFermentationHours * 3600000) : null;
             const currentTime = hours(tina.startedAt, tina.finishedAt ?? now);
@@ -194,9 +209,10 @@ export default async function LotProductionOverview({ lotId, nextAction, nextHre
                   <Datum label="Sacarímetro" value={sac === null ? "—" : fmt(sac, 2)} />
                   <Datum label="Tiempo" value={fmt(currentTime) + " h"} />
                   <Datum label="Mosto cargado a destrozado" value={fmt(charged) + " L"} />
-                  <Datum label="Destrozado registrado" value={hasMeasuredOutput ? fmt(produced) + " L" : "Por completar"} />
+                  <Datum label="Salida atribuible sin mezcla" value={hasMeasuredOutput ? fmt(produced) + " L" : blended ? "Mezcla no atribuible" : "Por completar"} />
                   <Datum label="Salida / 1,000 L mosto" value={hasMeasuredOutput && charged > 0 ? fmt(produced / charged * 1000) + " L" : "—"} />
                 </div>
+                {blended && <p className="mt-3 text-xs text-on-surface-variant">La tina compartió alambique con otra fuente: los litros cargados se cuentan por origen, pero la salida mezclada solo se informa a nivel de corrida y lote.</p>}
                 {expected && <p className="mt-3 text-xs text-on-surface-variant">Proyección orientativa de cierre: {when(expected)} (según duración de otras tinas terminadas de este lote; no predice el alcohol).</p>}
                 {active && !expected && <p className="mt-3 text-xs text-on-surface-variant">Proyección pendiente: faltan tinas terminadas para establecer una referencia.</p>}
                 {warnings.length > 0 && <div className="mt-3 rounded-xl border border-amber-500/40 p-3 text-sm">
@@ -228,7 +244,7 @@ export default async function LotProductionOverview({ lotId, nextAction, nextHre
           <History title="Cocimiento" items={lot.cookings.map((item) => ({ id: item.id, label: fmt(item.agaveKg, 0) + " kg · " + fmt(hours(item.startedAt, item.finishedAt ?? now)) + " h", detail: item.status, href: "/cooking/" + item.id, date: item.startedAt }))} />
           <History title="Molienda" items={lot.millings.map((item) => ({ id: item.id, label: fmt(item.finalMashLiters ?? item.mashLiters ?? 0) + " L mosto", detail: item.status, href: "/milling/" + item.id, date: item.startedAt }))} />
           <History title="Fermentación" items={lot.fermentations.map((item) => ({ id: item.id, label: item.tank + " · " + fmt(item.mustLiters) + " L", detail: item.status, href: "/fermentation/" + item.id, date: item.startedAt }))} />
-          <History title="Destilación" items={lot.distillations.map((item) => ({ id: item.id, label: item.equipment.name + " · " + (item.type === "DESTROZADO" ? "Destrozado" : "Rectificación") + " · " + fmt(item.loadedLiters) + " L", detail: item.status, href: "/distillation/" + item.id, date: item.startedAt }))} />
+          <History title="Destilación" items={lot.distillations.map((item) => ({ id: item.id, label: item.equipment.name + " · " + (item.type === "DESTROZADO" ? "Destrozado" : "Rectificación") + " · " + fmt(totalRunLoadedLiters(item)) + " L", detail: item.status, href: "/distillation/" + item.id, date: item.startedAt }))} />
         </div>
         <div className="rounded-2xl border border-outline-variant bg-surface-container p-4">
           <h3 className="font-semibold">Caldera vinculada a este lote</h3>
