@@ -17,7 +17,9 @@ import {
 } from "@/lib/payroll/legacyRules";
 import { resolveBranchHourlyRate, summarizeHourlyRates, type HourlyRateRow } from "@/lib/payroll/branchRates";
 import { formatCivilDate } from "@/lib/dateTime";
+import { calculatePayrollSupplement, effectiveSupplementPercent, sumPayrollSupplements, supplementFromSnapshotAdjustments, isPayrollRoundingDeduction, type PayrollSupplementBreakdown } from "@/lib/payroll/contractualSupplement";
 import { sendPayrollReviewEmail } from "@/lib/email";
+import { createNotification, createNotificationsForUsers } from "@/app/actions/notifications";
 
 /**
  * ==========================================================
@@ -145,9 +147,14 @@ export type PayrollWeekEmployee = {
   overtimeHours: number;
   totalHours: number;
   estimatedPay: number;
+  supplementTotal?: number;
   adjustmentsTotal: number;
   finalPay: number;
   approval: PayrollEmployeeApproval;
+  signature?: {
+    signedAt: string | null;
+    signedByName: string | null;
+  } | null;
 };
 
 export type PayrollWeekTable = {
@@ -218,6 +225,7 @@ export type PayrollAdjustmentRow = {
   notes: string | null;
   createdByName: string;
   createdAt: string;
+  origin?: "CONTRACTUAL_SUPPLEMENT";
 };
 
 export type PayrollEmployeeDetail = {
@@ -231,13 +239,42 @@ export type PayrollEmployeeDetail = {
   totalHours: number;
   basePay: number;
   overtimePay: number;
+  supplement?: PayrollSupplementBreakdown;
   totalPay: number;
   adjustments: PayrollAdjustmentRow[];
   adjustmentsTotal: number;
   finalPay: number;
   period: PayrollPeriodInfo;
   approval: PayrollEmployeeApproval;
+  signature?: {
+    signatureData: string | null;
+    signedAt: string | null;
+    signedByName: string | null;
+  } | null;
 };
+
+/** Desglose informativo congelado; no acredita anticipos de prestaciones legales. */
+function supplementSnapshotRows(supplement: PayrollSupplementBreakdown): PayrollAdjustmentRow[] {
+  const items = [
+    ["Referencia presupuestal: aguinaldo", supplement.aguinaldoReference],
+    ["Referencia presupuestal: vacaciones", supplement.vacationsReference],
+    ["Referencia presupuestal: prima vacacional", supplement.vacationPremiumReference],
+  ] as const;
+  return items.filter(([, amount]) => amount > 0).map(([concept, amount], index) => ({
+    id: `supplement-reference-${index}`, type: "BONO" as const, origin: "CONTRACTUAL_SUPPLEMENT" as const,
+    concept, amount,
+    notes: "Desglose informativo del adicional contractual; no sustituye prestaciones legales.",
+    createdByName: "Maestro", createdAt: "",
+  }));
+}
+type SupplementRateRow = { percent: number; effectiveFrom: Date; effectiveTo: Date | null };
+function supplementForDays(days: PayrollDayDetail[], rates: SupplementRateRow[]): PayrollSupplementBreakdown {
+  return sumPayrollSupplements(days.flatMap((day) => day.entries
+    .filter((entry) => entry.clockOut && (entry.pay ?? 0) > 0)
+    .map((entry) => calculatePayrollSupplement(
+      entry.pay ?? 0, effectiveSupplementPercent(rates, new Date(entry.clockIn)),
+    ))));
+}
 
 /**
  * Calcula EN VIVO (sin snapshot) las filas de la tabla semanal a
@@ -254,7 +291,7 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
   // tarifa estaba vigente — ver nota en resolveHourlyRate.
   const rateReferenceDate = new Date(clockEnd.getTime() - 1);
 
-  const [entries, employees, salaryRates, adjustments] = await Promise.all([
+  const [entries, employees, salaryRates, adjustments, supplementRates] = await Promise.all([
     prisma.timeClockEntry.findMany({
       where: { clockIn: { gte: clockStart, lt: clockEnd }, clockOut: { not: null } },
       select: { userId: true, branchId: true, clockIn: true, clockOut: true },
@@ -275,6 +312,11 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
       where: { weekStart: weekStartDate },
       select: { userId: true, type: true, amount: true },
     }),
+    prisma.payrollSupplementRate.findMany({
+      where: { effectiveFrom: { lt: clockEnd }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: clockStart } }] },
+      select: { userId: true, percent: true, effectiveFrom: true, effectiveTo: true },
+      orderBy: { effectiveFrom: "desc" },
+    }),
   ]);
 
   const adjustmentsByUser = new Map<string, { type: string; amount: number }[]>();
@@ -291,6 +333,12 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
     ratesByUser.set(r.userId, list);
   }
 
+  const supplementRatesByUser = new Map<string, SupplementRateRow[]>();
+  for (const rate of supplementRates) {
+    const list = supplementRatesByUser.get(rate.userId) ?? [];
+    list.push({ percent: Number(rate.percent), effectiveFrom: rate.effectiveFrom, effectiveTo: rate.effectiveTo });
+    supplementRatesByUser.set(rate.userId, list);
+  }
   const hoursByUserDay = new Map<string, number[]>();
   const shiftsByUser = new Map<string, { hours: number; branchId: string; clockIn: Date }[]>();
   for (const entry of entries) {
@@ -342,7 +390,11 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
     }));
     const { hourlyRate, missingRate, variableRate } = summarizeHourlyRates(ratedShifts.map((shift) => shift.rate), generalRate);
     const basePay = ratedShifts.reduce((sum, shift) => sum + computeHourlyPay(shift.hours, shift.rate), 0);
-    const estimatedPay = basePay;
+    const supplement = sumPayrollSupplements(ratedShifts.map((shift) => calculatePayrollSupplement(
+      computeHourlyPay(shift.hours, shift.rate),
+      effectiveSupplementPercent(supplementRatesByUser.get(employee.id) ?? [], shift.clockIn),
+    )));
+    const estimatedPay = basePay + supplement.total;
     const adjustmentsTotal = netAdjustmentAmount(employeeAdjustments);
     const finalPay = estimatedPay + adjustmentsTotal;
 
@@ -358,9 +410,11 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
       overtimeHours,
       totalHours,
       estimatedPay,
+      supplementTotal: supplement.total,
       adjustmentsTotal,
       finalPay,
       approval: { status: "BORRADOR", approvedByName: null, approvedAt: null },
+      signature: null,
     });
 
     totalRegular += regularHours;
@@ -402,7 +456,7 @@ async function computeLiveEmployeeDetail(
   const { start: clockStart, end: clockEnd } = payrollWeekInstantRange(mondayStr);
   const rateReferenceDate = new Date(clockEnd.getTime() - 1);
 
-  const [employee, entries, shifts, salaryRates, userBranches, adjustments] = await Promise.all([
+  const [employee, entries, shifts, salaryRates, userBranches, adjustments, supplementRates] = await Promise.all([
     db.user.findUnique({
       where: { id: userId },
       select: { id: true, name: true, hourlyRate: true },
@@ -430,6 +484,11 @@ async function computeLiveEmployeeDetail(
       where: { userId, weekStart: weekStartDate },
       include: { createdBy: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
+    }),
+    db.payrollSupplementRate.findMany({
+      where: { userId, effectiveFrom: { lt: clockEnd }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: clockStart } }] },
+      select: { percent: true, effectiveFrom: true, effectiveTo: true },
+      orderBy: { effectiveFrom: "desc" },
     }),
   ]);
 
@@ -537,7 +596,10 @@ async function computeLiveEmployeeDetail(
 
   const overtimePay = 0;
   const basePay = days.reduce((sum, day) => sum + day.entries.reduce((daySum, entry) => daySum + (entry.pay ?? 0), 0), 0);
-  const totalPay = basePay;
+  const supplement = supplementForDays(days, supplementRates.map((rate) => ({
+    percent: Number(rate.percent), effectiveFrom: rate.effectiveFrom, effectiveTo: rate.effectiveTo,
+  })));
+  const totalPay = basePay + supplement.total;
 
   const adjustmentRows: PayrollAdjustmentRow[] = adjustments.map((adj) => ({
     id: adj.id,
@@ -568,7 +630,8 @@ async function computeLiveEmployeeDetail(
     basePay,
     overtimePay,
     totalPay,
-    adjustments: adjustmentRows,
+    supplement,
+    adjustments: [...adjustmentRows, ...supplementSnapshotRows(supplement)],
     adjustmentsTotal,
     finalPay: totalPay + adjustmentsTotal,
     approval: { status: "BORRADOR", approvedByName: null, approvedAt: null },
@@ -598,7 +661,7 @@ async function computeLiveEmployeeDetailsBatch(
   const rateReferenceDate = new Date(clockEnd.getTime() - 1);
 
   // ── One query per table ──────────────────────────────────────────────────
-  const [employees, allEntries, allShifts, allSalaryRates, allUserBranches, allAdjustments, allJustifications] =
+  const [employees, allEntries, allShifts, allSalaryRates, allUserBranches, allAdjustments, allJustifications, allSupplementRates] =
     await Promise.all([
       db.user.findMany({
         where: { id: { in: userIds } },
@@ -632,6 +695,11 @@ async function computeLiveEmployeeDetailsBatch(
         where: { userId: { in: userIds }, date: { gte: weekStartDate, lt: weekEndDate } },
         include: { justifiedBy: { select: { name: true } } },
       }),
+      db.payrollSupplementRate.findMany({
+        where: { userId: { in: userIds }, effectiveFrom: { lt: clockEnd }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: clockStart } }] },
+        select: { userId: true, percent: true, effectiveFrom: true, effectiveTo: true },
+        orderBy: { effectiveFrom: "desc" },
+      }),
     ]);
 
   // ── Index results by userId for O(1) look-ups ───────────────────────────
@@ -652,6 +720,12 @@ async function computeLiveEmployeeDetailsBatch(
     salaryRatesByUser.get(rate.userId)?.push(rate);
   }
 
+  const supplementRatesByUser = new Map<string, SupplementRateRow[]>(userIds.map((id) => [id, []]));
+  for (const rate of allSupplementRates) {
+    supplementRatesByUser.get(rate.userId)?.push({
+      percent: Number(rate.percent), effectiveFrom: rate.effectiveFrom, effectiveTo: rate.effectiveTo,
+    });
+  }
   const userBranchesByUser = new Map<string, typeof allUserBranches>(userIds.map((id) => [id, []]));
   for (const ub of allUserBranches) {
     userBranchesByUser.get(ub.userId)?.push(ub);
@@ -807,7 +881,8 @@ async function computeLiveEmployeeDetailsBatch(
       (sum, day) => sum + day.entries.reduce((daySum, entry) => daySum + (entry.pay ?? 0), 0),
       0,
     );
-    const totalPay = basePay;
+    const supplement = supplementForDays(days, supplementRatesByUser.get(userId) ?? []);
+    const totalPay = basePay + supplement.total;
 
     const adjustmentRows: PayrollAdjustmentRow[] = adjustments.map((adj) => ({
       id: adj.id,
@@ -836,7 +911,8 @@ async function computeLiveEmployeeDetailsBatch(
       basePay,
       overtimePay,
       totalPay,
-      adjustments: adjustmentRows,
+      supplement,
+      adjustments: [...adjustmentRows, ...supplementSnapshotRows(supplement)],
       adjustmentsTotal,
       finalPay: totalPay + adjustmentsTotal,
       approval: { status: "BORRADOR", approvedByName: null, approvedAt: null },
@@ -981,9 +1057,11 @@ export async function getPayrollWeekTable(
             overtimeHours: 0,
             totalHours: 0,
             estimatedPay: 0,
+            supplementTotal: 0,
             adjustmentsTotal: 0,
             finalPay: 0,
             approval: { status: "BORRADOR" as const, approvedByName: null, approvedAt: null },
+            signature: null,
           };
         }
         if (period.status === "REVISION" && entry.status === "REVISION") {
@@ -1022,7 +1100,8 @@ export async function getPayrollWeekTable(
           regularHours: Number(entry.regularHours),
           overtimeHours: Number(entry.overtimeHours),
           totalHours: Number(entry.totalHours),
-          estimatedPay: Number(entry.basePay) + Number(entry.overtimePay),
+          estimatedPay: Number(entry.totalPay) - Number(entry.adjustmentsTotal),
+          supplementTotal: supplementFromSnapshotAdjustments(entry.adjustmentsSnapshot as PayrollAdjustmentRow[]).total,
           adjustmentsTotal: Number(entry.adjustmentsTotal),
           finalPay: Number(entry.totalPay),
           approval: {
@@ -1036,6 +1115,12 @@ export async function getPayrollWeekTable(
               totalPay: Number(approval.totalPay),
             })),
           },
+          signature: entry.signedAt
+            ? {
+                signedAt: entry.signedAt.toISOString(),
+                signedByName: entry.signedByName ?? null,
+              }
+            : null,
         };
       })
       .sort((a, b) => b.totalHours - a.totalHours || a.name.localeCompare(b.name, "es-MX"));
@@ -1080,12 +1165,21 @@ export async function getEmployeePayrollDetail(
   userId: string,
   weekStart: string,
 ): Promise<{ error: string } | { success: true; data: PayrollEmployeeDetail }> {
-  const admin = await requireAdmin();
-  if (!admin) return { error: "No tienes permiso" };
+  const currentUser = await getCurrentUser();
+  if (!currentUser) return { error: "No autorizado" };
+  const isAdmin = currentUser.role === "ADMIN" || currentUser.permissions.includes("/timeclock/payroll");
+  if (!isAdmin && currentUser.id !== userId) {
+    return { error: "No tienes permiso" };
+  }
 
   const mondayStr = mondayOfWeek(weekStart);
   const weekEnd = addDaysToDateOnly(mondayStr, 6);
   const period = await loadPeriodWithEntries(mondayStr);
+  // Un empleado solo consulta su propio snapshot formalmente aprobado/pagado.
+  // Nunca exponer el expediente en borrador o revisión individual.
+  if (!admin && (!period || !period.entries.some((e) =>
+    e.userId === actor.id && (e.status === "APROBADA" || e.status === "PAGADA")
+  ))) return { error: "El expediente todavía no está aprobado" };
 
   if (period && period.status !== "BORRADOR") {
     const employee = await prisma.user.findUnique({
@@ -1149,6 +1243,7 @@ export async function getEmployeePayrollDetail(
           basePay: 0,
           overtimePay: 0,
           totalPay: 0,
+          supplement: { aguinaldoReference: 0, vacationsReference: 0, vacationPremiumReference: 0, total: 0 },
           adjustments: [],
           adjustmentsTotal: 0,
           finalPay: 0,
@@ -1180,7 +1275,8 @@ export async function getEmployeePayrollDetail(
         totalHours: Number(entry.totalHours),
         basePay: Number(entry.basePay),
         overtimePay: Number(entry.overtimePay),
-        totalPay: Number(entry.basePay) + Number(entry.overtimePay),
+        totalPay: Number(entry.totalPay) - Number(entry.adjustmentsTotal),
+        supplement: supplementFromSnapshotAdjustments(entry.adjustmentsSnapshot as PayrollAdjustmentRow[]),
         adjustments: entry.adjustmentsSnapshot as PayrollAdjustmentRow[],
         adjustmentsTotal: Number(entry.adjustmentsTotal),
         finalPay: Number(entry.totalPay),
@@ -1195,6 +1291,11 @@ export async function getEmployeePayrollDetail(
             approvedAt: approval.approvedAt.toISOString(),
             totalPay: Number(approval.totalPay),
           })),
+        },
+        signature: {
+          signatureData: entry.signatureData ?? null,
+          signedAt: entry.signedAt?.toISOString() ?? null,
+          signedByName: entry.signedByName ?? null,
         },
       },
     };
@@ -1236,6 +1337,9 @@ export async function createPayrollAdjustmentAction(input: {
 
   const concept = input.concept.trim();
   if (!concept) return { error: "Escribe un concepto" };
+  if (input.type === "DEDUCCION" && isPayrollRoundingDeduction(`${concept} ${input.notes ?? ""}`)) {
+    return { error: "No se permite descontar un ajuste de centavos o redondeo de la nómina." };
+  }
   if (!(input.amount > 0)) return { error: "El monto debe ser mayor a cero" };
 
   const mondayStr = mondayOfWeek(input.weekStart);
@@ -1356,9 +1460,26 @@ export async function submitPayrollPeriodAction(weekStart: string) {
   void (async () => {
     try {
       const admins = await prisma.user.findMany({
-        where: { role: "ADMIN", active: true, email: { not: null } },
-        select: { email: true },
+        where: { role: "ADMIN", active: true },
+        select: { id: true, email: true },
       });
+
+      // 1. Notificación In-App (Campanita)
+      if (admins.length > 0) {
+        await createNotificationsForUsers(
+          admins.map((a) => a.id),
+          {
+            title: "📋 Nómina enviada a revisión",
+            body: `${admin.name} envió a revisión la nómina de la semana ${mondayStr} (${live.employees.length} colaboradores).`,
+            category: "PAYROLL",
+            priority: "HIGH",
+            href: `/timeclock/payroll?week=${mondayStr}`,
+            metadata: { weekStart: mondayStr, employeeCount: live.employees.length },
+          }
+        );
+      }
+
+      // 2. Notificación vía correo electrónico
       const toEmails = admins.map((a) => a.email!).filter(Boolean);
       if (toEmails.length > 0) {
         const startCivil = formatCivilDate(`${mondayStr}T00:00:00.000Z`, { day: "numeric", month: "short" });
@@ -1375,7 +1496,7 @@ export async function submitPayrollPeriodAction(weekStart: string) {
         });
       }
     } catch (err) {
-      console.error("[submitPayrollPeriodAction] Error sending review email notification:", err);
+      console.error("[submitPayrollPeriodAction] Error sending review notifications:", err);
     }
   })();
 
@@ -1518,8 +1639,33 @@ export async function markPayrollPeriodPaidAction(weekStart: string) {
       where: { id: period.id },
       data: { status: "PAGADA", paidById: admin.id, paidAt: new Date() },
     });
-    return { success: true };
+    return { success: true, periodId: period.id };
   });
+
+  if (result.success && "periodId" in result && result.periodId) {
+    // Notificar a todos los empleados pagados para que consulten y firmen su recibo
+    void (async () => {
+      try {
+        const entries = await prisma.payrollEntry.findMany({
+          where: { periodId: result.periodId },
+          select: { userId: true },
+        });
+        const userIds = entries.map((e) => e.userId);
+        if (userIds.length > 0) {
+          await createNotificationsForUsers(userIds, {
+            title: "💵 Pago de nómina emitido",
+            body: `Tu pago de la semana ${mondayStr} ha sido procesado. Tu recibo oficial ya está disponible para consulta y firma digital.`,
+            category: "PAYROLL",
+            priority: "HIGH",
+            href: "/timeclock/my-payroll",
+            metadata: { weekStart: mondayStr },
+          });
+        }
+      } catch (notifErr) {
+        console.error("[markPayrollPeriodPaidAction] Error enviando notificaciones:", notifErr);
+      }
+    })();
+  }
 
   revalidatePath("/timeclock/payroll");
   revalidateTag("payroll-analytics", "max");
