@@ -22,7 +22,7 @@ export default async function DistillationsByLotPage({ params }: { params: Promi
         orderBy: { startedAt: "desc" },
       },
       fermentations: {
-        select: { id: true, tank: true, status: true, mustLiters: true },
+        select: { id: true, tank: true, status: true, mustLiters: true, initialBrix: true, finalBrix: true, readings: { orderBy: { createdAt: "desc" }, take: 1, select: { brix: true } } },
         orderBy: { startedAt: "desc" },
       },
       distillationReceivers: {
@@ -57,6 +57,37 @@ export default async function DistillationsByLotPage({ params }: { params: Promi
           <MetricCard label="Corridas terminadas" value={finished.length} />
           <MetricCard label="Litros de salida registrados" value={`${liters(totalOutput)} L`} />
         </div>
+
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold">Rendimiento agrupado por tina</h2>
+          <p className="text-sm text-on-surface-variant">Solo se atribuye a cada tina el destrozado de corridas que tienen esa tina como origen explícito. El producto rectificado recibido de varias tinas se informa a nivel del lote.</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            {lot.fermentations.map((tank) => {
+              const runs = lot.distillations.filter((run) => run.type === "DESTROZADO" && run.sourceFermentationId === tank.id && run.status !== "CANCELADA");
+              const charged = runs.reduce((sum, run) => sum + run.loadedLiters, 0);
+              const completed = runs.filter((run) => run.status === "TERMINADA");
+              const measurable = completed.length > 0 && completed.every((run) => run.finalLiters != null);
+              const output = completed.reduce((sum, run) => sum + (run.finalLiters ?? 0), 0);
+              const currentBrix = tank.readings[0]?.brix ?? tank.finalBrix;
+              return <div key={tank.id} className="rounded-2xl border border-outline-variant bg-surface-container p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <Link className="font-semibold text-primary underline" href={"/fermentation/" + tank.id}>{tank.tank}</Link>
+                  <span className="text-xs text-on-surface-variant">{tank.status === "TERMINADA" ? "Cerrada" : "Activa"}</span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                  <div><p className="text-xs text-on-surface-variant">Mosto de tina</p><p className="font-bold">{liters(tank.mustLiters)} L</p></div>
+                  <div><p className="text-xs text-on-surface-variant">Brix inicio → último</p><p className="font-bold">{liters(tank.initialBrix)}° → {currentBrix == null ? "—" : liters(currentBrix) + "°"}</p></div>
+                  <div><p className="text-xs text-on-surface-variant">Carga a destrozado</p><p className="font-bold">{liters(charged)} L · {runs.length} corridas</p></div>
+                  <div><p className="text-xs text-on-surface-variant">Destrozado final</p><p className="font-bold">{measurable ? liters(output) + " L" : "Por registrar"}</p></div>
+                  <div><p className="text-xs text-on-surface-variant">Destrozado por 1,000 L cargados</p><p className="font-bold">{measurable && charged > 0 ? liters(output * 1000 / charged) + " L" : "—"}</p></div>
+                  <div><p className="text-xs text-on-surface-variant">Salida / mosto original</p><p className="font-bold">{measurable && tank.mustLiters > 0 ? liters(100 * output / tank.mustLiters) + "%" : "—"}</p></div>
+                </div>
+                <p className="mt-3 text-xs text-on-surface-variant">Los porcentajes son volumétricos y no representan alcohol absoluto. Las corridas incompletas no se imputan como salida.</p>
+              </div>;
+            })}
+            {lot.fermentations.length === 0 && <p className="text-sm text-on-surface-variant">No hay tinas de este lote.</p>}
+          </div>
+        </section>
 
         <section className="space-y-3">
           <h2 className="text-lg font-bold">Alambiques y corridas del lote</h2>
