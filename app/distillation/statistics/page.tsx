@@ -2,6 +2,7 @@ import Link from "next/link";
 import { DistillationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { summarizeDistillations } from "@/lib/distillation/statistics";
+import { totalRunLoadedLiters } from "@/lib/distillation/loadLedger";
 
 export default async function DistillationStatisticsPage() {
   const lots = await prisma.lot.findMany({
@@ -12,6 +13,7 @@ export default async function DistillationStatisticsPage() {
         include: {
           equipment: { select: { name: true } },
           sourceFermentation: { select: { tank: true } },
+          supplementalLoads: { include: { fermentation: { select: { tank: true } } } },
           sourceDistillation: { include: { sourceFermentation: { select: { tank: true } } } },
         },
         orderBy: { startedAt: "asc" },
@@ -23,16 +25,22 @@ export default async function DistillationStatisticsPage() {
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 text-on-surface sm:px-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Producción correlacionada</p><h1 className="mt-2 text-3xl font-bold">Estadísticas por tina y alambique</h1><p className="mt-2 text-on-surface-variant">Volumen, rendimiento y alcohol conservan la fuente real de cada corrida.</p></div>
+        <div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Producción correlacionada</p><h1 className="mt-2 text-3xl font-bold">Estadísticas por tina y alambique</h1><p className="mt-2 text-on-surface-variant">El destrozado de varias tinas se agrupa como mezcla y nunca se atribuye a una tina individual. Las rectificaciones se presentan a nivel de lote.</p></div>
         <Link href="/distillation" className="rounded-xl border border-outline-variant px-4 py-2 font-bold">Volver a destilación</Link>
       </header>
       <div className="mt-8 space-y-8">
         {lots.map((lot) => {
           const groups = summarizeDistillations(lot.distillations.map((run) => ({
             id: run.id,
-            tankName: run.sourceFermentation?.tank ?? run.sourceDistillation?.sourceFermentation?.tank ?? "Sin tina histórica",
+            tankName: run.supplementalLoads.length > 0
+              ? "Mezcla: " + [...new Set([
+                  run.sourceFermentation?.tank ?? "Tina original",
+                  ...run.supplementalLoads.map((load) => load.fermentation.tank),
+                ])].join(" + ")
+              : run.sourceFermentation?.tank ?? run.sourceDistillation?.sourceFermentation?.tank
+                ?? (run.type === "RECTIFICACION" ? "Rectificación del lote" : "Sin tina histórica"),
             equipmentName: run.equipment.name,
-            loadedLiters: run.loadedLiters,
+            loadedLiters: totalRunLoadedLiters(run),
             finalLiters: run.finalLiters,
             finalAlcohol: run.finalAlcohol,
             finalHeadsLiters: run.finalHeadsLiters,
