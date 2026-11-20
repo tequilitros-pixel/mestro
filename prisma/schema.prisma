@@ -1546,6 +1546,8 @@ model CashCut {
   // se descuenta automáticamente del inventario de la sucursal.
   eventId String?
   event   ServiceEvent? @relation(fields: [eventId], references: [id])
+  /// Los cortes nuevos de evento consumen stock aislado del evento, nunca de la sucursal.
+  eventStockIsolated Boolean @default(false)
 
   date     DateTime
   openedAt DateTime      @default(now())
@@ -2256,6 +2258,7 @@ model InventoryProduct {
   rawMaterialLinks  RawMaterial[]          @relation("RawMaterialInventoryLink")
 
   eventAddedProducts EventAddedProduct[]
+  eventSaleConsumptions EventSaleConsumption[]
 
   @@index([name])
   @@index([category])
@@ -2474,6 +2477,26 @@ model ServiceEvent {
   recounts      EventRecount[]
   cashCuts      CashCut[]
   addedProducts EventAddedProduct[]
+  saleConsumptions EventSaleConsumption[]
+}
+
+model EventSaleConsumption {
+  id        String @id @default(cuid())
+  eventId   String
+  saleId    String
+  productId String
+  /// Magnitud positiva consumida al cobrar, expresada en la unidad base indicada.
+  quantity  Decimal @db.Decimal(18, 6)
+  unit      String
+  createdAt DateTime @default(now())
+  reversedAt DateTime?
+
+  event   ServiceEvent     @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  sale    PosSale          @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  product InventoryProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([saleId, productId])
+  @@index([eventId, productId])
 }
 
 model ServiceEventItem {
@@ -4706,6 +4729,7 @@ model PosSale {
 
   items    PosSaleItem[]
   payments PosSalePayment[]
+  eventConsumptions EventSaleConsumption[]
 
   @@index([branchId])
   @@index([cashCutId])

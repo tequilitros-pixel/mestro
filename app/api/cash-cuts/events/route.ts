@@ -4,8 +4,8 @@ import { getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
 
 /**
  * Eventos elegibles para vincular a un nuevo corte de caja: aquellos
- * cuyo inventario aún no se ha descontado (stockDeductedAt null) y
- * que no están cancelados. Se listan del más próximo al más lejano.
+ * que no están cancelados o terminados y que no tengan otro corte abierto.
+ * El inventario del evento se maneja separado del de Barra.
  */
 export async function GET() {
   const user = await getCurrentUserWithAnyModuleAccess(["/cash-cuts", "/cash-cuts/daily"]);
@@ -17,8 +17,9 @@ export async function GET() {
   try {
     const events = await prisma.serviceEvent.findMany({
       where: {
-        stockDeductedAt: null,
-        status: { notIn: ["CANCELLED"] },
+        status: { notIn: ["CANCELLED", "COMPLETED"] },
+        returnConfirmedAt: null,
+        cashCuts: { none: { status: "ABIERTO" } },
       },
       select: {
         id: true,
