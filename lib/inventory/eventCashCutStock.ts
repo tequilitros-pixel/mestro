@@ -20,7 +20,7 @@ export type EventOpeningWarning = {
   note?: string;
 };
 
-function eventItemAmount(item: EventItem, product: InventoryProduct) {
+export function eventItemAmount(item: EventItem, product: InventoryProduct) {
   const captured = new Prisma.Decimal(item.sentQuantity ?? item.plannedQuantity);
   if (!product.inventoryBaseUnit) return { amount: captured, factor: new Prisma.Decimal(1), unit: item.unit };
   const snapshot = {
