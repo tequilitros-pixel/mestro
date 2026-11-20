@@ -89,7 +89,7 @@ export async function getMyApprovedPayrollHistory(): Promise<
       weekEnd: formatDateOnly(entry.period.weekEnd),
       status,
       approvedAt: (entry.approvedAt ?? entry.period.approvedAt)?.toISOString() ?? null,
-      paidAt: entry.period.paidAt?.toISOString() ?? null,
+      paidAt: (entry.period.paidAt ?? (entry.status === "PAGADA" ? entry.signedAt : null))?.toISOString() ?? null,
       regularHours: Number(entry.regularHours),
       overtimeHours: Number(entry.overtimeHours),
       totalHours: Number(entry.totalHours),

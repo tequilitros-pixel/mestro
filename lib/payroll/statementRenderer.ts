@@ -3,7 +3,6 @@ import {
   COMPANY_NAME,
   COMPANY_TRADE_NAME,
   COMPANY_ADDRESS,
-  LEGAL_REPRESENTATIVE,
 } from "@/lib/payroll/compositeSalary";
 import { numberToMexicanCurrencyText } from "@/lib/payroll/numberToWords";
 import type { PayrollEmployeeDetail } from "@/app/actions/payroll";
@@ -155,7 +154,9 @@ export async function renderPayrollStatementPage(
     color: INK,
   });
 
-  const statusBadge = detail.approval.status === "PAGADA" ? "PAGADA" : "APROBADA";
+  const statusBadge = detail.approval.status === "PAGADA"
+    ? (detail.signature?.signedAt ? "PAGADA - FIRMADA" : "PAGADA")
+    : "ENTREGA AUTORIZADA";
   const statusWidth = bold.widthOfTextAtSize(statusBadge, 9) + 16;
   page.drawRectangle({
     x: PAGE_WIDTH - MARGIN - statusWidth - 12,
@@ -463,7 +464,7 @@ export async function renderPayrollStatementPage(
     color: INK,
   });
 
-  const legalText = `El presente recibo refleja las horas, importes y ajustes registrados en MAESTRO para el periodo. Su aprobación no acredita necesariamente pago bancario ni liquidación de aguinaldo, vacaciones, prima vacacional, descanso semanal u otros derechos laborales. La firma, si se recaba, reconoce la consulta del desglose y no representa finiquito, renuncia a prestaciones ni liberación general de obligaciones del patrón.`;
+  const legalText = `El recibo detalla horas, montos y ajustes registrados. La empresa registra la entrega al autorizarla; desde esta actualización, el trabajador firma de recibido y el sistema confirma PAGADO. Las firmas históricas conservan el significado con el que se recabaron. Esta constancia no sustituye al CFDI, no constituye finiquito ni implica renuncia a aguinaldo, vacaciones u otros derechos laborales.`;
 
   drawWrapped(page, legalText, {
     x: MARGIN + 8,
@@ -480,33 +481,38 @@ export async function renderPayrollStatementPage(
   // ─── 7. ESPACIO DE FIRMAS ───────────────────────────────────────────────────
   const colSigWidth = (CONTENT_WIDTH - 40) / 2;
 
-  // Firma Patronal
-  page.drawLine({
-    start: { x: MARGIN + 10, y: y },
-    end: { x: MARGIN + 10 + colSigWidth, y },
-    thickness: 0.8,
-    color: INK,
+  // Sello administrativo informativo (no es firma autógrafa ni CFDI).
+  // Se genera con la aprobación individual y sus datos históricos.
+  const employerStampX = MARGIN + 10;
+  const employerStampWidth = colSigWidth;
+  page.drawRectangle({
+    x: employerStampX,
+    y: y - 44,
+    width: employerStampWidth,
+    height: 49,
+    color: BG_HIGHLIGHT,
+    borderColor: BRAND_PRIMARY,
+    borderWidth: 1.2,
   });
-  page.drawText("POR EL PATRÓN", {
-    x: MARGIN + 10,
-    y: y - 10,
-    font: bold,
-    size: 6.8,
-    color: MUTED,
+  page.drawText("SELLO ADMINISTRATIVO DE LA EMPRESA", {
+    x: employerStampX + 8, y: y - 7, font: bold, size: 7.4, color: BRAND_PRIMARY,
   });
-  page.drawText(LEGAL_REPRESENTATIVE, {
-    x: MARGIN + 10,
-    y: y - 20,
-    font: bold,
-    size: 8,
-    color: INK,
+  page.drawText("ENTREGA AUTORIZADA", {
+    x: employerStampX + 8, y: y - 17, font: bold, size: 7.1, color: INK,
   });
-  page.drawText(COMPANY_NAME, {
-    x: MARGIN + 10,
-    y: y - 29,
-    font: regular,
-    size: 6.5,
-    color: MUTED,
+  const approvalDate = detail.approval.approvedAt
+    ? new Intl.DateTimeFormat("es-MX", {
+      day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+      timeZone: "America/Mexico_City",
+    }).format(new Date(detail.approval.approvedAt))
+    : "Sin fecha registrada";
+  const approvalName = cleanText(detail.approval.approvedByName || "Responsable no registrado");
+  const trimmedName = approvalName.length > 40 ? approvalName.slice(0, 38) + ".." : approvalName;
+  page.drawText(`Autoriza: ${trimmedName}`, {
+    x: employerStampX + 8, y: y - 29, font: regular, size: 6.4, color: INK,
+  });
+  page.drawText(`Fecha y hora: ${approvalDate}`, {
+    x: employerStampX + 8, y: y - 39, font: bold, size: 6.3, color: BRAND_PRIMARY,
   });
 
   // Firma Trabajador
@@ -566,7 +572,7 @@ export async function renderPayrollStatementPage(
       size: 6.2,
       color: BRAND_PRIMARY,
     });
-    page.drawText(`Acuse de revisión del desglose de nómina`, {
+    page.drawText(`Registro de firma y fecha de recepción`, {
       x: xTrabajador,
       y: y - 37,
       font: regular,

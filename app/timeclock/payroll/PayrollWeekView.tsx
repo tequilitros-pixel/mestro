@@ -23,7 +23,6 @@ import {
   approvePayrollEntryAction,
   reopenPayrollEntryAction,
   closePayrollReviewAction,
-  markPayrollPeriodPaidAction,
   reopenPayrollPeriodAction,
   justifyIncidentAction,
   unjustifyIncidentAction,
@@ -333,11 +332,11 @@ export default function PayrollWeekView() {
                     table.period.submittedAt ? formatDateTime(table.period.submittedAt) : ""
                   }`}
                 {table.period.status === "APROBADA" &&
-                  `Aprobada por ${table.period.approvedByName ?? "—"} · ${
+                  `Entrega autorizada por ${table.period.approvedByName ?? "—"} · ${
                     table.period.approvedAt ? formatDateTime(table.period.approvedAt) : ""
                   }`}
                 {table.period.status === "PAGADA" &&
-                  `Pagada por ${table.period.paidByName ?? "—"} · ${
+                  `Pagada por recibos firmados · ${
                     table.period.paidAt ? formatDateTime(table.period.paidAt) : ""
                   }`}
               </p>
@@ -379,16 +378,9 @@ export default function PayrollWeekView() {
                     <span>📦</span>
                     Descargar todos los recibos (PDF)
                   </a>
-                  <button
-                    disabled={actionBusy}
-                    onClick={() =>
-                      handlePeriodAction(markPayrollPeriodPaidAction, "Semana marcada como pagada")
-                    }
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:opacity-50"
-                  >
-                    <CheckIcon className="h-3.5 w-3.5" />
-                    Marcar pagada
-                  </button>
+                  <span className="inline-flex items-center rounded-xl border border-outline-variant px-3 py-2 text-xs font-semibold text-on-surface-variant">
+                    Entrega autorizada · el pago se confirma con la firma de cada empleado
+                  </span>
                   <button
                     disabled={actionBusy}
                     onClick={() =>
@@ -536,7 +528,7 @@ export default function PayrollWeekView() {
                               {employee.approval.status === "PAGADA"
                                 ? "Pagado"
                                 : employee.approval.status === "APROBADA"
-                                  ? (employee.approval.history?.length ?? 0) > 1 ? "Reaprobado" : "Aprobado"
+                                  ? employee.signature?.signedAt ? "Recibo firmado" : "Por firmar de recibido"
                                   : employee.approval.status === "BORRADOR" ? "Sin expediente"
                                   : (employee.approval.history?.length ?? 0) > 0 ? "Por reaprobación" : "Pendiente"}
                             </button>
@@ -935,7 +927,7 @@ function EmployeeDetailModal({
                       : detail.approval.status === "PAGADA"
                       ? "Nómina individual pagada"
                       : detail.approval.status === "APROBADA"
-                      ? (detail.approval.history?.length ?? 0) > 1 ? "Nómina individual reaprobada" : "Nómina individual aprobada"
+                      ? "Entrega autorizada · pendiente de firma de recibido"
                       : (detail.approval.history?.length ?? 0) > 0 ? "Pendiente de reaprobación" : "Aprobación individual pendiente"}
                   </p>
                   <p className="text-xs text-on-surface-variant">
