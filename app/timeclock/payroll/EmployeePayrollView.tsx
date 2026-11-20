@@ -525,7 +525,7 @@ export default function EmployeePayrollView({
                           </p>
                           <span
                             className={`inline-block mt-0.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-                              item.status === "PAGADA"
+                              (item.status === "PAGADA" || !!signedWeeks[item.weekStart])
                                 ? "bg-primary/15 text-primary"
                                 : item.status === "APROBADA"
                                   ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim"
@@ -548,8 +548,10 @@ export default function EmployeePayrollView({
                         return (
                           <div className="mt-3 space-y-3 border-t border-outline-variant/60 pt-3 text-xs text-on-surface-variant">
                             <p>
-                              {(item.status === "PAGADA" || !!signedWeeks[item.weekStart]) && (signedWeeks[item.weekStart]?.signedAt || item.paidAt)
-                                ? `Recibo pagado y firmado el ${formatApprovalDate(signedWeeks[item.weekStart]?.signedAt || item.paidAt)}`
+                              {(item.signedAt || signedWeeks[item.weekStart]?.signedAt)
+                                ? `Recibo firmado de recibido el ${formatApprovalDate(signedWeeks[item.weekStart]?.signedAt || item.signedAt)}`
+                                : item.status === "PAGADA"
+                                  ? "Pago registrado en el historial; falta firma de recibido"
                                 : item.status === "APROBADA" && item.approvedAt
                                   ? `Aprobada el ${formatApprovalDate(item.approvedAt)}`
                                   : item.status === "PENDIENTE"
@@ -561,7 +563,7 @@ export default function EmployeePayrollView({
                               <div className="flex flex-wrap items-center gap-2 pt-1">
                                 {isSigned ? (
                                   <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                                    ✓ Firmado de conformidad {signedDate && `el ${formatApprovalDate(signedDate)}`}
+                                    ✓ Firma registrada {signedDate && `el ${formatApprovalDate(signedDate)}`}
                                   </span>
                                 ) : (
                                   <button
