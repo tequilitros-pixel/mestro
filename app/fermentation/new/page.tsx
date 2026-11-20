@@ -19,13 +19,13 @@ function weighted(items: Discharge[], key: "brix" | "ph" | "temperature") {
 export default async function NewFermentationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; lotId?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, lotId: selectedLotId } = await searchParams;
   const discharges = await prisma.millingDischarge.findMany({
     where: {
       tankId: { not: null },
-      milling: { status: "TERMINADA" },
+      milling: { status: "TERMINADA", ...(selectedLotId ? { lotId: selectedLotId } : {}) },
     },
     include: { tank: true, milling: { include: { lot: true } } },
     orderBy: { createdAt: "asc" },
@@ -57,7 +57,7 @@ export default async function NewFermentationPage({
     "use server";
     await requireModuleActionAccess("/fermentation");
     const [lotId, tankId] = String(formData.get("source") ?? "").split(":");
-    if (!lotId || !tankId) redirect("/fermentation/new?error=Fuente%20inválida");
+    if (!lotId || !tankId || (selectedLotId && lotId !== selectedLotId)) redirect("/fermentation/new?error=Fuente%20inválida");
 
     try {
       const fermentation = await prisma.$transaction(async (tx) => {
