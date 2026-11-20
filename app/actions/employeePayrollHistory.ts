@@ -8,7 +8,8 @@ import {
   addDaysToDateOnly,
 } from "@/lib/dateOnly";
 import { prisma } from "@/lib/prisma";
-import { payrollWeekInstantRange } from "@/lib/payroll/legacyRules";
+import { computeHourlyPay, payrollWeekInstantRange } from "@/lib/payroll/legacyRules";
+import { calculatePayrollSupplement, effectiveSupplementPercent } from "@/lib/payroll/contractualSupplement";
 import { resolveBranchHourlyRate } from "@/lib/payroll/branchRates";
 
 /**
@@ -27,6 +28,8 @@ export type ApprovedPayrollHistoryItem = {
   overtimeHours: number;
   totalHours: number;
   totalPay: number;
+  signedAt: string | null;
+  signatureData: string | null;
 };
 
 /**
@@ -57,6 +60,8 @@ export async function getMyApprovedPayrollHistory(): Promise<
       overtimeHours: true,
       totalHours: true,
       totalPay: true,
+      signedAt: true,
+      signatureData: true,
       period: {
         select: {
           weekStart: true,
@@ -89,6 +94,8 @@ export async function getMyApprovedPayrollHistory(): Promise<
       overtimeHours: Number(entry.overtimeHours),
       totalHours: Number(entry.totalHours),
       totalPay: Number(entry.totalPay),
+      signedAt: entry.signedAt ? entry.signedAt.toISOString() : null,
+      signatureData: entry.signatureData ?? null,
     };
   });
 
@@ -97,7 +104,7 @@ export async function getMyApprovedPayrollHistory(): Promise<
   const currentWeekMonday = mondayOfWeek(todayDateOnly());
 
   // Traer tarifas del usuario para calcular semanas pasadas si aplica
-  const [salaryRates, dbUser] = await Promise.all([
+  const [salaryRates, dbUser, supplementRates] = await Promise.all([
     prisma.salaryRate.findMany({
       where: { userId: user.id, scheme: "HORA" },
       select: { branchId: true, amount: true, effectiveFrom: true, effectiveTo: true },
@@ -107,9 +114,15 @@ export async function getMyApprovedPayrollHistory(): Promise<
       where: { id: user.id },
       select: { hourlyRate: true },
     }),
+    prisma.payrollSupplementRate.findMany({
+      where: { userId: user.id },
+      select: { percent: true, effectiveFrom: true, effectiveTo: true },
+      orderBy: { effectiveFrom: "desc" },
+    }),
   ]);
   const rates = salaryRates.map((r) => ({ ...r, amount: Number(r.amount) }));
   const baseRate = dbUser?.hourlyRate !== null && dbUser?.hourlyRate !== undefined ? Number(dbUser.hourlyRate) : null;
+  const supplements = supplementRates.map((r) => ({ ...r, percent: Number(r.percent) }));
 
   for (let i = 1; i <= 8; i++) {
     const mondayStr = addDaysToDateOnly(currentWeekMonday, -7 * i);
@@ -142,7 +155,8 @@ export async function getMyApprovedPayrollHistory(): Promise<
 
       weekHours += hours;
       const appliedRate = resolveBranchHourlyRate(rates, entry.branchId, entry.clockIn, baseRate);
-      weekPay += hours * (appliedRate ?? 0);
+      const base = computeHourlyPay(hours, appliedRate);
+      weekPay += base + calculatePayrollSupplement(base, effectiveSupplementPercent(supplements, entry.clockIn)).total;
     }
 
     if (weekHours > 0) {
@@ -156,6 +170,8 @@ export async function getMyApprovedPayrollHistory(): Promise<
         overtimeHours: 0,
         totalHours: weekHours,
         totalPay: Math.round(weekPay * 100) / 100,
+        signedAt: null,
+        signatureData: null,
       });
     }
   }
