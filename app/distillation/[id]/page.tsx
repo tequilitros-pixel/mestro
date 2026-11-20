@@ -92,6 +92,7 @@ export default async function DistillationDetailPage({
     include: {
       equipment: { select: { name: true } },
       sourceFermentation: { select: { tank: true } },
+      supplementalLoads: { include: { fermentation: { select: { tank: true } } } },
       sourceDistillation: { include: { sourceFermentation: { select: { tank: true } } } },
       sourceReceiver: { select: { name: true } },
     },
@@ -1166,7 +1167,11 @@ export default async function DistillationDetailPage({
               id: item.id,
               label: item.equipment.name,
               active: item.status === DistillationStatus.ACTIVA,
-              detail: `${item.sourceReceiver?.name ?? item.sourceFermentation?.tank ?? item.sourceDistillation?.sourceFermentation?.tank ?? "Sin tina"} · ${formatNumber(item.loadedLiters)} L`,
+              detail: `${[...new Set([
+                item.sourceReceiver?.name ?? item.sourceFermentation?.tank
+                  ?? item.sourceDistillation?.sourceFermentation?.tank ?? "Sin tina",
+                ...item.supplementalLoads.map((load) => load.fermentation.tank),
+              ])].join(" + ")} · ${formatNumber(totalRunLoadedLiters(item))} L`,
               status: item.status === DistillationStatus.TERMINADA ? "Terminada" : item.status === DistillationStatus.CANCELADA ? "Cancelada" : "Activa",
             }))}
           />
