@@ -47,6 +47,8 @@ export type OfflineOperation = {
   createdAt: string;
   attempts: number;
   status: OfflineOperationStatus;
+  /** Last time a tab atomically claimed this operation for synchronizing. */
+  syncStartedAt?: string;
   lastError?: string;
 };
 

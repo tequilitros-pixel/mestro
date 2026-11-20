@@ -1,6 +1,7 @@
 "use client";
 
 import type { OfflineOperation } from "./types";
+import { canClaimForSync, needsPosSaleReconciliation } from "./syncPolicy";
 
 const DATABASE_NAME = "maestro-offline";
 const DATABASE_VERSION = 1;
@@ -65,23 +66,68 @@ export async function removeOperation(id: string) {
   window.dispatchEvent(new Event("maestro:queue-changed"));
 }
 
+/**
+ * Atomic read-modify-write transaction. Prevents another browser tab from
+ * resending a sale or overriding a local cancellation between two awaits.
+ */
+async function transitionOperation(
+  id: string,
+  transition: (operation: OfflineOperation) => OfflineOperation | null,
+): Promise<OfflineOperation | null> {
+  const database = await openDatabase();
+  return new Promise<OfflineOperation | null>((resolve, reject) => {
+    const tx = database.transaction(OPERATIONS_STORE, "readwrite");
+    const store = tx.objectStore(OPERATIONS_STORE);
+    const request = store.get(id);
+    let updated: OfflineOperation | null = null;
+
+    request.onsuccess = () => {
+      const current = request.result as OfflineOperation | undefined;
+      if (!current) return;
+      updated = transition(current);
+      if (updated) store.put(updated);
+    };
+    tx.oncomplete = () => {
+      database.close();
+      if (updated) window.dispatchEvent(new Event("maestro:queue-changed"));
+      resolve(updated);
+    };
+    const failed = () => {
+      database.close();
+      reject(tx.error ?? new Error("No se pudo actualizar la transacción local."));
+    };
+    tx.onerror = failed;
+    tx.onabort = failed;
+  });
+}
+
+/** One atomic claim per operation, safe across browser tabs and refreshes. */
+export async function claimQueuedOperation(id: string): Promise<OfflineOperation | null> {
+  return transitionOperation(id, (operation) => {
+    if (!canClaimForSync(operation)) return null;
+    return { ...operation, status: "syncing", syncStartedAt: new Date().toISOString() };
+  });
+}
+
 /** Cancela una operación POS pendiente sin borrar su rastro local. */
 export async function cancelQueuedOperation(id: string, reason?: string) {
-  const operations = await listOperations();
-  const operation = operations.find((item) => item.id === id);
-  if (!operation || operation.kind !== "pos.sale.create" || operation.status === "syncing") return false;
-  await updateOperation({
-    ...operation,
-    status: "cancelled",
-    lastError: reason?.trim() || "Cancelada en el dispositivo antes de sincronizar.",
+  const updated = await transitionOperation(id, (operation) => {
+    if (operation.kind !== "pos.sale.create" || operation.status === "syncing" || operation.status === "cancelled") return null;
+    return {
+      ...operation,
+      status: "cancelled",
+      syncStartedAt: undefined,
+      lastError: reason?.trim() || "Cancelada en el dispositivo antes de sincronizar.",
+    };
   });
-  return true;
+  return updated !== null;
 }
 
 export async function retryQueuedOperation(id: string) {
-  const operations = await listOperations();
-  const operation = operations.find((item) => item.id === id);
-  if (!operation || operation.status === "syncing" || operation.status === "cancelled") return false;
-  await updateOperation({ ...operation, status: "pending", lastError: undefined });
-  return true;
+  const updated = await transitionOperation(id, (operation) => {
+    if (operation.status === "syncing" || operation.status === "cancelled") return null;
+    if (operation.kind === "pos.sale.create" && needsPosSaleReconciliation(operation.lastError)) return null;
+    return { ...operation, status: "pending", syncStartedAt: undefined, lastError: undefined };
+  });
+  return updated !== null;
 }
