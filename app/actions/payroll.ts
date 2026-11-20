@@ -1599,37 +1599,12 @@ export async function approvePayrollEntryAction(weekStart: string, userId: strin
   return result;
 }
 
-/** APROBADA -> PAGADA. Solo admins. Cierra la semana por completo. */
-export async function markPayrollPeriodPaidAction(weekStart: string) {
+/** Compatibilidad: la semana ya no puede marcarse pagada manualmente.
+ * Cada trabajador la confirma firmando su recibo. */
+export async function markPayrollPeriodPaidAction(_weekStart: string) {
   const admin = await requireAdmin();
   if (!admin) return { error: "No tienes permiso" };
-
-  const mondayStr = mondayOfWeek(weekStart);
-  const result = await prisma.$transaction(async (tx) => {
-    const periods = await tx.$queryRaw<Array<{ id: string; status: string }>>`
-      SELECT "id", "status"::text AS "status"
-      FROM "PayrollPeriod"
-      WHERE "weekStart" = ${parseDateOnly(mondayStr)}
-      FOR UPDATE
-    `;
-    const period = periods[0];
-    if (!period || period.status !== "APROBADA") {
-      return { error: "Esta semana no está aprobada" };
-    }
-    await tx.payrollEntry.updateMany({
-      where: { periodId: period.id, status: "APROBADA" },
-      data: { status: "PAGADA" },
-    });
-    await tx.payrollPeriod.update({
-      where: { id: period.id },
-      data: { status: "PAGADA", paidById: admin.id, paidAt: new Date() },
-    });
-    return { success: true, periodId: period.id };
-  });
-
-  revalidatePath("/timeclock/payroll");
-  revalidateTag("payroll-analytics", "max");
-  return result;
+  return { error: "El estado PAGADA se registra automáticamente al firmar de recibido todos los trabajadores. No se permite marcar sin firma." };
 }
 
 /**
