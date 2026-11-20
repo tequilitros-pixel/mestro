@@ -55,12 +55,12 @@ export async function getPosSaleBranchOptions(
   const cuts = branches.length ? await db.cashCut.findMany({
     where: { status: "ABIERTO", branchId: { in: branches.map((branch) => branch.id) } },
     orderBy: { openedAt: "desc" },
-    select: { id: true, branchId: true },
+    select: { id: true, branchId: true, eventStockIsolated: true, event: { select: { clientName: true } } },
   }) : [];
-  const openCutByBranch = new Map<string, string>();
-  for (const cut of cuts) if (!openCutByBranch.has(cut.branchId)) openCutByBranch.set(cut.branchId, cut.id);
+  const openCutByBranch = new Map<string, (typeof cuts)[number]>();
+  for (const cut of cuts) if (!openCutByBranch.has(cut.branchId)) openCutByBranch.set(cut.branchId, cut);
   return {
-    branches: branches.map((branch) => ({ ...branch, openCashCutId: openCutByBranch.get(branch.id) ?? null })),
+    branches: branches.map((branch) => ({ ...branch, openCashCutId: openCutByBranch.get(branch.id)?.id ?? null, openEventName: openCutByBranch.get(branch.id)?.eventStockIsolated ? (openCutByBranch.get(branch.id)?.event?.clientName ?? null) : null })),
     branchLockMessage,
   };
 }
