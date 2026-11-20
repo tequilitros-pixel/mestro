@@ -112,6 +112,9 @@ export async function recordEventSaleConsumption(tx: Tx, input: {
   for (const item of input.requirements) {
     const product = byId.get(item.inventoryProductId);
     if (!product) throw new Error("El ingrediente de la receta ya no existe.");
+    // El equipo (escarchadores, herramientas, etc.) regresa al evento;
+    // no se consume por cada cóctel aunque alguna receta histórica lo incluya.
+    if (product.itemType === "EQUIPMENT") continue;
     const inputQuantity = new Prisma.Decimal(item.quantity);
     if (inputQuantity.lessThanOrEqualTo(0)) continue;
     // Las recetas V2 expresan cantidad en la unidad base; las recetas
