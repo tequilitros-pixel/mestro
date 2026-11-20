@@ -1,5 +1,4 @@
-import { applyEventInventoryMovement } from "@/lib/inventory/eventMovements";
-import { generateOperationId } from "@/lib/pos2/operationId";
+import { getEventOpeningWarnings } from "@/lib/inventory/eventCashCutStock";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { assertCashCutBranch, lockCashCutOwner } from "@/lib/pos/cashCutBranchGuard";
@@ -189,11 +188,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "El evento seleccionado no existe." }, { status: 404 });
     }
 
-    if (event.stockDeductedAt) {
-      return NextResponse.json(
-        { error: "El inventario de este evento ya fue descontado en otro corte." },
-        { status: 400 }
-      );
+    if (event.status === "CANCELLED" || event.returnConfirmedAt) {
+      return NextResponse.json({ error: "El evento ya está cancelado o finalizado." }, { status: 400 });
     }
   }
 
@@ -225,21 +221,22 @@ export async function POST(request: Request) {
   if (Number.isNaN(openedAt.getTime())) return NextResponse.json({ error: "Fecha de apertura inválida" }, { status: 400 });
 
   try {
-  const cashCut = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const cutResponsibleId = responsibleId ?? user.id;
     await lockCashCutOwner(tx, cutResponsibleId);
     if (clientOperationId) {
       const existing = await tx.cashCut.findUnique({ where: { id: clientOperationId } });
       if (existing) {
         if (existing.branchId !== branchId || existing.createdById !== user.id) throw new Error("La operación pertenece a otro corte.");
-        return existing;
+        return { cashCut: existing, stockWarnings: [] };
       }
     }
     await assertCashCutBranch(tx, cutResponsibleId, branchId);
     await tx.$queryRaw`SELECT "id" FROM "Branch" WHERE "id"=${branchId} FOR UPDATE`;
     if (eventId) await tx.$queryRaw`SELECT "id" FROM "ServiceEvent" WHERE "id"=${eventId} FOR UPDATE`;
     const lockedEvent = eventId ? await tx.serviceEvent.findUnique({ where: { id: eventId }, include: { items: { orderBy: { productId: "asc" } } } }) : null;
-    if (eventId && (!lockedEvent || lockedEvent.stockDeductedAt || !lockedEvent.checkoutConfirmedAt || lockedEvent.returnConfirmedAt || lockedEvent.status === "CANCELLED")) throw new Error("Confirma la salida de un evento que no tenga inventario descontado antes de vincularlo al corte.");
+    if (eventId && (!lockedEvent || lockedEvent.returnConfirmedAt || lockedEvent.status === "CANCELLED")) throw new Error("El evento seleccionado está cancelado o finalizado.");
+    if (eventId && await tx.cashCut.findFirst({ where: { eventId, status: "ABIERTO" }, select: { id: true } })) throw new Error("Ya hay un corte abierto para este evento.");
     const created = await tx.cashCut.create({
       data: {
         ...(clientOperationId ? { id: clientOperationId } : {}),
@@ -253,6 +250,7 @@ export async function POST(request: Request) {
         openedAt,
         createdAt: openedAt,
         eventId: event?.id,
+        eventStockIsolated: Boolean(lockedEvent),
         auditEntries: {
           create: {
             action: "CREADO",
@@ -265,19 +263,20 @@ export async function POST(request: Request) {
       },
     });
 
-    // Si se vinculó un evento, descuenta del inventario de esta
-    // sucursal lo que se cargó a ese evento (lo enviado, o lo
-    // planeado si aún no se registró envío).
-    if (lockedEvent) {
-      const operationId = generateOperationId();
-      for (const item of lockedEvent.items) await applyEventInventoryMovement(tx, { item, branchId, actorId: user.id, operationId, eventId: lockedEvent.id, returning: false });
-      await tx.serviceEvent.update({ where: { id: lockedEvent.id }, data: { stockDeductedAt: new Date() } });
-    }
+    // Apertura NO es una transferencia de mercancía: nunca modifica el
+    // inventario de Barra. El manifiesto pertenece al evento y las ventas
+    // usarán su propio ledger. Los faltantes son sólo informativos.
+    const stockWarnings = lockedEvent
+      ? await getEventOpeningWarnings(tx, lockedEvent.items, branchId).catch((cause) => {
+          console.error("No se pudo generar el aviso de existencias del evento:", cause);
+          return [{ product: "Inventario pendiente de revisión", required: 0, available: 0, missing: 0, unit: "", note: "Consulta las existencias con el encargado." }];
+        })
+      : [];
 
-    return created;
+    return { cashCut: created, stockWarnings };
   });
 
-  return NextResponse.json(cashCut, { status: 201 });
+  return NextResponse.json({ ...result.cashCut, stockWarnings: result.stockWarnings }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No fue posible abrir el corte." }, { status: 409 });
   }
