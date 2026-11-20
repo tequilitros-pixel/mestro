@@ -263,20 +263,19 @@ export async function POST(request: Request) {
       },
     });
 
-    // Apertura NO es una transferencia de mercancía: nunca modifica el
-    // inventario de Barra. El manifiesto pertenece al evento y las ventas
-    // usarán su propio ledger. Los faltantes son sólo informativos.
-    const stockWarnings = lockedEvent
-      ? await getEventOpeningWarnings(tx, lockedEvent.items, branchId).catch((cause) => {
-          console.error("No se pudo generar el aviso de existencias del evento:", cause);
-          return [{ product: "Inventario pendiente de revisión", required: 0, available: 0, missing: 0, unit: "", note: "Consulta las existencias con el encargado." }];
-        })
-      : [];
-
-    return { cashCut: created, stockWarnings };
+    // Apertura NO es transferencia: no tocar existencias de Barra.
+    return { cashCut: created };
   });
 
-  return NextResponse.json({ ...result.cashCut, stockWarnings: result.stockWarnings }, { status: 201 });
+  // El aviso ocurre DESPUÉS de confirmar la apertura. Un problema en el
+  // cálculo de faltantes nunca debe revertir ni bloquear el corte.
+  const stockWarnings = event?.items.length
+    ? await prisma.$transaction((tx) => getEventOpeningWarnings(tx, event.items, branchId)).catch((cause) => {
+        console.error("No se pudo generar el aviso de existencias del evento:", cause);
+        return [{ product: "Inventario pendiente de revisión", required: 0, available: 0, missing: 0, unit: "", note: "Consulta las existencias con el encargado." }];
+      })
+    : [];
+  return NextResponse.json({ ...result.cashCut, stockWarnings }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "No fue posible abrir el corte." }, { status: 409 });
   }
