@@ -70,19 +70,26 @@ export default function PayrollDashboard() {
   useEffect(() => {
     let cancelled = false;
 
-    getPayrollAnalytics(from, to).then((result) => {
-      if (cancelled) return;
-
-      if ("error" in result) {
-        setError(result.error);
+    getPayrollAnalytics(from, to)
+      .then((result) => {
+        if (cancelled) return;
+        if ("error" in result) {
+          setError(result.error);
+          setData(null);
+        } else {
+          setError(null);
+          setData(result.data);
+        }
+      })
+      .catch((error) => {
+        console.error("Error cargando nómina:", error);
+        if (cancelled) return;
+        setError("No fue posible cargar el resumen de nómina. Intenta de nuevo.");
         setData(null);
-      } else {
-        setError(null);
-        setData(result.data);
-      }
-
-      setLoading(false);
-    });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
     return () => {
       cancelled = true;
@@ -118,8 +125,22 @@ export default function PayrollDashboard() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">
-        {error}
+      <div className="space-y-4">
+        <div role="alert" className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              setError(null);
+              setRefreshKey((key) => key + 1);
+            }}
+            className="mt-3 rounded-lg border border-error/40 px-3 py-2 font-semibold"
+          >
+            Reintentar resumen
+          </button>
+        </div>
+        <PayrollWeekView />
       </div>
     );
   }
