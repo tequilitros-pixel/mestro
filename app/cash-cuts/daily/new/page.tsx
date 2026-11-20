@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card, CardLabel } from "@/components/ui/Card";
@@ -50,6 +50,8 @@ export default function NuevoCortePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openedCut, setOpenedCut] = useState<{ id: string; warnings: StockWarning[] } | null>(null);
+  // Reutilizar la misma clave ante doble toque, reintento o corte ya creado.
+  const openingOperationId = useRef<string | null>(null);
 
   useEffect(() => {
     const cachedBranches = localStorage.getItem("maestro:cash-cut-branches");
@@ -86,7 +88,10 @@ export default function NuevoCortePage() {
     }
 
     setLoading(true);
+    const operationId = openingOperationId.current ?? crypto.randomUUID();
+    openingOperationId.current = operationId;
     const payload = {
+      clientOperationId: operationId,
       branchId,
       date,
       startingFund: total,
@@ -99,7 +104,7 @@ export default function NuevoCortePage() {
         setLoading(false);
         return;
       }
-      const id = crypto.randomUUID();
+      const id = operationId;
       const branch = branches.find((item) => item.id === branchId)!;
       await enqueueOperation({ id, kind: "cash-cut.open", payload, createdAt: new Date().toISOString() });
       localStorage.setItem(`maestro:cash-cut:${id}`, JSON.stringify({
@@ -152,7 +157,7 @@ export default function NuevoCortePage() {
           <CardLabel>Sucursal</CardLabel>
           <select
             value={branchId}
-            onChange={(e) => setBranchId(e.target.value)}
+            onChange={(e) => { openingOperationId.current = null; setBranchId(e.target.value); }}
             className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
           >
             <option value="">Selecciona...</option>
@@ -169,7 +174,7 @@ export default function NuevoCortePage() {
           <input
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => { openingOperationId.current = null; setDate(e.target.value); }}
             className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
           />
         </Card>
@@ -183,7 +188,7 @@ export default function NuevoCortePage() {
             </p>
             <select
               value={eventId}
-              onChange={(e) => setEventId(e.target.value)}
+              onChange={(e) => { openingOperationId.current = null; setEventId(e.target.value); }}
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             >
               <option value="">Ninguno</option>
