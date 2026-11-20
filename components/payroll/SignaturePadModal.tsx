@@ -139,12 +139,12 @@ export default function SignaturePadModal({
     }
     setSaving(false);
 
-    if (result.error) {
+    if ("error" in result && result.error) {
       setError(result.error);
       return;
     }
 
-    if (result.success && result.signedAt) {
+    if ("success" in result && result.success && result.signedAt) {
       onSigned(signatureData, result.signedAt);
       onClose();
     }
