@@ -16,6 +16,15 @@ interface Branch {
   code: string;
 }
 
+interface StockWarning {
+  product: string;
+  required: number;
+  available: number;
+  missing: number;
+  unit: string;
+  note?: string;
+}
+
 interface EligibleEvent {
   id: string;
   code: string;
@@ -40,6 +49,7 @@ export default function NuevoCortePage() {
   const [eventId, setEventId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openedCut, setOpenedCut] = useState<{ id: string; warnings: StockWarning[] } | null>(null);
 
   useEffect(() => {
     const cachedBranches = localStorage.getItem("maestro:cash-cut-branches");
@@ -117,7 +127,12 @@ export default function NuevoCortePage() {
         setError(cashCut.error ?? "No se pudo abrir el corte");
         return;
       }
-      router.push(`/cash-cuts/daily/${cashCut.id}`);
+      const warnings: StockWarning[] = Array.isArray(cashCut.stockWarnings) ? cashCut.stockWarnings : [];
+      if (eventId && warnings.length) {
+        setOpenedCut({ id: cashCut.id, warnings });
+      } else {
+        router.push(`/cash-cuts/daily/${cashCut.id}`);
+      }
     } catch {
       setError("No se pudo abrir el corte. Revisa tu conexión e inténtalo de nuevo.");
     } finally {
@@ -163,8 +178,8 @@ export default function NuevoCortePage() {
           <Card>
             <CardLabel>Evento (opcional)</CardLabel>
             <p className="mb-2 text-xs text-on-surface-variant">
-              Si este turno es para un evento, elígelo aquí: su inventario
-              cargado se descontará automáticamente de esta sucursal.
+              Vincula el corte al evento. Las ventas consumirán sus productos,
+              sin descontar otra vez del inventario de la sucursal.
             </p>
             <select
               value={eventId}
@@ -201,6 +216,39 @@ export default function NuevoCortePage() {
         />
       )}
       {counting && error && <p className="mt-4 text-sm text-error">{error}</p>}
+
+      {openedCut && (
+        <div role="dialog" aria-modal="true" aria-labelledby="event-stock-warning-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-lg space-y-4 rounded-2xl border border-outline-variant bg-surface p-5 shadow-2xl">
+            <div>
+              <p className="text-sm font-semibold text-amber-500">Corte abierto correctamente</p>
+              <h2 id="event-stock-warning-title" className="mt-1 text-xl font-bold text-on-surface">
+                ¿Te hacen falta estos productos para trabajar?
+              </h2>
+              <p className="mt-2 text-sm text-on-surface-variant">
+                El inventario de la sucursal muestra diferencias frente a lo cargado para este evento.
+                Es una advertencia: puedes continuar vendiendo y revisar los faltantes después.
+              </p>
+            </div>
+            <ul className="max-h-60 space-y-2 overflow-y-auto rounded-xl bg-surface-container p-3 text-sm">
+              {openedCut.warnings.map((item, index) => (
+                <li key={`${item.product}-${index}`} className="flex justify-between gap-3 border-b border-outline-variant pb-2 last:border-0 last:pb-0">
+                  <div>
+                    <span className="font-medium text-on-surface">{item.product}</span>
+                    {item.note && <p className="text-xs text-on-surface-variant">{item.note}</p>}
+                  </div>
+                  <span className="shrink-0 font-semibold text-amber-500">
+                    {item.missing > 0 ? `Faltan ${item.missing.toLocaleString("es-MX")} ${item.unit}` : "Revisar"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <button type="button" autoFocus onClick={() => router.push(`/cash-cuts/daily/${openedCut.id}`)} className="min-h-12 w-full rounded-xl bg-primary px-5 font-bold text-on-primary">
+              Aceptar y continuar al corte
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
