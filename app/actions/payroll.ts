@@ -1166,7 +1166,9 @@ export async function getEmployeePayrollDetail(
 ): Promise<{ error: string } | { success: true; data: PayrollEmployeeDetail }> {
   const currentUser = await getCurrentUser();
   if (!currentUser) return { error: "No autorizado" };
-  const isAdmin = currentUser.role === "ADMIN" || currentUser.permissions.includes("/timeclock/payroll");
+  // Únicamente administradores o el propio trabajador consultando un pago aprobado.
+  // Las consultas en borrador y revisión continúan restringidas al administrador.
+  const isAdmin = currentUser.role === "ADMIN";
   if (!isAdmin && currentUser.id !== userId) {
     return { error: "No tienes permiso" };
   }
@@ -1176,8 +1178,8 @@ export async function getEmployeePayrollDetail(
   const period = await loadPeriodWithEntries(mondayStr);
   // Un empleado solo consulta su propio snapshot formalmente aprobado/pagado.
   // Nunca exponer el expediente en borrador o revisión individual.
-  if (!admin && (!period || !period.entries.some((e) =>
-    e.userId === actor.id && (e.status === "APROBADA" || e.status === "PAGADA")
+  if (!isAdmin && (!period || !period.entries.some((e) =>
+    e.userId === currentUser.id && (e.status === "APROBADA" || e.status === "PAGADA")
   ))) return { error: "El expediente todavía no está aprobado" };
 
   if (period && period.status !== "BORRADOR") {
