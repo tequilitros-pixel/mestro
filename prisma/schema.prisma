@@ -3426,6 +3426,11 @@ model PayrollEntry {
   daysSnapshot        Json
   adjustmentsSnapshot Json @default("[]")
 
+  // Firmas de recibo históricas (las columnas ya existen en Neon).
+  signatureData String?   @db.Text
+  signedAt      DateTime?
+  signedByName  String?
+
   createdAt DateTime @default(now())
 
   period     PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
