@@ -45,6 +45,7 @@ import {
 } from "@/lib/dateOnly";
 import { useToast } from "@/components/ui/Toast";
 import { payrollApprovalProgress } from "@/lib/payroll/approvalProgress";
+import { PayrollSmartAudit } from "@/components/payroll/PayrollSmartAudit";
 
 const STATUS_LABELS: Record<PayrollPeriodInfo["status"], string> = {
   BORRADOR: "Borrador",
@@ -370,6 +371,14 @@ export default function PayrollWeekView() {
 
               {table.period.status === "APROBADA" && (
                 <>
+                  <a
+                    href={`/api/timeclock/payroll/statements-batch?weekStart=${encodeURIComponent(weekStart)}&download=1`}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/20 transition-colors"
+                    title="Descargar todos los recibos de la semana en un solo PDF"
+                  >
+                    <span>📦</span>
+                    Descargar todos los recibos (PDF)
+                  </a>
                   <button
                     disabled={actionBusy}
                     onClick={() =>
@@ -394,10 +403,20 @@ export default function PayrollWeekView() {
               )}
 
               {table.period.status === "PAGADA" && (
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-outline">
-                  <LockIcon className="h-3.5 w-3.5" />
-                  Cerrada
-                </span>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`/api/timeclock/payroll/statements-batch?weekStart=${encodeURIComponent(weekStart)}&download=1`}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/20 transition-colors"
+                    title="Descargar todos los recibos de la semana en un solo PDF"
+                  >
+                    <span>📦</span>
+                    Descargar todos los recibos (PDF)
+                  </a>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-outline">
+                    <LockIcon className="h-3.5 w-3.5" />
+                    Cerrada
+                  </span>
+                </div>
               )}
             </div>
           </Card>
@@ -407,7 +426,7 @@ export default function PayrollWeekView() {
               {[
                 ["Usuarios activos", String(table.totals.activeEmployees)],
                 ["Horas trabajadas", hours(table.totals.totalHours)],
-                ["Total nómina", money(table.totals.finalPay)],
+                ["Total a pagar", money(table.totals.finalPay)],
                 ["Pago", formatPaymentDate(table.weekStart)],
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0 px-4 py-3">
@@ -439,6 +458,8 @@ export default function PayrollWeekView() {
             </section>
           )}
 
+          <PayrollSmartAudit table={table} onFilterEmployee={(name) => setSearch(name)} />
+
           <section className="overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest">
             <div className="flex flex-wrap items-end justify-between gap-3 border-b border-outline-variant bg-surface-container px-4 py-3">
               <div>
@@ -468,8 +489,8 @@ export default function PayrollWeekView() {
                       ))}
                       <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Total horas</th>
                       <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Pago por hora</th>
-                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Pago total</th>
-                      <th className="border-b border-outline-variant px-3 py-3 text-center font-bold">Estado</th>
+                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Total a pagar</th>
+                      <th className="border-b border-outline-variant px-3 py-3 text-center font-bold">Estado / Firma</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -497,7 +518,12 @@ export default function PayrollWeekView() {
                           {hours(employee.totalHours)}
                         </td>
                         <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-semibold tabular-nums text-on-surface">
-                          {employee.variableRate ? "Varias" : employee.hourlyRate === null ? "—" : money(employee.hourlyRate)}
+                          {employee.variableRate ? "Varias tarifas" : employee.hourlyRate === null ? "—" : money(employee.hourlyRate)}
+                          {(employee.supplementTotal ?? 0) > 0 && (
+                            <span className="block text-[10px] font-normal text-on-surface-variant">
+                              +{money(employee.supplementTotal ?? 0)} adicional semanal
+                            </span>
+                          )}
                         </td>
                         <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-black tabular-nums text-on-surface">
                           {employee.missingRate && employee.adjustmentsTotal === 0
@@ -505,14 +531,25 @@ export default function PayrollWeekView() {
                             : money(employee.finalPay)}
                         </td>
                         <td className="border-b border-outline-variant px-3 py-2.5 text-center">
-                          <button onClick={() => openEmployeeReview(employee.id)} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${employee.approval.status === "APROBADA" || employee.approval.status === "PAGADA" ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim" : "bg-secondary/15 text-secondary"}`}>
-                            {employee.approval.status === "PAGADA"
-                              ? "Pagado"
-                              : employee.approval.status === "APROBADA"
-                                ? (employee.approval.history?.length ?? 0) > 1 ? "Reaprobado" : "Aprobado"
-                                : employee.approval.status === "BORRADOR" ? "Sin expediente"
-                                : (employee.approval.history?.length ?? 0) > 0 ? "Por reaprobación" : "Pendiente"}
-                          </button>
+                          <div className="flex flex-col items-center gap-1">
+                            <button onClick={() => openEmployeeReview(employee.id)} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${employee.approval.status === "APROBADA" || employee.approval.status === "PAGADA" ? "bg-tertiary-fixed-dim/15 text-tertiary-fixed-dim" : "bg-secondary/15 text-secondary"}`}>
+                              {employee.approval.status === "PAGADA"
+                                ? "Pagado"
+                                : employee.approval.status === "APROBADA"
+                                  ? (employee.approval.history?.length ?? 0) > 1 ? "Reaprobado" : "Aprobado"
+                                  : employee.approval.status === "BORRADOR" ? "Sin expediente"
+                                  : (employee.approval.history?.length ?? 0) > 0 ? "Por reaprobación" : "Pendiente"}
+                            </button>
+                            {employee.signature?.signedAt ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 text-[9px] font-black text-emerald-800 dark:text-emerald-300" title={`Firmado digitalmente el ${formatDateTime(employee.signature.signedAt)}`}>
+                                ✓ Firmado
+                              </span>
+                            ) : (employee.approval.status === "APROBADA" || employee.approval.status === "PAGADA" || table.period.status === "APROBADA" || table.period.status === "PAGADA") && employee.totalHours > 0 ? (
+                              <span className="text-[9px] font-semibold text-outline" title="Pendiente de firma del colaborador en su portal">
+                                Por firmar
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -847,7 +884,7 @@ function EmployeeDetailModal({
                 <p className="text-lg font-bold text-on-surface">{hours(detail.totalHours)}</p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Pago por hora</CardLabel>
+                <CardLabel>Tarifa base por hora</CardLabel>
                 <p className="text-lg font-bold text-on-surface">
                   {new Set(detail.days.flatMap((day) => day.entries.filter((entry) => entry.clockOut && entry.hourlyRate !== undefined).map((entry) => entry.hourlyRate))).size > 1
                     ? "Varias tarifas"
@@ -855,15 +892,15 @@ function EmployeeDetailModal({
                 </p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Pago por horas</CardLabel>
+                <CardLabel>Sueldo base por horas</CardLabel>
                 <p className="text-lg font-bold text-on-surface">{money(detail.basePay)}</p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Total</CardLabel>
+                <CardLabel>Total a pagar</CardLabel>
                 <p className="text-lg font-bold text-on-surface">{money(detail.finalPay)}</p>
                 {detail.adjustmentsTotal !== 0 && (
                   <p className="text-[10px] text-on-surface-variant">
-                    {money(detail.totalPay)} horas{" "}
+                    {money(detail.totalPay)} sueldo y adicional{" "}
                     {detail.adjustmentsTotal > 0 ? "+" : "−"}{" "}
                     {money(Math.abs(detail.adjustmentsTotal))} ajustes
                   </p>
@@ -871,6 +908,24 @@ function EmployeeDetailModal({
               </Card>
             </div>
 
+            {(detail.supplement?.total ?? 0) > 0 && (
+              <div className="mt-4 rounded-xl border border-primary/30 bg-primary/[0.04] p-3">
+                <p className="text-sm font-bold text-on-surface">Desglose del adicional contractual</p>
+                <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                  <p>Sueldo base: <strong>{money(detail.basePay)}</strong></p>
+                  <p>Referencia presupuestal de aguinaldo: <strong>{money(detail.supplement?.aguinaldoReference ?? 0)}</strong></p>
+                  <p>Referencia presupuestal de vacaciones: <strong>{money(detail.supplement?.vacationsReference ?? 0)}</strong></p>
+                  <p>Referencia presupuestal de prima vacacional: <strong>{money(detail.supplement?.vacationPremiumReference ?? 0)}</strong></p>
+                  <p>Adicional total: <strong>{money(detail.supplement?.total ?? 0)}</strong></p>
+                  <p>Bonos/deducciones manuales: <strong>{money(detail.adjustmentsTotal)}</strong></p>
+                </div>
+                <p className="mt-2 text-[11px] text-on-surface-variant">
+                  Este adicional es un pago contractual y su distribución es presupuestal.
+                  No acredita por sí sola el pago legal de prestaciones. Descanso semanal,
+                  vacaciones, aguinaldo y demás derechos requieren conciliación independiente.
+                </p>
+              </div>
+            )}
             {detail.period.status !== "BORRADOR" && (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant bg-surface-container p-3">
                 <div>
@@ -913,12 +968,34 @@ function EmployeeDetailModal({
                   </button>
                 )}
                 {(detail.approval.status === "APROBADA" || detail.approval.status === "PAGADA") && (
-                  <a
-                    href={`/api/timeclock/payroll/statement?userId=${encodeURIComponent(detail.employee.id)}&weekStart=${encodeURIComponent(detail.weekStart)}&download=1`}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-primary/40 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10"
-                  >
-                    Descargar resumen PDF
-                  </a>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <a
+                      href={`/api/timeclock/payroll/statement?userId=${encodeURIComponent(detail.employee.id)}&weekStart=${encodeURIComponent(detail.weekStart)}&download=1`}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/5 px-3.5 py-2 text-xs font-bold text-primary shadow-sm hover:bg-primary/10"
+                    >
+                      📄 Descargar Recibo de Pago (PDF)
+                    </a>
+                  </div>
+                )}
+                {detail.signature?.signedAt && (
+                  <div className="w-full flex items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">✍️</span>
+                      <div>
+                        <p className="font-bold">Firmado digitalmente de conformidad</p>
+                        <p className="text-[11px] opacity-85">
+                          Fecha: {formatDateTime(detail.signature.signedAt)} · {detail.signature.signedByName ?? detail.employee.name}
+                        </p>
+                      </div>
+                    </div>
+                    {detail.signature.signatureData && (
+                      <img
+                        src={detail.signature.signatureData}
+                        alt="Firma del trabajador"
+                        className="h-9 max-w-[120px] object-contain rounded bg-white/90 p-0.5 border border-emerald-400/40"
+                      />
+                    )}
+                  </div>
                 )}
                 {(detail.approval.history?.length ?? 0) > 0 && (
                   <div className="w-full border-t border-outline-variant pt-2 text-xs text-on-surface-variant">
@@ -1254,13 +1331,13 @@ function EmployeeDetailModal({
                 />
               )}
 
-              {detail.adjustments.length === 0 ? (
+              {detail.adjustments.filter((adj) => adj.origin !== "CONTRACTUAL_SUPPLEMENT").length === 0 ? (
                 <p className="mt-2 text-xs text-on-surface-variant">
                   Sin bonos ni deducciones esta semana.
                 </p>
               ) : (
                 <div className="mt-3 space-y-2">
-                  {detail.adjustments.map((adj) => (
+                  {detail.adjustments.filter((adj) => adj.origin !== "CONTRACTUAL_SUPPLEMENT").map((adj) => (
                     <div
                       key={adj.id}
                       className="flex items-start justify-between gap-2 rounded-lg bg-surface-container p-2.5 text-xs"
