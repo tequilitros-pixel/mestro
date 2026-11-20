@@ -11,7 +11,6 @@ import {
 } from "@/lib/dateOnly";
 import { formatCivilDate } from "@/lib/dateTime";
 import { resolveBranchHourlyRate } from "@/lib/payroll/branchRates";
-import { unstable_cache } from "next/cache";
 
 /**
  * Analítica de nómina para dirección: costo real de mano de obra,
@@ -172,14 +171,11 @@ function scheduledHoursOf(startTime: string, endTime: string) {
 }
 
 /**
- * Función interna cacheada que realiza todas las consultas costosas a la
- * base de datos. No contiene lógica de autenticación (las cookies no son
- * accesibles dentro de `unstable_cache`). El caché se invalida
- * automáticamente cuando cambia cualquier dato de nómina mediante
- * `revalidateTag('payroll-analytics')`.
+ * Consulta de datos de nómina sin unstable_cache: las extensiones de Prisma
+ * emplean el contexto de sesión y pueden requerir cookies() durante las
+ * consultas. Next.js no permite cookies() dentro de unstable_cache.
  */
-const fetchPayrollAnalyticsData = unstable_cache(
-  async (from: string, to: string): Promise<PayrollAnalytics> => {
+const fetchPayrollAnalyticsData = async (from: string, to: string): Promise<PayrollAnalytics> => {
     const start = parseDateOnly(from);
     const end = parseDateOnly(addDaysToDateOnly(to, 1));
     const instantStart = businessDayStart(from);
@@ -557,10 +553,7 @@ const fetchPayrollAnalyticsData = unstable_cache(
       people,
       daily,
     };
-  },
-  ["payroll-analytics"],
-  { tags: ["payroll-analytics"], revalidate: 300 }, // 5 min TTL
-);
+};
 
 export async function getPayrollAnalytics(
   from: string,
@@ -583,6 +576,11 @@ export async function getPayrollAnalytics(
     return { error: "El rango de fechas no es válido." };
   }
 
-  const data = await fetchPayrollAnalyticsData(from, to);
-  return { success: true, data };
+  try {
+    const data = await fetchPayrollAnalyticsData(from, to);
+    return { success: true, data };
+  } catch (error) {
+    console.error("No se pudo cargar el resumen de nómina:", error);
+    return { error: "No se pudo consultar el resumen de nómina. Intenta de nuevo." };
+  }
 }
