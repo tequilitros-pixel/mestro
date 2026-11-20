@@ -26,7 +26,7 @@ export async function cancelPosSaleAtomic(input: {
       include: {
         items: { include: { variant: { include: { ingredients: true } } } },
         payments: true,
-        cashCut: { select: { id: true, status: true } },
+        cashCut: { select: { id: true, status: true, eventId: true, eventStockIsolated: true } },
       },
     });
     if (!sale) return { kind: "not_found" as const };
@@ -54,6 +54,14 @@ export async function cancelPosSaleAtomic(input: {
       include: { items: true, payments: true },
     });
 
+    if (sale.cashCut.eventStockIsolated && sale.cashCut.eventId) {
+      // Revertir sólo el consumo del evento. Jamás acreditar a Barra lo
+      // que no se descontó de ella al cobrar.
+      await tx.eventSaleConsumption.updateMany({
+        where: { saleId: sale.id, eventId: sale.cashCut.eventId, reversedAt: null },
+        data: { reversedAt: new Date() },
+      });
+    } else {
     const pospressMovements = await tx.inventoryMovement.findMany({
       where: {
         branchId: sale.branchId,
@@ -92,6 +100,7 @@ export async function cancelPosSaleAtomic(input: {
       );
       if (reversals.length) await tx.inventoryEntry.createMany({ data: reversals });
     }
+    }
 
     if (sale.cashCut.status === "ABIERTO") {
       for (const payment of sale.payments) {
@@ -105,7 +114,7 @@ export async function cancelPosSaleAtomic(input: {
     await appendAuditEvent(tx, {
       actorId: input.user.id, branchId: sale.branchId, action: "pos.sale.cancelled",
       entityType: "PosSale", entityId: sale.id, operationId: input.operationId,
-      metadata: { code: sale.code, cashCutOpen: sale.cashCut.status === "ABIERTO", reasonProvided: Boolean(input.reason), resolutionType },
+      metadata: { code: sale.code, cashCutOpen: sale.cashCut.status === "ABIERTO", reasonProvided: Boolean(input.reason), resolutionType, eventId: sale.cashCut.eventId ?? null, eventStockIsolated: sale.cashCut.eventStockIsolated },
     });
     await evaluateCapabilityShadow(tx, {
       actor: { id: input.user.id, role: input.user.role as "ADMIN" | "GERENTE" | "ENCARGADO" | "OPERATOR" | "CONSULTA", branchIds: input.user.role === "ADMIN" ? null : [sale.branchId] },
