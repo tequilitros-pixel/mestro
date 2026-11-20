@@ -1684,9 +1684,10 @@ export async function reopenPayrollEntryAction(weekStart: string, userId: string
     if (!period || period.status !== "REVISION") return { error: "La semana no está en revisión" };
     const entry = await tx.payrollEntry.findUnique({
       where: { periodId_userId: { periodId: period.id, userId } },
-      select: { id: true, status: true },
+      select: { id: true, status: true, signedAt: true },
     });
     if (!entry || entry.status !== "APROBADA") return { error: "Este empleado no está aprobado" };
+    if (entry.signedAt) return { error: "Este recibo ya fue firmado y no se puede alterar. Registra las correcciones mediante un expediente adicional." };
     await tx.payrollEntry.update({ where: { id: entry.id }, data: { status: "REVISION" } });
     return { success: true };
   });
