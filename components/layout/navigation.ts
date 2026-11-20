@@ -545,12 +545,6 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       operatorAllowed: true,
     },
     {
-      href: "/administration/personnel",
-      label: "Empleados",
-      icon: UsersIcon,
-      iconVariant: "purple",
-    },
-    {
       href: "/administration/schedule",
       label: "Horarios",
       icon: CalendarIcon,
@@ -564,7 +558,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
     },
     {
       href: "/timeclock/payroll",
-      label: "Pagos",
+      label: "Nómina",
       icon: DollarIcon,
       iconVariant: "green",
       operatorAllowed: true,
