@@ -75,6 +75,11 @@ export default function EditPersonnelForm({
 
   const numericRate = parseFloat(hourlyRate) || 0;
   const composite = calculateCompositeSalary(numericRate, 40);
+  const configuredExtra = Number(supplementPercent);
+  const extraHourly = numericRate > 0 && Number.isFinite(configuredExtra) && configuredExtra >= 0
+    ? Math.round(numericRate * configuredExtra) / 100
+    : 0;
+  const payableHourly = Math.round((numericRate + extraHourly) * 100) / 100;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -347,7 +352,7 @@ export default function EditPersonnelForm({
         <SectionHeader icon={DollarIcon} title="Sueldo Base y Salario Compuesto" />
 
         <p className="text-sm text-on-surface-variant">
-          Captura el <strong>sueldo base por hora</strong>. El sistema recalcula en tiempo real el desglose proporcional de ley (aguinaldo, vacaciones y prima vacacional) y aplicará esta tarifa de hoy en adelante, manteniendo intactas las nóminas de semanas pasadas.
+          Captura el <strong>sueldo base por hora</strong>. El desglose de prestaciones es una referencia anualizada; el monto adicional que se paga realmente se configura abajo para cada empleado y se aplica desde su fecha de vigencia. Las nóminas aprobadas no se recalculan.
         </p>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -382,7 +387,7 @@ export default function EditPersonnelForm({
           <div className="mt-3 rounded-2xl border border-primary/25 bg-primary/5 p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-1 border-b border-primary/15 pb-2">
               <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                Desglose de Salario Compuesto (en vivo)
+                Referencia proporcional de prestaciones (orientativa)
               </span>
               <span className="text-xs font-semibold text-on-surface-variant">
                 Jornada estimada: 40 hrs / sem.
@@ -417,16 +422,24 @@ export default function EditPersonnelForm({
 
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-primary/10 px-3.5 py-2.5 text-primary">
               <span className="text-xs font-bold">
-                Tarifa Integrada Total: ${composite.totalHourlyRate.toFixed(2)} / hora
+                Total referencial: ${composite.totalHourlyRate.toFixed(2)} / hora
               </span>
               <span className="text-sm font-black">
-                Total por 40 hrs: ${composite.totalPay.toFixed(2)}
+                Referencia por 40 hrs: ${composite.totalPay.toFixed(2)}
               </span>
             </div>
           </div>
         )}
 
         <div className="border-t border-outline-variant pt-4">
+          {numericRate > 0 && Number.isFinite(configuredExtra) && configuredExtra >= 0 && (
+            <div className="mb-3 rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm">
+              <p className="font-bold">Tarifa de pago según adicional configurado</p>
+              <p>Base: ${numericRate.toFixed(2)}/h + adicional ({configuredExtra.toFixed(2)}%): ${extraHourly.toFixed(2)}/h</p>
+              <p className="font-bold text-primary">Total para nómina: ${payableHourly.toFixed(2)}/h</p>
+              <p className="mt-1 text-xs text-on-surface-variant">Estimado; el importe semanal depende de las horas aprobadas y los centavos calculados por registro.</p>
+            </div>
+          )}
           <p className="mb-2 text-sm font-semibold text-on-surface">Adicional contractual por hora (%)</p>
           <p className="mb-2 text-xs text-on-surface-variant">
             Por empleado; ejemplo 12% ($40 base + $4.80 adicional = $44.80/h).
