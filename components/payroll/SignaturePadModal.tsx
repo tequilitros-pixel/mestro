@@ -161,7 +161,7 @@ export default function SignaturePadModal({
                 ✍️
               </span>
               <div>
-                <h3 className="text-base font-bold text-on-surface">Firma del recibo</h3>
+                <h3 className="text-base font-bold text-on-surface">Firma de recibido</h3>
                 <p className="text-xs text-on-surface-variant">Recibo de Nómina Semanal</p>
               </div>
             </div>
@@ -220,7 +220,7 @@ export default function SignaturePadModal({
 
           {/* Cláusula legal corta de conformidad */}
           <p className="rounded-xl bg-surface-container p-2.5 text-[10px] leading-relaxed text-on-surface-variant">
-            <strong>Constancia:</strong> Con mi firma confirmo que revisé el desglose de este recibo semanal. La firma no representa renuncia a derechos laborales ni acredita por sí sola un pago bancario o el cumplimiento de prestaciones de ley.
+            <strong>Acuse de recibido:</strong> Confirmo que recibí el importe indicado en este recibo y revisé su desglose. Al firmar, mi recibo se marcará como PAGADO. Esto no implica renuncia a otros derechos laborales ni sustituye el CFDI de nómina.
           </p>
 
           {error && (
@@ -245,7 +245,7 @@ export default function SignaturePadModal({
               disabled={saving || !hasDrawn}
               className="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-on-primary shadow transition hover:opacity-95 disabled:opacity-50"
             >
-              {saving ? "Guardando firma..." : "Confirmar y firmar"}
+              {saving ? "Registrando recibido..." : "Firmar de recibido y confirmar pago"}
             </button>
           </div>
         </div>
