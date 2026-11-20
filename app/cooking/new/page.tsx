@@ -5,14 +5,15 @@ import { advanceLotStage } from "@/lib/lotStage";
 import { findAvailableEquipment, reserveEquipment } from "@/lib/equipmentAvailability";
 import { requireModuleActionAccess } from "@/lib/auth";
 
-export default async function NewCookingPage() {
+export default async function NewCookingPage({ searchParams }: { searchParams: Promise<{ lotId?: string }> }) {
+  const { lotId: selectedLotId } = await searchParams;
   /*
    * Solo lotes que todavía pueden entrar al horno. Un lote ya
    * molido, fermentado o terminado no debe aparecer: antes salían
    * todos y se podía arrancar una cocción sobre un lote cerrado.
    */
   const lots = await prisma.lot.findMany({
-    where: { stage: { in: [LotStage.RECEPCION, LotStage.COCCION] } },
+    where: { stage: { in: [LotStage.RECEPCION, LotStage.COCCION] }, ...(selectedLotId ? { id: selectedLotId } : {}) },
     orderBy: { createdAt: "desc" },
   });
 
@@ -24,6 +25,9 @@ export default async function NewCookingPage() {
     await requireModuleActionAccess("/cooking");
 
     const lotId = formData.get("lotId") as string;
+    if (selectedLotId && lotId !== selectedLotId) throw new Error("La cocción no corresponde al lote seleccionado.");
+    const eligibleLot = await prisma.lot.findFirst({ where: { id: lotId, stage: { in: [LotStage.RECEPCION, LotStage.COCCION] } } });
+    if (!eligibleLot) throw new Error("El lote ya no está disponible para cocción.");
     const equipmentId = formData.get("equipmentId") as string;
     const agaveKg = Number(formData.get("agaveKg"));
     const notes = formData.get("notes") as string;

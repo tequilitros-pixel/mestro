@@ -109,7 +109,7 @@ export const MAIN_MODULES: MainModule[] = [
     module: "home",
   },
   {
-    href: "/plant",
+    href: "/lots",
     label: "Proceso de Producción",
     shortLabel: "Producción",
     icon: FactoryIcon,
@@ -180,16 +180,16 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
   ],
   production: [
     {
-      href: "/plant",
-      label: "Planta",
-      icon: FactoryIcon,
-      iconVariant: "slate",
-    },
-    {
       href: "/lots",
       label: "Lotes",
       icon: PackageIcon,
       iconVariant: "purple",
+    },
+    {
+      href: "/plant",
+      label: "Planta",
+      icon: FactoryIcon,
+      iconVariant: "slate",
     },
     {
       href: "/cooking",

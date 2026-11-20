@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import ProcessTable from "@/components/production/ProcessTable";
 import { MetricCard, PageHeader, StatusBadge } from "@/components/ui/CompactUI";
 import { receiverTotals } from "@/lib/distillation/receiverMath";
+import { totalRunLoadedLiters } from "@/lib/distillation/loadLedger";
 
 const TYPE_LABELS: Record<string, string> = { DESTROZADO: "Destrozado", RECTIFICACION: "Rectificación" };
 const liters = (value: number) => value.toLocaleString("es-MX", { maximumFractionDigits: 2 });
@@ -17,12 +18,20 @@ export default async function DistillationsByLotPage({ params }: { params: Promi
         include: {
           equipment: { select: { name: true } },
           sourceFermentation: { select: { tank: true } },
+          supplementalLoads: { include: { fermentation: { select: { tank: true } } } },
           sourceReceiver: { select: { name: true } },
         },
         orderBy: { startedAt: "desc" },
       },
       fermentations: {
-        select: { id: true, tank: true, status: true, mustLiters: true },
+        select: {
+          id: true, tank: true, status: true, mustLiters: true, initialBrix: true, finalBrix: true,
+          readings: { orderBy: { createdAt: "desc" }, take: 1, select: { brix: true } },
+          supplementalLoads: {
+            where: { distillation: { status: { not: "CANCELADA" } } },
+            select: { liters: true },
+          },
+        },
         orderBy: { startedAt: "desc" },
       },
       distillationReceivers: {
@@ -59,6 +68,39 @@ export default async function DistillationsByLotPage({ params }: { params: Promi
         </div>
 
         <section className="space-y-3">
+          <h2 className="text-lg font-bold">Rendimiento agrupado por tina</h2>
+          <p className="text-sm text-on-surface-variant">Las cargas se atribuyen por tina, incluida cualquier carga adicional. La salida de una corrida con varias tinas no se atribuye a una sola tina; se informa a nivel de corrida y lote.</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            {lot.fermentations.map((tank) => {
+              const runs = lot.distillations.filter((run) => run.type === "DESTROZADO" && run.sourceFermentationId === tank.id && run.status !== "CANCELADA");
+              const charged = runs.reduce((sum, run) => sum + run.loadedLiters, 0)
+                + tank.supplementalLoads.reduce((sum, load) => sum + load.liters, 0);
+              const blended = tank.supplementalLoads.length > 0 || runs.some((run) => run.supplementalLoads.length > 0);
+              const completed = runs.filter((run) => run.status === "TERMINADA" && run.supplementalLoads.length === 0);
+              const measurable = completed.length > 0 && completed.every((run) => run.finalLiters != null);
+              const output = completed.reduce((sum, run) => sum + (run.finalLiters ?? 0), 0);
+              const currentBrix = tank.readings[0]?.brix ?? tank.finalBrix;
+              return <div key={tank.id} className="rounded-2xl border border-outline-variant bg-surface-container p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <Link className="font-semibold text-primary underline" href={"/fermentation/" + tank.id}>{tank.tank}</Link>
+                  <span className="text-xs text-on-surface-variant">{tank.status === "TERMINADA" ? "Cerrada" : "Activa"}</span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                  <div><p className="text-xs text-on-surface-variant">Mosto de tina</p><p className="font-bold">{liters(tank.mustLiters)} L</p></div>
+                  <div><p className="text-xs text-on-surface-variant">Brix inicio → último</p><p className="font-bold">{liters(tank.initialBrix)}° → {currentBrix == null ? "—" : liters(currentBrix) + "°"}</p></div>
+                  <div><p className="text-xs text-on-surface-variant">Carga a destrozado</p><p className="font-bold">{liters(charged)} L · {runs.length} corridas</p></div>
+                  <div><p className="text-xs text-on-surface-variant">Destrozado final</p><p className="font-bold">{measurable ? liters(output) + " L" : blended ? "Mezcla: no atribuible" : "Por registrar"}</p></div>
+                  <div><p className="text-xs text-on-surface-variant">Destrozado por 1,000 L cargados</p><p className="font-bold">{measurable && charged > 0 ? liters(output * 1000 / charged) + " L" : "—"}</p></div>
+                  <div><p className="text-xs text-on-surface-variant">Salida / mosto original</p><p className="font-bold">{measurable && tank.mustLiters > 0 ? liters(100 * output / tank.mustLiters) + "%" : "—"}</p></div>
+                </div>
+                <p className="mt-3 text-xs text-on-surface-variant">Los porcentajes son volumétricos y no representan alcohol absoluto. Las corridas incompletas no se imputan como salida.</p>
+              </div>;
+            })}
+            {lot.fermentations.length === 0 && <p className="text-sm text-on-surface-variant">No hay tinas de este lote.</p>}
+          </div>
+        </section>
+
+        <section className="space-y-3">
           <h2 className="text-lg font-bold">Alambiques y corridas del lote</h2>
           <ProcessTable
             emptyLabel="Todavía no hay corridas en este lote. Puedes iniciar una nueva destilación desde aquí."
@@ -82,12 +124,15 @@ export default async function DistillationsByLotPage({ params }: { params: Promi
               startedAt: run.startedAt.toISOString(),
               status: run.status === "TERMINADA" ? "Terminado" : run.status === "CANCELADA" ? "Cancelado" : "En proceso",
               finished: run.status !== "ACTIVA",
-              search: `${lot.code} ${TYPE_LABELS[run.type] ?? run.type} ${run.equipment.name} ${run.sourceFermentation?.tank ?? run.sourceReceiver?.name ?? ""}`,
+              search: `${lot.code} ${TYPE_LABELS[run.type] ?? run.type} ${run.equipment.name} ${run.sourceFermentation?.tank ?? run.sourceReceiver?.name ?? ""} ${run.supplementalLoads.map((load) => load.fermentation.tank).join(" ")}`,
               values: {
                 type: TYPE_LABELS[run.type] ?? run.type,
                 equipment: run.equipment.name,
-                source: run.sourceFermentation?.tank ?? run.sourceReceiver?.name ?? "Origen histórico",
-                liters: `${liters(run.loadedLiters)} L`,
+                source: [...new Set([
+                  run.sourceFermentation?.tank ?? run.sourceReceiver?.name ?? "Origen histórico",
+                  ...run.supplementalLoads.map((load) => load.fermentation.tank),
+                ])].join(" + "),
+                liters: `${liters(totalRunLoadedLiters(run))} L`,
               },
               filters: { type: TYPE_LABELS[run.type] ?? run.type, equipment: run.equipment.name },
             }))}
@@ -103,7 +148,8 @@ export default async function DistillationsByLotPage({ params }: { params: Promi
             ) : (
               <div className="mt-3 space-y-2">
                 {lot.fermentations.map((tank) => {
-                  const allocated = lot.distillations.filter((run) => run.sourceFermentationId === tank.id && run.status !== "CANCELADA").reduce((sum, run) => sum + run.loadedLiters, 0);
+                  const allocated = lot.distillations.filter((run) => run.sourceFermentationId === tank.id && run.status !== "CANCELADA").reduce((sum, run) => sum + run.loadedLiters, 0)
+                    + tank.supplementalLoads.reduce((sum, load) => sum + load.liters, 0);
                   return <div key={tank.id} className="rounded-xl bg-surface-container-high p-3 text-sm">
                     <div className="flex justify-between gap-2"><span className="font-semibold">{tank.tank}</span><span>{tank.status === "TERMINADA" ? "Fermentación terminada" : "En fermentación"}</span></div>
                     <p className="mt-1 text-on-surface-variant">{liters(tank.mustLiters)} L registrados · {liters(allocated)} L cargados a destrozado</p>

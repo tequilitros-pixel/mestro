@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { randomUUID } from "node:crypto";
+import { totalRunLoadedLiters } from "@/lib/distillation/loadLedger";
+import { addSupplementalFermentationLoad } from "@/lib/distillation/supplementalLoads";
+import { getDistillationSources } from "@/lib/distillation/operations";
 import { requireModuleActionAccess } from "@/lib/auth";
 import {
   PrinterIcon,
@@ -18,6 +22,7 @@ import BottleQrCode from "@/components/liquors/BottleQrCode";
 import {
   DistillationEventType,
   DistillationStatus,
+  DistillationType,
   EquipmentStatus,
   LotStage,
 } from "@prisma/client";
@@ -65,6 +70,10 @@ export default async function DistillationDetailPage({
       sourceFermentation: {
         include: { distillations: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true } } },
       },
+      supplementalLoads: {
+        include: { fermentation: { select: { tank: true } }, recordedBy: { select: { name: true } } },
+        orderBy: { createdAt: "asc" },
+      },
       sourceDistillation: {
         include: { sourceFermentation: { select: { tank: true } }, derivedDistillations: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true } } },
       },
@@ -83,6 +92,7 @@ export default async function DistillationDetailPage({
     include: {
       equipment: { select: { name: true } },
       sourceFermentation: { select: { tank: true } },
+      supplementalLoads: { include: { fermentation: { select: { tank: true } } } },
       sourceDistillation: { include: { sourceFermentation: { select: { tank: true } } } },
       sourceReceiver: { select: { name: true } },
     },
@@ -92,18 +102,16 @@ export default async function DistillationDetailPage({
   const distillationEquipmentId = distillation.equipmentId;
   const distillationLotId = distillation.lotId;
   const distillationType = distillation.type;
-  const sourceName = distillation.sourceReceiver?.name ?? distillation.sourceFermentation?.tank ?? distillation.sourceDistillation?.sourceFermentation?.tank ?? "Fuente histórica";
-  const sourceVolume = (distillation.sourceReceiver?.transfers.reduce((sum, transfer) => sum + transfer.liters, 0))
-    ?? distillation.sourceFermentation?.mustLiters
-    ?? (distillation.sourceDistillation?.finalHeartLiters && distillation.sourceDistillation.finalHeartLiters > 0
-      ? distillation.sourceDistillation.finalHeartLiters
-      : distillation.sourceDistillation?.finalLiters)
-    ?? distillation.loadedLiters;
-  const sourceAllocated = (distillation.sourceReceiver?.rectifications.reduce((sum, run) => sum + run.loadedLiters, 0))
-    ?? distillation.sourceFermentation?.distillations.reduce((sum, run) => sum + run.loadedLiters, 0)
-    ?? distillation.sourceDistillation?.derivedDistillations.reduce((sum, run) => sum + run.loadedLiters, 0)
-    ?? distillation.loadedLiters;
-  const sourceRemaining = Math.max(0, sourceVolume - sourceAllocated);
+  const initialSource = distillation.sourceReceiver?.name ?? distillation.sourceFermentation?.tank
+    ?? distillation.sourceDistillation?.sourceFermentation?.tank ?? "Fuente histórica";
+  const sourceName = [...new Set([initialSource, ...distillation.supplementalLoads.map((load) => load.fermentation.tank)])].join(" + ");
+  const totalLoadedLiters = totalRunLoadedLiters(distillation);
+  const loadableSources = distillation.type === DistillationType.DESTROZADO
+    && distillation.status === DistillationStatus.ACTIVA
+    ? (await getDistillationSources(distillation.lotId)).filter((item) => item.sourceKind === "FERMENTATION")
+    : [];
+  const allowedCapacity = distillation.equipment.capacity * (distillation.fillPercent ?? 100) / 100;
+  const availableCapacity = Math.max(0, allowedCapacity - totalLoadedLiters);
 
   const hasFinished = distillation.status !== DistillationStatus.ACTIVA;
 
@@ -158,7 +166,7 @@ export default async function DistillationDetailPage({
   const absoluteAlcohol = calculatedLAA ?? fallbackAbsoluteAlcohol;
 
   const distillationYield = getYield(
-    distillation.loadedLiters,
+    totalLoadedLiters,
     totalLiters
   );
 
@@ -173,6 +181,26 @@ export default async function DistillationDetailPage({
     lastAlcohol,
     lastAlcoholCorrected
   );
+
+  async function addTinaLoad(formData: FormData) {
+    "use server";
+    const user = await requireModuleActionAccess("/distillation");
+    try {
+      await addSupplementalFermentationLoad({
+        distillationId: id,
+        fermentationId: String(formData.get("fermentationId") ?? ""),
+        liters: Number(formData.get("liters")),
+        actorId: user.id,
+        idempotencyKey: String(formData.get("idempotencyKey") ?? ""),
+      });
+    } catch (caught) {
+      if (caught instanceof DistillationOperationError) {
+        redirect(`/distillation/${id}?error=${encodeURIComponent(caught.message)}`);
+      }
+      throw caught;
+    }
+    redirect(`/distillation/${id}?loadAdded=1`);
+  }
 
   async function cancelRun(formData: FormData) {
     "use server";
@@ -610,9 +638,9 @@ export default async function DistillationDetailPage({
         <Card
           title="Cargado"
           value={`${formatNumber(
-            distillation.loadedLiters
+            totalLoadedLiters
           )} L`}
-          detail={`${distillation.fillPercent ? `${formatNumber(distillation.fillPercent)}% del alambique · ` : ""}${sourceName} · quedan ${formatNumber(sourceRemaining)} L`}
+          detail={`${sourceName} · ${formatNumber(distillation.loadedLiters)} L iniciales y ${formatNumber(totalLoadedLiters - distillation.loadedLiters)} L adicionales`}
         />
 
         <Card
@@ -746,6 +774,60 @@ export default async function DistillationDetailPage({
         />
       </section>
 
+      {distillation.type === DistillationType.DESTROZADO && (
+        <section className="mt-6 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-6">
+          <h3 className="text-xl font-bold">Cargas por tina en este alambique</h3>
+          <p className="mt-2 text-sm text-on-surface-variant">
+            Lote {distillation.lot.code} · {formatNumber(totalLoadedLiters)} L cargados en total.
+            Cada carga conserva su origen y registro.
+          </p>
+          <div className="mt-3 space-y-2 text-sm">
+            <p className="rounded-xl bg-surface-container-high p-3">
+              <strong>Inicio:</strong> {initialSource} · {formatNumber(distillation.loadedLiters)} L
+            </p>
+            {distillation.supplementalLoads.map((load) => (
+              <p key={load.id} className="rounded-xl bg-surface-container-high p-3">
+                <strong>Adicional:</strong> {load.fermentation.tank} · {formatNumber(load.liters)} L ·
+                {" "}{formatBusinessDateTime(load.createdAt)} · {load.recordedBy.name}
+              </p>
+            ))}
+          </div>
+          {!hasFinished && (
+            <div className="mt-5 border-t border-outline-variant pt-4">
+              <h4 className="font-semibold">Cargar mosto de otra tina</h4>
+              <p className="mt-1 text-sm text-on-surface-variant">
+                Capacidad libre autorizada: {formatNumber(availableCapacity)} L.
+                Las tinas deben estar terminadas y pertenecer al mismo lote.
+              </p>
+              {availableCapacity > 0.005 && loadableSources.length > 0 ? (
+                <form action={addTinaLoad} className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto] sm:items-end">
+                  <input type="hidden" name="idempotencyKey" value={randomUUID()} />
+                  <label className="grid gap-1 text-sm font-semibold">Tina de origen
+                    <select name="fermentationId" required className="min-h-11 rounded-xl border border-outline-variant bg-surface-container-high px-3">
+                      <option value="">Selecciona tina</option>
+                      {loadableSources.map((source) => (
+                        <option key={source.id} value={source.id}>
+                          {source.tankName} · quedan {formatNumber(source.availableLiters)} L
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-semibold">Litros
+                    <input name="liters" type="number" min="0.01" step="0.01" max={availableCapacity} required
+                      className="min-h-11 rounded-xl border border-outline-variant bg-surface-container-high px-3"/>
+                  </label>
+                  <button className="min-h-11 rounded-xl bg-primary px-4 font-bold text-on-primary">Agregar carga</button>
+                </form>
+              ) : (
+                <p className="mt-3 text-sm text-on-surface-variant">
+                  No hay capacidad o mosto confirmado disponible para una carga adicional.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       {distillation.status === DistillationStatus.TERMINADA && (
         <DistillationClosureAct
           closureCode={
@@ -756,9 +838,7 @@ export default async function DistillationDetailPage({
             distillation.equipment.name
           }
           type={distillation.type}
-          loadedLiters={
-            distillation.loadedLiters
-          }
+          loadedLiters={totalLoadedLiters}
           initialAlcohol={
             distillation.initialAlcohol
           }
@@ -1087,7 +1167,11 @@ export default async function DistillationDetailPage({
               id: item.id,
               label: item.equipment.name,
               active: item.status === DistillationStatus.ACTIVA,
-              detail: `${item.sourceReceiver?.name ?? item.sourceFermentation?.tank ?? item.sourceDistillation?.sourceFermentation?.tank ?? "Sin tina"} · ${formatNumber(item.loadedLiters)} L`,
+              detail: `${[...new Set([
+                item.sourceReceiver?.name ?? item.sourceFermentation?.tank
+                  ?? item.sourceDistillation?.sourceFermentation?.tank ?? "Sin tina",
+                ...item.supplementalLoads.map((load) => load.fermentation.tank),
+              ])].join(" + ")} · ${formatNumber(totalRunLoadedLiters(item))} L`,
               status: item.status === DistillationStatus.TERMINADA ? "Terminada" : item.status === DistillationStatus.CANCELADA ? "Cancelada" : "Activa",
             }))}
           />
