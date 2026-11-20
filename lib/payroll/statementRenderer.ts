@@ -3,7 +3,6 @@ import {
   COMPANY_NAME,
   COMPANY_TRADE_NAME,
   COMPANY_ADDRESS,
-  LEGAL_REPRESENTATIVE,
 } from "@/lib/payroll/compositeSalary";
 import { numberToMexicanCurrencyText } from "@/lib/payroll/numberToWords";
 import type { PayrollEmployeeDetail } from "@/app/actions/payroll";
@@ -507,7 +506,7 @@ export async function renderPayrollStatementPage(
       timeZone: "America/Mexico_City",
     }).format(new Date(detail.approval.approvedAt))
     : "Sin fecha registrada";
-  const approvalName = cleanText(detail.approval.approvedByName || LEGAL_REPRESENTATIVE);
+  const approvalName = cleanText(detail.approval.approvedByName || "Responsable no registrado");
   const trimmedName = approvalName.length > 40 ? approvalName.slice(0, 38) + ".." : approvalName;
   page.drawText(`Autoriza: ${trimmedName}`, {
     x: employerStampX + 8, y: y - 29, font: regular, size: 6.4, color: INK,
