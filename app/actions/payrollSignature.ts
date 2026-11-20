@@ -5,74 +5,64 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { mondayOfWeek, parseDateOnly } from "@/lib/dateOnly";
 
+/** Firma personal e inmutable del recibo aprobado o pagado. */
 export async function savePayrollSignatureAction(input: {
   weekStart: string;
   signatureData: string;
 }) {
   const user = await getCurrentUser();
-  if (!user || !user.active) {
-    return { error: "No autorizado" };
-  }
-
+  if (!user?.active) return { error: "No autorizado" };
   const { weekStart, signatureData } = input;
-  if (!weekStart || !signatureData) {
-    return { error: "Datos de firma incompletos" };
+  if (typeof weekStart !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
+    return { error: "Semana de nómina inválida" };
   }
-
-  // Validar formato de data URL (PNG o JPEG)
-  if (!signatureData.startsWith("data:image/") || signatureData.length < 50) {
-    return { error: "Trazo de firma inválido" };
+  if (typeof signatureData !== "string" || signatureData.length > 400_000 ||
+      !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(signatureData)) {
+    return { error: "La firma debe ser una imagen PNG válida" };
   }
-
-  const mondayStr = mondayOfWeek(weekStart);
-  const weekStartDate = parseDateOnly(mondayStr);
-
+  const image = Buffer.from(signatureData.slice("data:image/png;base64,".length), "base64");
+  const pngHeader = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  if (image.length < 100 || !image.subarray(0, 8).equals(pngHeader)) {
+    return { error: "El trazo de firma no es válido" };
+  }
+  let monday: Date;
+  try {
+    monday = parseDateOnly(mondayOfWeek(weekStart));
+  } catch {
+    return { error: "Semana de nómina inválida" };
+  }
   const period = await prisma.payrollPeriod.findUnique({
-    where: { weekStart: weekStartDate },
-    include: {
+    where: { weekStart: monday },
+    select: {
+      status: true,
       entries: {
         where: { userId: user.id },
+        select: { id: true, status: true, signedAt: true },
       },
     },
   });
-
-  if (!period) {
-    return { error: "Periodo de nómina no encontrado" };
+  const entry = period?.entries[0];
+  if (!entry) return { error: "No tienes un recibo de nómina en esta semana" };
+  if (entry.signedAt) return { error: "Este recibo ya está firmado y su firma se conserva" };
+  if (entry.status !== "APROBADA" && entry.status !== "PAGADA") {
+    return { error: "La nómina individual debe estar aprobada o pagada para firmarla" };
   }
-
-  const entry = period.entries[0];
-  if (!entry) {
-    return { error: "No tienes un registro de nómina en este periodo" };
-  }
-
-  // Solo se puede firmar si ya está aprobada o pagada
-  const isEligible =
-    entry.status === "APROBADA" ||
-    entry.status === "PAGADA" ||
-    period.status === "APROBADA" ||
-    period.status === "PAGADA";
-
-  if (!isEligible) {
-    return { error: "La nómina debe estar aprobada para poder firmar de conformidad" };
-  }
+  if (period?.status === "BORRADOR") return { error: "El periodo no está disponible para firma" };
 
   const now = new Date();
-
-  await prisma.payrollEntry.update({
-    where: { id: entry.id },
-    data: {
-      signatureData,
-      signedAt: now,
-      signedByName: user.name,
+  const updated = await prisma.payrollEntry.updateMany({
+    where: {
+      id: entry.id,
+      userId: user.id,
+      status: { in: ["APROBADA", "PAGADA"] },
+      signedAt: null,
     },
+    data: { signatureData, signedAt: now, signedByName: user.name },
   });
-
+  if (updated.count !== 1) {
+    return { error: "El recibo cambió o ya fue firmado. Actualiza la página." };
+  }
   revalidatePath("/timeclock/payroll");
   revalidatePath("/timeclock/hours");
-
-  return {
-    success: true,
-    signedAt: now.toISOString(),
-    signedByName: user.name,
-  };
+  return { success: true, signedAt: now.toISOString(), signedByName: user.name };
 }
