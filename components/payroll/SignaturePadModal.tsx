@@ -129,11 +129,14 @@ export default function SignaturePadModal({
     setSaving(true);
     setError(null);
 
-    const result = await savePayrollSignatureAction({
-      weekStart,
-      signatureData,
-    });
-
+    let result: Awaited<ReturnType<typeof savePayrollSignatureAction>>;
+    try {
+      result = await savePayrollSignatureAction({ weekStart, signatureData });
+    } catch {
+      setSaving(false);
+      setError("No se pudo guardar la firma. Verifica tu conexión y vuelve a intentar.");
+      return;
+    }
     setSaving(false);
 
     if (result.error) {
@@ -158,7 +161,7 @@ export default function SignaturePadModal({
                 ✍️
               </span>
               <div>
-                <h3 className="text-base font-bold text-on-surface">Firma de Conformidad</h3>
+                <h3 className="text-base font-bold text-on-surface">Firma del recibo</h3>
                 <p className="text-xs text-on-surface-variant">Recibo de Nómina Semanal</p>
               </div>
             </div>
@@ -217,7 +220,7 @@ export default function SignaturePadModal({
 
           {/* Cláusula legal corta de conformidad */}
           <p className="rounded-xl bg-surface-container p-2.5 text-[10px] leading-relaxed text-on-surface-variant">
-            <strong>Declaración:</strong> Manifiesto haber recibido a mi entera conformidad las percepciones desglosadas por concepto de salario ordinario devengado, así como las partes proporcionales de aguinaldo, vacaciones y prima vacacional conforme a mi contrato y la Ley Federal del Trabajo.
+            <strong>Constancia:</strong> Con mi firma confirmo que revisé el desglose de este recibo semanal. La firma no representa renuncia a derechos laborales ni acredita por sí sola un pago bancario o el cumplimiento de prestaciones de ley.
           </p>
 
           {error && (
