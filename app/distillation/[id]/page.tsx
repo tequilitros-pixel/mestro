@@ -22,6 +22,7 @@ import BottleQrCode from "@/components/liquors/BottleQrCode";
 import {
   DistillationEventType,
   DistillationStatus,
+  DistillationType,
   EquipmentStatus,
   LotStage,
 } from "@prisma/client";
@@ -636,9 +637,9 @@ export default async function DistillationDetailPage({
         <Card
           title="Cargado"
           value={`${formatNumber(
-            distillation.loadedLiters
+            totalLoadedLiters
           )} L`}
-          detail={`${distillation.fillPercent ? `${formatNumber(distillation.fillPercent)}% del alambique · ` : ""}${sourceName} · quedan ${formatNumber(sourceRemaining)} L`}
+          detail={`${sourceName} · ${formatNumber(distillation.loadedLiters)} L iniciales y ${formatNumber(totalLoadedLiters - distillation.loadedLiters)} L adicionales`}
         />
 
         <Card
@@ -772,6 +773,60 @@ export default async function DistillationDetailPage({
         />
       </section>
 
+      {distillation.type === DistillationType.DESTROZADO && (
+        <section className="mt-6 rounded-2xl border border-outline-variant bg-surface-container p-5 sm:p-6">
+          <h3 className="text-xl font-bold">Cargas por tina en este alambique</h3>
+          <p className="mt-2 text-sm text-on-surface-variant">
+            Lote {distillation.lot.code} · {formatNumber(totalLoadedLiters)} L cargados en total.
+            Cada carga conserva su origen y registro.
+          </p>
+          <div className="mt-3 space-y-2 text-sm">
+            <p className="rounded-xl bg-surface-container-high p-3">
+              <strong>Inicio:</strong> {initialSource} · {formatNumber(distillation.loadedLiters)} L
+            </p>
+            {distillation.supplementalLoads.map((load) => (
+              <p key={load.id} className="rounded-xl bg-surface-container-high p-3">
+                <strong>Adicional:</strong> {load.fermentation.tank} · {formatNumber(load.liters)} L ·
+                {" "}{formatBusinessDateTime(load.createdAt)} · {load.recordedBy.name}
+              </p>
+            ))}
+          </div>
+          {!hasFinished && (
+            <div className="mt-5 border-t border-outline-variant pt-4">
+              <h4 className="font-semibold">Cargar mosto de otra tina</h4>
+              <p className="mt-1 text-sm text-on-surface-variant">
+                Capacidad libre autorizada: {formatNumber(availableCapacity)} L.
+                Las tinas deben estar terminadas y pertenecer al mismo lote.
+              </p>
+              {availableCapacity > 0.005 && loadableSources.length > 0 ? (
+                <form action={addTinaLoad} className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto] sm:items-end">
+                  <input type="hidden" name="idempotencyKey" value={randomUUID()} />
+                  <label className="grid gap-1 text-sm font-semibold">Tina de origen
+                    <select name="fermentationId" required className="min-h-11 rounded-xl border border-outline-variant bg-surface-container-high px-3">
+                      <option value="">Selecciona tina</option>
+                      {loadableSources.map((source) => (
+                        <option key={source.id} value={source.id}>
+                          {source.tankName} · quedan {formatNumber(source.availableLiters)} L
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-semibold">Litros
+                    <input name="liters" type="number" min="0.01" step="0.01" max={availableCapacity} required
+                      className="min-h-11 rounded-xl border border-outline-variant bg-surface-container-high px-3"/>
+                  </label>
+                  <button className="min-h-11 rounded-xl bg-primary px-4 font-bold text-on-primary">Agregar carga</button>
+                </form>
+              ) : (
+                <p className="mt-3 text-sm text-on-surface-variant">
+                  No hay capacidad o mosto confirmado disponible para una carga adicional.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       {distillation.status === DistillationStatus.TERMINADA && (
         <DistillationClosureAct
           closureCode={
@@ -782,9 +837,7 @@ export default async function DistillationDetailPage({
             distillation.equipment.name
           }
           type={distillation.type}
-          loadedLiters={
-            distillation.loadedLiters
-          }
+          loadedLiters={totalLoadedLiters}
           initialAlcohol={
             distillation.initialAlcohol
           }
