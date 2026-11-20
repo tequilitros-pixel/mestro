@@ -38,6 +38,7 @@ model User {
   sweetHoneyRecoveries      SweetHoneyRecovery[]
   distillationsFinished     Distillation[]             @relation("DistillationFinishedBy")
   distillationsCancelled    Distillation[]             @relation("DistillationCancelledBy")
+  supplementalLoadsRecorded DistillationSupplementalLoad[] @relation("SupplementalDistillationLoadRecorder")
   fermentationsFinished     Fermentation[]             @relation("FermentationFinishedBy")
   liquorBatchesCreated      LiquorBatch[]              @relation("LiquorBatchCreatedBy")
   liquorBatchesFinished     LiquorBatch[]              @relation("LiquorBatchFinishedBy")
@@ -613,6 +614,7 @@ model Fermentation {
   tankEquipment      Equipment?            @relation(fields: [tankId], references: [id])
   readings           FermentationReading[]
   distillations      Distillation[]         @relation("FermentationDistillations")
+  supplementalLoads  DistillationSupplementalLoad[]
 
   @@index([lotId])
   @@index([tankId])
@@ -680,6 +682,7 @@ model Distillation {
   sourceReceiver DistillationReceiver? @relation("ReceiverRectifications", fields: [sourceReceiverId], references: [id])
   receiverTransfer DistillationReceiverTransfer?
   events           DistillationEvent[]
+  supplementalLoads DistillationSupplementalLoad[]
 
   @@index([lotId])
   @@index([equipmentId])
@@ -689,6 +692,25 @@ model Distillation {
   @@index([sourceDistillationId])
   @@index([sourceReceiverId])
   @@index([plannedReceiverId])
+}
+
+/// Cargas adicionales realizadas a una destilación ya abierta.
+/// loadedLiters en Distillation conserva la carga inicial histórica;
+/// el volumen físico total es carga inicial + suma de estas cargas.
+model DistillationSupplementalLoad {
+  id             String       @id @default(cuid())
+  distillationId String
+  fermentationId String
+  liters         Float
+  idempotencyKey String       @unique
+  recordedById   String
+  createdAt      DateTime     @default(now())
+  distillation   Distillation @relation(fields: [distillationId], references: [id])
+  fermentation   Fermentation @relation(fields: [fermentationId], references: [id])
+  recordedBy     User         @relation("SupplementalDistillationLoadRecorder", fields: [recordedById], references: [id])
+
+  @@index([distillationId])
+  @@index([fermentationId])
 }
 
 model DistillationReceiver {
