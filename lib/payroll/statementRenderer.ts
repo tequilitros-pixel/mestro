@@ -147,7 +147,7 @@ export async function renderPayrollStatementPage(
     color: MUTED,
   });
 
-  page.drawText("RECIBO INDIVIDUAL DE PAGO Y LIQUIDACIÓN SEMANAL", {
+  page.drawText("RECIBO INDIVIDUAL DE PAGO SEMANAL", {
     x: MARGIN + 12,
     y: y - 46,
     font: bold,
