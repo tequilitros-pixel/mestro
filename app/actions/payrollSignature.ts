@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { mondayOfWeek, parseDateOnly } from "@/lib/dateOnly";
+import { shouldClosePayrollPeriodOnReceipt } from "@/lib/payroll/receiptSettlement";
 
 /** Firma personal e inmutable del recibo aprobado o pagado. */
 export async function savePayrollSignatureAction(input: {
@@ -75,7 +76,7 @@ export async function savePayrollSignatureAction(input: {
       where: { periodId: period.id, status: { not: "PAGADA" } },
     });
     const totalCount = await tx.payrollEntry.count({ where: { periodId: period.id } });
-    if (totalCount > 0 && pendingCount === 0 && period.status !== "PAGADA") {
+    if (shouldClosePayrollPeriodOnReceipt(period.status, totalCount, pendingCount)) {
       await tx.payrollPeriod.update({
         where: { id: period.id },
         data: { status: "PAGADA", paidAt: now },
