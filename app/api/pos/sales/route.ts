@@ -9,6 +9,7 @@ import { setRlsContext, withRlsContext } from "@/lib/rls";
 import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
 import { hashPayload } from "@/lib/pos2/payloadHash";
 import { consumePosInventory } from "@/lib/pos/v1InventoryGuard";
+import { recordEventSaleConsumption } from "@/lib/inventory/eventCashCutStock";
 import {
   consumePospressInventoryV2,
   type PospressInventoryRequirement,
@@ -598,6 +599,7 @@ export async function POST(request: NextRequest) {
 
     const inventoryRequirements: Array<{ productId: string; quantity: number }> = [];
     const pospressInventoryRequirements: PospressInventoryRequirement[] = [];
+    const eventInventoryRequirements: Array<{ inventoryProductId: string; quantity: Prisma.Decimal; unit: typeof variants[number]["ingredients"][number]["unit"] }> = [];
     for (const item of resolvedItems) {
       if (!item.variantId) continue;
       const variant = variantsById.get(item.variantId);
@@ -606,7 +608,8 @@ export async function POST(request: NextRequest) {
       for (const ingredient of variant.ingredients) {
         const quantity = new Prisma.Decimal(ingredient.quantity).times(item.quantity);
         inventoryRequirements.push({ productId: ingredient.inventoryProductId, quantity: quantity.toNumber() });
-        if (inventoryMode === "v2") {
+        eventInventoryRequirements.push({ inventoryProductId: ingredient.inventoryProductId, quantity, unit: ingredient.unit });
+        if (inventoryMode === "v2" && !(openCashCut.eventStockIsolated && openCashCut.eventId)) {
           if (!ingredient.unit || ingredient.unitStatus !== "RESOLVED") {
             throw new DomainError("RECIPE_UNIT_UNRESOLVED", {
               ingredientId: ingredient.id,
@@ -621,7 +624,16 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    if (inventoryMode === "v2") {
+    if (openCashCut.eventStockIsolated && openCashCut.eventId) {
+      // El corte está vinculado a un evento: el POS consume exclusivamente
+      // del evento, incluso cuando la sucursal origen tiene faltantes.
+      // La venta y sus consumos se confirman en la misma transacción.
+      await recordEventSaleConsumption(tx, {
+        eventId: openCashCut.eventId,
+        saleId: createdSale.id,
+        requirements: eventInventoryRequirements,
+      });
+    } else if (inventoryMode === "v2") {
       await consumePospressInventoryV2(tx, {
         branchId,
         actorId: user.id,
@@ -655,7 +667,7 @@ export async function POST(request: NextRequest) {
 
     await appendAuditEvent(tx, {
       actorId: user.id, branchId, action: "pos.sale.completed", entityType: "PosSale",
-      entityId: createdSale.id, operationId: clientOperationId, metadata: { code, total, itemCount: resolvedItems.length },
+      entityId: createdSale.id, operationId: clientOperationId, metadata: { code, total, itemCount: resolvedItems.length, eventId: openCashCut.eventId ?? null, eventStockIsolated: openCashCut.eventStockIsolated },
     });
     await evaluateCapabilityShadow(tx, {
       actor: { id: user.id, role: user.role, branchIds: user.role === "ADMIN" ? null : [branchId] },
