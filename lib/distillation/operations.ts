@@ -176,18 +176,24 @@ export async function startDistillationRun(input: {
       if (!lot || lot.stage === LotStage.TERMINADO || drained) {
         throw new DistillationOperationError("Esta tina ya fue cerrada o el lote está terminado.", "SOURCE_CLOSED");
       }
-      const currentRuns = await tx.distillation.findMany({
-        where: { sourceFermentationId: source.id, status: { not: DistillationStatus.CANCELADA } },
-        select: { status: true, loadedLiters: true, finishedAt: true },
-      });
-      const completedRuns = currentRuns.filter((run) => run.status === DistillationStatus.TERMINADA);
-      if (completedRuns.length > 0 && !currentRuns.some((run) => run.status === DistillationStatus.ACTIVA)) {
+      const [currentRuns, supplementalLoads] = await Promise.all([
+        tx.distillation.findMany({
+          where: { sourceFermentationId: source.id, status: { not: DistillationStatus.CANCELADA } },
+          select: { status: true, loadedLiters: true, finishedAt: true },
+        }),
+        tx.distillationSupplementalLoad.findMany({
+          where: { fermentationId: source.id, distillation: { status: { not: DistillationStatus.CANCELADA } } },
+          select: { liters: true, distillation: { select: { status: true, finishedAt: true } } },
+        }),
+      ]);
+      const ledger = { distillations: currentRuns, supplementalLoads };
+      if (fermentationHasCompletedLoad(ledger) && !fermentationHasActiveLoad(ledger)) {
         const verified = await tx.auditEvent.findFirst({
           where: { entityType: "Fermentation", entityId: source.id, action: "FERMENTATION_SOURCE_AVAILABLE" },
           orderBy: { createdAt: "desc" },
           select: { createdAt: true },
         });
-        if (!verified || completedRuns.some((run) => run.finishedAt && run.finishedAt > verified.createdAt)) {
+        if (!verified || fermentationLatestFinishedLoad(ledger) > verified.createdAt) {
           throw new DistillationOperationError(
             "Esta tina tiene saldo contable pendiente. Confirma que todavía tiene mosto en la conciliación de fuentes.",
             "PHYSICAL_STOCK_NOT_CONFIRMED",
@@ -254,7 +260,13 @@ export async function startDistillationRun(input: {
           : { sourceDistillationId, status: { not: DistillationStatus.CANCELADA } },
       _sum: { loadedLiters: true },
     });
-    const remaining = sourceLiters - (allocated._sum.loadedLiters ?? 0);
+    const supplemental = sourceFermentationId
+      ? await tx.distillationSupplementalLoad.aggregate({
+          where: { fermentationId: sourceFermentationId, distillation: { status: { not: DistillationStatus.CANCELADA } } },
+          _sum: { liters: true },
+        })
+      : null;
+    const remaining = sourceLiters - (allocated._sum.loadedLiters ?? 0) - (supplemental?._sum.liters ?? 0);
     if (input.loadedLiters - remaining > EPSILON) {
       throw new DistillationOperationError(
         `Solo quedan ${remaining.toFixed(2)} L disponibles en la fuente seleccionada.`,
@@ -366,7 +378,13 @@ export async function reconcileLotDistillationStage(
   if (completedType === DistillationType.DESTROZADO) {
     const sources = await tx.fermentation.findMany({
       where: { lotId, status: "TERMINADA" },
-      include: { distillations: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true, status: true } } },
+      include: {
+        distillations: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true, status: true } },
+        supplementalLoads: {
+          where: { distillation: { status: { not: DistillationStatus.CANCELADA } } },
+          select: { liters: true, distillation: { select: { status: true } } },
+        },
+      },
     });
     const closedSources = sources.length
       ? await tx.auditEvent.findMany({
@@ -376,9 +394,9 @@ export async function reconcileLotDistillationStage(
       : [];
     const closedIds = new Set(closedSources.map((row) => row.entityId));
     const complete = sources.length > 0 && sources.every((source) => {
-      const allocated = source.distillations.reduce((sum, run) => sum + run.loadedLiters, 0);
+      const allocated = allocatedFermentationLiters(source);
       return (closedIds.has(source.id) || source.mustLiters - allocated <= EPSILON)
-        && source.distillations.every((run) => run.status === DistillationStatus.TERMINADA);
+        && !fermentationHasActiveLoad(source);
     });
     if (complete) await advanceLotStage(tx, lotId, LotStage.RECTIFICACION);
     return complete;
@@ -450,13 +468,17 @@ export async function closeEmptyFermentationSource(input: {
           where: { status: { not: DistillationStatus.CANCELADA } },
           select: { id: true, loadedLiters: true, status: true },
         },
+        supplementalLoads: {
+          where: { distillation: { status: { not: DistillationStatus.CANCELADA } } },
+          select: { liters: true, distillation: { select: { status: true } } },
+        },
       },
     });
     if (!source || source.status !== "TERMINADA" || source.lot.stage === LotStage.TERMINADO ||
       (input.expectedLotId && input.expectedLotId !== source.lotId)) {
       throw new DistillationOperationError("No se puede conciliar esta tina o pertenece a otro lote.", "SOURCE_UNAVAILABLE");
     }
-    if (source.distillations.some((run) => run.status === DistillationStatus.ACTIVA)) {
+    if (fermentationHasActiveLoad(source)) {
       throw new DistillationOperationError("Termina primero las corridas activas de esta tina.", "ACTIVE_RUNS");
     }
     const previous = await tx.auditEvent.findFirst({
@@ -468,7 +490,7 @@ export async function closeEmptyFermentationSource(input: {
       select: { id: true },
     });
     if (previous) throw new DistillationOperationError("Esta tina ya fue conciliada.", "ALREADY_CLOSED");
-    const loadedLiters = source.distillations.reduce((sum, run) => sum + run.loadedLiters, 0);
+    const loadedLiters = allocatedFermentationLiters(source);
     const residualLiters = Math.max(0, source.mustLiters - loadedLiters);
     if (residualLiters <= EPSILON) {
       throw new DistillationOperationError("Esta tina ya no tiene saldo contable pendiente.", "NO_RESIDUAL");
@@ -519,6 +541,10 @@ export async function verifyFermentationSourceHasMust(input: {
           where: { status: { not: DistillationStatus.CANCELADA } },
           select: { loadedLiters: true, status: true },
         },
+        supplementalLoads: {
+          where: { distillation: { status: { not: DistillationStatus.CANCELADA } } },
+          select: { liters: true, distillation: { select: { status: true } } },
+        },
       },
     });
     if (!source || source.status !== "TERMINADA" || source.lot.stage === LotStage.TERMINADO ||
@@ -530,7 +556,7 @@ export async function verifyFermentationSourceHasMust(input: {
       select: { id: true },
     });
     if (alreadyClosed) throw new DistillationOperationError("La tina ya fue conciliada como vacía.", "SOURCE_CLOSED");
-    const allocated = source.distillations.reduce((sum, run) => sum + run.loadedLiters, 0);
+    const allocated = allocatedFermentationLiters(source);
     const remaining = source.mustLiters - allocated;
     if (remaining <= EPSILON) throw new DistillationOperationError("No queda mosto contable pendiente.", "NO_RESIDUAL");
     await tx.auditEvent.create({
