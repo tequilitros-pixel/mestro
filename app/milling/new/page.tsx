@@ -5,9 +5,11 @@ import { advanceLotStage } from "@/lib/lotStage";
 import { findAvailableEquipment, reserveEquipment } from "@/lib/equipmentAvailability";
 import { requireModuleActionAccess } from "@/lib/auth";
 
-export default async function NewMillingPage() {
+export default async function NewMillingPage({ searchParams }: { searchParams: Promise<{ lotId?: string }> }) {
+  const { lotId: selectedLotId } = await searchParams;
   const lots = await prisma.lot.findMany({
     where: {
+      ...(selectedLotId ? { id: selectedLotId } : {}),
       stage: {
         in: ["COCCION", "MOLIENDA"],
       },
@@ -35,10 +37,13 @@ export default async function NewMillingPage() {
     const user = await requireModuleActionAccess("/milling");
 
     const lotId = formData.get("lotId") as string;
+    if (selectedLotId && lotId !== selectedLotId) throw new Error("La molienda no corresponde al lote seleccionado.");
     const equipmentId = formData.get("equipmentId") as string;
     const cookedKg = Number(formData.get("cookedKg"));
 
     const milling = await prisma.$transaction(async (tx) => {
+      const eligibleLot = await tx.lot.findFirst({ where: { id: lotId, stage: { in: ["COCCION", "MOLIENDA"] }, cookings: { some: { status: "TERMINADA" } } } });
+      if (!eligibleLot) throw new Error("El lote ya no está disponible para molienda.");
       const duplicate = await tx.milling.findFirst({
         where: { lotId, status: { not: "TERMINADA" } },
         select: { id: true },
