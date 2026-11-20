@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { randomUUID } from "node:crypto";
+import { totalRunLoadedLiters } from "@/lib/distillation/loadLedger";
+import { addSupplementalFermentationLoad } from "@/lib/distillation/supplementalLoads";
+import { getDistillationSources } from "@/lib/distillation/operations";
 import { requireModuleActionAccess } from "@/lib/auth";
 import {
   PrinterIcon,
@@ -65,6 +69,10 @@ export default async function DistillationDetailPage({
       sourceFermentation: {
         include: { distillations: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true } } },
       },
+      supplementalLoads: {
+        include: { fermentation: { select: { tank: true } }, recordedBy: { select: { name: true } } },
+        orderBy: { createdAt: "asc" },
+      },
       sourceDistillation: {
         include: { sourceFermentation: { select: { tank: true } }, derivedDistillations: { where: { status: { not: DistillationStatus.CANCELADA } }, select: { loadedLiters: true } } },
       },
@@ -92,18 +100,16 @@ export default async function DistillationDetailPage({
   const distillationEquipmentId = distillation.equipmentId;
   const distillationLotId = distillation.lotId;
   const distillationType = distillation.type;
-  const sourceName = distillation.sourceReceiver?.name ?? distillation.sourceFermentation?.tank ?? distillation.sourceDistillation?.sourceFermentation?.tank ?? "Fuente histórica";
-  const sourceVolume = (distillation.sourceReceiver?.transfers.reduce((sum, transfer) => sum + transfer.liters, 0))
-    ?? distillation.sourceFermentation?.mustLiters
-    ?? (distillation.sourceDistillation?.finalHeartLiters && distillation.sourceDistillation.finalHeartLiters > 0
-      ? distillation.sourceDistillation.finalHeartLiters
-      : distillation.sourceDistillation?.finalLiters)
-    ?? distillation.loadedLiters;
-  const sourceAllocated = (distillation.sourceReceiver?.rectifications.reduce((sum, run) => sum + run.loadedLiters, 0))
-    ?? distillation.sourceFermentation?.distillations.reduce((sum, run) => sum + run.loadedLiters, 0)
-    ?? distillation.sourceDistillation?.derivedDistillations.reduce((sum, run) => sum + run.loadedLiters, 0)
-    ?? distillation.loadedLiters;
-  const sourceRemaining = Math.max(0, sourceVolume - sourceAllocated);
+  const initialSource = distillation.sourceReceiver?.name ?? distillation.sourceFermentation?.tank
+    ?? distillation.sourceDistillation?.sourceFermentation?.tank ?? "Fuente histórica";
+  const sourceName = [...new Set([initialSource, ...distillation.supplementalLoads.map((load) => load.fermentation.tank)])].join(" + ");
+  const totalLoadedLiters = totalRunLoadedLiters(distillation);
+  const loadableSources = distillation.type === DistillationType.DESTROZADO
+    && distillation.status === DistillationStatus.ACTIVA
+    ? (await getDistillationSources(distillation.lotId)).filter((item) => item.sourceKind === "FERMENTATION")
+    : [];
+  const allowedCapacity = distillation.equipment.capacity * (distillation.fillPercent ?? 100) / 100;
+  const availableCapacity = Math.max(0, allowedCapacity - totalLoadedLiters);
 
   const hasFinished = distillation.status !== DistillationStatus.ACTIVA;
 
@@ -158,7 +164,7 @@ export default async function DistillationDetailPage({
   const absoluteAlcohol = calculatedLAA ?? fallbackAbsoluteAlcohol;
 
   const distillationYield = getYield(
-    distillation.loadedLiters,
+    totalLoadedLiters,
     totalLiters
   );
 
@@ -173,6 +179,26 @@ export default async function DistillationDetailPage({
     lastAlcohol,
     lastAlcoholCorrected
   );
+
+  async function addTinaLoad(formData: FormData) {
+    "use server";
+    const user = await requireModuleActionAccess("/distillation");
+    try {
+      await addSupplementalFermentationLoad({
+        distillationId: id,
+        fermentationId: String(formData.get("fermentationId") ?? ""),
+        liters: Number(formData.get("liters")),
+        actorId: user.id,
+        idempotencyKey: String(formData.get("idempotencyKey") ?? ""),
+      });
+    } catch (caught) {
+      if (caught instanceof DistillationOperationError) {
+        redirect(`/distillation/${id}?error=${encodeURIComponent(caught.message)}`);
+      }
+      throw caught;
+    }
+    redirect(`/distillation/${id}?loadAdded=1`);
+  }
 
   async function cancelRun(formData: FormData) {
     "use server";
