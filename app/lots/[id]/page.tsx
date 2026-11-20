@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import LotMenu from "@/components/LotMenu";
+import LotProductionOverview from "@/components/lots/LotProductionOverview";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireModuleActionAccess } from "@/lib/auth";
@@ -136,6 +137,8 @@ export default async function LotDetailPage({ params }: Props) {
           }}
         />
 
+        <LotProductionOverview lotId={lot.id} nextAction={engine.nextAction} nextHref={engine.nextHref} status={engine.status} progress={engine.progress} />
+
         {isFinished && (
           <div className="mt-8">
             <SendToLiquorBatch
@@ -181,195 +184,7 @@ export default async function LotDetailPage({ params }: Props) {
           </section>
         )}
 
-        <section className="mt-8 rounded-xl bg-surface-container p-8">
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
-                MOTOR DEL LOTE
-              </p>
 
-              <h2 className="mt-3 text-4xl font-bold text-primary">
-                {engine.status}
-              </h2>
-
-              <p className="mt-3 max-w-2xl text-on-surface-variant">
-                {engine.message}
-              </p>
-            </div>
-
-            <Link
-              href={engine.nextHref}
-              className="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 text-center font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] hover:opacity-90 active:scale-[0.97]"
-            >
-              {engine.nextAction}
-            </Link>
-          </div>
-
-          <div className="mt-8">
-            <div className="mb-2 flex justify-between text-sm text-on-surface-variant">
-              <span>Progreso del lote</span>
-              <span>{engine.progress}%</span>
-            </div>
-
-            <div className="h-4 rounded-full bg-surface-container-high">
-              <div
-                className="h-4 rounded-full bg-primary"
-                style={{ width: `${engine.progress}%` }}
-              />
-            </div>
-          </div>
-        </section>
-        <section className="mt-6 rounded-xl border border-outline-variant bg-surface-container p-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
-                PRÓXIMA ACCIÓN
-              </p>
-
-              <h2 className="mt-2 text-3xl font-bold text-primary">
-                {engine.nextAction}
-              </h2>
-
-              <p className="mt-2 text-on-surface-variant">
-                Esta es la siguiente actividad recomendada por MAESTRO.
-              </p>
-            </div>
-
-            <Link
-              href={engine.nextHref}
-              className="flex items-center gap-2 rounded-xl bg-primary px-8 py-4 font-bold text-on-primary transition duration-150 ease-out hover:scale-[1.04] active:scale-[0.97]"
-            >
-              IR
-              <ChevronRightIcon className="h-4 w-4" />
-            </Link>
-          </div>
-
-          <div className="mt-8 flex items-center gap-3">
-            <span className="text-sm text-on-surface-variant">
-              Prioridad:
-            </span>
-
-            <span
-              className={`rounded-full px-3 py-1 text-sm font-bold ${
-                engine.priority === "ALTA"
-                  ? "bg-error text-on-error"
-                  : engine.priority === "NORMAL"
-                  ? "bg-secondary text-on-secondary"
-                  : "bg-surface-container-high text-on-surface"
-              }`}
-            >
-              {engine.priority}
-            </span>
-          </div>
-        </section>
-        <section className="mt-6 rounded-xl border border-outline-variant bg-surface-container p-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-              <BrainIcon className="h-6 w-6 text-on-primary" />
-            </div>
-
-            <div>
-              <p className="font-mono text-sm uppercase tracking-[0.35em] text-on-surface-variant">
-                MAESTRO DICE
-              </p>
-
-              <h2 className="text-2xl font-bold text-primary">
-                Recomendaciones para este lote
-              </h2>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-4">
-            {engine.advice.map((item: string, index: number) => (
-              <div
-                key={index}
-                className="flex items-start gap-3 rounded-xl bg-surface-container-high p-4"
-              >
-                <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-tertiary-fixed-dim" />
-
-                <p className="text-on-surface">
-                  {item}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="mt-8 grid gap-4 md:grid-cols-4">
-          <Kpi title="Etapa actual" value={lot.stage} />
-          <Kpi title="Agave" value={`${lot.agaveKg.toLocaleString()} kg`} />
-          <Kpi title="ART" value={lot.art ?? "-"} />
-          <Kpi title="Costo/L" value={costPerLiter > 0 ? `$${costPerLiter.toFixed(2)}` : "-"} />
-        </section>
-
-        <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          <StageCard
-            icon={FlameIcon}
-            title="Cocción"
-            status={lastCooking?.status ?? "Pendiente"}
-            main={lastCooking ? `${lastCooking.agaveKg.toLocaleString()} kg` : "Sin registro"}
-            detail={`${lastCooking?.events.length ?? 0} eventos`}
-            href={lastCooking ? `/cooking/${lastCooking.id}` : "/cooking"}
-          />
-
-          <StageCard
-            icon={GearIcon}
-            title="Molienda"
-            status={lastMilling?.status ?? "Pendiente"}
-            main={lastMilling?.mashLiters ? `${lastMilling.mashLiters} L mosto` : "Sin mosto"}
-            detail={
-              lastMilling?.brix
-                ? `Último Brix: ${lastMilling.brix}`
-                : `${lastMilling?.events.length ?? 0} eventos`
-            }
-            href={lastMilling ? `/milling/${lastMilling.id}` : "/milling"}
-          />
-
-          <StageCard
-            icon={FlaskIcon}
-            title="Fermentación"
-            status={lastFermentation?.status ?? "Pendiente"}
-            main={
-              lastFermentationReading?.brix
-                ? `${lastFermentationReading.brix} °Brix`
-                : lastFermentation
-                  ? `${lastFermentation.mustLiters} L mosto`
-                  : "Sin registro"
-            }
-            detail={
-              lastFermentationReading?.alcohol
-                ? `Alcohol: ${lastFermentationReading.alcohol}%`
-                : `${lastFermentation?.readings.length ?? 0} lecturas`
-            }
-            href={lastFermentation ? `/fermentation/${lastFermentation.id}` : "/fermentation"}
-          />
-
-          <StageCard
-            icon={StillIcon}
-            title="Destilación"
-            status={lastDistillation?.status ?? "Pendiente"}
-            main={isFinished ? `${totalLiters.toFixed(2)} L` : "Sin litros"}
-            detail={`${lot.distillations.length} corridas`}
-            href={lastDistillation ? `/distillation/${lastDistillation.id}` : "/distillation"}
-          />
-
-          <StageCard
-            icon={DollarIcon}
-            title="Costos"
-            status={totalCost > 0 ? "Registrado" : "Pendiente"}
-            main={`$${totalCost.toLocaleString()}`}
-            detail={costPerLiter > 0 ? `$${costPerLiter.toFixed(2)} por litro` : "Sin costo/L"}
-            href={`/lots/${lot.id}/costs`}
-          />
-
-          <StageCard
-            icon={ChartBarIcon}
-            title="Resultado"
-            status="En análisis"
-            main={isFinished ? `${totalLiters.toFixed(2)} L producidos` : "Sin producción"}
-            detail="Expediente vivo del lote"
-            href={`/lots/${lot.id}`}
-          />
-        </section>
       </div>
     </main>
   );
