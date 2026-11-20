@@ -56,6 +56,7 @@ type BranchOption = {
   id: string;
   name: string;
   openCashCutId: string | null;
+  openEventName?: string | null;
 };
 
 type LineDiscount = {
@@ -539,6 +540,11 @@ export default function PosSellClient({
         {branchLockMessage && (
           <p role="status" className="border-b border-outline-variant bg-surface-container px-4 py-3 text-sm text-on-surface-variant">
             {branchLockMessage}
+          </p>
+        )}
+        {hasOpenCut && branch?.openEventName && (
+          <p role="status" className="mx-4 mt-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm font-semibold text-on-surface">
+            Ventas del evento: {branch.openEventName}. Los consumos de recetas se registran en este evento, no en el inventario de {branch.name}.
           </p>
         )}
         {!hasOpenCut && branch && (
