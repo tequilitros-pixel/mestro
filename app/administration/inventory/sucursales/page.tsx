@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { computeStockMatrix, totalStockByProduct } from "../lib/stock";
+import { totalStockByProduct } from "../lib/stock";
 import {
   InventoryFlowChart,
   InventoryBranchComparisonChart,
@@ -94,7 +94,7 @@ export default async function SucursalesInventoryPage() {
     getInventoryDashboardData(allowedBranchIds),
   ]);
 
-  const matrix = await computeStockMatrix(products.map((p) => p.id), allowedBranchIds);
+  const matrix = dashboard.stockMatrix;
 
   const lowStockProducts = products
     .map((product) => ({

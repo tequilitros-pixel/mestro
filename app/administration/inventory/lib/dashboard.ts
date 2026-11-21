@@ -6,7 +6,7 @@ import {
   formatCommercialPresentation,
   hasValidCommercialConversion,
 } from "@/lib/inventory/units";
-import { computeStockMatrix } from "./stock";
+import { computeStockMatrix, type StockMatrix } from "./stock";
 import { getInventoryAnalytics, type InventoryAnalytics } from "./analytics";
 import { inventoryCountTypeLabel } from "@/lib/inventory/countScope";
 
@@ -27,6 +27,8 @@ type DashboardProduct = {
 export type InventoryDashboardData = {
   analytics: InventoryAnalytics;
   weeklyAnalytics: InventoryAnalytics;
+  /** Request-scoped server data, not intended for client component props. */
+  stockMatrix: StockMatrix;
   branches: Array<{ id: string; name: string }>;
   pendingCounts: Array<{ id: string; code: string; branchName: string; countDate: string; countType: "WEEKLY" | "MONTHLY" }>;
   counts: Array<{
@@ -103,9 +105,17 @@ export async function getInventoryDashboardData(
     ...(allowedBranchIds === null ? {} : { id: { in: allowedBranchIds } }),
   };
 
-  const [analytics, weeklyAnalytics, branches, productsRows, counts, balances, declarations] = await Promise.all([
-    getInventoryAnalytics(30, allowedBranchIds),
-    getInventoryAnalytics(7, allowedBranchIds),
+  // Share current stock between 7/30-day analytics and the branch dashboard.
+  // Include inactive, non-archived products for accurate historical analytics.
+  // Promise is local to this render; never share stock across users or requests.
+  const stockMatrixPromise = prisma.inventoryProduct.findMany({
+    where: { archivedAt: null, trackStock: true },
+    select: { id: true },
+  }).then((products) => computeStockMatrix(products.map((product) => product.id), allowedBranchIds));
+
+  const [analytics, weeklyAnalytics, branches, productsRows, counts, balances, declarations, matrix] = await Promise.all([
+    getInventoryAnalytics(30, allowedBranchIds, stockMatrixPromise),
+    getInventoryAnalytics(7, allowedBranchIds, stockMatrixPromise),
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.inventoryProduct.findMany({
       where: { isActive: true, archivedAt: null, trackStock: true },
@@ -165,11 +175,11 @@ export async function getInventoryDashboardData(
         count: { select: { code: true } },
       },
     }),
+    stockMatrixPromise,
   ]);
 
   const products = productsRows.map(toProduct);
   const productById = new Map(products.map((product) => [product.id, product]));
-  const matrix = await computeStockMatrix(products.map((product) => product.id), allowedBranchIds);
   const balanceKeys = new Set(balances.map((balance) => `${balance.branchId}:${balance.inventoryProductId}`));
 
   const negativeLegacy: InventoryDashboardData["negativeLegacy"] = [];
@@ -234,6 +244,7 @@ export async function getInventoryDashboardData(
   return {
     analytics,
     weeklyAnalytics,
+    stockMatrix: matrix,
     branches,
     pendingCounts: counts
       .filter((count) => count.status === "BORRADOR")
