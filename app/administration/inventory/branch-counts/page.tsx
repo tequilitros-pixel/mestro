@@ -86,10 +86,16 @@ export default async function BranchCountsPage({
                 className={`rounded-full px-3 py-1 text-xs ${
                   count.status === "CERRADO"
                     ? "bg-tertiary-fixed-dim/20 text-tertiary-fixed-dim"
-                    : "bg-secondary/20 text-secondary"
+                    : count.status === "ANULADO"
+                      ? "bg-error/20 text-error"
+                      : "bg-secondary/20 text-secondary"
                 }`}
               >
-                {count.status === "CERRADO" ? "Cerrado" : "Borrador"}
+                {count.status === "CERRADO"
+                  ? "Cerrado"
+                  : count.status === "ANULADO"
+                    ? "Anulado"
+                    : "Borrador"}
               </span>
             </Link>
           ))}
