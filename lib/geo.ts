@@ -46,6 +46,6 @@ export type BranchLocation = {
  */
 export function hasGeofence(
   branch: BranchLocation
-): branch is { geofence: { latitude: number; longitude: number; radius: number } } {
+): branch is BranchLocation & { geofence: { latitude: number; longitude: number; radius: number } } {
   return branch.geofence !== null;
 }

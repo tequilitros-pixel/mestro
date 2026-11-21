@@ -37,9 +37,7 @@ export async function requireAdmin() {
   const user = await getCurrentUser();
 
   if (!user || user.role !== "ADMIN") {
-    // /cooking puede requerir un permiso que el usuario no tenga y provocar
-    // un ciclo de redirecciones. El perfil es un destino autenticado seguro.
-    redirect(user ? "/profile" : "/login");
+    redirect("/cooking");
   }
 
   return user;
@@ -151,12 +149,10 @@ export async function getAccessibleBranchIds(): Promise<string[] | null> {
     return null;
   }
 
-  // Authentication uses the raw client, but branch membership is RLS-protected.
-  const { withRlsContext } = await import("@/lib/rls");
-  const branches = await withRlsContext(user, (tx) => tx.userBranch.findMany({
+  const branches = await prisma.userBranch.findMany({
     where: { userId: user.id },
     select: { branchId: true },
-  }));
+  });
 
   return branches.map((b) => b.branchId);
 }

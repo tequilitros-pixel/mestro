@@ -77,6 +77,15 @@ export async function getScheduleGridForWeek(weekStart: string) {
   const availability = await getAvailabilityMatrix(employees.map((employee) => employee.id), start, end);
   const allShiftsPublished = shifts.length > 0 && shifts.every((shift) => shift.publicationStatus === "PUBLISHED");
 
+  const publishedShiftCount = shifts.filter((shift) => shift.publicationStatus === "PUBLISHED").length;
+  const status: "DRAFT" | "PARTIAL" | "PUBLISHED" = shifts.length === 0
+    ? (weekRow?.status === "PUBLISHED" ? "PUBLISHED" : "DRAFT")
+    : publishedShiftCount === 0
+      ? "DRAFT"
+      : publishedShiftCount === shifts.length
+        ? "PUBLISHED"
+        : "PARTIAL";
+
   return {
     success: true,
     weekStart: start,
@@ -173,7 +182,10 @@ export async function upsertScheduledShiftAction(input: UpsertShiftInput) {
       const shift = await tx.scheduledShift.create({ data });
       shiftId = shift.id;
     } else {
-      await tx.scheduledShift.update({ where: { id: input.id }, data });
+      await tx.scheduledShift.update({
+        where: { id: input.id },
+        data: { ...data, publicationStatus: "DRAFT" },
+      });
       shiftId = input.id;
     }
     if (conflict && effectiveAvailability && input.overrideAvailability) {
@@ -483,10 +495,18 @@ export async function publishWeekAction(weekStart: string) {
     data: { publicationStatus: "PUBLISHED" },
   });
 
-  await prisma.scheduleWeek.upsert({
-    where: { weekStart: start },
-    update: { status: "PUBLISHED", publishedAt: new Date(), publishedById: admin.id },
-    create: { weekStart: start, status: "PUBLISHED", publishedAt: new Date(), publishedById: admin.id },
+  const end = parseDateOnly(addDaysToDateOnly(mondayOfWeek(weekStart), 7));
+
+  await prisma.$transaction(async (tx) => {
+    await tx.scheduledShift.updateMany({
+      where: { date: { gte: start, lt: end } },
+      data: { publicationStatus: "PUBLISHED" },
+    });
+    await tx.scheduleWeek.upsert({
+      where: { weekStart: start },
+      update: { status: "PUBLISHED", publishedAt: new Date(), publishedById: admin.id },
+      create: { weekStart: start, status: "PUBLISHED", publishedAt: new Date(), publishedById: admin.id },
+    });
   });
 
   // Notificar a los colaboradores que tienen turnos en la semana publicada
@@ -570,16 +590,81 @@ export async function unpublishWeekAction(weekStart: string) {
     data: { publicationStatus: "DRAFT" },
   });
 
-  await prisma.scheduleWeek.upsert({
-    where: { weekStart: start },
-    update: { status: "DRAFT" },
-    create: { weekStart: start, status: "DRAFT" },
+  const end = parseDateOnly(addDaysToDateOnly(mondayOfWeek(weekStart), 7));
+
+  await prisma.$transaction(async (tx) => {
+    await tx.scheduledShift.updateMany({
+      where: { date: { gte: start, lt: end } },
+      data: { publicationStatus: "DRAFT" },
+    });
+    await tx.scheduleWeek.upsert({
+      where: { weekStart: start },
+      update: { status: "DRAFT" },
+      create: { weekStart: start, status: "DRAFT" },
+    });
   });
 
   revalidatePath("/administration/schedule");
   revalidatePath("/timeclock/calendar");
 
   return { success: true };
+}
+
+type SchedulePublicationScope = {
+  weekStart: string;
+  userId?: string;
+  branchId?: string;
+};
+
+function scheduleScopeWhere(input: SchedulePublicationScope) {
+  const mondayStr = mondayOfWeek(input.weekStart);
+  return {
+    date: {
+      gte: parseDateOnly(mondayStr),
+      lt: parseDateOnly(addDaysToDateOnly(mondayStr, 7)),
+    },
+    ...(input.userId ? { userId: input.userId } : {}),
+    ...(input.branchId ? { branchId: input.branchId } : {}),
+  };
+}
+
+function validateSchedulePublicationScope(input: SchedulePublicationScope) {
+  if (input.userId && input.branchId) return "Selecciona un empleado o una sucursal, no ambos.";
+  return null;
+}
+
+/** Publica solo los turnos de una persona, sucursal o de toda la semana. */
+export async function publishScheduleScopeAction(input: SchedulePublicationScope) {
+  const admin = await getCurrentUser();
+  if (!admin || admin.role !== "ADMIN") return { error: "No tienes permiso" };
+  const validationError = validateSchedulePublicationScope(input);
+  if (validationError) return { error: validationError };
+
+  const result = await prisma.scheduledShift.updateMany({
+    where: scheduleScopeWhere(input),
+    data: { publicationStatus: "PUBLISHED" },
+  });
+
+  revalidatePath("/administration/schedule");
+  revalidatePath("/timeclock/calendar");
+  return { success: true, count: result.count };
+}
+
+/** Devuelve a borrador solo los turnos de una persona, sucursal o semana. */
+export async function unpublishScheduleScopeAction(input: SchedulePublicationScope) {
+  const admin = await getCurrentUser();
+  if (!admin || admin.role !== "ADMIN") return { error: "No tienes permiso" };
+  const validationError = validateSchedulePublicationScope(input);
+  if (validationError) return { error: validationError };
+
+  const result = await prisma.scheduledShift.updateMany({
+    where: scheduleScopeWhere(input),
+    data: { publicationStatus: "DRAFT" },
+  });
+
+  revalidatePath("/administration/schedule");
+  revalidatePath("/timeclock/calendar");
+  return { success: true, count: result.count };
 }
 
 export async function deleteScheduledShiftAction(shiftId: string) {

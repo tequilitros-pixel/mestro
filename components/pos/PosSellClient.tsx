@@ -559,12 +559,28 @@ export default function PosSellClient({
             )}
 
             <Link
-              href="/pos/sales"
+              href="/pospress/transactions"
               className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
             >
               <ChartLineIcon className="h-4 w-4" />
               Resumen de ventas
             </Link>
+            {inventoryMode === "v2" && (
+              <>
+                <Link
+                  href="/pospress/transactions"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+                >
+                  Transacciones
+                </Link>
+                <Link
+                  href="/pospress/tables"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+                >
+                  Mesas
+                </Link>
+              </>
+            )}
             <Link
               href="/pospress/transactions"
               className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-outline-variant px-2.5 py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
@@ -1043,6 +1059,7 @@ export default function PosSellClient({
           employeeBuyerId={employeeMode ? employeeBuyerId : ""}
           needsAuthorization={needsAuthorization}
           managers={managers}
+          inventoryMode={inventoryMode}
           onClose={() => setShowPayment(false)}
           onSuccess={(receipt) => {
             setShowPayment(false);
@@ -1529,6 +1546,7 @@ function PaymentModal({
   employeeBuyerId,
   needsAuthorization,
   managers,
+  inventoryMode,
   onClose,
   onSuccess,
 }: {
@@ -1542,6 +1560,7 @@ function PaymentModal({
   employeeBuyerId: string;
   needsAuthorization: boolean;
   managers: Employee[];
+  inventoryMode: "legacy" | "v2";
   onClose: () => void;
   onSuccess: (receipt: ReceiptData) => void;
 }) {

@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAccessibleBranchIds, requireModuleAccess } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
-import { parseDateOnly } from "@/lib/dateOnly";
 import {
   applyScheduleTemplate,
   copyPreviousScheduleWeek,
@@ -33,7 +32,7 @@ function value(formData: FormData, key: string) {
 }
 function date(formData: FormData, key: string) {
   const raw = value(formData, key);
-  const parsed = parseDateOnly(raw);
+  const parsed = new Date(`${raw}T00:00:00.000Z`);
   if (!raw || Number.isNaN(parsed.getTime()))
     throw new Error(`Fecha inválida: ${key}`);
   return parsed;
@@ -60,7 +59,7 @@ async function run(
       target,
       "error",
       error instanceof Error
-        ? error.message.replace(/\s*\(OVERLAPPING_SHIFT\)$/, "")
+        ? error.message
         : "No fue posible completar la acción.",
     );
   }

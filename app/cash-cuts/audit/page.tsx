@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { DateRangeCalendar } from "@/components/ui/DateRangeCalendar";
-import { formatBusinessDateTime } from "@/lib/dateTime";
 
 interface Branch {
   id: string;
@@ -30,6 +29,15 @@ const ACTION_LABELS: Record<string, string> = {
   EDITADO: "Edición",
   CERRADO: "Cierre",
 };
+
+const formatDateTime = (value: string) =>
+  new Intl.DateTimeFormat("es-MX", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 
 export default function AuditPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -149,7 +157,7 @@ export default function AuditPage() {
               {!loading &&
                 rows.map((r) => (
                   <tr key={r.id} className="border-outline-variant last:border-0 hover:bg-surface-container">
-                    <td className="px-4 py-3 whitespace-nowrap">{formatBusinessDateTime(r.createdAt)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{formatDateTime(r.createdAt)}</td>
                     <td className="px-4 py-3 font-medium">
                       <Link
                         href={`/cash-cuts/daily/${r.cashCutId}`}

@@ -61,7 +61,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "/plant", label: "Planta · Resumen operativo" },
       { key: "/lots", label: "Lotes de producción" },
       { key: "/cooking", label: "Cocción" },
-      { key: "/boiler", label: "Caldera" },
       { key: "/milling", label: "Molienda" },
       { key: "/fermentation", label: "Fermentación" },
       { key: "/distillation", label: "Destilación" },

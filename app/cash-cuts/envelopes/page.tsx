@@ -4,7 +4,6 @@ import { useEffect, useState, startTransition } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { DateRangeCalendar } from "@/components/ui/DateRangeCalendar";
-import { formatCivilDate } from "@/lib/dateTime";
 
 interface Branch {
   id: string;
@@ -25,7 +24,9 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
 
 const formatDate = (value: string) =>
-  formatCivilDate(value, { day: "2-digit", month: "short", year: "numeric" });
+  new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", year: "numeric" }).format(
+    new Date(value)
+  );
 
 export default function EnvelopesPage() {
   const [branches, setBranches] = useState<Branch[]>([]);

@@ -264,6 +264,17 @@ export default function PayrollWeekView() {
     return Array.from(options.values()).sort((a, b) => b.weekStart.localeCompare(a.weekStart));
   }, [history, table, weekStart]);
 
+  const historyOptions = useMemo(() => {
+    const options = new Map<string, PayrollWeekHistoryItem>();
+    options.set(weekStart, {
+      weekStart,
+      paymentDate: addDaysToDateOnly(weekStart, 7),
+      status: table?.period.status ?? "BORRADOR",
+    });
+    for (const item of history) options.set(item.weekStart, item);
+    return Array.from(options.values()).sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+  }, [history, table, weekStart]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">

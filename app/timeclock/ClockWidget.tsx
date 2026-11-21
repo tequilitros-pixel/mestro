@@ -45,7 +45,15 @@ function formatElapsed(milliseconds: number) {
 }
 
 function toDatetimeLocal(date: Date) {
-  return formatBusinessDateTimeLocal(date);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+    )}:${pad(date.getMinutes())}`;
+}
+
+function asLocationInput(coords: { latitude: number; longitude: number } | undefined) {
+  if (!coords) return undefined;
+  return { sample: { latitude: coords.latitude, longitude: coords.longitude, checkedAt: new Date().toISOString() } };
 }
 
 function getCurrentPosition(): Promise<GeolocationPosition> {
@@ -652,7 +660,10 @@ export default function ClockWidget() {
           </p>
           <p className="text-2xl font-bold text-on-surface">
             Desde las{" "}
-            {formatBusinessTime(openShift.clockIn)}
+            {new Date(openShift.clockIn).toLocaleTimeString("es-MX", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </p>
 
           <div className="rounded-2xl bg-background/55 px-4 py-5">

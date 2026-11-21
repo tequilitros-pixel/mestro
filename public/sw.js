@@ -68,6 +68,8 @@ self.addEventListener("activate", (event) => {
   );
 });
 self.addEventListener("fetch", (event) => {
+  if (IS_DEVELOPMENT_HOST) return;
+
   const request = event.request;
   const url = new URL(request.url);
 

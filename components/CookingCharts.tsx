@@ -1,4 +1,4 @@
-"use client";
+ "use client";
 
 import {
   CartesianGrid,
@@ -13,7 +13,6 @@ import {
   YAxis,
 } from "recharts";
 import { formatBusinessTime } from "@/lib/dateTime";
-import type { ReactElement } from "react";
 
 type CookingEvent = {
   id: string;

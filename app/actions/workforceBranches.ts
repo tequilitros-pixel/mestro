@@ -3,8 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { withRlsContext } from "@/lib/rls";
-import { assertActiveBranch } from "@/lib/workforce/branchLifecycle";
-import { signalTimesheetsForEmployment } from "@/lib/workforce/timesheet/service";
 import { normalizeBranchCode, validBranchCode, validGeofenceConfig, validTimezone } from "@/lib/workforce/branch";
 import { rangesOverlap, shiftRangeMinutes, validBreakMinutes, validTemplateWeekday } from "@/lib/workforce/scheduleTemplate";
 
@@ -99,7 +97,7 @@ export async function updateWorkforceBranchAction(input: {
       }
       await tx.branch.update({
         where: { id: input.branchId },
-        data: { name, code, address: input.address?.trim() || null, timezone: input.timezone, active: input.active, templateApplyMode: "ASK_BEFORE_APPLY", defaultScheduleTemplateId: input.defaultScheduleTemplateId || null },
+        data: { name, code, address: input.address?.trim() || null, timezone: input.timezone, active: input.active, templateApplyMode: input.templateApplyMode, defaultScheduleTemplateId: input.defaultScheduleTemplateId || null },
       });
     });
     revalidatePath(BRANCHES_PATH);
@@ -112,7 +110,6 @@ export async function updateWorkforceBranchAction(input: {
 
 export async function updateBranchGeofenceAction(input: { branchId: string; enabled: boolean; latitude: number; longitude: number; radius: number }) {
   const admin = await requireAdmin();
-  if (input.enabled) return { error: "Geolocalización desactivada. Próximamente." };
   if (input.enabled && !validGeofenceConfig(input.latitude, input.longitude, input.radius)) return { error: "Coordenadas o radio de geozona inválidos." };
   try {
     await withRlsContext(admin, async (tx) => {
@@ -122,7 +119,6 @@ export async function updateBranchGeofenceAction(input: { branchId: string; enab
         await tx.branch.update({ where: { id: branch.id }, data: { geofenceEnabled: false } });
         return;
       }
-      await assertActiveBranch(tx, branch.id);
       let geofenceId = branch.geofenceId;
       if (!branch.geofence || branch.geofence.branches.length > 1) {
         geofenceId = (await tx.geofence.create({ data: { name: `${branch.name} · geozona`, latitude: input.latitude, longitude: input.longitude, radius: input.radius } })).id;
@@ -154,13 +150,12 @@ export async function saveWorkforceScheduleTemplateAction(input: {
   }
   try {
     await withRlsContext(admin, async (tx) => {
-      await assertActiveBranch(tx, input.branchId);
+      if (!await tx.branch.findUnique({ where: { id: input.branchId }, select: { id: true } })) throw new Error("Sucursal no encontrada.");
       const shifts = input.blocks.map((block) => ({ ...block, branchId: input.branchId, type: "TURNO" as const }));
       if (input.templateId) {
         const template = await tx.scheduleTemplate.findFirst({ where: { id: input.templateId, branchId: input.branchId }, select: { id: true } });
         if (!template) throw new Error("Plantilla no encontrada.");
         await tx.scheduleTemplate.update({ where: { id: template.id }, data: { name, active: input.active, shifts: { deleteMany: {}, create: shifts } } });
-        if (!input.active) await tx.branch.updateMany({ where: { defaultScheduleTemplateId: template.id }, data: { defaultScheduleTemplateId: null } });
       } else {
         await tx.scheduleTemplate.create({ data: { name, active: input.active, branchId: input.branchId, createdById: admin.id, shifts: { create: shifts } } });
       }
@@ -175,18 +170,14 @@ export async function saveWorkforceScheduleTemplateAction(input: {
 
 export async function reviewGeolocationEvidenceAction(evidenceId: string, decision: "APPROVED" | "REJECTED") {
   const admin = await requireAdmin();
-  if (decision !== "APPROVED" && decision !== "REJECTED") return { error: "Decisión inválida." };
   try {
     await withRlsContext(admin, async (tx) => {
       const evidence = await tx.clockGeolocationEvidence.findFirst({ where: { id: evidenceId, reviewStatus: "PENDING" } });
       if (!evidence) throw new Error("La excepción ya fue revisada o no existe.");
       const now = new Date();
-      const updated = await tx.clockGeolocationEvidence.updateMany({ where: { id: evidence.id, reviewStatus: "PENDING" }, data: { reviewStatus: decision, reviewedById: admin.id, reviewedAt: now } });
-      if (updated.count !== 1) throw new Error("La excepción ya fue revisada.");
+      await tx.clockGeolocationEvidence.update({ where: { id: evidence.id }, data: { reviewStatus: decision, reviewedById: admin.id, reviewedAt: now } });
       if (decision === "APPROVED" && evidence.attendanceExceptionId) {
         await tx.attendanceException.updateMany({ where: { id: evidence.attendanceExceptionId, status: "OPEN" }, data: { status: "RESOLVED", resolvedById: admin.id, resolvedAt: now, resolution: "Ubicación aprobada por manager." } });
-        const exception = await tx.attendanceException.findUniqueOrThrow({ where: { id: evidence.attendanceExceptionId } });
-        await signalTimesheetsForEmployment(tx, exception.employmentId);
       }
     });
     revalidatePath(BRANCHES_PATH);

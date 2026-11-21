@@ -303,10 +303,10 @@ export async function updateCountItemNotesAction(
 ): Promise<ActionResult> {
   try {
     const scopedItem = await prisma.inventoryCountItem.findUnique({
-      where: { id: itemId },
+      where: { id: input.itemId },
       select: { countId: true, count: { select: { branchId: true } } },
     });
-    if (!scopedItem || scopedItem.countId !== countId) throw new Error("PERMISSION_DENIED");
+    if (!scopedItem || scopedItem.countId !== input.countId) throw new Error("PERMISSION_DENIED");
     await authorizeCountBranch(scopedItem.count.branchId);
 
     await prisma.$transaction(async (tx) => {

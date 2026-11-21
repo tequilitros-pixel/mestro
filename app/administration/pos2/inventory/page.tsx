@@ -14,7 +14,7 @@ export default async function InventoryV2Page({ searchParams }: { searchParams: 
   const branchId = query.branchId ?? branches[0]?.id;
   if (!branchId) return <main className="p-6">No hay sucursales activas.</main>;
   const [products, balances, movements, declarations, recipeIngredients] = await Promise.all([
-    prisma.inventoryProduct.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
+    prisma.inventoryProduct.findMany({ where: { isActive: true, archivedAt: null }, orderBy: { name: "asc" } }),
     prisma.inventoryBalance.findMany({ where: { branchId }, include: { inventoryProduct: true }, orderBy: { inventoryProduct: { name: "asc" } } }),
     prisma.inventoryMovement.findMany({ where: { branchId }, select: { inventoryProductId: true }, distinct: ["inventoryProductId"] }),
     prisma.inventoryCountDeclaration.findMany({ where: { branchId }, select: { inventoryProductId: true }, distinct: ["inventoryProductId"] }),

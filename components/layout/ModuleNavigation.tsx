@@ -45,7 +45,7 @@ export default function ModuleNavigation({
 
   if (currentModule === "home") return null;
   const items = SUBMENUS[currentModule]
-    .filter((item) => isSubmenuItemVisible(role, moduleKeys, item))
+    .filter((item) => !item.legacyAlias && isSubmenuItemVisible(role, moduleKeys, item))
     .map((item) =>
       item.children
         ? {

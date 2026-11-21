@@ -1,15 +1,12 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
-import { Prisma, type CatalogBaseUnit } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { DomainError } from "@/lib/domain/errors";
-import { applyInventoryBatchInTransaction } from "@/lib/pos2/inventory/applyMovements";
-import { groupInventoryDeltas } from "@/lib/pos2/inventory/domain";
 
-export type InventoryRequirement = { productId: string; quantity: Prisma.Decimal | string | number; unit?: CatalogBaseUnit };
+export type InventoryRequirement = { productId: string; quantity: Prisma.Decimal | string | number };
 
 export async function consumePosInventory(
   tx: Prisma.TransactionClient,
-  input: { branchId: string; saleCode: string; requirements: InventoryRequirement[]; actorId?: string; operationId?: string },
+  input: { branchId: string; saleCode: string; requirements: InventoryRequirement[] },
 ) {
   const required = new Map<string, Prisma.Decimal>();
   for (const item of input.requirements) {
@@ -33,7 +30,7 @@ export async function consumePosInventory(
   const [products, lastCount] = await Promise.all([
     tx.inventoryProduct.findMany({
       where: { id: { in: productIds } },
-      select: { id: true, name: true, trackStock: true, inventoryBaseUnit: true },
+      select: { id: true, name: true, trackStock: true },
     }),
     tx.inventoryCount.findFirst({
       where: { branchId: input.branchId, status: "CERRADO" },
@@ -42,40 +39,6 @@ export async function consumePosInventory(
     }),
   ]);
   const tracked = new Map(products.filter((product) => product.trackStock).map((product) => [product.id, product]));
-
-  const balances = await tx.inventoryBalance.findMany({
-    where: { branchId: input.branchId, inventoryProductId: { in: [...tracked.keys()] } },
-    select: { inventoryProductId: true },
-  });
-  const balanceProductIds = new Set(balances.map((balance) => balance.inventoryProductId));
-  const units = new Map(input.requirements.filter((item) => item.unit).map((item) => [item.productId, item.unit!]));
-
-  // Initialized POS2 branches use the transactional V2 ledger as the source
-  // of truth for legacy /pos sales. Partially initialized branches retain the
-  // legacy guard rather than silently mixing stock sources.
-  const pos2Ready = Boolean(input.actorId) && productIds.every((productId) => {
-    const product = tracked.get(productId);
-    return Boolean(product && product.inventoryBaseUnit && units.get(productId) === product.inventoryBaseUnit && balanceProductIds.has(productId));
-  });
-  if (pos2Ready) {
-    const grouped = groupInventoryDeltas([...required.entries()].map(([productId, quantity]) => ({
-      inventoryProductId: productId,
-      quantityDelta: quantity.negated().toString(),
-      unit: units.get(productId)!,
-      movementType: "SALE_CONSUMPTION" as const,
-      sourceType: "SALE" as const,
-      sourceId: input.saleCode,
-      reasonCode: "POS_LEGACY_SALE",
-    })));
-    await applyInventoryBatchInTransaction(tx, {
-      branchId: input.branchId,
-      movements: grouped,
-      actorId: input.actorId!,
-      operationId: input.operationId ?? randomUUID(),
-    });
-    return;
-  }
-
   const periodStart = lastCount?.countDate ?? new Date(0);
   const baseline = new Map((lastCount?.items ?? []).map((item) => [item.productId, item.quantityCounted]));
   const entries = await tx.inventoryEntry.groupBy({

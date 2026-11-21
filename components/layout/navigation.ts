@@ -869,7 +869,6 @@ export function getCurrentModule(pathname: string): AppModule {
     "/plant",
     "/lots",
     "/cooking",
-    "/boiler",
     "/milling",
     "/fermentation",
     "/distillation",

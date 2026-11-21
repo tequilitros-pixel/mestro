@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { finalizeOvertime, setEmploymentJornadaPolicy } from "@/lib/workforce/overtime/service";
-import { parseDateOnly } from "@/lib/dateOnly";
 
 const path = "/administration/workforce/overtime";
 const value = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
@@ -40,7 +39,7 @@ export async function setWorkforceJornadaAction(form: FormData) {
       {
         employmentId: value(form, "employmentId"),
         jornadaType: value(form, "jornadaType") as "DAY" | "NIGHT" | "MIXED",
-        effectiveFrom: parseDateOnly(value(form, "effectiveFrom")),
+        effectiveFrom: new Date(`${value(form, "effectiveFrom")}T00:00:00.000Z`),
       },
     );
     revalidatePath(path);

@@ -27,9 +27,9 @@ export async function applyInventoryMovementsBatch(input: { branchId: string; mo
 
 export async function applyInventoryBatchInTransaction(tx: Prisma.TransactionClient, input: { branchId: string; movements: Array<MovementInput & { delta: Prisma.Decimal; sourceLineIds: string[] }>; actorId: string; operationId: string; failAfterFirstMovementForTest?: boolean }) {
   const ids = input.movements.map((m) => m.inventoryProductId);
-  const products = await tx.inventoryProduct.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, trackStock: true, inventoryBaseUnit: true } });
+  const products = await tx.inventoryProduct.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, trackStock: true, inventoryBaseUnit: true, archivedAt: true } });
   const map = new Map(products.map((p) => [p.id, p]));
-  for (const item of input.movements) { const product = map.get(item.inventoryProductId); if (!product) throw new DomainError("INVENTORY_ITEM_NOT_FOUND", { inventoryProductId: item.inventoryProductId }); if (!product.trackStock || !product.inventoryBaseUnit) throw new DomainError("INVENTORY_NOT_TRACKED", { inventoryProductId: item.inventoryProductId }); if (product.inventoryBaseUnit !== item.unit) throw new DomainError("INVENTORY_UNIT_MISMATCH", { inventoryProductId: item.inventoryProductId, expected: product.inventoryBaseUnit, received: item.unit }); }
+  for (const item of input.movements) { const product = map.get(item.inventoryProductId); if (!product) throw new DomainError("INVENTORY_ITEM_NOT_FOUND", { inventoryProductId: item.inventoryProductId }); if (product.archivedAt || !product.trackStock || !product.inventoryBaseUnit) throw new DomainError("INVENTORY_NOT_TRACKED", { inventoryProductId: item.inventoryProductId }); if (product.inventoryBaseUnit !== item.unit) throw new DomainError("INVENTORY_UNIT_MISMATCH", { inventoryProductId: item.inventoryProductId, expected: product.inventoryBaseUnit, received: item.unit }); }
   for (const item of input.movements) {
     await tx.$executeRaw`INSERT INTO "InventoryBalance" ("id","branchId","inventoryProductId","quantity","unit","version","createdAt","updatedAt") VALUES (${randomUUID()},${input.branchId},${item.inventoryProductId},0,${item.unit}::"CatalogBaseUnit",1,NOW(),NOW()) ON CONFLICT ("branchId","inventoryProductId") DO NOTHING`;
   }

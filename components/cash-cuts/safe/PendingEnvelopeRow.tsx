@@ -14,7 +14,7 @@ const formatMoney = (v: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(v);
 
 const formatDate = (v: string) =>
-  formatCivilDate(v, { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }).format(new Date(v));
 
 export function PendingEnvelopeRow({
   envelope,

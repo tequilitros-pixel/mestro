@@ -30,6 +30,31 @@ type ReconciledItem = {
   declarationId: string;
 };
 
+function declarationOperationId(countId: string, itemId: string, countDate: Date) {
+  const entropy = createHash("sha256")
+    .update(`InventoryCountDeclaration:${countId}:${itemId}`)
+    .digest("hex")
+    .slice(0, 20);
+  const timestamp = Math.max(0, countDate.getTime())
+    .toString(16)
+    .padStart(12, "0")
+    .slice(-12);
+  const hex = `${timestamp}${entropy}`;
+
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7${hex.slice(13, 16)}-${
+    ["8", "9", "a", "b"][parseInt(hex[16], 16) % 4]
+  }${hex.slice(17, 20)}-${hex.slice(20)}`;
+}
+
+type ReconciledItem = {
+  productId: string;
+  before: string;
+  after: string;
+  unit: CatalogBaseUnit;
+  movementId: string | null;
+  declarationId: string;
+};
+
 export async function reconcileWeeklyCountCutover(
   tx: Prisma.TransactionClient,
   input: { countId: string; actorId: string; operationId: string; failAfterProductId?: string },

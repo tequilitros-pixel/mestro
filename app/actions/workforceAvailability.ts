@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 import { deleteAvailabilityException, saveAvailabilityException, saveAvailabilityRule } from "@/lib/workforce/availability/service";
-import { parseDateOnly } from "@/lib/dateOnly";
 
 async function actor() {
   if (!workforceV1Enabled()) throw new Error("Workforce V1 no está habilitado.");
@@ -16,7 +15,7 @@ async function actor() {
 
 function date(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "");
-  const parsed = parseDateOnly(value);
+  const parsed = new Date(`${value}T00:00:00.000Z`);
   if (!value || Number.isNaN(parsed.getTime())) throw new Error(`Fecha inválida: ${key}`);
   return parsed;
 }

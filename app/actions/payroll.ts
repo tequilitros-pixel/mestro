@@ -1338,7 +1338,10 @@ export async function getEmployeePayrollDetail(
   const live = await computeLiveEmployeeDetail(userId, mondayStr);
   if ("error" in live) return live;
 
-  return { success: true, data: { ...live, period: periodInfoFrom(period) } };
+  return {
+    success: true,
+    data: { ...live, period: periodInfoFrom(period) },
+  };
 }
 
 /**

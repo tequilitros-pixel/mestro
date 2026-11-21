@@ -34,7 +34,7 @@ export type GeofenceResult = {
 };
 
 export function requiresLocation(branch: GeofenceBranch, policyEnabled: boolean) {
-  return policyEnabled && branch.geofenceEnabled;
+  return policyEnabled && branch.geofenceEnabled && branch.geofence !== null;
 }
 
 export function evaluateGeofence(
@@ -49,15 +49,9 @@ export function evaluateGeofence(
   if (!requiresLocation(branch, policyEnabled)) {
     return { result: "NOT_REQUIRED", checkedAt };
   }
-  if (!branch.geofence) return { result: "UNAVAILABLE", checkedAt };
 
   if (location?.failure) {
-    // JSON from a Server Action is untrusted even when TypeScript narrows it.
-    // Only failures may come from the device; success is calculated below.
-    const result = location.failure === "PERMISSION_DENIED" || location.failure === "UNAVAILABLE"
-      ? location.failure
-      : "UNAVAILABLE";
-    return { result, checkedAt };
+    return { result: location.failure, checkedAt };
   }
 
   if (!location?.sample) {
@@ -76,10 +70,10 @@ export function evaluateGeofence(
     return { result: "UNAVAILABLE", checkedAt };
   }
 
-  if (typeof accuracyMeters !== "number" || !Number.isFinite(accuracyMeters) || accuracyMeters < 0) {
-    return { result: "UNAVAILABLE", checkedAt };
-  }
-  if (accuracyMeters > maximumAccuracyMeters) {
+  if (
+    accuracyMeters !== undefined &&
+    (!Number.isFinite(accuracyMeters) || accuracyMeters < 0 || accuracyMeters > maximumAccuracyMeters)
+  ) {
     return { result: "LOW_ACCURACY", accuracyMeters, checkedAt };
   }
 

@@ -1,7 +1,6 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { assertActiveBranch } from "@/lib/workforce/branchLifecycle";
 import { setRlsContext } from "@/lib/rls";
 import { reconcileAttendanceForEmployment } from "@/lib/workforce/attendance/reconcile";
 import { resolveWorkforcePolicy } from "@/lib/workforce/settings/service";
@@ -43,7 +42,7 @@ export type ShiftCommand = {
 
 function serializable<T>(
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
-  timeout = 30_000,
+  timeout = 10_000,
 ) {
   return prisma.$transaction(fn, {
     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -73,7 +72,7 @@ async function validateAssignedShift(
 ) {
   const employment = await tx.employment.findUnique({
     where: { id: input.employmentId },
-    include: { branchAssignments: true, employee: true },
+    include: { branchAssignments: true },
   });
   const branchAuthorized = Boolean(
     employment?.branchAssignments.some(
@@ -108,11 +107,7 @@ async function validateAssignedShift(
       endAt: { gt: input.startAt },
     },
   });
-  if (overlap) {
-    const branch = await tx.branch.findUniqueOrThrow({ where: { id: overlap.branchId } });
-    const time = (date: Date) => new Intl.DateTimeFormat("es-MX", { timeZone: branch.timezone ?? "America/Mexico_City", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
-    throw new Error(`${employment?.employee.displayName ?? "El empleado"} ya tiene un turno en ${branch.name} de ${time(overlap.startAt)} a ${time(overlap.endAt)}. (OVERLAPPING_SHIFT)`);
-  }
+  if (overlap) throw new Error("Bloqueado: OVERLAPPING_SHIFT");
   return employment!;
 }
 
@@ -476,7 +471,7 @@ export async function getPreviousWeekSchedulePreview(
 export async function createOrUpdateShift(
   actor: SchedulingActor,
   input: ShiftCommand,
-  transactionTimeoutMs = 30_000,
+  transactionTimeoutMs = 10_000,
 ) {
   return serializable(async (tx) => {
     const sourcePeriod = await tx.schedulePeriod.findUnique({
@@ -490,8 +485,6 @@ export async function createOrUpdateShift(
       sourcePeriod.branchId,
     );
     const targetBranchId = input.branchId || sourcePeriod.branchId;
-    await assertActiveBranch(tx, sourcePeriod.branchId);
-    await assertActiveBranch(tx, targetBranchId);
     assertSchedulingBranchAccess(
       actor.role,
       actor.accessibleBranchIds,
@@ -525,8 +518,6 @@ export async function createOrUpdateShift(
       endTime: input.endTime,
       timezone,
     });
-    if (!Number.isInteger(input.expectedBreakMinutes) || input.expectedBreakMinutes < 0 || input.expectedBreakMinutes >= (endAt.getTime() - startAt.getTime()) / 60000)
-      throw new Error("El descanso debe ser menor que la duración del turno y no puede ser negativo.");
     if (input.employmentId)
       await validateAssignedShift(tx, {
         employmentId: input.employmentId,
@@ -591,7 +582,6 @@ export async function createOrUpdateShift(
         });
       if (published && input.employmentId)
         await reconcileAttendanceForEmployment(tx, input.employmentId);
-      if (published) await tx.schedulePeriod.update({ where: { id: period.id }, data: { status: "DRAFT" } });
       return shift;
     }
     const current = await tx.shift.findUnique({
@@ -650,7 +640,6 @@ export async function createOrUpdateShift(
       for (const employmentId of employmentIds)
         await reconcileAttendanceForEmployment(tx, employmentId);
     }
-    if (published) await tx.schedulePeriod.updateMany({ where: { id: { in: [sourcePeriod.id, period.id] } }, data: { status: "DRAFT" } });
     return tx.shift.findUniqueOrThrow({ where: { id: current.id } });
   }, transactionTimeoutMs).catch((error) => {
     if (
@@ -718,7 +707,6 @@ export async function deleteOrCancelShift(
     });
     if (shift.employmentId)
       await reconcileAttendanceForEmployment(tx, shift.employmentId);
-    await tx.schedulePeriod.update({ where: { id: shift.schedulePeriodId }, data: { status: "DRAFT" } });
     return { deleted: false, cancelled: true };
   });
 }
@@ -812,7 +800,7 @@ export async function publishSchedulePeriod(
           endAt: shift.endAt,
           expectedBreakMinutes: shift.expectedBreakMinutes,
           status: shift.status === "CANCELLED" ? "CANCELLED" : "PUBLISHED",
-          reason: version === 1 ? "Publicación inicial de semana" : "Publicación de cambios",
+          reason: "Publicación inicial de semana",
           changedById: actor.id,
         },
       });
@@ -839,7 +827,7 @@ export async function publishSchedulePeriod(
     ))
       await reconcileAttendanceForEmployment(tx, employmentId);
     return { id: publication.id, idempotent: false };
-  }, 60_000).catch((error) => {
+  }).catch((error) => {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       (error.code === "P2002" || error.code === "P2034")
@@ -878,7 +866,6 @@ export async function copyPreviousScheduleWeek(
       include: { shifts: true, branch: true },
     });
     if (!target) throw new Error("Semana destino no encontrada.");
-    await assertActiveBranch(tx, target.branchId);
     assertSchedulingBranchAccess(
       actor.role,
       actor.accessibleBranchIds,
@@ -965,14 +952,12 @@ export async function applyScheduleTemplate(
     });
     if (!template?.active || !template.branchId || !template.branch)
       throw new Error("Plantilla no disponible para una sucursal.");
-    await assertActiveBranch(tx, template.branchId);
     assertSchedulingBranchAccess(
       actor.role,
       actor.accessibleBranchIds,
       template.branchId,
     );
     const periodStart = dateOnly(input.weekStart);
-    if (periodStart.getUTCDay() !== 1) throw new Error("Selecciona el lunes de la semana.");
     const periodEnd = weekEnd(periodStart);
     const period = await tx.schedulePeriod.upsert({
       where: {
@@ -1037,7 +1022,7 @@ export async function applyScheduleTemplate(
       }
     }
     return { created, periodId: period.id, branchId: template.branchId };
-  }, 60_000);
+  }, 20_000);
 }
 
 export async function upsertStaffingRequirement(
