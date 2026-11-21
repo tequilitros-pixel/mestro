@@ -1,0 +1,16 @@
+(node:41411) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+PASS 1 employee without User preserves unknown start/pay/jornada
+PASS 2 linked User, HOME, ALLOWED, PayRate, jornada created atomically
+PASS 3 edit visible name
+PASS 4 HOME history preserved
+PASS 5 rate change retains old amount
+PASS 6 jornada history preserved
+PASS 7 duplicate ALLOWED rejected
+PASS 8 end ALLOWED retains original assignment
+PASS 9 termination requires reason and valid date
+PASS 10 termination preserves shift, rates and assignments
+PASS 11 terminated Employment cannot reopen or change rate
+PASS 12 rehire creates new Employment and keeps historical one closed
+PASS 13 duplicate rehire rejected
+13/13 service integration PASS

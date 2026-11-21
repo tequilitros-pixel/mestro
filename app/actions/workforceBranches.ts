@@ -82,12 +82,15 @@ export async function updateWorkforceBranchAction(input: {
   branchId: string; name: string; code: string; address?: string; timezone: string; active: boolean;
   templateApplyMode: "ASK_BEFORE_APPLY" | "AUTO_CREATE_DRAFT" | "DO_NOT_APPLY";
   defaultScheduleTemplateId?: string | null;
+  geofence?: BranchGeofenceSaveInput;
 }) {
   const admin = await requireAdmin();
   const name = input.name.trim();
   const code = normalizeBranchCode(input.code);
   if (name.length < 2 || !validBranchCode(code)) return { error: "Nombre o código de sucursal inválido." };
   if (!validTimezone(input.timezone)) return { error: "La zona horaria IANA no es válida." };
+  const geofenceState = input.geofence ? getBranchGeofenceSaveState(input.geofence) : null;
+  if (geofenceState?.error) return { error: geofenceState.error };
   try {
     await withRlsContext(admin, async (tx) => {
       if (await tx.branch.findFirst({ where: { code, id: { not: input.branchId } }, select: { id: true } })) throw new Error("Ya existe una sucursal con ese código.");
@@ -95,10 +98,18 @@ export async function updateWorkforceBranchAction(input: {
         const template = await tx.scheduleTemplate.findFirst({ where: { id: input.defaultScheduleTemplateId, branchId: input.branchId, active: true }, select: { id: true } });
         if (!template) throw new Error("La plantilla no pertenece a esta sucursal.");
       }
+      const branch = input.geofence
+        ? await tx.branch.findUnique({ where: { id: input.branchId }, include: { geofence: { include: { branches: { select: { id: true } } } } } })
+        : null;
+      if (input.geofence && !branch) throw new Error("Sucursal no encontrada.");
       await tx.branch.update({
         where: { id: input.branchId },
         data: { name, code, address: input.address?.trim() || null, timezone: input.timezone, active: input.active, templateApplyMode: input.templateApplyMode, defaultScheduleTemplateId: input.defaultScheduleTemplateId || null },
       });
+      if (input.geofence) {
+        if (geofenceState!.shouldEnable) await assertActiveBranch(tx, input.branchId);
+        await persistBranchGeofence(tx, { ...branch!, name }, input.geofence, geofenceState!);
+      }
     });
     revalidatePath(BRANCHES_PATH);
     revalidatePath("/administration/schedule");
@@ -108,7 +119,7 @@ export async function updateWorkforceBranchAction(input: {
   }
 }
 
-export async function updateBranchGeofenceAction(input: { branchId: string; enabled: boolean; latitude: number; longitude: number; radius: number }) {
+export async function updateBranchGeofenceAction(input: { branchId: string } & BranchGeofenceSaveInput) {
   const admin = await requireAdmin();
   if (input.enabled && !validGeofenceConfig(input.latitude, input.longitude, input.radius)) return { error: "Coordenadas o radio de geozona inválidos." };
   try {
@@ -129,9 +140,56 @@ export async function updateBranchGeofenceAction(input: { branchId: string; enab
     });
     revalidatePath(BRANCHES_PATH);
     revalidatePath("/workforce/clock");
+    revalidatePath("/workforce/kiosk");
     return { success: true } as const;
   } catch (error) {
     return { error: error instanceof Error ? error.message : "No se pudo guardar la geozona." };
+  }
+}
+
+let lastAddressSearchAt = 0;
+
+export async function searchBranchAddressAction(query: string) {
+  await requireAdmin();
+  const normalized = query.trim();
+  if (normalized.length < 3) return { error: "Escribe al menos 3 caracteres para buscar." } as const;
+  if (Date.now() - lastAddressSearchAt < 1000) return { error: "Espera un momento antes de buscar otra vez." } as const;
+
+  lastAddressSearchAt = Date.now();
+  const endpoint = process.env.MAESTRO_GEOCODER_URL ?? "https://nominatim.openstreetmap.org/search";
+  const url = new URL(endpoint);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("countrycodes", "mx");
+  url.searchParams.set("limit", "5");
+  url.searchParams.set("q", normalized);
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "Accept-Language": "es-MX,es;q=0.9",
+        "User-Agent": "MAESTRO geofence admin search (+https://maestro-destiladora.space)",
+      },
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return { error: "El buscador de lugares no está disponible." } as const;
+    const payload: unknown = await response.json();
+    const results = Array.isArray(payload)
+      ? payload.flatMap((item) => {
+          if (!item || typeof item !== "object") return [];
+          const record = item as Record<string, unknown>;
+          const latitude = Number(record.lat);
+          const longitude = Number(record.lon);
+          const displayName = typeof record.display_name === "string" ? record.display_name.trim() : "";
+          if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !displayName) return [];
+          return [{ placeId: String(record.place_id ?? `${latitude}:${longitude}`), displayName, latitude, longitude }];
+        })
+      : [];
+    return { results } as const;
+  } catch {
+    return { error: "No pudimos consultar el buscador de lugares." } as const;
   }
 }
 

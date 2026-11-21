@@ -1,0 +1,172 @@
+{
+  "retiredAt": "2026-09-06T17:40:29.964Z",
+  "history": [
+    {
+      "id": "cmtq35bmr0004ybtwk1kht9bj",
+      "employments": [
+        {
+          "id": "cmtq35bqa0005ybtwx8w4uf6r",
+          "status": "ACTIVE",
+          "endedAt": null,
+          "terminationReason": null,
+          "retained": {
+            "shifts": 0,
+            "payRates": 0,
+            "branchAssignments": 0,
+            "jornadaPolicies": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "cmtq35dni0006ybtwxa4rbivu",
+      "employments": [
+        {
+          "id": "cmtq35dqw0007ybtwftrbi32y",
+          "status": "TERMINATED",
+          "endedAt": "2026-04-01T00:00:00.000Z",
+          "terminationReason": "Fin QA",
+          "retained": {
+            "shifts": 1,
+            "payRates": 2,
+            "branchAssignments": 3,
+            "jornadaPolicies": 2
+          }
+        },
+        {
+          "id": "cmtq35zis000hybtwvd176p0h",
+          "status": "ACTIVE",
+          "endedAt": null,
+          "terminationReason": null,
+          "retained": {
+            "shifts": 0,
+            "payRates": 0,
+            "branchAssignments": 0,
+            "jornadaPolicies": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "cmtq3bh8l0000fntw6hx843xj",
+      "employments": [
+        {
+          "id": "cmtq3bhbx0001fntwatqfj6k6",
+          "status": "ACTIVE",
+          "endedAt": null,
+          "terminationReason": null,
+          "retained": {
+            "shifts": 0,
+            "payRates": 1,
+            "branchAssignments": 3,
+            "jornadaPolicies": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "cmtq3cwti0007fntwjauw470p",
+      "employments": [
+        {
+          "id": "cmtq3cwxq0008fntwlcpmes80",
+          "status": "ACTIVE",
+          "endedAt": null,
+          "terminationReason": null,
+          "retained": {
+            "shifts": 0,
+            "payRates": 1,
+            "branchAssignments": 2,
+            "jornadaPolicies": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "cmtq3f0cy000dfntwl89by94q",
+      "employments": [
+        {
+          "id": "cmtq3f0fy000efntwyunxhtgw",
+          "status": "TERMINATED",
+          "endedAt": "2026-09-06T00:00:00.000Z",
+          "terminationReason": "Fin de prueba UX",
+          "retained": {
+            "shifts": 0,
+            "payRates": 2,
+            "branchAssignments": 3,
+            "jornadaPolicies": 1
+          }
+        },
+        {
+          "id": "cmtq3fdke000lfntw8hv3y604",
+          "status": "ACTIVE",
+          "endedAt": null,
+          "terminationReason": null,
+          "retained": {
+            "shifts": 0,
+            "payRates": 0,
+            "branchAssignments": 0,
+            "jornadaPolicies": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "cmtq3fxsg000mfntwxxbqu1vx",
+      "employments": [
+        {
+          "id": "cmtq3fxv4000nfntwteue8mwj",
+          "status": "TERMINATED",
+          "endedAt": "2026-09-06T00:00:00.000Z",
+          "terminationReason": "Fin de prueba UX",
+          "retained": {
+            "shifts": 0,
+            "payRates": 2,
+            "branchAssignments": 3,
+            "jornadaPolicies": 1
+          }
+        },
+        {
+          "id": "cmtq3gclx000ufntwqu15yypj",
+          "status": "ACTIVE",
+          "endedAt": null,
+          "terminationReason": null,
+          "retained": {
+            "shifts": 0,
+            "payRates": 0,
+            "branchAssignments": 0,
+            "jornadaPolicies": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "cmtq3jdax0000z9two4ozkxjf",
+      "employments": [
+        {
+          "id": "cmtq3jdge0001z9tworyyhbwl",
+          "status": "TERMINATED",
+          "endedAt": "2026-09-06T00:00:00.000Z",
+          "terminationReason": "Fin de prueba UX",
+          "retained": {
+            "shifts": 0,
+            "payRates": 2,
+            "branchAssignments": 3,
+            "jornadaPolicies": 1
+          }
+        },
+        {
+          "id": "cmtq3ju8v0008z9tw1snggud6",
+          "status": "ACTIVE",
+          "endedAt": null,
+          "terminationReason": null,
+          "retained": {
+            "shifts": 1,
+            "payRates": 0,
+            "branchAssignments": 1,
+            "jornadaPolicies": 0
+          }
+        }
+      ]
+    }
+  ]
+}

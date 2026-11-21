@@ -1,0 +1,19 @@
+PASS visible navigation, official employees route, desktop table and new CTA
+PASS mobile cards and immediately visible new CTA
+SUBMIT Guardar empleado
+PASS create employee with HOME, ALLOWED, rate and jornada; no User or invented start
+SUBMIT Guardar nombre
+PASS edit employee
+SUBMIT Asignar sucursal
+PASS change HOME with historical assignment retained
+SUBMIT Guardar nueva tarifa
+PASS rate history
+SUBMIT Dar de baja
+PASS termination preserves history and no physical delete
+SUBMIT Recontratar
+PASS rehire with historical contract retained
+SUBMIT Asignar sucursal
+SUBMIT Aplicar a próxima semana
+PASS default template applied explicitly as draft
+PASS normal employee denied list and create routes
+EMPLOYEES BROWSER QA PASS

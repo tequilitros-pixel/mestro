@@ -1,0 +1,8 @@
+PASS PRODUCTION branches read/edit through restricted app runtime
+PASS PRODUCTION employees
+PASS PRODUCTION bulk template creates 3 QA drafts
+PASS PRODUCTION explicit QA publication
+PASS PRODUCTION mobile layout
+PASS PRODUCTION employee published date/time/branch
+PASS PRODUCTION employee admin authorization
+PRODUCTION BROWSER QA PASS

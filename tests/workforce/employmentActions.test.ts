@@ -10,3 +10,14 @@ test("pay-rate domain errors return to the employee detail instead of reaching t
   assert.match(action, /catch\s*\(cause\)/);
   assert.match(action, /redirect\(`\/administration\/workforce\/employees\/\$\{encodeURIComponent\(employeeId\)\}\?error=/);
 });
+
+test("identity archive and Employee active actions are administrative and preserve Employment history", async () => {
+  const service = await readFile(new URL("../../lib/workforce/employment/service.ts", import.meta.url), "utf8");
+  const action = await readFile(new URL("../../app/actions/workforceEmployment.ts", import.meta.url), "utf8");
+  assert.match(service, /export async function setEmployeeActive/);
+  assert.match(service, /export async function archiveEmployeeIdentity/);
+  assert.match(service, /tx\.userSession\.deleteMany/);
+  assert.match(service, /pinHash: null/);
+  assert.match(action, /changeWorkforceEmployeeActiveAction/);
+  assert.match(action, /archiveWorkforceIdentityAction/);
+});

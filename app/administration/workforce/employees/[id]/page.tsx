@@ -1,12 +1,29 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Card } from "@/components/ui/Card";
+import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEmployee } from "@/lib/workforce/employment/service";
-import { addWorkforceAllowedBranchAction, changeWorkforceEmploymentStatusAction, changeWorkforceHomeAction, changeWorkforcePayRateAction } from "@/app/actions/workforceEmployment";
-import { applyWorkforceScheduleTemplateAction } from "@/app/actions/workforceScheduling";
+import {
+  createWorkforceEmployeeUserAction,
+  changeWorkforceEmployeeActiveAction,
+  changeWorkforceEmploymentStatusAction,
+  changeWorkforceHomeAction,
+  changeWorkforceJornadaAction,
+  changeWorkforcePayRateAction,
+  rehireWorkforceEmployeeAction,
+  toggleWorkforceAllowedBranchAction,
+  updateWorkforceEmployeeAction,
+  setWorkforceEmployeeUserAction,
+} from "@/app/actions/workforceEmployment";
+import { SubmitButton } from "../SubmitButton";
+import { ConfirmSubmitButton } from "../ConfirmSubmitButton";
+import { getEmployee, listEligibleUsers } from "@/lib/workforce/employment/service";
 
-const field = "w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm";
-const date = (value: Date | null) => value?.toISOString().slice(0, 10) ?? "—";
+const field = "mt-1 w-full rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm";
+const panel = "space-y-4 rounded-xl border border-outline-variant p-4 sm:p-5";
+const button = "min-h-11 rounded-lg bg-primary px-4 py-2 font-semibold text-on-primary";
+const states: Record<string, string> = { ACTIVE: "Activo", INACTIVE: "Inactivo", TERMINATED: "Baja" };
+const rateLabels: Record<string, string> = { HOURLY: "hora", DAILY: "día", WEEKLY: "semana", SALARY: "salario" };
+const jornadas: Record<string, string> = { DAY: "Diurna", NIGHT: "Nocturna", MIXED: "Mixta" };
 
 export default async function WorkforceEmployeeDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; assignedBranch?: string }> }) {
   const { id } = await params;

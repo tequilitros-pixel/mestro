@@ -74,14 +74,6 @@ async function validateAssignedShift(
     where: { id: input.employmentId },
     include: { branchAssignments: true },
   });
-  const branchAuthorized = Boolean(
-    employment?.branchAssignments.some(
-      (item) =>
-        item.branchId === input.branchId &&
-        item.effectiveFrom <= input.startAt &&
-        (!item.effectiveTo || item.effectiveTo >= input.endAt),
-    ),
-  );
   const baseFacts = validateShiftFacts({
     shift: {
       employmentId: input.employmentId,
@@ -93,7 +85,6 @@ async function validateAssignedShift(
     periodStart: input.periodStart,
     periodEnd: input.periodEnd,
     employmentStatus: employment?.status,
-    branchAuthorized,
     overlaps: false,
   });
   if (baseFacts.blockers.length)
@@ -161,7 +152,7 @@ export async function getScheduleBoard(
         },
       }),
       prisma.employment.findMany({
-        where: scheduleEligibleEmploymentWhere(branchId, start, end),
+        where: scheduleEligibleEmploymentWhere(),
         include: {
           employee: true,
           availabilityRules: true,
@@ -268,19 +259,7 @@ export async function getGlobalScheduleBoard(
       throw new Error("Sucursal no encontrada.");
   }
 
-  const employmentScope =
-    actor.role === "ADMIN"
-      ? { status: "ACTIVE" as const }
-      : {
-          status: "ACTIVE" as const,
-          branchAssignments: {
-            some: {
-              branchId: { in: accessibleBranchIds },
-              effectiveFrom: { lte: end },
-              OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
-            },
-          },
-        };
+  const employmentScope = { status: "ACTIVE" as const };
   const previousStart = new Date(start.getTime() - 7 * 86_400_000);
   const previousEnd = weekEnd(previousStart);
   const [periods, previousPeriods, employments, requirements, workforcePolicy, templates] =

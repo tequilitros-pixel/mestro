@@ -3,11 +3,14 @@ import { notFound } from "next/navigation";
 import { requireModuleAccess } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 
-export default async function WorkforceV1Layout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+const tabs = [
+  ["employees", "Empleados"], ["schedule", "Programar horarios"],
+  ["clock", "Checador"],
+  ["clock-corrections", "Solicitudes"], ["attendance", "Asistencia"],
+  ["timesheets", "Horas trabajadas"], ["overtime", "Horas extra"],
+  ["payroll", "Nómina"], ["branches", "Sucursales"], ["settings", "Configuración"],
+];
+export default async function WorkforceLayout({ children }: { children: React.ReactNode }) {
   if (!workforceV1Enabled()) notFound();
   await requireModuleAccess("/administration/workforce");
   return (

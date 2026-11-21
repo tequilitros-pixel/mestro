@@ -9,12 +9,14 @@ import {
   evaluateGeofence,
   geofenceDecision,
   geofenceMessage,
+  resolveBranchGeofencePolicy,
   type LocationInput,
 } from "@/lib/workforce/geofence";
 import {
   assertUnscheduledWorkPolicy,
   shiftLinkProximityMilliseconds,
 } from "./policy";
+import { localBusinessDate } from "../timesheet/rules";
 import { buildEffectiveClockStream, type ClockType } from "./effectiveStream";
 import {
   clockState,
@@ -27,15 +29,6 @@ export type ClockActor = { id: string; role: string };
 export type ClockServiceContext = { clock: WorkforceTimeProvider; transactionTimeoutMs?: number };
 const defaultContext: ClockServiceContext = { clock: systemWorkforceClock };
 const sourceValues = new Set(["PERSONAL", "KIOSK"]);
-function civilDate(value: Date, timezone: string) {
-  const text = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(value);
-  return new Date(`${text}T00:00:00.000Z`);
-}
 async function serializable<T>(
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
   timeout = 15_000,
@@ -189,6 +182,7 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string, c
   const stream = await effectiveFor(tx, employmentId);
   const sessions = reconstructWorkSessions(stream);
   const desiredIds = new Set(sessions.map((session) => `native_${session.key}`));
+  const sessionBusinessDates: Date[] = [];
   const staleSessions = await tx.workSession.findMany({
     where: {
       employmentId,
@@ -225,6 +219,9 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string, c
     const eventDate = session.startedAt ?? session.events[0].occurredAt;
     const workforcePolicy = await resolveWorkforcePolicy(eventDate, tx);
     const timezone = branch.timezone ?? workforcePolicy.companyTimezone;
+    const sessionBusinessDate =
+      shift?.businessDate ?? localBusinessDate(eventDate, timezone);
+    sessionBusinessDates.push(sessionBusinessDate);
     const id = `native_${session.key}`;
     const existing = await tx.workSession.findUnique({ where: { id } });
     await tx.workSession.upsert({
@@ -232,12 +229,7 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string, c
       update: {
         branchId: session.branchId,
         shiftId: shift?.id ?? null,
-        businessDate:
-          shift?.businessDate ??
-          civilDate(
-            eventDate,
-            timezone,
-          ),
+        businessDate: sessionBusinessDate,
         startedAt: session.startedAt,
         endedAt: session.endedAt,
         workedMinutes: session.workedMinutes,
@@ -251,12 +243,7 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string, c
         employmentId,
         branchId: session.branchId,
         shiftId: shift?.id ?? null,
-        businessDate:
-          shift?.businessDate ??
-          civilDate(
-            eventDate,
-            timezone,
-          ),
+        businessDate: sessionBusinessDate,
         startedAt: session.startedAt,
         endedAt: session.endedAt,
         workedMinutes: session.workedMinutes,
@@ -281,7 +268,7 @@ async function materialize(tx: Prisma.TransactionClient, employmentId: string, c
       throw new Error("No se reconstruye una sesión legacy.");
   }
   await reconcileAttendanceForEmployment(tx, employmentId, context.clock.now());
-  await signalTimesheetsForEmployment(tx, employmentId);
+  await signalTimesheetsForEmployment(tx, employmentId, sessionBusinessDates);
   return { stream, sessions };
 }
 
@@ -324,6 +311,9 @@ export async function getClockDashboard(actor: ClockActor, context: ClockService
     employment,
     branches: branches.map((a) => a.branch),
     shifts,
+    displayEvents: stream,
+    companyTimezone: locationPolicy.companyTimezone,
+    displayNow: now,
     state,
     lastEvent: stream.at(-1) ?? null,
     locationPolicy: {
@@ -390,6 +380,8 @@ export async function recordClockEvent(
       stream.map((e) => e.type).lastIndexOf("CLOCK_OUT") + 1,
     );
     const state = clockState(open);
+    if (!open.some((event) => event.type === "CLOCK_IN") && input.type === "CLOCK_OUT")
+      throw new Error("CLOCK_OUT requiere una entrada activa válida.");
     if (!(
       (state === "NO_SESSION" && input.type === "CLOCK_IN") ||
       (state === "CLOCKED_IN" &&
@@ -401,6 +393,7 @@ export async function recordClockEvent(
       where: { id: input.branchId },
       include: { geofence: true },
     });
+    const branchPolicy = resolveBranchGeofencePolicy(branch, policy);
     const requiresGeolocation = input.type === "CLOCK_IN"
       ? policy.requireGeolocationClockIn
       : input.type === "CLOCK_OUT"
@@ -410,11 +403,11 @@ export async function recordClockEvent(
       branch,
       input.location,
       requiresGeolocation,
-      policy.maximumGpsAccuracyMeters,
+      branchPolicy.maximumGpsAccuracyMeters,
     );
     const locationDecision = geofenceDecision(
       geolocation.result,
-      policy.geofenceOutsideBehavior,
+      branchPolicy.geofenceOutsideBehavior,
     );
     if (!locationDecision.allow)
       throw new Error(geofenceMessage(geolocation) ?? "No se pudo validar la ubicación.");
@@ -432,12 +425,12 @@ export async function recordClockEvent(
     });
     await materialize(tx, input.employmentId, context);
     let attendanceExceptionId: string | null = null;
-    if (locationDecision.needsReview && policy.requireOutsideGeofenceReview) {
+    if (locationDecision.needsReview && branchPolicy.requireOutsideGeofenceReview) {
       const exception = await tx.attendanceException.create({
         data: {
           employmentId: input.employmentId,
           branchId: input.branchId,
-          businessDate: civilDate(now, branch.timezone ?? policy.companyTimezone),
+          businessDate: localBusinessDate(now, branch.timezone ?? policy.companyTimezone),
           type: "OUTSIDE_GEOFENCE",
           severity: "WARNING",
           blocking: false,
@@ -445,8 +438,9 @@ export async function recordClockEvent(
           fingerprint: `geofence:${event.id}`,
           policySnapshot: {
             policyVersion: policy.version,
+            geofenceMode: branchPolicy.mode,
             result: geolocation.result,
-            outsideBehavior: policy.geofenceOutsideBehavior,
+            outsideBehavior: branchPolicy.geofenceOutsideBehavior,
           },
           detectedAt: now,
           evaluatedAt: now,
@@ -484,6 +478,7 @@ export async function requestCorrection(
   context: ClockServiceContext = defaultContext,
 ) {
   const employment = await resolveOwnActiveEmployment(actor);
+  if (!employment.employee.active) throw new Error("Tu perfil de empleado está inactivo.");
   if (input.reason.trim().length < 5) throw new Error("Razón demasiado corta.");
   const targets = Number(Boolean(input.targetClockEventId)) +
     Number(Boolean(input.targetCorrectionId));
@@ -554,6 +549,77 @@ export async function requestCorrection(
     },
   });
 }
+
+export async function applyAdminClockCorrection(
+  actor: ClockActor,
+  input: {
+    employmentId: string;
+    type: "MODIFY_OCCURRED_TIME" | "ADD_MISSING_EVENT" | "VOID_EVENT";
+    targetClockEventId?: string | null;
+    branchId?: string | null;
+    proposedEventType?: ClockType | null;
+    proposedOccurredAt?: Date | null;
+    reason: string;
+  },
+  context: ClockServiceContext = defaultContext,
+) {
+  if (actor.role !== "ADMIN") throw new Error("No autorizado.");
+  if (input.reason.trim().length < 5) throw new Error("Razón obligatoria.");
+  const hasTarget = Boolean(input.targetClockEventId);
+  if (input.type === "ADD_MISSING_EVENT" && (hasTarget || !input.branchId || !input.proposedEventType || !input.proposedOccurredAt))
+    throw new Error("Evento faltante requiere tipo, hora y sucursal.");
+  if ((input.type === "MODIFY_OCCURRED_TIME" || input.type === "VOID_EVENT") !== hasTarget)
+    throw new Error("La corrección requiere exactamente un objetivo.");
+  if (input.type === "MODIFY_OCCURRED_TIME" && !input.proposedOccurredAt)
+    throw new Error("Cambio de hora requiere una hora propuesta.");
+  if (input.type === "VOID_EVENT" && input.proposedOccurredAt)
+    throw new Error("Anulación no acepta hora propuesta.");
+  if (input.proposedOccurredAt && !Number.isFinite(input.proposedOccurredAt.getTime()))
+    throw new Error("Hora propuesta inválida.");
+  const now = context.clock.now();
+  if (input.proposedOccurredAt && input.proposedOccurredAt.getTime() > now.getTime() + 5 * 60000)
+    throw new Error("La hora propuesta no puede estar en el futuro.");
+
+  return serializable(async (tx) => {
+    await setRlsContext(tx, actor);
+    await lockEmployment(tx, input.employmentId);
+    const employment = await tx.employment.findUnique({ where: { id: input.employmentId } });
+    if (!employment) throw new Error("Employment no encontrado.");
+
+    let targetBranchId = input.branchId ?? null;
+    if (input.targetClockEventId) {
+      const target = await tx.clockEvent.findFirst({
+        where: { id: input.targetClockEventId, employmentId: input.employmentId },
+        select: { id: true, branchId: true },
+      });
+      if (!target) throw new Error("Evento objetivo inexistente.");
+      targetBranchId ??= target.branchId;
+    }
+    if (input.type === "ADD_MISSING_EVENT") {
+      const branch = await tx.branch.findFirst({ where: { id: input.branchId!, active: true }, select: { id: true } });
+      if (!branch) throw new Error("Sucursal activa inexistente.");
+    }
+    const correction = await tx.clockCorrection.create({
+      data: {
+        employmentId: input.employmentId,
+        branchId: targetBranchId,
+        targetClockEventId: input.targetClockEventId ?? null,
+        type: input.type,
+        proposedEventType: input.proposedEventType ?? null,
+        proposedOccurredAt: input.proposedOccurredAt ?? null,
+        reason: input.reason.trim(),
+        status: "APPROVED",
+        requestedById: actor.id,
+        approvedById: actor.id,
+        approvedAt: now,
+      },
+    });
+    await materialize(tx, input.employmentId, context);
+    await signalTimesheetsForEmployment(tx, input.employmentId);
+    return correction;
+  }, context.transactionTimeoutMs);
+}
+
 export async function decideCorrection(
   actor: ClockActor,
   input: {
@@ -565,6 +631,8 @@ export async function decideCorrection(
 ) {
   if (actor.role !== "ADMIN")
     throw new Error("No autorizado.");
+  if (input.decision === "REJECTED" && (input.rejectionReason?.trim().length ?? 0) < 5)
+    throw new Error("Motivo de rechazo obligatorio.");
   return serializable(async (tx) => {
     const correction = await tx.clockCorrection.findUnique({
       where: { id: input.correctionId },
@@ -585,8 +653,7 @@ export async function decideCorrection(
               status: "REJECTED",
               rejectedById: actor.id,
               rejectedAt: context.clock.now(),
-              rejectionReason:
-                input.rejectionReason?.trim() || "Rechazada por manager",
+              rejectionReason: input.rejectionReason!.trim(),
             },
     });
     if (input.decision === "APPROVED")
@@ -594,15 +661,45 @@ export async function decideCorrection(
     return updated;
   }, context.transactionTimeoutMs);
 }
-export async function listPendingCorrections() {
+
+const correctionListInclude = {
+  employment: { include: { employee: true } },
+  branch: true,
+  targetClockEvent: { include: { branch: true } },
+  requestedBy: { select: { name: true } },
+  approvedBy: { select: { name: true } },
+  rejectedBy: { select: { name: true } },
+} as const;
+
+type CorrectionStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+
+export async function listCorrections(input: {
+  status?: CorrectionStatus;
+  branchId?: string;
+  requestedFrom?: Date;
+  requestedTo?: Date;
+} = {}) {
   return prisma.clockCorrection.findMany({
-    where: { status: "PENDING" },
-    include: {
-      employment: { include: { employee: true } },
-      branch: true,
-      targetClockEvent: true,
-      requestedBy: { select: { name: true } },
+    where: {
+      status: input.status,
+      branchId: input.branchId || undefined,
+      requestedAt: input.requestedFrom || input.requestedTo
+        ? { gte: input.requestedFrom, lt: input.requestedTo }
+        : undefined,
     },
+    include: correctionListInclude,
     orderBy: { requestedAt: "asc" },
   });
+}
+
+export async function listOwnCorrections(actor: ClockActor) {
+  return prisma.clockCorrection.findMany({
+    where: { requestedById: actor.id },
+    include: correctionListInclude,
+    orderBy: [{ requestedAt: "desc" }, { id: "desc" }],
+  });
+}
+
+export async function listPendingCorrections() {
+  return listCorrections({ status: "PENDING" });
 }

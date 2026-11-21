@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { Prisma, type WorkforcePayrollAdjustmentDirection } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mondayOf, sundayOf } from "@/lib/workforce/timesheet/rules";
+import { normalizeEmploymentStatusFilter, type EmploymentStatusFilter } from "@/lib/workforce/timesheet/visibility";
 import { assertPayrollAdmin, calculatePayrollMoney, effectivePayRateBlocker } from "./rules";
 
 type Tx = Prisma.TransactionClient;
@@ -245,10 +246,18 @@ export async function setPayrollCategoryActive(actor: PayrollActor, input: { id:
   return prisma.workforcePayrollCategory.update({ where: { id: input.id }, data: { active: input.active } });
 }
 
-export async function getPayrollBoard(inputDate: Date) {
+function payrollEmploymentWhere(filter: EmploymentStatusFilter): Prisma.EmploymentWhereInput {
+  if (filter === "ALL") return {};
+  if (filter === "ACTIVE") return { status: "ACTIVE", employee: { active: true } };
+  if (filter === "TERMINATED") return { status: "TERMINATED" };
+  return { OR: [{ status: "INACTIVE" }, { employee: { active: false } }] };
+}
+
+export async function getPayrollBoard(inputDate: Date, requestedEmploymentStatus?: string) {
   const start = mondayOf(inputDate), end = sundayOf(start);
+  const employmentStatus = normalizeEmploymentStatusFilter(requestedEmploymentStatus);
   const sheets = await prisma.timesheet.findMany({
-    where: { periodStart: start },
+    where: { periodStart: start, employment: payrollEmploymentWhere(employmentStatus) },
     include: { employment: { include: { employee: true } }, payrollLine: true },
     orderBy: { employment: { employee: { displayName: "asc" } } },
   });

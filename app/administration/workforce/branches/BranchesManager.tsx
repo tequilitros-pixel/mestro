@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 import {
   createWorkforceBranchAction,
   reviewGeolocationEvidenceAction,
@@ -10,7 +11,14 @@ import {
   updateWorkforceBranchAction,
 } from "@/app/actions/workforceBranches";
 import { useToast } from "@/components/ui/Toast";
+import GeofenceLocationEditor from "@/components/GeofenceLocationEditor";
 import { MapPinIcon, PlusIcon, UsersIcon, ClockIcon } from "@/components/ui/icons";
+import {
+  geofenceResultLabel,
+  globalGeofenceMode,
+  resolveBranchGeofencePolicy,
+  type BranchGeofenceMode,
+} from "@/lib/workforce/geofence";
 
 type Template = { id: string; name: string; branchId: string | null; active: boolean; shifts: { id: string; dayOfWeek: number; startTime: string | null; endTime: string | null; breakMinutes: number }[] };
 type Branch = {
@@ -22,6 +30,7 @@ type Branch = {
   color: string | null;
   timezone: string | null;
   geofenceEnabled: boolean;
+  geofenceMode?: BranchGeofenceMode | null;
   templateApplyMode: "ASK_BEFORE_APPLY" | "AUTO_CREATE_DRAFT" | "DO_NOT_APPLY";
   defaultScheduleTemplateId: string | null;
   defaultScheduleTemplate: { id: string; name: string; active: boolean } | null;
@@ -46,6 +55,10 @@ type Evidence = {
 };
 
 const fieldClass = "h-10 w-full rounded-lg border border-outline-variant bg-background px-3 text-sm text-on-surface outline-none focus:border-primary";
+
+function policyMode(settings: Settings) {
+  return globalGeofenceMode(settings);
+}
 
 export default function BranchesManager({
   initialBranches,
@@ -103,7 +116,8 @@ export default function BranchesManager({
             <span className={branch.active ? "text-xs font-semibold text-tertiary" : "text-xs font-semibold text-outline"}>{branch.active ? "Activa" : "Inactiva"}</span>
             <span className="inline-flex items-center gap-1.5 text-xs text-on-surface-variant"><UsersIcon className="h-3.5 w-3.5" /> {branch.workforceAssignments.filter((item) => item.employment.employee.active).length}</span>
             <div className="space-y-1 text-xs text-on-surface-variant">
-              <p><MapPinIcon className="mr-1 inline h-3.5 w-3.5" />{branch.geofenceEnabled && branch.geofence ? `Geozona ${branch.geofence.radius} m` : "Geozona desactivada"}</p>
+              <p><MapPinIcon className="mr-1 inline h-3.5 w-3.5" />{branch.geofenceEnabled && branch.geofence ? `Geozona activa · ${branch.geofence.radius} m` : "Geozona desactivada"}</p>
+              <p>Modo efectivo: <strong>{resolveBranchGeofencePolicy(branch, initialSettings).mode}</strong></p>
               <p><ClockIcon className="mr-1 inline h-3.5 w-3.5" />{branch.defaultScheduleTemplate?.name ?? "Sin plantilla predeterminada"}</p>
             </div>
             <button onClick={() => setSelected(branch)} className="h-8 rounded-md border border-outline-variant px-3 text-xs font-semibold hover:border-outline">Configurar</button>
@@ -115,7 +129,7 @@ export default function BranchesManager({
         <div className="rounded-lg border border-outline-variant bg-surface-container p-4">
           <h2 className="text-base font-bold">Clock / ubicación</h2>
           <p className="mt-1 text-xs text-on-surface-variant">La ubicación se solicita sólo al checar; nunca se rastrea continuamente.</p>
-          <div className="mt-4 space-y-2 text-sm"><p>Entrada: <strong>{initialSettings.requireGeolocationClockIn ? "requerida" : "opcional"}</strong></p><p>Salida: <strong>{initialSettings.requireGeolocationClockOut ? "requerida" : "opcional"}</strong></p><p>Fuera de geozona: <strong>{initialSettings.geofenceOutsideBehavior === "BLOCK" ? "bloquear" : "permitir con excepción"}</strong></p><p>Precisión máxima: <strong>{initialSettings.maximumGpsAccuracyMeters} m</strong></p><a href="/administration/workforce/settings" className="inline-flex h-9 items-center rounded-lg border border-outline-variant px-3 text-sm font-bold text-primary">Editar política versionada</a></div>
+          <div className="mt-4 space-y-2 text-sm"><p>Modo global: <strong>{policyMode(initialSettings)}</strong></p><p>Entrada: <strong>{initialSettings.requireGeolocationClockIn ? "requiere ubicación" : "sin ubicación"}</strong></p><p>Salida: <strong>{initialSettings.requireGeolocationClockOut ? "requiere ubicación" : "sin ubicación"}</strong></p><p>Fuera de geozona: <strong>{initialSettings.geofenceOutsideBehavior === "BLOCK" ? "bloquear" : "permitir con revisión"}</strong></p><p>Precisión máxima: <strong>{initialSettings.maximumGpsAccuracyMeters} m</strong></p><a href="/administration/workforce/settings" className="inline-flex min-h-10 items-center rounded-lg border border-outline-variant px-3 text-sm font-bold text-primary">Editar política versionada</a></div>
         </div>
 
         <div className="rounded-lg border border-outline-variant bg-surface-container p-4">
@@ -124,8 +138,8 @@ export default function BranchesManager({
             {initialPendingEvidence.length === 0 && <p className="text-sm text-on-surface-variant">No hay excepciones por revisar.</p>}
             {initialPendingEvidence.filter((evidence) => evidence.clockEvent).map((evidence) => (
               <div key={evidence.id} className="rounded-md border border-outline-variant bg-background p-3 text-xs">
-                <div className="flex flex-wrap justify-between gap-2"><strong>{evidence.clockEvent?.employment.employee.displayName ?? "Empleado"}</strong><span className="text-on-surface-variant">{new Date(evidence.checkedAt).toLocaleString("es-MX")}</span></div>
-                <p className="mt-1 text-on-surface-variant">{evidence.clockEvent?.type === "CLOCK_IN" ? "Entrada" : "Salida"} · {evidence.clockEvent?.branch.name} · {evidence.result}{evidence.distanceMeters !== null ? ` · ${evidence.distanceMeters} m` : ""}</p>
+                <div className="flex flex-wrap justify-between gap-2"><strong>{evidence.clockEvent?.employment.employee.displayName ?? "Empleado"}</strong><span className="text-on-surface-variant">{formatBusinessDateTime(evidence.checkedAt)}</span></div>
+                <p className="mt-1 text-on-surface-variant">{evidence.clockEvent?.type === "CLOCK_IN" ? "Entrada" : "Salida"} · {evidence.clockEvent?.branch.name} · {geofenceResultLabel(evidence.result)}{evidence.distanceMeters !== null ? ` · ${evidence.distanceMeters} m` : ""}</p>
                 <div className="mt-2 flex gap-2"><ReviewButton evidenceId={evidence.id} decision="APPROVED" onDone={() => router.refresh()} /><ReviewButton evidenceId={evidence.id} decision="REJECTED" onDone={() => router.refresh()} /></div>
               </div>
             ))}
@@ -137,6 +151,7 @@ export default function BranchesManager({
         <BranchPanel
           branch={selected}
           templates={templates}
+          initialSettings={initialSettings}
           onClose={() => { setCreating(false); setSelected(null); }}
           onSaved={refresh}
           onError={setError}
@@ -152,7 +167,7 @@ function ReviewButton({ evidenceId, decision, onDone }: { evidenceId: string; de
   return <button disabled={busy} onClick={async () => { setBusy(true); const result = await reviewGeolocationEvidenceAction(evidenceId, decision); setBusy(false); if (!result.error) onDone(); }} className="rounded border border-outline-variant px-2 py-1 disabled:opacity-60">{decision === "APPROVED" ? "Aprobar" : "Rechazar"}</button>;
 }
 
-function BranchPanel({ branch, templates, onClose, onSaved, onError, onRefresh }: { branch: Branch | null; templates: Template[]; onClose: () => void; onSaved: (message: string) => void; onError: (message: string | null) => void; onRefresh: () => void }) {
+function BranchPanel({ branch, templates, initialSettings, onClose, onSaved, onError, onRefresh }: { branch: Branch | null; templates: Template[]; initialSettings: Settings; onClose: () => void; onSaved: (message: string) => void; onError: (message: string | null) => void; onRefresh: () => void }) {
   const [name, setName] = useState(branch?.name ?? "");
   const [code, setCode] = useState(branch?.code ?? "");
   const [address, setAddress] = useState(branch?.address ?? "");
@@ -161,6 +176,7 @@ function BranchPanel({ branch, templates, onClose, onSaved, onError, onRefresh }
   const [templateId, setTemplateId] = useState(branch?.defaultScheduleTemplateId ?? "");
   const [applyMode, setApplyMode] = useState(branch?.templateApplyMode ?? "ASK_BEFORE_APPLY");
   const [geoEnabled, setGeoEnabled] = useState(branch?.geofenceEnabled ?? false);
+  const [modeOverride, setModeOverride] = useState<"GLOBAL" | BranchGeofenceMode>(branch?.geofenceMode ?? "GLOBAL");
   const [latitude, setLatitude] = useState(branch?.geofence?.latitude.toString() ?? "");
   const [longitude, setLongitude] = useState(branch?.geofence?.longitude.toString() ?? "");
   const [radius, setRadius] = useState(branch?.geofence?.radius.toString() ?? "100");
@@ -169,7 +185,7 @@ function BranchPanel({ branch, templates, onClose, onSaved, onError, onRefresh }
   async function save() {
     setBusy(true); onError(null);
     const result = branch
-      ? await updateWorkforceBranchAction({ branchId: branch.id, name, code, address, timezone, active, templateApplyMode: applyMode, defaultScheduleTemplateId: templateId || null })
+      ? await updateWorkforceBranchAction({ branchId: branch.id, name, code, address, timezone, active, templateApplyMode: applyMode, defaultScheduleTemplateId: templateId || null, geofence: { enabled: modeOverride === "OFF" ? false : geoEnabled, mode: modeOverride === "GLOBAL" ? null : modeOverride, latitude: latitude.trim() ? Number(latitude) : null, longitude: longitude.trim() ? Number(longitude) : null, radius: Number(radius) } })
       : await createWorkforceBranchAction({ name, code, address, timezone });
     if (result.error) { setBusy(false); onError(result.error); return; }
     if (branch && (!geoEnabled || (latitude && longitude))) {
@@ -197,7 +213,7 @@ function BranchPanel({ branch, templates, onClose, onSaved, onError, onRefresh }
           <TemplateEditor branch={branch} templates={templates.filter((item) => item.branchId === branch.id)} onError={onError} onSaved={onRefresh} />
           <section className="mt-6 border-t border-outline-variant pt-5"><h3 className="font-bold">Empleados asignados</h3><div className="mt-2 flex flex-wrap gap-2">{branch.workforceAssignments.length === 0 ? <span className="text-sm text-on-surface-variant">Sin empleados asignados.</span> : branch.workforceAssignments.map((item) => <span key={`${item.employment.id}-${item.type}`} className="rounded-full border border-outline-variant px-2.5 py-1 text-xs">{item.employment.employee.displayName ?? "Sin nombre"}{item.type === "HOME" ? " · principal" : ""}</span>)}</div></section>
         </>}
-        <div className="mt-6 flex justify-end gap-2 border-t border-outline-variant pt-4"><button onClick={onClose} className="h-9 rounded-lg border border-outline-variant px-3 text-sm">Cancelar</button><button onClick={save} disabled={busy} className="h-9 rounded-lg bg-primary px-3 text-sm font-bold text-on-primary disabled:opacity-60">{busy ? "Guardando..." : "Guardar"}</button></div>
+        <div className="mt-6 flex justify-end gap-2 border-t border-outline-variant pt-4"><button onClick={onClose} className="h-9 rounded-lg border border-outline-variant px-3 text-sm">Cancelar</button><button onClick={save} disabled={busy} className="h-9 rounded-lg bg-primary px-3 text-sm font-bold text-on-primary disabled:opacity-60">{busy ? "Guardando..." : "Guardar cambios"}</button></div>
       </aside>
     </div>
   );

@@ -12,7 +12,9 @@ export type PublishedRevision = {
 
 export function latestPublishedRevisions(rows: PublishedRevision[]) {
   const latest = new Map<string, PublishedRevision>();
-  for (const row of [...rows].sort(
+  for (const row of rows
+    .filter((row) => row.revisionStatus !== "DRAFT")
+    .sort(
     (a, b) =>
       b.publicationPublishedAt.getTime() - a.publicationPublishedAt.getTime() ||
       b.revisionNumber - a.revisionNumber,

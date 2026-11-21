@@ -198,6 +198,19 @@ test("latest publication wins and exposes CHANGED", () => {
   assert.equal(row.revisionNumber, 2);
   assert.equal(calendarStatus(row), "CHANGED");
 });
+test("unpublished revision does not replace the latest published snapshot", () => {
+  const row = latestPublishedRevisions([
+    revision(),
+    revision({
+      revisionNumber: 2,
+      revisionStatus: "DRAFT",
+      startAt: new Date("2026-09-06T01:00:00Z"),
+      endAt: new Date("2026-09-06T09:00:00Z"),
+    }),
+  ])[0];
+  assert.equal(row.revisionNumber, 1);
+  assert.equal(row.startAt.toISOString(), "2026-09-06T00:00:00.000Z");
+});
 test("cancelled revision is visible as CANCELLED", () =>
   assert.equal(
     calendarStatus(revision({ revisionStatus: "CANCELLED" })),

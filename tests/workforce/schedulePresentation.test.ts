@@ -3,8 +3,15 @@ import assert from "node:assert/strict";
 import {
   canCopyPreviousWeek,
   canPublishSchedule,
+  scheduleShiftVisualState,
   scheduleWarningLabel,
 } from "../../lib/workforce/scheduling/presentation";
+
+test("published, draft, and changed-pending shifts have explicit visual states", () => {
+  assert.equal(scheduleShiftVisualState({ published: true, hasPublication: true }), "PUBLISHED");
+  assert.equal(scheduleShiftVisualState({ published: false, hasPublication: false }), "DRAFT");
+  assert.equal(scheduleShiftVisualState({ published: false, hasPublication: true }), "CHANGES_PENDING");
+});
 
 test("publication is available only for an unpublished week without blockers", () => {
   assert.equal(canPublishSchedule({ published: false, blockers: [] }), true);

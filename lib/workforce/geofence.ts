@@ -1,5 +1,21 @@
 import { distanceMeters } from "@/lib/geo";
 
+export const BRANCH_GEOFENCE_MODES = ["OFF", "WARN", "BLOCK"] as const;
+export type BranchGeofenceMode = (typeof BRANCH_GEOFENCE_MODES)[number];
+export type GeofenceOutsideBehavior = "BLOCK" | "ALLOW_WITH_EXCEPTION";
+
+export type GlobalGeofencePolicy = {
+  requireGeolocationClockIn: boolean;
+  requireGeolocationClockOut: boolean;
+  geofenceOutsideBehavior: GeofenceOutsideBehavior;
+  requireOutsideGeofenceReview: boolean;
+  maximumGpsAccuracyMeters: number;
+};
+
+export type EffectiveGeofencePolicy = GlobalGeofencePolicy & {
+  mode: BranchGeofenceMode;
+};
+
 export type LocationFailure = "PERMISSION_DENIED" | "UNAVAILABLE";
 
 export type LocationSample = {
@@ -17,8 +33,47 @@ export type LocationInput =
 
 export type GeofenceBranch = {
   geofenceEnabled: boolean;
-  geofence: { latitude: number; longitude: number; radius: number } | null;
+  geofenceMode?: BranchGeofenceMode | null;
+  geofence?: { latitude: number; longitude: number; radius: number } | null;
 };
+
+export function globalGeofenceMode(
+  policy: Pick<
+    GlobalGeofencePolicy,
+    "requireGeolocationClockIn" | "requireGeolocationClockOut" | "geofenceOutsideBehavior"
+  >,
+): BranchGeofenceMode {
+  if (!policy.requireGeolocationClockIn && !policy.requireGeolocationClockOut) return "OFF";
+  return policy.geofenceOutsideBehavior === "BLOCK" ? "BLOCK" : "WARN";
+}
+
+export function resolveBranchGeofencePolicy(
+  branch: GeofenceBranch,
+  policy: GlobalGeofencePolicy,
+): EffectiveGeofencePolicy {
+  const hasConfiguredGeofence = Boolean(branch.geofenceEnabled && branch.geofence);
+  const usesGlobalPolicy = branch.geofenceMode == null;
+  const mode = branch.geofenceMode ?? (hasConfiguredGeofence ? globalGeofenceMode(policy) : "OFF");
+
+  if (usesGlobalPolicy) {
+    return {
+      ...policy,
+      mode,
+      requireGeolocationClockIn: mode === "OFF" ? false : policy.requireGeolocationClockIn,
+      requireGeolocationClockOut: mode === "OFF" ? false : policy.requireGeolocationClockOut,
+      requireOutsideGeofenceReview: mode === "OFF" ? false : policy.requireOutsideGeofenceReview,
+    };
+  }
+
+  return {
+    ...policy,
+    mode,
+    requireGeolocationClockIn: mode !== "OFF",
+    requireGeolocationClockOut: mode !== "OFF",
+    geofenceOutsideBehavior: mode === "BLOCK" ? "BLOCK" : "ALLOW_WITH_EXCEPTION",
+    requireOutsideGeofenceReview: mode === "WARN",
+  };
+}
 
 export type GeofenceResult = {
   result:
@@ -118,5 +173,24 @@ export function geofenceMessage(result: GeofenceResult) {
       return "No pudimos verificar tu ubicación.";
     default:
       return null;
+  }
+}
+
+export function geofenceResultLabel(result: GeofenceResult["result"] | string) {
+  switch (result) {
+    case "INSIDE":
+      return "Dentro de la sucursal";
+    case "OUTSIDE":
+      return "Fuera de la geozona";
+    case "PERMISSION_DENIED":
+      return "Permiso de ubicación rechazado";
+    case "LOW_ACCURACY":
+      return "Ubicación imprecisa";
+    case "UNAVAILABLE":
+      return "Ubicación no disponible";
+    case "NOT_REQUIRED":
+      return "Ubicación no requerida";
+    default:
+      return "Revisión de ubicación";
   }
 }
