@@ -42,6 +42,8 @@ export default async function NewDistillationPage({
   if (lot.stage === "TERMINADO") redirect(`/distillation/lots/${lotId}`);
   const newUrl = `/distillation/new?lotId=${encodeURIComponent(lotId)}`;
 
+  const defaultSource = sources.find((s) => s.lotId === queryLotId) ?? sources[0];
+
   async function createDistillation(formData: FormData) {
     "use server";
     await requireModuleActionAccess("/distillation");
@@ -232,11 +234,11 @@ export default async function NewDistillationPage({
             </label>
             <label className="grid gap-2 text-sm font-semibold">
               Litros a cargar
-              <input name="loadedLiters" type="number" min="0.01" step="0.01" required className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3" />
+              <input name="loadedLiters" type="number" min="0.01" step="0.01" placeholder="Litros de esta corrida" required className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3" />
             </label>
             <label className="grid gap-2 text-sm font-semibold">
               Alcohol inicial % (opcional)
-              <input name="initialAlcohol" type="number" min="0" max="100" step="0.01" className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3" />
+              <input name="initialAlcohol" type="number" min="0" max="100" step="0.01" defaultValue={defaultSource?.initialAlcohol ?? ""} className="rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3" />
             </label>
             <p className="text-xs text-on-surface-variant">El servidor vuelve a comprobar el saldo y la capacidad al guardar; nunca permite sobreasignar una tina.</p>
             <button className="rounded-xl bg-primary px-6 py-3 font-bold text-on-primary">Abrir corrida</button>

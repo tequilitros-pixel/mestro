@@ -12,10 +12,12 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@/components/ui/icons";
- import { useEffect, useState, useCallback, startTransition } from "react";
+import { useEffect, useState, useCallback, startTransition } from "react";
 import { enqueueOperation } from "@/lib/offline/queue";
 import { formatBusinessDateTime } from "@/lib/dateTime";
 import { envelopeNumberForClose } from "@/lib/cash-cuts/envelopeNumber";
+import { TurnTransactionsLive, type PosSaleTransaction } from "@/components/cash-cuts/TurnTransactionsLive";
+import { TurnInventoryConsumption } from "@/components/cash-cuts/TurnInventoryConsumption";
 
 function localCutKey(id: string) { return `maestro:cash-cut:${id}`; }
 function saveLocalCut(cut: CashCut) { localStorage.setItem(localCutKey(cut.id), JSON.stringify(cut)); }
@@ -108,23 +110,7 @@ interface CashCut {
   responsible: { id: string; name: string };
   createdBy: { id: string; name: string };
   updatedBy: { id: string; name: string } | null;
-  posSales: Array<{
-    id: string;
-    code: string;
-    subtotal: number;
-    discountAmount: number;
-    total: number;
-    createdAt: string;
-    soldBy: { id: string; name: string };
-    items: Array<{
-      id: string;
-      name: string;
-      description: string | null;
-      quantity: number;
-      unitPrice: number;
-      lineTotal: number;
-    }>;
-  }>;
+  posSales: PosSaleTransaction[];
 }
 
 interface CloseResult {
@@ -181,6 +167,7 @@ const formatDateTime = (value: string | null | undefined) =>
   value ? formatBusinessDateTime(value) : "Sin registrar";
 
 function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
+  const [summaryTab, setSummaryTab] = useState<"resumen" | "transacciones" | "inventario">("resumen");
   const posSales = cashCut.posSales ?? [];
   const aperturaBreakdown = cashCut.denominations.filter((d) => d.context === "APERTURA");
   const cierreBreakdown = cashCut.denominations.filter((d) => d.context === "CIERRE");
@@ -218,6 +205,57 @@ function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
           </span>
         </div>
       </Card>
+
+      <div className="flex border-b border-outline-variant">
+        <button
+          type="button"
+          onClick={() => setSummaryTab("resumen")}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition ${
+            summaryTab === "resumen"
+              ? "border-primary text-primary"
+              : "border-transparent text-on-surface-variant hover:text-on-surface"
+          }`}
+        >
+          📊 Resumen del Corte
+        </button>
+        <button
+          type="button"
+          onClick={() => setSummaryTab("transacciones")}
+          className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition ${
+            summaryTab === "transacciones"
+              ? "border-primary text-primary"
+              : "border-transparent text-on-surface-variant hover:text-on-surface"
+          }`}
+        >
+          🧾 Transacciones ({posSales.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setSummaryTab("inventario")}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition ${
+            summaryTab === "inventario"
+              ? "border-primary text-primary"
+              : "border-transparent text-on-surface-variant hover:text-on-surface"
+          }`}
+        >
+          📦 Consumo de Inventario
+        </button>
+      </div>
+
+      {summaryTab === "transacciones" && (
+        <TurnTransactionsLive sales={cashCut.posSales ?? []} isOpen={false} />
+      )}
+
+      {summaryTab === "inventario" && (
+        <TurnInventoryConsumption
+          sales={cashCut.posSales ?? []}
+          totalSales={cashCut.totalSales ?? 0}
+          totalOutflows={cashCut.totalOutflows ?? 0}
+        />
+      )}
+
+      {summaryTab === "resumen" && (
+        <div className="space-y-5">
 
       <section>
         <h2 className="mb-3 text-base font-bold text-on-surface">Turno y responsables</h2>
@@ -336,6 +374,8 @@ function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
           {cashCut.notes && <Card className="mb-3"><p className="text-sm text-on-surface">{cashCut.notes}</p></Card>}
           <p className="text-sm text-on-surface-variant">{cashCut.evidences.length} evidencia(s) asociada(s) al turno.</p>
         </section>
+      )}
+        </div>
       )}
     </div>
   );
@@ -477,6 +517,7 @@ export default function CashCutDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [cashCut, setCashCut] = useState<CashCut | null>(null);
   const [step, setStep] = useState<Step>("ventas");
+  const [mainTab, setMainTab] = useState<"corte" | "transacciones" | "inventario">("corte");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -526,6 +567,9 @@ const load = useCallback(async () => {
     return <div className="mx-auto max-w-3xl p-6"><ClosedCutSummary cashCut={cashCut} /></div>;
   }
 
+  const latestSale = (cashCut.posSales ?? []).find((s) => s.status === "COMPLETADA") ?? (cashCut.posSales ?? [])[0];
+  const totalOutflows = cashCut.outflows.reduce((sum, outflow) => sum + outflow.amount, 0);
+
   return (
     <div className="max-w-2xl mx-auto p-6">
       <div className="mb-4">
@@ -535,7 +579,7 @@ const load = useCallback(async () => {
             <h1 className="text-2xl font-bold text-on-surface">{cashCut.code}</h1>
           </div>
           {!isClosed && (
-            <Button type="button" variant="secondary" onClick={() => setStep("cierre")}>
+            <Button type="button" variant="secondary" onClick={() => { setMainTab("corte"); setStep("cierre"); }}>
               Cerrar caja
             </Button>
           )}
@@ -554,27 +598,119 @@ const load = useCallback(async () => {
         )}
       </div>
 
-      <OpenCashSummary cashCut={cashCut} />
+      {latestSale && (
+        <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2.5 w-2.5 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+            </span>
+            <span className="font-semibold text-on-surface">
+              Última venta en POSpress:{" "}
+              <b className="font-mono text-primary">
+                {formatBusinessDateTime(latestSale.createdAt).split(" ").slice(-2).join(" ")}
+              </b>
+            </span>
+            <span className="text-on-surface-variant">({latestSale.soldBy.name} · ${latestSale.total.toFixed(2)})</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMainTab("transacciones")}
+            className="font-bold text-primary hover:underline shrink-0"
+          >
+            Ver en vivo →
+          </button>
+        </div>
+      )}
 
-      <Stepper current={step} cashCut={cashCut} onSelect={setStep} />
+      {/* Selector de Pestañas Principales */}
+      <div className="mb-6 flex border-b border-outline-variant">
+        <button
+          type="button"
+          onClick={() => setMainTab("corte")}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition ${
+            mainTab === "corte"
+              ? "border-primary text-primary"
+              : "border-transparent text-on-surface-variant hover:text-on-surface"
+          }`}
+        >
+          💰 Flujo de Corte
+        </button>
+        <button
+          type="button"
+          onClick={() => setMainTab("transacciones")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition ${
+            mainTab === "transacciones"
+              ? "border-primary text-primary"
+              : "border-transparent text-on-surface-variant hover:text-on-surface"
+          }`}
+        >
+          <span className="flex h-2 w-2 relative">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          </span>
+          Transacciones en Vivo
+          {cashCut.posSales && cashCut.posSales.length > 0 && (
+            <span className="rounded-full bg-surface-container-high px-2 py-0.5 text-xs text-on-surface font-mono">
+              {cashCut.posSales.length}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMainTab("inventario")}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition ${
+            mainTab === "inventario"
+              ? "border-primary text-primary"
+              : "border-transparent text-on-surface-variant hover:text-on-surface"
+          }`}
+        >
+          📦 Consumo de Inventario
+        </button>
+      </div>
 
-      {step === "ventas" && (
-        <VentasStep cashCutId={id} cashCut={cashCut} onSaved={load} disabled={isClosed} />
-      )}
-      {step === "salidas" && (
-        <SalidasStep cashCutId={id} cashCut={cashCut} onSaved={load} disabled={isClosed} />
-      )}
-      {step === "entradas" && (
-        <EntradasStep cashCutId={id} cashCut={cashCut} onSaved={load} disabled={isClosed} />
-      )}
-      {step === "evidencias" && (
-        <EvidenciasStep cashCutId={id} cashCut={cashCut} onSaved={load} disabled={isClosed} />
-      )}
-      {step === "cierre" && (
-        <CierreStep cashCutId={id} cashCut={cashCut} onSaved={load} disabled={isClosed} />
+      {mainTab === "transacciones" && (
+        <TurnTransactionsLive
+          sales={cashCut.posSales ?? []}
+          isOpen={!isClosed}
+          onRefresh={load}
+          refreshing={loading}
+        />
       )}
 
-      <StepFooterNav current={step} onSelect={setStep} />
+      {mainTab === "inventario" && (
+        <TurnInventoryConsumption
+          sales={cashCut.posSales ?? []}
+          totalSales={cashCut.totalSales ?? 0}
+          totalOutflows={totalOutflows}
+        />
+      )}
+
+      {mainTab === "corte" && (
+        <>
+          <OpenCashSummary cashCut={cashCut} />
+
+          <Stepper current={step} cashCut={cashCut} onSelect={setStep} />
+
+          {step === "ventas" && (
+            <VentasStep cashCutId={id} cashCut={cashCut} onSaved={load} disabled={isClosed} />
+          )}
+          {step === "salidas" && (
+            <SalidasStep cashCutId={id} cashCut={cashCut} onSaved={load} disabled={isClosed} />
+          )}
+          {step === "entradas" && (
+            <EntradasStep cashCutId={id} cashCut={cashCut} onSaved={load} disabled={isClosed} />
+          )}
+          {step === "evidencias" && (
+            <EvidenciasStep cashCutId={id} cashCut={cashCut} onSaved={load} disabled={isClosed} />
+          )}
+          {step === "cierre" && (
+            <CierreStep cashCutId={id} cashCut={cashCut} onSaved={load} disabled={isClosed} />
+          )}
+
+          <StepFooterNav current={step} onSelect={setStep} />
+        </>
+      )}
     </div>
   );
 }
@@ -664,14 +800,25 @@ function VentasStep({ cashCutId, cashCut, onSaved, disabled }: StepProps) {
   }
 
   const total = Object.values(values).reduce((sum, v) => sum + (Number(v) || 0), 0);
+  const posSalesCount = cashCut.posSales?.filter((s) => s.status === "COMPLETADA").length ?? 0;
+  const posTotalSales = cashCut.posSales?.filter((s) => s.status === "COMPLETADA").reduce((sum, s) => sum + s.total, 0) ?? 0;
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-on-surface-variant">
-        Si vendiste con el Punto de Venta, estos montos ya están cargados — no los vuelvas a
-        capturar aquí, porque escribir un número nuevo <span className="font-semibold">reemplaza</span>{" "}
-        (no suma) lo que ya se cobró en el POS para ese método de pago.
-      </p>
+      {posSalesCount > 0 ? (
+        <Card highlight className="border-emerald-500/40 bg-emerald-500/5">
+          <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+            ✓ Sincronizado automáticamente con POSpress
+          </p>
+          <p className="mt-1 text-xs text-on-surface-variant">
+            Se han registrado <b>{posSalesCount} ticket(s)</b> en este turno por un total de <b>${posTotalSales.toFixed(2)}</b>. Los montos por método de pago reflejan las ventas cobradas.
+          </p>
+        </Card>
+      ) : (
+        <p className="text-xs text-on-surface-variant">
+          Las ventas se van sumando automáticamente al cobrar tickets en POSpress. Si requieres registrar ventas manuales, captura el importe correspondiente.
+        </p>
+      )}
       {METODOS.map((m) => (
         <Card key={m.key}>
           <div className="flex items-center gap-3">

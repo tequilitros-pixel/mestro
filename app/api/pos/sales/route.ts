@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { PaymentMethod, PosBenefitReason, Prisma } from "@prisma/client";
@@ -15,11 +15,12 @@ import {
   type PospressInventoryRequirement,
 } from "@/lib/pos/pospressInventory";
 import { DomainError } from "@/lib/domain/errors";
-import { appendAuditEvent } from "@/lib/pos2/audit";
-import { appendOutboxEvent } from "@/lib/pos2/outbox";
-import { evaluateCapabilityShadow } from "@/lib/pos2/capabilities";
 import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
 import { assertCashCutBranch, lockCashCutOwner } from "@/lib/pos/cashCutBranchGuard";
+
+function hashPayload(payload: unknown): string {
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
 
 const ROLES_QUE_PUEDEN_VENDER = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -75,8 +76,8 @@ export async function GET(request: NextRequest) {
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
 
-  const currentCashCut = user.role === "ADMIN" ? null : await getCurrentPospressCashCut(user);
-  const scopedBranchId = user.role === "ADMIN" ? undefined : currentCashCut?.branch.id;
+  const currentCashCut = await getCurrentPospressCashCut(user);
+  const scopedBranchId = currentCashCut?.branch.id;
 
   if (user.role !== "ADMIN" && !currentCashCut) return NextResponse.json([]);
   if (scopedBranchId && branchId && branchId !== scopedBranchId) {
@@ -262,6 +263,25 @@ export async function POST(request: NextRequest) {
     where: { branchId, status: "ABIERTO" },
     orderBy: { openedAt: "desc" },
   });
+
+  // Si tiene un corte abierto en una sucursal distinta a la que intenta vender, se bloquea estrictamente
+  if (userOpenCut && userOpenCut.branchId !== branchId) {
+    return NextResponse.json(
+      {
+        error: `Tienes un corte de caja abierto en la sucursal "${userOpenCut.branch.name}". Solo puedes vender en esa sucursal mientras tu corte siga abierto.`,
+      },
+      { status: 403 }
+    );
+  }
+
+  // El corte de caja a vincular es específicamente el corte abierto del usuario, o el de la sucursal
+  const openCashCut =
+    userOpenCut && userOpenCut.branchId === branchId
+      ? userOpenCut
+      : await prisma.cashCut.findFirst({
+          where: { branchId, status: "ABIERTO" },
+          orderBy: { openedAt: "desc" },
+        });
 
   if (!openCashCut) {
     return NextResponse.json(
@@ -646,8 +666,6 @@ export async function POST(request: NextRequest) {
         operationId: clientOperationId ?? randomUUID(),
         requirements: pospressInventoryRequirements,
       });
-    } else {
-      await consumePosInventory(tx, { branchId, saleCode: code, requirements: inventoryRequirements });
     }
 
     // Suma los pagos de esta venta al corte de caja abierto de la

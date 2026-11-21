@@ -20,3 +20,10 @@ test("la semana de nomina usa medianoches locales como limites UTC", () => {
   assert.equal(range.start.toISOString(), "2026-09-14T06:00:00.000Z");
   assert.equal(range.end.toISOString(), "2026-09-21T06:00:00.000Z");
 });
+
+test("el pago base por registro se redondea a centavos sin una deduccion adicional", () => {
+  assert.equal(computeHourlyPay(1 / 3, 40), 13.33);
+  assert.equal(computeHourlyPay(2 / 3, 40), 26.67);
+  assert.equal(computeHourlyPay(0.1, 44.8), 4.48);
+  assert.equal(computeHourlyPay(1, 40) + computeHourlyPay(1, 4.8), 44.8);
+});

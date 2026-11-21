@@ -8,6 +8,7 @@ import {
   formatCommercialCaptureHint,
   formatCommercialPresentation,
   formatCommercialQuantity,
+  formatInventoryDashboardQuantity,
   getInventoryBaseUnitLabel,
   getInventoryCaptureDescriptor,
   getPiecePresentationSize,
@@ -36,7 +37,7 @@ const countNumberInputStyle = {
 };
 
 function formatCountQuantity(value: number, item: Item) {
-  return formatCommercialQuantity(value, item);
+  return formatInventoryDashboardQuantity(value, item);
 }
 
 function splitPackagesAndLoosePieces(item: Item, packageSize: number) {
@@ -488,7 +489,7 @@ export default function CountItemRow({
                 <span className="block text-xs text-on-surface-variant">Entradas</span>
                 <p className="text-sm text-on-surface-variant">
                   {item.entriesQuantity !== undefined && item.entriesQuantity !== null
-                    ? item.entriesQuantity
+                    ? formatCountQuantity(item.entriesQuantity, item)
                     : "—"}
                 </p>
               </div>
@@ -499,7 +500,7 @@ export default function CountItemRow({
                 <span className="block text-xs text-on-surface-variant">Consumido</span>
                 <p className="text-sm font-semibold text-on-surface">
                   {item.quantityConsumed !== undefined && item.quantityConsumed !== null
-                    ? item.quantityConsumed
+                    ? formatCountQuantity(item.quantityConsumed, item)
                     : "—"}
                 </p>
                 {item.costTotal !== undefined && item.costTotal !== null && item.costTotal > 0 && (

@@ -13,15 +13,15 @@ export default async function PospressTransactionsPage() {
   const allowedBranchIds = await getAccessibleBranchIds();
   if (!user) return null;
 
-  const isAdmin = user.role === "ADMIN";
-  const currentCashCut = isAdmin ? null : await getCurrentPospressCashCut(user);
+  const currentCashCut = await getCurrentPospressCashCut(user);
+  const isAdmin = user.role === "ADMIN" && !currentCashCut;
   const today = todayDateOnly();
 
   const branches = await prisma.branch.findMany({
     where: {
       active: true,
-      ...(isAdmin ? {} : currentCashCut ? { id: currentCashCut.branch.id } : { id: "__no-branch__" }),
-      ...(isAdmin && allowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
+      ...(currentCashCut ? { id: currentCashCut.branch.id } : {}),
+      ...(!currentCashCut && allowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
     },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
@@ -32,7 +32,7 @@ export default async function PospressTransactionsPage() {
       posSalesSold: {
         some: {
           ...(currentCashCut ? { cashCutId: currentCashCut.id } : {}),
-          ...(isAdmin ? { branchId: allowedBranchIds ? { in: allowedBranchIds } : undefined } : {}),
+          ...(!currentCashCut && allowedBranchIds ? { branchId: { in: allowedBranchIds } } : {}),
           createdAt: { gte: businessDayStart(today), lt: businessDayStart(addDaysToDateOnly(today, 1)) },
         },
       },
@@ -42,9 +42,9 @@ export default async function PospressTransactionsPage() {
   });
   const sales = await withRlsContext(user, (tx) => tx.posSale.findMany({
     where: {
-      ...(isAdmin
-        ? (allowedBranchIds ? { branchId: { in: allowedBranchIds } } : {})
-        : currentCashCut ? { branchId: currentCashCut.branch.id, cashCutId: currentCashCut.id } : { id: "__no-sales__" }),
+      ...(currentCashCut
+        ? { branchId: currentCashCut.branch.id, cashCutId: currentCashCut.id }
+        : allowedBranchIds ? { branchId: { in: allowedBranchIds } } : {}),
       createdAt: { gte: businessDayStart(today), lt: businessDayStart(addDaysToDateOnly(today, 1)) },
     },
     include: {

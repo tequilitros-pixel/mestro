@@ -109,28 +109,15 @@ export async function requireModuleAccess(moduleKey: string) {
 
   if (isAdminOnlyPath(moduleKey)) redirect("/profile");
 
-  if (user.role === "OPERATOR") {
-    const storedPermissions = await prisma.modulePermission.findMany({
-      where: { userId: user.id },
-      select: { moduleKey: true },
-    });
-    const hasConfiguredPermissions = storedPermissions.some((permission) =>
-      isConfigurablePermissionKey(permission.moduleKey),
-    );
-
-    if (
-      !hasConfiguredPermissions &&
-      LEGACY_OPERATOR_PERMISSION_KEYS.some((key) => key === moduleKey)
-    ) {
-      return user;
-    }
-  }
-
-  const permission = await prisma.modulePermission.findUnique({
-    where: { userId_moduleKey: { userId: user.id, moduleKey } },
+  const storedPermissions = await prisma.modulePermission.findMany({
+    where: { userId: user.id },
+    select: { moduleKey: true },
   });
+  const moduleKeys = storedPermissions.map((permission) => permission.moduleKey);
 
-  if (!permission) redirect("/profile");
+  if (!canAccessModule(user.role, moduleKeys, moduleKey)) {
+    redirect("/profile");
+  }
 
   return user;
 }

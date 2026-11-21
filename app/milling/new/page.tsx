@@ -4,6 +4,14 @@ import { LotStage } from "@prisma/client";
 import { advanceLotStage } from "@/lib/lotStage";
 import { findAvailableEquipment, reserveEquipment } from "@/lib/equipmentAvailability";
 import { requireModuleActionAccess } from "@/lib/auth";
+import { MILLING_ALLOWED_LOT_STAGES } from "@/lib/milling/eligibleLots";
+
+export default async function NewMillingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ lotId?: string; error?: string }>;
+}) {
+  const { lotId: queryLotId, error } = (await searchParams) ?? {};
 
 export default async function NewMillingPage({ searchParams }: { searchParams: Promise<{ lotId?: string }> }) {
   const { lotId: selectedLotId } = await searchParams;
@@ -20,15 +28,16 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
     include: {
       cookings: {
         where: { status: "TERMINADA" },
-        orderBy: { finishedAt: "desc" },
-        take: 1,
+        select: { finalAgaveKg: true, agaveKg: true },
       },
+      millings: { select: { cookedKg: true } },
     },
     orderBy: {
       createdAt: "desc",
     },
   });
 
+  // El mismo lote puede tener varias moliendas cerradas, cada una con su propio peso.
   const equipments = await findAvailableEquipment(["DESGARRADORA", "PRENSA"]);
 
   async function createMilling(formData: FormData) {
@@ -40,6 +49,9 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
     if (selectedLotId && lotId !== selectedLotId) throw new Error("La molienda no corresponde al lote seleccionado.");
     const equipmentId = formData.get("equipmentId") as string;
     const cookedKg = Number(formData.get("cookedKg"));
+    if (!Number.isFinite(cookedKg) || cookedKg <= 0) {
+      redirect("/milling/new?error=kilos-invalidos");
+    }
 
     const milling = await prisma.$transaction(async (tx) => {
       const eligibleLot = await tx.lot.findFirst({ where: { id: lotId, stage: { in: ["COCCION", "MOLIENDA"] }, cookings: { some: { status: "TERMINADA" } } } });
@@ -48,9 +60,19 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
         where: { lotId, status: { not: "TERMINADA" } },
         select: { id: true },
       });
-      if (duplicate) return duplicate;
+      if (duplicate) return { id: duplicate.id };
+      const equipment = await tx.equipment.findFirst({
+        where: {
+          id: equipmentId,
+          active: true,
+          type: { in: ["DESGARRADORA", "PRENSA"] },
+          status: "DISPONIBLE",
+        },
+        select: { id: true },
+      });
+      if (!equipment) return { error: "equipo-ocupado" } as const;
       const reserved = await reserveEquipment(tx, equipmentId, cookedKg);
-      if (!reserved) return null;
+      if (!reserved) return { error: "equipo-ocupado" } as const;
       const created = await tx.milling.create({ data: { lotId, equipmentId, cookedKg } });
       await tx.millingWorkSession.create({
         data: {
@@ -60,10 +82,10 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
         },
       });
       await advanceLotStage(tx, lotId, LotStage.MOLIENDA);
-      return created;
+      return { id: created.id };
     });
 
-    if (!milling) redirect("/milling/new?error=equipo-ocupado");
+    if ("error" in milling) redirect(`/milling/new?error=${milling.error}`);
 
     redirect(`/milling/${milling.id}?created=1`);
   }
@@ -72,7 +94,7 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
 
   if (lots.length === 0) {
     blockers.push(
-      "No hay lotes con una cocción terminada. Cierra primero la cocción del lote que quieres moler.",
+      "No hay lotes abiertos con una cocción terminada. Los lotes finalizados o archivados no permiten nuevas moliendas.",
     );
   }
 
@@ -115,9 +137,22 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
           MAESTRO
         </p>
 
-        <h1 className="mt-2 mb-8 text-4xl font-bold">
+        <h1 className="mt-2 mb-4 text-4xl font-bold">
           Nueva molienda
         </h1>
+        <p className="mb-6 text-sm text-on-surface-variant">
+          Puedes iniciar varias moliendas del mismo lote, una por jornada,
+          y enviar el mosto a tinas diferentes.
+        </p>
+        {error && (
+          <p role="alert" className="mb-6 rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">
+            {error === "equipo-ocupado"
+              ? "El equipo ya está ocupado. Selecciona uno disponible."
+              : error === "kilos-invalidos"
+                ? "Ingresa los kilos de agave realmente molidos en esta jornada."
+                : "El lote ya no está disponible para una nueva molienda."}
+          </p>
+        )}
 
         <form action={createMilling} className="space-y-6">
 
@@ -127,26 +162,26 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
             <select
               name="lotId"
               id="lotId"
+              defaultValue={lots.some((lot) => lot.id === queryLotId) ? queryLotId : ""}
               required
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             >
               <option value="">Selecciona un lote</option>
 
               {lots.map((lot) => {
-                const finishedCooking = lot.cookings[0];
+                const totalCookedKg = lot.cookings.reduce(
+                  (sum, cooking) => sum + (cooking.finalAgaveKg ?? cooking.agaveKg),
+                  0,
+                );
 
                 return (
                   <option
                     key={lot.id}
                     value={lot.id}
-                    data-cooked-kg={
-                      finishedCooking?.finalAgaveKg ?? ""
-                    }
                   >
                     {lot.code}
-                    {finishedCooking?.finalAgaveKg
-                      ? ` — ${finishedCooking.finalAgaveKg.toLocaleString()} kg cocidos`
-                      : ""}
+                    {totalCookedKg > 0 ? ` — ${totalCookedKg.toLocaleString("es-MX")} kg cocidos en el lote` : ""}
+                    {lot.millings.length > 0 ? ` · ${lot.millings.length} molienda(s) registrada(s)` : ""}
                   </option>
                 );
               })}
@@ -179,20 +214,22 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-semibold text-on-surface-variant">Kg cocidos</label>
+            <label className="mb-2 block text-sm font-semibold text-on-surface-variant">Kg cocidos para esta jornada</label>
 
             <input
               type="number"
               step="0.01"
+              min="0.01"
               name="cookedKg"
               id="cookedKg"
+              placeholder="Kilos realmente molidos hoy"
               required
               className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
             />
 
             <p className="mt-1 text-xs text-outline">
-              Se sugiere automáticamente con el kg final
-              registrado al cerrar la cocción del lote.
+              Captura únicamente los kilos de esta molienda, no los kilos totales
+              del lote, para evitar duplicarlos entre jornadas.
             </p>
           </div>
 
@@ -201,25 +238,6 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
           </button>
 
         </form>
-
-        <script
-          // Sugiere el kg cocido real de la cocción terminada
-          // del lote seleccionado, sin necesitar un componente cliente.
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function () {
-                var lotSelect = document.getElementById("lotId");
-                var cookedKgInput = document.getElementById("cookedKg");
-                if (!lotSelect || !cookedKgInput) return;
-                lotSelect.addEventListener("change", function () {
-                  var option = lotSelect.options[lotSelect.selectedIndex];
-                  var suggested = option ? option.getAttribute("data-cooked-kg") : "";
-                  if (suggested) cookedKgInput.value = suggested;
-                });
-              })();
-            `,
-          }}
-        />
       </div>
     </main>
   );

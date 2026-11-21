@@ -62,16 +62,14 @@ test("los totales conservan centavos sin sumar flotantes", () => {
   assert.equal(formatPaymentMoney("1234567890.45"), "$1,234,567,890.45");
 });
 
-test("Contabilidad está reservada a administradores", () => {
+test("Contabilidad es configurable por permisos", () => {
   assert.equal(getModuleKeyForPath("/accounting"), "/accounting");
   assert.equal(getModuleKeyForPath("/accounting/anything"), "/accounting");
-  assert.equal(isAdminOnlyPath("/accounting"), true);
-  assert.equal(isAdminOnlyPath("/accounting/anything"), true);
-  assert.equal(isConfigurablePermissionKey("/accounting"), false);
+  assert.equal(isConfigurablePermissionKey("/accounting"), true);
   assert.equal(SUBMENUS.accounting[0]?.href, "/accounting");
   const accountingModule = MAIN_MODULES.find((item) => item.module === "accounting");
   assert.ok(accountingModule);
-  assert.equal(isMainModuleVisible("GERENTE", ["/accounting"], accountingModule), false);
-  assert.equal(isMainModuleVisible("ADMIN", [], accountingModule), true);
+  assert.equal(isMainModuleVisible("GERENTE", ["/accounting"], accountingModule), true);
   assert.equal(isMainModuleVisible("GERENTE", ["/cash-cuts"], accountingModule), false);
+  assert.equal(isMainModuleVisible("ADMIN", [], accountingModule), true);
 });

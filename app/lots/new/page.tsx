@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { requireModuleActionAccess } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
+import { calculateTheoreticalTequilaYield } from "@/lib/processCalculations";
+import { notifyLotCreated } from "@/lib/notifications/tequilaAlerts";
 
 const LOT_PREFIX = "PV";
 const LOT_TIME_ZONE = "America/Mexico_City";
@@ -40,14 +42,23 @@ export default async function NewLotPage() {
       redirect("/lots/new");
     }
 
-    await createLotWithPermanentSequence({
+    const createdLot = await createLotWithPermanentSequence({
       ownerId: user.id,
       agaveKg,
       art,
       observations,
     });
 
-    redirect("/lots");
+    const projection = calculateTheoreticalTequilaYield(agaveKg, art);
+    await notifyLotCreated({
+      lotCode: createdLot.code,
+      lotId: createdLot.id,
+      agaveKg,
+      art,
+      theoreticalLiters: projection.theoreticalTequila40Liters,
+    });
+
+    redirect(`/lots/${createdLot.id}`);
   }
 
   return (
@@ -78,6 +89,20 @@ export default async function NewLotPage() {
           <p className="mt-3 text-sm text-on-surface-variant">
             La fecha es una referencia. El número final es
             consecutivo y nunca se reinicia.
+          </p>
+        </section>
+
+        <section className="mt-4 rounded-2xl border border-secondary/30 bg-surface-container p-5">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🥃</span>
+            <h3 className="font-bold text-primary">Criterios del Maestro Tequilero</h3>
+          </div>
+          <p className="mt-2 text-xs text-on-surface-variant leading-relaxed">
+            • <strong>ART óptimo:</strong> 24% a 28% de azúcares reductores totales en agave maduro.
+            <br />
+            • <strong>Rendimiento esperado:</strong> 7.0 a 8.5 kg de agave por cada litro de Tequila al 40% Alc. Vol.
+            <br />
+            • Al registrar el lote, el sistema notificará automáticamente a los encargados de cocimiento y caldera en Destiladora del Norte.
           </p>
         </section>
 

@@ -7,7 +7,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: ["/tequilitros", "/privacy-policy", "/terms-of-service", "/llms.txt"],
+        allow: ["/tequilitros", "/TequilaElColotlense", "/privacy-policy", "/terms-of-service", "/llms.txt"],
         disallow: [
           "/administration/",
           "/api/",
@@ -28,7 +28,7 @@ export default function robots(): MetadataRoute.Robots {
           "Applebot-Extended",
           "Bingbot",
         ],
-        allow: ["/tequilitros", "/llms.txt"],
+        allow: ["/tequilitros", "/TequilaElColotlense", "/llms.txt"],
       },
     ],
     sitemap: `${siteUrl}/sitemap.xml`,

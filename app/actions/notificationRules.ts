@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, requireAdminAction } from "@/lib/auth";
 import type { NotificationTriggerType, UserRole } from "@prisma/client";
+import { NOTIFICATION_RULE_RECIPIENT_ROLES } from "@/lib/notifications/access";
 
 export type ActionResult =
   | { success: true; message: string; id?: string }
@@ -17,7 +18,7 @@ const VALID_TRIGGER_TYPES: NotificationTriggerType[] = [
   "PROCESO_ATRASADO",
 ];
 
-const VALID_ROLES: UserRole[] = ["ADMIN", "OPERATOR", "GERENTE", "ENCARGADO", "CONSULTA"];
+const VALID_ROLES: UserRole[] = [...NOTIFICATION_RULE_RECIPIENT_ROLES];
 
 export async function getNotificationRules() {
   await requireAdminAction();

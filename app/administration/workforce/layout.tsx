@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 
 export default async function WorkforceV1Layout({
@@ -9,7 +9,7 @@ export default async function WorkforceV1Layout({
   children: React.ReactNode;
 }) {
   if (!workforceV1Enabled()) notFound();
-  await requireAdmin();
+  await requireModuleAccess("/administration/workforce");
   return (
     <main className="mx-auto w-full max-w-7xl p-4 sm:p-6">
       <header className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">

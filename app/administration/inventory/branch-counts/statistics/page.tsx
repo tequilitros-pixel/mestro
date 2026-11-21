@@ -1,9 +1,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { InventoryMovementTypeV2, Prisma } from "@prisma/client";
+import { InventoryEntryType, InventoryMovementTypeV2, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds } from "@/lib/auth";
 import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
+import { periodRange, shiftPeriodAnchor, validDateOnly, type AccountingPeriod } from "@/lib/accounting";
 import { inventoryCountTypeLabel } from "@/lib/inventory/countScope";
 import {
   formatInventoryDashboardQuantity,
@@ -14,6 +15,11 @@ import CountDashboardCharts from "./CountDashboardCharts";
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const COUNT_TYPES = ["WEEKLY", "MONTHLY"] as const;
+const REPORT_PERIODS: Array<{ value: AccountingPeriod; label: string }> = [
+  { value: "day", label: "Día" },
+  { value: "week", label: "Semana" },
+  { value: "month", label: "Mes" },
+];
 
 type CountAnalysisRow = {
   countId: string;
@@ -94,13 +100,22 @@ export default async function BranchCountStatisticsPage({
   };
   const allHistory = value("all") === "1";
   const today = todayDateOnly();
-  const defaultFrom = addDaysToDateOnly(today, -29);
   const fromParam = value("from");
   const toParam = value("to");
-  const requestedFrom = isDate(fromParam) ? fromParam : defaultFrom;
-  const requestedTo = isDate(toParam) ? toParam : today;
-  const dateFrom = allHistory ? undefined : requestedFrom <= requestedTo ? requestedFrom : requestedTo;
-  const dateTo = allHistory ? undefined : requestedFrom <= requestedTo ? requestedTo : requestedFrom;
+  const requestedPeriod = value("period");
+  const period: AccountingPeriod = REPORT_PERIODS.some((item) => item.value === requestedPeriod)
+    ? requestedPeriod as AccountingPeriod
+    : "week";
+  const requestedDate = value("date");
+  const anchor = validDateOnly(requestedDate ?? "") ? requestedDate! : today;
+  const selectedRange = periodRange(period, anchor);
+  // Conserva enlaces previos con rangos manuales, pero los filtros nuevos usan
+  // siempre una fecha de referencia para día, semana o mes.
+  const hasLegacyRange = !requestedPeriod && (isDate(fromParam) || isDate(toParam));
+  const requestedFrom = isDate(fromParam) ? fromParam : selectedRange.from;
+  const requestedTo = isDate(toParam) ? toParam : selectedRange.to;
+  const dateFrom = allHistory ? undefined : hasLegacyRange ? (requestedFrom <= requestedTo ? requestedFrom : requestedTo) : selectedRange.from;
+  const dateTo = allHistory ? undefined : hasLegacyRange ? (requestedFrom <= requestedTo ? requestedTo : requestedFrom) : selectedRange.to;
   const allowedBranchIds = await getAccessibleBranchIds();
   const requestedBranchId = value("branchId") ?? "";
   const selectedBranchId = requestedBranchId && (allowedBranchIds === null || allowedBranchIds.includes(requestedBranchId)) ? requestedBranchId : "";
@@ -125,7 +140,7 @@ export default async function BranchCountStatisticsPage({
   };
   const branchWhere = allowedBranchIds === null ? { active: true } : { active: true, id: { in: allowedBranchIds } };
 
-  const [branches, employees, counts, consumptionGroups] = await Promise.all([
+  const [branches, employees, counts, consumptionGroups, legacyConsumptionGroups] = await Promise.all([
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.user.findMany({
       where: {
@@ -181,6 +196,21 @@ export default async function BranchCountStatisticsPage({
       _sum: { quantityDelta: true },
       _count: { _all: true },
     }),
+    ,
+    // El POS histórico registra el consumo en InventoryEntry. Se incluye
+    // aquí para que los conteos semanales no aparezcan en cero mientras la
+    // sucursal todavía tenga movimientos del libro anterior.
+    prisma.inventoryEntry.groupBy({
+      where: {
+        branchId: branchFilter,
+        type: { in: [InventoryEntryType.VENTA_POS, InventoryEntryType.SALIDA_EVENTO] },
+        quantity: { lt: 0 },
+        ...(dateFilter ? { entryDate: dateFilter } : {}),
+      },
+      by: ["branchId", "productId", "type"],
+      _sum: { quantity: true },
+      _count: { _all: true },
+    }),
   ]);
 
   // Análisis por renglón con costo unitario en moneda real ($ MXN)
@@ -231,10 +261,32 @@ export default async function BranchCountStatisticsPage({
     _sum: { quantityDelta: Prisma.Decimal | null };
     _count: { _all: number };
   }>;
+  const legacyConsumptionGroupRows = legacyConsumptionGroups as Array<{
+    branchId: string;
+    productId: string;
+    type: InventoryEntryType;
+    _sum: { quantity: Prisma.Decimal | null };
+    _count: { _all: number };
+  }>;
+  const v2ConsumptionKeys = new Set(
+    consumptionGroupRows.map((row) => `${row.branchId}:${row.inventoryProductId}`),
+  );
+  const allConsumptionGroups = [
+    ...consumptionGroupRows,
+    ...legacyConsumptionGroupRows
+      .filter((row) => !v2ConsumptionKeys.has(`${row.branchId}:${row.productId}`))
+      .map((row) => ({
+        branchId: row.branchId,
+        inventoryProductId: row.productId,
+        unit: "BASE",
+        _sum: { quantityDelta: row._sum.quantity },
+        _count: row._count,
+      })),
+  ];
   const productIds = [
     ...new Set([
       ...rows.map((row) => row.productId),
-      ...consumptionGroupRows.map((row) => row.inventoryProductId),
+      ...allConsumptionGroups.map((row) => row.inventoryProductId),
     ]),
   ];
   const productCodes = await prisma.inventoryProduct.findMany({
@@ -256,7 +308,7 @@ export default async function BranchCountStatisticsPage({
   const productConfigs = new Map(productCodes.map((p) => [p.id, p]));
 
   // 1. TOP CONSUMO: Ordenado por valor financiero consumido ($) y velocidad de agotamiento
-  const consumption = consumptionGroupRows
+  const consumption = allConsumptionGroups
     .map((group) => {
       // A historical movement can remain after its catalog item was removed. Keep
       // it visible with a neutral cost/unit configuration instead of inventing a
@@ -282,7 +334,7 @@ export default async function BranchCountStatisticsPage({
 
   const branchNames = new Map(branches.map((b) => [b.id, b.name]));
   const consumptionByBranch = [
-    ...consumptionGroupRows
+    ...allConsumptionGroups
       .reduce((map, group) => {
         const current = map.get(group.branchId) ?? {
           name: branchNames.get(group.branchId) ?? "Sucursal histórica",
@@ -447,7 +499,13 @@ export default async function BranchCountStatisticsPage({
     }))
     .reverse();
 
-  const periodLabel = allHistory ? "Todo el historial" : `${dateFrom} a ${dateTo}`;
+  const periodLabel = allHistory
+    ? "Todo el historial"
+    : period === "day"
+      ? `Día ${dateFrom}`
+      : period === "week"
+        ? `Semana del ${dateFrom} al ${dateTo}`
+        : `Mes ${dateFrom?.slice(0, 7)}`;
   const filterSuffix = [
     selectedBranchId && `branchId=${encodeURIComponent(selectedBranchId)}`,
     selectedEmployeeId && `employeeId=${encodeURIComponent(selectedEmployeeId)}`,
@@ -456,8 +514,10 @@ export default async function BranchCountStatisticsPage({
     .filter(Boolean)
     .join("&");
   const filterQuery = filterSuffix ? `&${filterSuffix}` : "";
-  const quickPeriod = (from: string, to = today) =>
-    `/administration/inventory/branch-counts/statistics?from=${from}&to=${to}${filterQuery}`;
+  const periodHref = (nextPeriod: AccountingPeriod, nextAnchor: string) =>
+    `/administration/inventory/branch-counts/statistics?period=${nextPeriod}&date=${nextAnchor}${filterQuery}`;
+  const previousPeriodHref = periodHref(period, shiftPeriodAnchor(period, anchor, -1));
+  const nextPeriodHref = periodHref(period, shiftPeriodAnchor(period, anchor, 1));
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface sm:px-6 lg:px-8">
@@ -474,9 +534,9 @@ export default async function BranchCountStatisticsPage({
             <p className="text-xs font-bold uppercase tracking-widest text-primary">
               Contaduría y Control de Inventario
             </p>
-            <h1 className="mt-1 text-3xl font-bold">Resumen Semanal de Auditoría de Conteos</h1>
+            <h1 className="mt-1 text-3xl font-bold">Resumen de Auditoría de Conteos</h1>
             <p className="mt-2 max-w-3xl text-sm text-on-surface-variant">
-              Panel contable ejecutivo: identifica qué sucursal tiene problemas, qué conteo semanal
+              Panel contable ejecutivo: identifica qué sucursal tiene problemas, qué conteo
               presenta mayor merma o descuadre, y qué insumo se está agotando más rápido.
             </p>
           </div>
@@ -493,14 +553,14 @@ export default async function BranchCountStatisticsPage({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-bold">Filtros de periodo y alcance</h2>
             <div className="flex flex-wrap gap-2 text-xs font-semibold">
-              <Link href={quickPeriod(today)} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
+              <Link href={periodHref("day", today)} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
                 Hoy
               </Link>
-              <Link href={quickPeriod(addDaysToDateOnly(today, -6))} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
-                7 días
+              <Link href={periodHref("week", today)} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
+                Esta semana
               </Link>
-              <Link href={quickPeriod(defaultFrom)} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
-                30 días
+              <Link href={periodHref("month", today)} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
+                Este mes
               </Link>
               <Link href={`/administration/inventory/branch-counts/statistics?all=1${filterQuery}`} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
                 Todo el historial
@@ -509,12 +569,16 @@ export default async function BranchCountStatisticsPage({
           </div>
           <form method="get" className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <label className="text-xs font-semibold text-on-surface-variant">
-              Desde
-              <input type="date" name="from" defaultValue={allHistory ? "" : dateFrom} className="mt-1 h-10 w-full rounded-lg border border-outline-variant bg-background px-3 text-sm text-on-surface" />
+              Periodo
+              <select name="period" defaultValue={period} className="mt-1 h-10 w-full rounded-lg border border-outline-variant bg-background px-3 text-sm text-on-surface">
+                {REPORT_PERIODS.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </select>
             </label>
             <label className="text-xs font-semibold text-on-surface-variant">
-              Hasta
-              <input type="date" name="to" defaultValue={allHistory ? "" : dateTo} className="mt-1 h-10 w-full rounded-lg border border-outline-variant bg-background px-3 text-sm text-on-surface" />
+              Fecha de referencia
+              <input type="date" name="date" defaultValue={anchor} className="mt-1 h-10 w-full rounded-lg border border-outline-variant bg-background px-3 text-sm text-on-surface" />
             </label>
             <label className="text-xs font-semibold text-on-surface-variant">
               Sucursal
@@ -552,6 +616,12 @@ export default async function BranchCountStatisticsPage({
                   Periodo: {periodLabel} · {counts.length.toLocaleString("es-MX")} conteos cerrados
                 </span>
               </div>
+              {!allHistory && (
+                <div className="flex gap-2 text-xs font-semibold">
+                  <Link href={previousPeriodHref} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">← Anterior</Link>
+                  <Link href={nextPeriodHref} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">Siguiente →</Link>
+                </div>
+              )}
             </div>
           </form>
         </section>

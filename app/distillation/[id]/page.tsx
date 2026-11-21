@@ -47,6 +47,7 @@ import { cancelDistillationRun, reconcileLotDistillationStage, DistillationOpera
 import { transferDestrozadoToReceiver } from "@/lib/distillation/receivers";
 import ProcessBoilerUsage from "@/components/boiler/ProcessBoilerUsage";
 import { finishProductionLot } from "@/lib/lots/finishProductionLot";
+import { notifyDistillationAlert } from "@/lib/notifications/tequilaAlerts";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -538,6 +539,18 @@ export default async function DistillationDetailPage({
     if (result.count === 0) {
       redirect(`/distillation/${id}`);
     }
+
+    const alcPercent = finalAlcohol ?? 40;
+    const laa = (finalLiters * alcPercent) / 100;
+    notifyDistillationAlert({
+      lotCode: distillation.lot.code,
+      distillationId: id,
+      stillName: distillation.equipment.name,
+      type: distillation.type as "DESTROZADO" | "RECTIFICACION",
+      heartLiters: finalLiters,
+      alcoholPercent: alcPercent,
+      laa,
+    }).catch((err) => console.error("Error dispatching distillation alert:", err));
 
     redirect(`/distillation/${id}?finished=1`);
   }

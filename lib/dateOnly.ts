@@ -96,3 +96,15 @@ export function lastSalesDayOfMonth(dateStr: string): string {
   const lastDay = lastDayOfMonth(dateStr);
   return Number(lastDay.slice(-2)) > 30 ? `${dateStr.slice(0, 7)}-30` : lastDay;
 }
+
+/** Agrupa una lista de fechas YYYY-MM-DD por semana laboral (iniciando en lunes). */
+export function groupCalendarWeeks(days: string[]) {
+  const weeks: Array<{ start: string; days: string[] }> = [];
+  for (const day of days) {
+    const start = mondayOfWeek(day);
+    const current = weeks[weeks.length - 1];
+    if (current?.start === start) current.days.push(day);
+    else weeks.push({ start, days: [day] });
+  }
+  return weeks;
+}

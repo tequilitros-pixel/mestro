@@ -189,8 +189,8 @@ export async function startDistillationRun(input: {
 
     if (input.type === DistillationType.DESTROZADO) {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Fermentation" WHERE "id" = ${input.sourceId} FOR UPDATE`);
-      const source = await tx.fermentation.findUnique({ where: { id: input.sourceId } });
-      if (!source || source.status !== "TERMINADA") {
+      const source = await tx.fermentation.findUnique({ where: { id: input.sourceId }, include: { lot: { select: { archivedAt: true } } } });
+      if (!source || source.status !== "TERMINADA" || source.lot.archivedAt) {
         throw new DistillationOperationError("La fermentación ya no está disponible.", "SOURCE_UNAVAILABLE");
       }
       const [lot, drained] = await Promise.all([

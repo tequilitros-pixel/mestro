@@ -17,6 +17,9 @@ type ProductionOperationKind = Extract<
   | "milling.discharge.create"
   | "fermentation.reading.create"
   | "distillation.event.create"
+  | "liquor.batch.create"
+  | "liquor.batch.step.complete"
+  | "liquor.bottling.create"
 >;
 
 const MODULE_BY_OPERATION: Record<ProductionOperationKind, string> = {
@@ -35,6 +38,9 @@ const MODULE_BY_OPERATION: Record<ProductionOperationKind, string> = {
   "milling.discharge.create": "/milling",
   "fermentation.reading.create": "/fermentation",
   "distillation.event.create": "/distillation",
+  "liquor.batch.create": "/liquors/batches",
+  "liquor.batch.step.complete": "/liquors/batches",
+  "liquor.bottling.create": "/liquors/bottling",
 };
 
 export function getProductionOperationModuleKey(kind: OfflineOperation["kind"]) {

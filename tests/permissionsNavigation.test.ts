@@ -5,6 +5,7 @@ import {
   getModuleKeyForPath,
   isAdminOnlyPath,
   isAlwaysAvailablePath,
+  isConfigurablePermissionKey,
 } from "../lib/permission-modules";
 import {
   MAIN_MODULES,
@@ -39,7 +40,7 @@ test("Punto de Venta separa vender, transacciones y ventas resumen", () => {
   assert.equal(sale?.permissionKey, "/pos");
   assert.equal(transactions?.permissionKey, "/pos/sales");
   assert.equal(summary?.href, "/pos/sales");
-  assert.deepEqual(summary?.permissionKeys, ["/pos", "/pos/sales"]);
+  assert.equal(summary?.permissionKey, "/pos/sales");
   assert.equal(getSubmenuItemDestination("GERENTE", ["/pos"], sale!), "/pospress");
   assert.equal(getMainModuleDestination("GERENTE", ["/pos"], main!), "/pospress");
   assert.equal(
@@ -66,6 +67,11 @@ test("la ruta de ventas resumen no es interceptada por la entrada de POSpress", 
     redirects.some((redirect) => redirect.source === "/pos/:path*"),
     false,
     "las pantallas reales bajo /pos deben permanecer accesibles",
+  );
+  assert.equal(
+    redirects.some((redirect) => redirect.source === "/administration/pos2/:path*"),
+    false,
+    "el panel y sus módulos administrativos POS 2.0 deben permanecer accesibles",
   );
 });
 
@@ -99,7 +105,7 @@ test("cada pestaña delegable está representada en el catálogo de permisos", (
   }
 });
 
-test("Vender concede Punto de Venta y Ventas resumen, pero no Transacciones", () => {
+test("Vender no concede Ventas resumen ni Transacciones", () => {
   const items = SUBMENUS.pos;
   const visible = (label: string) =>
     isSubmenuItemVisible("GERENTE", ["/pos"], items.find((item) => item.label === label)!);
@@ -107,7 +113,7 @@ test("Vender concede Punto de Venta y Ventas resumen, pero no Transacciones", ()
   assert.equal(visible("Punto de Venta"), true);
   assert.equal(visible("Mesas"), true);
   assert.equal(visible("Transacciones"), false);
-  assert.equal(visible("Ventas resumen"), true);
+  assert.equal(visible("Ventas resumen"), false);
   assert.equal(
     isSubmenuItemVisible(
       "GERENTE",
@@ -144,12 +150,13 @@ test("Cortes activa su módulo principal sin conceder las demás pantallas", () 
   assert.deepEqual(visible, ["Cortes"]);
 });
 
-test("el historial de cortes queda reservado a administración", () => {
+test("el historial de cortes es configurable por permiso", () => {
   const history = SUBMENUS["cash-cuts"]
     .find((item) => item.label === "Control")!
     .children!.find((item) => item.href === "/cash-cuts/history")!;
-  assert.equal(isAdminOnlyPath(history.href), true);
-  assert.equal(isSubmenuItemVisible("GERENTE", ["/cash-cuts/safe", "/cash-cuts/history"], history), false);
+  assert.equal(isConfigurablePermissionKey(history.href), true);
+  assert.equal(isSubmenuItemVisible("GERENTE", ["/cash-cuts/safe"], history), false);
+  assert.equal(isSubmenuItemVisible("GERENTE", ["/cash-cuts/safe", "/cash-cuts/history"], history), true);
   assert.equal(isSubmenuItemVisible("ADMIN", [], history), true);
 });
 

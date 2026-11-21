@@ -1,6 +1,6 @@
-import { requireAdmin } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/auth";
 
 export default async function AccountingLayout({ children }: { children: React.ReactNode }) {
-  await requireAdmin();
+  await requireModuleAccess("/accounting");
   return <>{children}</>;
 }

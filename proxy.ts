@@ -15,6 +15,17 @@ import { isPublicPath } from "@/lib/publicPaths";
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const publicStorePath = "/TequilaElColotlense";
+
+  // La tienda vive como una sección pública del dominio corporativo. La
+  // reescritura conserva la URL pública y entrega la ruta interna /tienda.
+  if (pathname.toLowerCase() === publicStorePath.toLowerCase()) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/tienda";
+    const rewriteHeaders = new Headers(request.headers);
+    rewriteHeaders.set("x-pathname", "/tienda");
+    return NextResponse.rewrite(url, { request: { headers: rewriteHeaders } });
+  }
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname);

@@ -36,7 +36,7 @@ export type InventoryDashboardData = {
     countDate: string;
     countType: "WEEKLY" | "MONTHLY";
     countTypeLabel: string;
-    status: "BORRADOR" | "CERRADO";
+    status: "BORRADOR" | "CERRADO" | "ANULADO";
     closedAt: string | null;
   }>;
   negativeLegacy: Array<{

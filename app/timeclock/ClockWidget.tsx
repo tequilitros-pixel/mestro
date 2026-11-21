@@ -17,6 +17,7 @@ import { ClockIcon, LoginIcon, LogoutIcon } from "@/components/ui/icons";
 import { distanceMeters, hasGeofence, type BranchLocation } from "@/lib/geo";
 import { enqueueOperation } from "@/lib/offline/queue";
 import { formatBusinessTime, formatBusinessDateTimeLocal, parseBusinessDateTimeLocal } from "@/lib/dateTime";
+import { triggerAlertFeedback } from "@/lib/feedback";
 
 type Branch = BranchLocation & { id: string; name: string };
 type OpenShift = {
@@ -299,21 +300,39 @@ export default function ClockWidget() {
         setOpenShift(localShift);
         localStorage.setItem("maestro:timeclock-open-shift", JSON.stringify(localShift));
       }
+      triggerAlertFeedback("success");
       setSaving(false);
       return;
     }
-    const result = await clockInAction(selectedBranch, coords);
-    setSaving(false);
+    try {
+      const result = await clockInAction(selectedBranch, coords);
+      setSaving(false);
 
-    if (result.error) {
-      setError(result.error);
-      if (branch && hasGeofence(branch) && result.error.includes("m de la sucursal")) setShowLocationFallback(true);
-      return;
+      if (result.error) {
+        setError(result.error);
+        if (branch && hasGeofence(branch) && result.error.includes("m de la sucursal")) setShowLocationFallback(true);
+        return;
+      }
+
+      triggerAlertFeedback("success");
+      setShowLocationFallback(false);
+      setLocationNote("");
+      await load();
+    } catch {
+      // Si la conexión falla a mitad del envío, guardar localmente en cola
+      const id = crypto.randomUUID();
+      const clockIn = new Date();
+      await enqueueOperation({ id, kind: "timeclock.clock-in", createdAt: clockIn.toISOString(), payload: { branchId: selectedBranch, clockIn: clockIn.toISOString(), coords } });
+      if (branch) {
+        const localShift = { id, clockIn, branch };
+        setOpenShift(localShift);
+        localStorage.setItem("maestro:timeclock-open-shift", JSON.stringify(localShift));
+      }
+      triggerAlertFeedback("success");
+      setSaving(false);
+      setShowLocationFallback(false);
+      setLocationNote("");
     }
-
-    setShowLocationFallback(false);
-    setLocationNote("");
-    await load();
   }
 
   async function handleLocationFallback() {
@@ -434,27 +453,38 @@ export default function ClockWidget() {
       await enqueueOperation({ id: crypto.randomUUID(), kind: "timeclock.clock-out", createdAt: new Date().toISOString(), payload: { entryId: openShift.id, clockIn: adjustedClockIn.toISOString(), clockOut: clockOut.toISOString(), coords } });
       setOpenShift(null);
       localStorage.removeItem("maestro:timeclock-open-shift");
+      triggerAlertFeedback("success");
       setConfirming(false);
       setSaving(false);
       return;
     }
-    // datetime-local no incluye zona horaria. Se interpreta explícitamente en
-    // la zona oficial de negocio antes de enviar un instante ISO inequívoco.
-    const result = await clockOutAction(
-      openShift.id,
-      adjustedClockIn.toISOString(),
-      adjustedClockOut.toISOString(),
-      coords,
-    );
-    setSaving(false);
+    try {
+      const result = await clockOutAction(
+        openShift.id,
+        adjustedClockIn.toISOString(),
+        adjustedClockOut.toISOString(),
+        coords,
+      );
+      setSaving(false);
 
-    if (result.error) {
-      setError(result.error);
-      return;
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      triggerAlertFeedback("success");
+      setConfirming(false);
+      await load();
+    } catch {
+      // Fallback a encolar localmente si la conexión se cortó durante el envío
+      const clockOut = adjustedClockOut;
+      await enqueueOperation({ id: crypto.randomUUID(), kind: "timeclock.clock-out", createdAt: new Date().toISOString(), payload: { entryId: openShift.id, clockIn: adjustedClockIn.toISOString(), clockOut: clockOut.toISOString(), coords } });
+      setOpenShift(null);
+      localStorage.removeItem("maestro:timeclock-open-shift");
+      triggerAlertFeedback("success");
+      setConfirming(false);
+      setSaving(false);
     }
-
-    setConfirming(false);
-    await load();
   }
 
   if (loading) {
@@ -486,6 +516,13 @@ export default function ClockWidget() {
 
   return (
     <div className="space-y-4">
+      {typeof window !== "undefined" && !navigator.onLine && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-xs font-bold text-amber-600 dark:text-amber-400">
+          <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+          Modo Fuera de Línea Activo · Tu entrada o salida se guardará en este dispositivo y se sincronizará al volver la señal.
+        </div>
+      )}
+
       {error && (
         <div className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">
           {error}

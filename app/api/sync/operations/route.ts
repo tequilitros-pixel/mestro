@@ -86,6 +86,12 @@ export async function POST(request: Request) {
       case "distillation.event.create":
         await syncDistillationEvent(operation.id, createdAt, payload);
         break;
+      case "liquor.batch.step.complete":
+        await syncLiquorBatchStep(operation.id, createdAt, payload, user.id);
+        break;
+      case "liquor.bottling.create":
+        await syncLiquorBottling(operation.id, createdAt, payload, user.id);
+        break;
       default:
         return fail("Tipo de operación no compatible", 400);
     }
@@ -200,6 +206,56 @@ async function syncDistillationEvent(id: string, createdAt: Date, payload: Paylo
   await prisma.distillationEvent.upsert({
     where: { id }, update: {},
     create: { id, distillationId, type, temperature, outputTemperature, alcohol, alcoholCorrected, liters, notes, createdAt },
+  });
+}
+
+async function syncLiquorBatchStep(id: string, createdAt: Date, payload: Payload, userId: string) {
+  const stepId = requiredString(payload.stepId, "Falta el paso");
+  const step = await prisma.liquorBatchStep.findUnique({
+    where: { id: stepId },
+  });
+  if (!step) invalid("No se encontró el paso solicitado", 404);
+  if (step.status === "COMPLETADO") return;
+
+  await prisma.liquorBatchStep.update({
+    where: { id: step.id },
+    data: {
+      status: "COMPLETADO",
+      completedAt: createdAt,
+      completedById: userId,
+      actualQuantity: optionalNumber(payload.actualQuantity),
+      observations: optionalString(payload.observations),
+    },
+  });
+}
+
+async function syncLiquorBottling(id: string, createdAt: Date, payload: Payload, userId: string) {
+  const existing = await prisma.liquorBottling.findUnique({ where: { id } });
+  if (existing) return;
+
+  const batchId = optionalString(payload.batchId);
+  const rawMaterialId = optionalString(payload.rawMaterialId);
+  const code = requiredString(payload.code, "Falta el código de embotellado");
+  const bottleSizeMl = Number(requiredNumber(payload.bottleSizeMl, "Falta la presentación en ml"));
+  const producedBottles = Number(requiredNumber(payload.producedBottles, "Falta la cantidad de botellas"));
+  const litersUsed = optionalNumber(payload.litersUsed);
+
+  await prisma.liquorBottling.create({
+    data: {
+      id,
+      code,
+      batchId,
+      rawMaterialId,
+      bottleSizeMl,
+      producedBottles,
+      litersUsed,
+      status: "COMPLETADO",
+      bottledAt: optionalDate(payload.bottledAt) ?? createdAt,
+      finishedAt: createdAt,
+      finishedById: userId,
+      createdById: userId,
+      notes: optionalString(payload.notes),
+    },
   });
 }
 

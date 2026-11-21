@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/auth";
 import { getGeofencesPageData } from "@/app/actions/geofences";
 import GeofencesManager from "./GeofencesManager";
 
@@ -9,15 +8,7 @@ type GeofencesSuccess = Extract<
 >;
 
 export default async function GeofencesPage() {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  if (user.role !== "ADMIN") {
-    redirect("/timeclock");
-  }
+  await requireModuleAccess("/timeclock/geofences");
 
   const data = await getGeofencesPageData();
 

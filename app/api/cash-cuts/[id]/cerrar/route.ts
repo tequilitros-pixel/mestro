@@ -22,6 +22,7 @@ import { getCashCutScope, withCashCutScope } from "@/lib/cash-cuts/access";
 import { denominationTotal, validDenominationRows } from "@/lib/cash-cuts/denominations";
 import { createEnvelopeForCashCut } from "@/lib/cash-cuts/safeEnvelopes";
 import { envelopeNumberForClose } from "@/lib/cash-cuts/envelopeNumber";
+import { createNotificationsForUsers } from "@/app/actions/notifications";
 
 const ROLES_QUE_PUEDEN_CERRAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -231,6 +232,38 @@ export async function POST(
 
       return cut;
     });
+
+    // Notificación en tiempo real si el corte de caja presenta diferencia
+    if (updated.difference !== null && Math.abs(updated.difference) >= 1) {
+      void (async () => {
+        try {
+          const diff = updated.difference ?? 0;
+          const formattedDiff = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(diff);
+          const diffWord = diff < 0 ? "FALTANTE" : "SOBRANTE";
+
+          const managers = await prisma.user.findMany({
+            where: { role: { in: ["ADMIN", "GERENTE"] }, active: true },
+            select: { id: true },
+          });
+
+          if (managers.length > 0) {
+            await createNotificationsForUsers(
+              managers.map((m) => m.id),
+              {
+                title: `⚠️ Diferencia en corte (${diffWord}): ${formattedDiff}`,
+                body: `${user.name} cerró un corte con diferencia de ${formattedDiff}. Revisa el arqueo y desglose.`,
+                category: "POS",
+                priority: "URGENT",
+                href: `/cash-cuts/${cashCutId}`,
+                metadata: { cashCutId, difference: diff, branchId: updated.branchId },
+              }
+            );
+          }
+        } catch (notifErr) {
+          console.error("[CERRAR CORTE] Error al notificar diferencia:", notifErr);
+        }
+      })();
+    }
 
     return NextResponse.json({ cashCut: updated, assignmentWarning });
   } catch (error) {

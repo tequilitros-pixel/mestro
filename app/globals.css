@@ -347,4 +347,33 @@ body {
   .no-print {
     display: none !important;
   }
+
+  /* Impresión limpia de Cotizaciones y Contratos Tequilitros */
+  html:has(.quote-print-document),
+  body:has(.quote-print-document) {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body:has(.quote-print-document) header,
+  body:has(.quote-print-document) aside,
+  body:has(.quote-print-document) nav,
+  body:has(.quote-print-document) .shell-icon-button {
+    display: none !important;
+  }
+
+  .quote-print-document {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 1.5cm !important;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
 }
