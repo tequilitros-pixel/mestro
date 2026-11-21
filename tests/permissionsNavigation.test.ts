@@ -34,13 +34,13 @@ const allLeaves = Object.values(SUBMENUS).flatMap(leaves);
 test("Punto de Venta separa vender, transacciones y ventas resumen", () => {
   const main = MAIN_MODULES.find((module) => module.module === "pos");
   const sale = SUBMENUS.pos.find((item) => item.label === "Punto de Venta");
-  const transactions = SUBMENUS.pos.find((item) => item.label === "Transacciones");
-  const summary = SUBMENUS.pos.find((item) => item.label === "Ventas resumen");
+  const transactions = SUBMENUS.pos.find((item) => item.label === "Transacciones y ventas");
+  const summary = SUBMENUS.pos.find((item) => item.label === "Resumen de ventas");
 
   assert.equal(main?.href, "/pospress");
   assert.equal(main?.label, "Ventas");
   assert.equal(sale?.permissionKey, "/pos");
-  assert.equal(transactions?.permissionKey, "/pos/sales");
+  assert.equal(transactions?.permissionKey, "/pos");
   assert.equal(summary?.href, "/pos/sales");
   assert.equal(summary?.permissionKey, "/pos/sales");
   assert.equal(getSubmenuItemDestination("GERENTE", ["/pos"], sale!), "/pospress");
@@ -120,7 +120,7 @@ test("Vender no concede Ventas resumen ni Transacciones", () => {
     isSubmenuItemVisible(
       "GERENTE",
       ["/pos/sales"],
-      items.find((item) => item.label === "Ventas resumen")!,
+      items.find((item) => item.label === "Resumen de ventas")!,
     ),
     true,
   );
