@@ -172,14 +172,12 @@ export default function PosSellClient({
   initialBranchId,
   branchLockMessage,
   title = "Punto de Venta",
-  inventoryMode = "legacy",
 }: {
   branchOptions: BranchOption[];
   canManageCatalog: boolean;
   initialBranchId?: string;
   branchLockMessage?: string | null;
   title?: string;
-  inventoryMode?: "legacy" | "v2";
 }) {
   const [branchId, setBranchId] = useState(
     initialBranchId && branchOptions.some((branch) => branch.id === initialBranchId)
@@ -1045,7 +1043,6 @@ export default function PosSellClient({
           employeeBuyerId={employeeMode ? employeeBuyerId : ""}
           needsAuthorization={needsAuthorization}
           managers={managers}
-          inventoryMode={inventoryMode}
           onClose={() => setShowPayment(false)}
           onSuccess={(receipt) => {
             setShowPayment(false);
@@ -1532,7 +1529,6 @@ function PaymentModal({
   employeeBuyerId,
   needsAuthorization,
   managers,
-  inventoryMode,
   onClose,
   onSuccess,
 }: {
@@ -1546,7 +1542,6 @@ function PaymentModal({
   employeeBuyerId: string;
   needsAuthorization: boolean;
   managers: Employee[];
-  inventoryMode: "legacy" | "v2";
   onClose: () => void;
   onSuccess: (receipt: ReceiptData) => void;
 }) {
@@ -1655,7 +1650,7 @@ function PaymentModal({
       discountReasonCode,
       discountReason: discountReasonNote,
       employeeBuyerId: employeeBuyerId || undefined,
-      inventoryMode,
+      inventoryMode: "v2" as const,
       ...(needsAuthorization ? { authorization: { managerId: authManagerId, pin: authPin } } : {}),
       items: cart.map((line) =>
         line.isCustom

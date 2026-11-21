@@ -28,7 +28,6 @@ export default async function PosPressPage({
       key={branches.map((branch) => branch.id).join(",")}
       branchLockMessage={branchLockMessage}
       title="Punto de Venta"
-      inventoryMode="v2"
       initialBranchId={selectedBranchId}
       branchOptions={branches}
       canManageCatalog={user?.role === "ADMIN"}

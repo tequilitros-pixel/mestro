@@ -24,6 +24,7 @@ export async function checkStockBajo(): Promise<NotificationCheckResult> {
     const productMap = matrix.stockByBranch.get(branch.id);
     if (!productMap) continue;
     for (const product of products) {
+      if (matrix.uninitializedByBranch.get(branch.id)?.has(product.id)) continue;
       const stock = productMap.get(product.id) ?? 0;
       if (stock < Number(product.minimumStock)) {
         lowStock.push({ branchName: branch.name, productName: product.name });

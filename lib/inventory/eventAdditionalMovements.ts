@@ -2,7 +2,6 @@ import "server-only";
 import { Prisma, type EventAddedProduct, type InventoryProduct } from "@prisma/client";
 import { applyInventoryBatchInTransaction } from "@/lib/pos2/inventory/applyMovements";
 import { groupInventoryDeltas } from "@/lib/pos2/inventory/domain";
-import { requireLegacyInventoryAvailable } from "@/lib/inventory/manualMovements";
 import { appendAuditEvent } from "@/lib/pos2/audit";
 
 export async function recordEventAdditionalMovement(
@@ -34,6 +33,7 @@ export async function recordEventAdditionalMovement(
   const balance = await tx.inventoryBalance.findUnique({
     where: { branchId_inventoryProductId: { branchId, inventoryProductId: product.id } },
   });
+  if (!balance) throw new Error("Registra el conteo inicial del producto antes de moverlo en un evento.");
   let movementId: string | null = null;
   if (balance) {
     if (!product.inventoryBaseUnit || balance.unit !== product.inventoryBaseUnit) {
@@ -56,10 +56,6 @@ export async function recordEventAdditionalMovement(
       }]),
     });
     movementId = movements[0]?.id ?? null;
-  } else if (!returning) {
-    await requireLegacyInventoryAvailable(
-      tx, branchId, product.id, original.toNumber(), product.unit,
-    );
   }
 
   const commercialQuantity = returning ? closed.plus(open.div(perUnit)) : original.negated();

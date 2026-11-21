@@ -21,6 +21,8 @@ type Input = { orderId: string; expectedOrderVersion: number; cashSessionId: str
 function inject(input: Input, point: Fault) { if (input.faultInjectionForTest === point && process.env.NODE_ENV !== "production") throw new Error(`TEST_FAILURE_${point}`); }
 
 export async function completeSale(input: Input) {
+  // Historical receipts, cancellations and returns remain available.
+  if (process.env.NODE_ENV === "production") throw new DomainError("POS_VERSION_RETIRED");
   const payload = { orderId: input.orderId, expectedOrderVersion: input.expectedOrderVersion, cashSessionId: input.cashSessionId, terminalId: input.terminalId, payments: input.payments };
   return executeIdempotent({ operationId: input.operationId, command: "CompleteSale", payload, receiptContext: { actorId: input.actor.id }, transactionOptions: { maxWait: 5000, timeout: 20000 }, execute: async (tx) => {
     const order = await lockOrder(tx, input.orderId);

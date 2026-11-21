@@ -486,6 +486,7 @@ export async function getInventoryAnalytics(
     const productMap = stockMatrix.stockByBranch.get(branch.id);
     if (!productMap) continue;
     for (const product of products) {
+      if (stockMatrix.uninitializedByBranch.get(branch.id)?.has(product.id)) continue;
       const stock = productMap.get(product.id) ?? 0;
       branchValue.currentStockValue += stock * Number(product.unitCost ?? 0);
       if (stock > 0) branchValue.stockedProducts += 1;
@@ -544,7 +545,7 @@ export async function getInventoryAnalytics(
     .sort((a, b) => b.consumed - a.consumed);
 
   const lowStock = products
-    .filter((product) => product.isActive)
+    .filter((product) => product.isActive && stockMatrix.branches.every((branch) => !stockMatrix.uninitializedByBranch.get(branch.id)?.has(product.id)))
     .map((product) => {
       const stock = totalStockByProduct(stockMatrix, product.id);
       const consumed = productAcc.has(product.id) ? netConsumed(productAcc.get(product.id)!) : 0;
@@ -615,7 +616,7 @@ export async function getInventoryAnalytics(
       shortageUnits: branchesResult.reduce((sum, branch) => sum + branch.shortageUnits, 0),
       surplusUnits: branchesResult.reduce((sum, branch) => sum + branch.surplusUnits, 0),
       lowStockCount: lowStock.length,
-      outOfStockCount: products.filter((product) => product.isActive && totalStockByProduct(stockMatrix, product.id) <= 0).length,
+      outOfStockCount: products.filter((product) => product.isActive && stockMatrix.branches.every((branch) => !stockMatrix.uninitializedByBranch.get(branch.id)?.has(product.id)) && totalStockByProduct(stockMatrix, product.id) <= 0).length,
       staleCount: stale.length,
     },
     topProducts,

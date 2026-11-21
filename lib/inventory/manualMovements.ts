@@ -21,13 +21,6 @@ export function normalizeManualInventoryQuantity(product: InventoryProduct, quan
   throw new Error("Configura la conversión de la presentación antes de registrar este movimiento.");
 }
 
-export async function requireLegacyInventoryAvailable(tx: Prisma.TransactionClient, branchId: string, productId: string, outgoing: number, unit: string) {
-  const count = await tx.inventoryCount.findFirst({ where: { branchId, status: "CERRADO", items: { some: { productId } } }, orderBy: [{ countDate: "desc" }, { id: "desc" }], include: { items: { where: { productId } } } });
-  const changes = await tx.inventoryEntry.aggregate({ where: { branchId, productId, entryDate: { gt: count?.countDate ?? new Date(0) } }, _sum: { quantity: true } });
-  const available = new Prisma.Decimal(count?.items[0]?.quantityCounted ?? 0).plus(changes._sum.quantity ?? 0);
-  if (available.minus(outgoing).isNegative()) throw new Error(`Existencia insuficiente: disponible ${available} ${unit}.`);
-}
-
 /** Called only after module and branch authorization. Keep legacy history and the
  * authoritative V2 balance in the same transaction; never initialize a balance
  * from an invented stock value or silently transfer across different ledgers. */
@@ -48,7 +41,7 @@ export async function recordManualInventoryMovement(input: {
       const branches = [input.branchId, ...(input.toBranchId ? [input.toBranchId] : [])].sort();
       for (const branch of branches) await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${branch}:${product.id}`},0))::text`;
       const balances = await tx.inventoryBalance.findMany({ where: { inventoryProductId: product.id, branchId: { in: branches } } });
-      if (input.toBranchId && balances.length === 1) throw new Error("Registra el conteo inicial del producto en ambas sucursales antes de traspasar.");
+      if (balances.length !== branches.length) throw new Error("Registra el conteo inicial del producto en cada sucursal antes de moverlo.");
       const entries = [];
       for (const branch of branches) {
         const outgoing = Boolean(input.toBranchId && branch === input.branchId);
@@ -65,8 +58,6 @@ export async function recordManualInventoryMovement(input: {
               metadata: { capturedQuantity: quantity, capturedUnit: product.unit, unitCost: input.unitCost ?? null },
             }]),
           });
-        } else if (quantity < 0) {
-          await requireLegacyInventoryAvailable(tx, branch, product.id, -quantity, product.unit);
         }
         const entry = await tx.inventoryEntry.create({ data: { branchId: branch, productId: product.id, type: input.type, quantity, unitCost: input.unitCost,
           notes: input.toBranchId ? `Traspaso ${outgoing ? "a" : "desde"} ${outgoing ? input.toBranchId : input.branchId}${input.notes ? `: ${input.notes}` : ""}` : input.notes,
@@ -88,9 +79,8 @@ export type WeeklyInventoryReceiptItem = {
 
 /**
  * Records a weekly replenishment as one idempotent operation. Products that
- * already have an authoritative V2 balance are written to the immutable V2
- * ledger; products that still use the legacy ledger receive the same
- * InventoryEntry shape as the individual-entry flow.
+ * have an authoritative V2 balance before a receipt is accepted. A legacy
+ * InventoryEntry remains as a historical mirror of the same operation.
  */
 export async function recordWeeklyInventoryReceiptBatch(input: {
   actorId: string;
@@ -132,6 +122,9 @@ export async function recordWeeklyInventoryReceiptBatch(input: {
         select: { inventoryProductId: true, unit: true },
       });
       const balanceMap = new Map(balances.map((balance) => [balance.inventoryProductId, balance]));
+      if (balances.length !== productIds.length) {
+        throw new Error("Registra el conteo inicial de cada producto antes de recibirlo.");
+      }
       const prepared = normalizedItems.map((item) => {
         const product = productMap.get(item.productId)!;
         if (!product.inventoryBaseUnit) throw new Error("WEEKLY_RECEIPT_UNIT_NOT_CONFIGURED");
@@ -141,22 +134,19 @@ export async function recordWeeklyInventoryReceiptBatch(input: {
           captureUnit: item.captureUnit,
           product,
         });
-        const isV2 = balanceMap.has(item.productId);
         const balance = balanceMap.get(item.productId);
         if (balance && balance.unit !== product.inventoryBaseUnit) {
           throw new Error("WEEKLY_RECEIPT_UNIT_MISMATCH");
         }
-        return { item, product, normalized, isV2 };
+        return { item, product, normalized };
       }).filter((row) => row.normalized.baseQuantity.gt(0));
       if (prepared.length === 0) throw new Error("WEEKLY_RECEIPT_EMPTY");
 
-      const v2Rows = prepared.filter((row) => row.isV2);
-      if (v2Rows.length > 0) {
-        await applyInventoryBatchInTransaction(tx, {
+      await applyInventoryBatchInTransaction(tx, {
           branchId: input.branchId,
           actorId: input.actorId,
           operationId: input.operationId,
-          movements: groupInventoryDeltas(v2Rows.map(({ item, product, normalized }) => ({
+          movements: groupInventoryDeltas(prepared.map(({ item, product, normalized }) => ({
             inventoryProductId: product.id,
             quantityDelta: normalized.baseQuantity.toString(),
             unit: product.inventoryBaseUnit!,
@@ -171,8 +161,7 @@ export async function recordWeeklyInventoryReceiptBatch(input: {
               loosePieces: normalized.captureUnit === "PRESENTATION" ? (item.loosePieces ?? null) : null,
             },
           }))),
-        });
-      }
+      });
 
       const entryIds: string[] = [];
       for (const { item, product, normalized } of prepared) {

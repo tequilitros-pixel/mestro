@@ -15,7 +15,7 @@ export default async function PosSettingsPage() {
       <div className="mx-auto max-w-2xl space-y-8">
         <div>
           <Link
-            href="/pos"
+            href="/pospress"
             className="mb-2 inline-flex items-center gap-1 text-sm font-semibold text-on-surface-variant hover:text-on-surface"
           >
             <ChevronLeftIcon className="h-3.5 w-3.5" />

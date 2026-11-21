@@ -10,6 +10,8 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireModuleActionAccess } from "@/lib/auth";
+import { applyInventoryBatchInTransaction } from "@/lib/pos2/inventory/applyMovements";
+import { groupInventoryDeltas } from "@/lib/pos2/inventory/domain";
 
 type CreateLiquorBottlingInput = {
   batchId: string;
@@ -369,15 +371,36 @@ if (batch.product.inventoryProductId) {
     );
   }
 
-  await tx.inventoryEntry.create({
+  const inventoryProductId = batch.product.inventoryProductId;
+  const inventoryProduct = await tx.inventoryProduct.findUnique({ where: { id: inventoryProductId } });
+  if (!inventoryProduct?.isActive || inventoryProduct.archivedAt || !inventoryProduct.trackStock || inventoryProduct.inventoryBaseUnit !== "ML") {
+    throw new Error("El insumo de inventario vinculado al licor debe estar activo y medirse en mililitros.");
+  }
+  const balance = await tx.inventoryBalance.findUnique({
+    where: { branchId_inventoryProductId: { branchId: veliz.id, inventoryProductId } },
+    select: { unit: true },
+  });
+  if (!balance) throw new Error("Registra el conteo inicial del insumo en Veliz antes de embotellar.");
+  if (balance.unit !== "ML") throw new Error("La unidad del saldo de Veliz no coincide con el licor.");
+  const entry = await tx.inventoryEntry.create({
     data: {
       branchId: veliz.id,
-      productId: batch.product.inventoryProductId,
+      productId: inventoryProductId,
       type: "PRODUCCION",
       quantity: producedBottles * bottleSizeMl,
       entryDate: now,
       notes: `Embotellado ${bottling.code} · ${producedBottles} botellas de ${bottleSizeMl}ml de ${batch.product.name}.`,
     },
+    select: { id: true },
+  });
+  await applyInventoryBatchInTransaction(tx, {
+    branchId: veliz.id, actorId: userId, operationId: randomUUID(),
+    movements: groupInventoryDeltas([{
+      inventoryProductId, quantityDelta: String(producedBottles * bottleSizeMl), unit: "ML",
+      movementType: "RECEIPT", sourceType: "RECEIPT", sourceId: bottling.id,
+      sourceLineId: entry.id, reasonCode: "LIQUOR_BOTTLING",
+      metadata: { bottlingCode: bottling.code, producedBottles, bottleSizeMl, inventoryEntryId: entry.id },
+    }]),
   });
 }
 

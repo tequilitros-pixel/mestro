@@ -16,6 +16,7 @@ import { quantityUnitFromCatalogBaseUnit } from "@/lib/pos2/units";
 const orderJson = (order: { id: string; orderNumber: string; reference?: string | null; status: string; version: number; subtotal: Prisma.Decimal; discountTotal: Prisma.Decimal; total: Prisma.Decimal }) => ({ type: "Pos2Order", id: order.id, orderNumber: order.orderNumber, reference: order.reference ?? null, status: order.status, version: order.version, subtotal: order.subtotal.toFixed(2), discountTotal: order.discountTotal.toFixed(2), total: order.total.toFixed(2) } as Prisma.InputJsonObject);
 
 export async function createOrder(input: { branchId: string; registerId: string; terminalId: string; cashSessionId: string; actor: CommandActor; operationId: string; expiresAt?: Date | null; reference?: string | null }) {
+  if (process.env.NODE_ENV === "production") throw new DomainError("POS_VERSION_RETIRED");
   const reference = input.reference?.trim() || null;
   if (reference && reference.length > 80) throw new DomainError("VALIDATION_ERROR", { field: "reference" });
   const payload = { branchId: input.branchId, registerId: input.registerId, terminalId: input.terminalId, cashSessionId: input.cashSessionId, expiresAt: input.expiresAt?.toISOString() ?? null, reference };

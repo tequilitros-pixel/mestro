@@ -714,7 +714,7 @@ export default function RawMaterialsClient({
                             className="w-full rounded-xl border border-outline-variant bg-background px-4 py-2.5 text-sm text-on-surface outline-none focus:border-primary"
                           >
                             <option value="">
-                              No abonar al inventario de la sucursal
+                              Usar vínculo del material, si existe
                             </option>
                             {inventoryProducts.map((p) => (
                               <option key={p.id} value={p.id}>
@@ -723,8 +723,7 @@ export default function RawMaterialsClient({
                             ))}
                           </select>
                           <span className="mt-1 block text-xs text-outline">
-                            Si lo eliges, la cantidad también entra al stock que consume
-                            el Punto de Venta.
+                            Si el material ya tiene un producto vinculado, se abonará automáticamente a ese stock. Para otros materiales puedes seleccionar el producto equivalente.
                           </span>
                         </label>
 

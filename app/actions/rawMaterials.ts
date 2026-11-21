@@ -1,10 +1,25 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { RawMaterialMovementType } from "@prisma/client";
+import { Prisma, RawMaterialMovementType } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { requireModuleActionAccess } from "@/lib/auth";
 import { applyRawMaterialMovement } from "@/lib/liquors/rawMaterialMovements";
+import { applyInventoryBatchInTransaction } from "@/lib/pos2/inventory/applyMovements";
+import { groupInventoryDeltas } from "@/lib/pos2/inventory/domain";
+
+function normalizeBranchTransfer(amount: number, sourceUnit: string, targetUnit: string) {
+  const units: Record<string, { base: string; factor: number }> = {
+    G: { base: "G", factor: 1 }, KG: { base: "G", factor: 1000 },
+    ML: { base: "ML", factor: 1 }, L: { base: "ML", factor: 1000 },
+  };
+  const conversion = units[sourceUnit.trim().toUpperCase()];
+  if (!conversion || conversion.base !== targetUnit) {
+    throw new Error("La unidad de la materia prima no coincide con la unidad base del producto de la sucursal.");
+  }
+  return new Prisma.Decimal(amount).times(conversion.factor);
+}
 
 /**
  * ==========================================================
@@ -288,7 +303,7 @@ export async function transferToBranchAction(
 
   const rawMaterialId = String(formData.get("rawMaterialId") ?? "").trim();
   const branchId = String(formData.get("branchId") ?? "").trim();
-  const inventoryProductId =
+  const requestedInventoryProductId =
     String(formData.get("inventoryProductId") ?? "").trim() || null;
   const amount = readNumber(formData, "amount");
   const notes = String(formData.get("notes") ?? "").trim() || null;
@@ -304,12 +319,16 @@ export async function transferToBranchAction(
   try {
     const material = await prisma.rawMaterial.findUnique({
       where: { id: rawMaterialId },
-      select: { name: true, currentStock: true, baseUnit: true },
+      select: { name: true, currentStock: true, baseUnit: true, inventoryProductId: true },
     });
 
     if (!material) {
       return { success: false, error: "La materia prima ya no existe." };
     }
+    if (material.inventoryProductId && requestedInventoryProductId && requestedInventoryProductId !== material.inventoryProductId) {
+      return { success: false, error: "El material ya tiene otro producto de inventario vinculado. Usa ese producto para el traspaso." };
+    }
+    const inventoryProductId = material.inventoryProductId ?? requestedInventoryProductId;
 
     if (material.currentStock < amount) {
       return {
@@ -340,7 +359,18 @@ export async function transferToBranchAction(
       // Espejo en el inventario de sucursales, para que el stock que
       // consume el Punto de Venta refleje lo que se envió.
       if (inventoryProductId) {
-        await tx.inventoryEntry.create({
+        const product = await tx.inventoryProduct.findUnique({ where: { id: inventoryProductId } });
+        if (!product?.isActive || product.archivedAt || !product.trackStock || !product.inventoryBaseUnit) {
+          throw new Error("El producto de inventario vinculado no está disponible.");
+        }
+        const balance = await tx.inventoryBalance.findUnique({
+          where: { branchId_inventoryProductId: { branchId, inventoryProductId } },
+          select: { unit: true },
+        });
+        if (!balance) throw new Error("Registra el conteo inicial del producto en la sucursal antes de traspasarlo.");
+        if (balance.unit !== product.inventoryBaseUnit) throw new Error("La unidad del saldo no coincide con el producto de inventario.");
+        const baseQuantity = normalizeBranchTransfer(amount, material.baseUnit, product.inventoryBaseUnit);
+        const entry = await tx.inventoryEntry.create({
           data: {
             branchId,
             productId: inventoryProductId,
@@ -348,12 +378,23 @@ export async function transferToBranchAction(
             quantity: amount,
             notes: `Traspaso desde almacén de producción · ${material.name}.`,
           },
+          select: { id: true },
+        });
+        await applyInventoryBatchInTransaction(tx, {
+          branchId, actorId: auth.user!.id, operationId: randomUUID(),
+          movements: groupInventoryDeltas([{
+            inventoryProductId, quantityDelta: baseQuantity.toString(), unit: product.inventoryBaseUnit,
+            movementType: "TRANSFER_IN", sourceType: "TRANSFER", sourceId: entry.id,
+            reasonCode: "RAW_MATERIAL_BRANCH_TRANSFER",
+            metadata: { rawMaterialId, sourceUnit: material.baseUnit, capturedQuantity: amount, inventoryEntryId: entry.id },
+          }]),
         });
       }
     });
 
     revalidatePath("/liquors/raw-materials");
     revalidatePath("/administration/inventory/sucursales");
+    revalidatePath("/administration/inventory/sucursales/stock");
 
     return {
       success: true,
@@ -363,7 +404,9 @@ export async function transferToBranchAction(
     };
   } catch (error) {
     console.error("Error transferring raw material:", error);
-    return { success: false, error: "No fue posible registrar el traspaso." };
+    const message = error instanceof Error ? error.message : "";
+    return { success: false, error: /^(Registra el conteo|La unidad|El producto de inventario)/.test(message)
+      ? message : "No fue posible registrar el traspaso." };
   }
 }
 

@@ -653,7 +653,6 @@ export async function POST(request: NextRequest) {
       include: { items: true, payments: true, branch: true },
     });
 
-    const inventoryRequirements: Array<{ productId: string; quantity: number }> = [];
     const pospressInventoryRequirements: PospressInventoryRequirement[] = [];
     const eventInventoryRequirements: Array<{ inventoryProductId: string; quantity: Prisma.Decimal; unit: typeof variants[number]["ingredients"][number]["unit"] }> = [];
     for (const item of resolvedItems) {
@@ -674,10 +673,13 @@ export async function POST(request: NextRequest) {
           }
           pospressInventoryRequirements.push({
             inventoryProductId: ingredient.inventoryProductId,
-            quantity,
-            unit: ingredient.unit,
           });
         }
+        pospressInventoryRequirements.push({
+          inventoryProductId: ingredient.inventoryProductId,
+          quantity,
+          unit: ingredient.unit,
+        });
       }
     }
     if (openCashCut.eventStockIsolated && openCashCut.eventId) {
