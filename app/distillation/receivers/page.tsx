@@ -114,6 +114,17 @@ export default async function DestrozadoReceiversPage({
     redirect(`${returnUrl}${separator}saved=all`);
   }
 
+  async function receiveAll(formData: FormData) {
+    "use server";
+    await requireModuleActionAccess("/distillation");
+    try {
+      await receiveAllCompletedDestrozados(String(formData.get("receiverId") ?? ""));
+    } catch (caught) {
+      redirect(`/distillation/receivers?error=${encodeURIComponent(detailError(caught))}`);
+    }
+    redirect("/distillation/receivers?saved=all");
+  }
+
   async function makeReady(formData: FormData) {
     "use server";
     await requireModuleActionAccess("/distillation");
