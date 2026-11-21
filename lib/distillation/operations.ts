@@ -56,6 +56,15 @@ export async function getDistillationSources(lotId?: string): Promise<Source[]> 
       },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.distillationReceiver.findMany({
+      where: { status: DistillationReceiverStatus.READY },
+      include: {
+        lot: { select: { code: true } },
+        transfers: true,
+        rectifications: { select: { loadedLiters: true, status: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
   // Una fuente marcada como tina vacía no es inventario físico disponible.
@@ -109,6 +118,24 @@ export async function getDistillationSources(lotId?: string): Promise<Source[]> 
 
   // El destrozado terminado debe pasar por el tanque receptor.
   // No ofrecer corridas individuales como fuente directa para rectificación.
+
+  for (const receiver of receivers) {
+    const stock = receiverTotals(receiver);
+    if (stock.availableLiters > EPSILON) {
+      result.push({
+        id: receiver.id,
+        lotId: receiver.lotId,
+        lotCode: receiver.lot.code,
+        type: DistillationType.RECTIFICACION,
+        sourceKind: "RECEIVER",
+        label: "Rectificación desde tanque receptor",
+        tankName: receiver.name,
+        availableLiters: stock.availableLiters,
+        sourceLiters: stock.receivedLiters,
+        initialAlcohol: stock.initialAlcohol,
+      });
+    }
+  }
 
   for (const receiver of receivers) {
     const stock = receiverTotals(receiver);
