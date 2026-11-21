@@ -228,13 +228,19 @@ export function formatCommercialQuantity(
 
   const commercialQuantity = quantity / content;
 
-  if (getPiecePresentationSize(config) !== null && quantity > 0) {
+  if (getPiecePresentationSize(config) !== null) {
     const contentUnit = config.contentUnit?.toUpperCase() ?? "PIEZAS";
     const itemLabel = contentLabel(config, contentUnit);
+    const quantityLabel = (value: number) => `${formatNumber(value)} ${value === 1 || value === -1 ? singularizeSpanish(itemLabel) : itemLabel}`;
+
+    // A negative difference represents missing individual pieces. Showing it
+    // as a fractional package (for example, -0.44 paquetes) hides the exact
+    // shortage that needs to be corrected in the count.
+    if (quantity < 0) return quantityLabel(quantity);
+
     const packages = Math.floor(quantity / content);
     const remainder = quantity - packages * content;
     const packageLabel = `${packages} ${handling}${packages === 1 ? "" : "s"}`;
-    const quantityLabel = (value: number) => `${formatNumber(value)} ${value === 1 ? singularizeSpanish(itemLabel) : itemLabel}`;
     const remainderLabel = quantityLabel(remainder);
     return remainder === 0 && packages > 0
       ? `${packageLabel} (${quantityLabel(quantity)})`

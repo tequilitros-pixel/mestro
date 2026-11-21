@@ -359,7 +359,7 @@ export async function closeInventoryCountAction(
     revalidatePath(`/administration/inventory/branch-counts/${countId}`);
     revalidatePath("/administration/inventory/branch-counts");
 
-    return { success: true, message: "Conteo cerrado y consumo calculado." };
+    return { success: true, message: "Conteo cerrado. El consumo registrado se consulta en el detalle." };
   } catch (error) {
     console.error("Error closing inventory count:", error);
     if (error instanceof Error && error.message === "PERMISSION_DENIED") {

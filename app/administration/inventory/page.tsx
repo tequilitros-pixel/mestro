@@ -142,7 +142,7 @@ export default async function InventoryPage() {
                       <CardLabel>Consumo del periodo</CardLabel>
                       <CardValue>{money(totals.consumedCost)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {units(totals.consumedUnits)} unidades salidas
+                        valor estimado del consumo
                       </p>
                     </Card>
 
@@ -150,7 +150,7 @@ export default async function InventoryPage() {
                       <CardLabel>Movimientos</CardLabel>
                       <CardValue>{totals.movements}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {units(totals.receivedUnits)} unidades entradas
+                        movimientos registrados
                       </p>
                     </Card>
 
@@ -188,7 +188,7 @@ export default async function InventoryPage() {
                     <>
                       <Card>
                         <CardLabel>Entradas y salidas por día</CardLabel>
-                        <InventoryFlowChart data={daily} />
+                        <InventoryFlowChart data={daily.map((day) => ({ label: day.label, consumed: day.consumedCost, received: day.receivedCost, waste: day.wasteCost }))} money />
                       </Card>
 
                       <div className="grid gap-4 lg:grid-cols-2">
@@ -368,13 +368,14 @@ export default async function InventoryPage() {
                         </Card>
 
                         <Card>
-                          <CardLabel>Unidades por categoría</CardLabel>
+                          <CardLabel>Costo consumido por categoría</CardLabel>
                           <InventoryRankingChart
                             data={categories.map((c) => ({
                               name: c.name,
-                              value: Math.round(c.consumed * 10) / 10,
+                              value: Math.round(c.cost),
                             }))}
-                            valueLabel="Unidades"
+                            valueLabel="Costo"
+                            money
                           />
                         </Card>
                       </div>
@@ -407,9 +408,7 @@ export default async function InventoryPage() {
                                   <p className="font-bold text-on-surface">
                                     {money(category.cost)}
                                   </p>
-                                  <p className="text-xs text-on-surface-variant">
-                                    {units(category.consumed)} unidades
-                                  </p>
+                                  <p className="text-xs text-on-surface-variant">Costo consumido</p>
                                 </div>
                               </div>
                             );
@@ -475,9 +474,7 @@ export default async function InventoryPage() {
                                   <p className="font-bold text-on-surface">
                                     {money(branch.cost)}
                                   </p>
-                                  <p className="text-xs text-on-surface-variant">
-                                    {units(branch.consumed)} unidades
-                                  </p>
+                                  <p className="text-xs text-on-surface-variant">costo estimado</p>
                                 </div>
                               </div>
                             );
@@ -650,7 +647,7 @@ export default async function InventoryPage() {
                     <>
                       <Card>
                         <CardLabel>Entradas y salidas por día</CardLabel>
-                        <InventoryFlowChart data={daily} />
+                        <InventoryFlowChart data={daily.map((day) => ({ label: day.label, consumed: day.consumedCost, received: day.receivedCost, waste: day.wasteCost }))} money />
                       </Card>
 
                       <div className="grid gap-4 lg:grid-cols-2">
