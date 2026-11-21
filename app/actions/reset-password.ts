@@ -43,9 +43,13 @@ export async function resetPasswordAction(formData: FormData) {
   });
   if (!allowed) backToForm();
 
-  const user = await prisma.user.findUnique({
-    where: { email },
+  // La misma búsqueda sin distinguir mayúsculas que al emitir el código.
+  // Si hay duplicados equivalentes, no seleccionar arbitrariamente una cuenta.
+  const matchingUsers = await prisma.user.findMany({
+    where: { email: { equals: email, mode: "insensitive" } },
+    take: 2,
   });
+  const user = matchingUsers.length === 1 ? matchingUsers[0] : null;
 
   if (!user || !user.active) {
     backToForm();
