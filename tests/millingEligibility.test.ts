@@ -18,4 +18,3 @@ test("permite más jornadas de molienda aunque el mismo lote ya haya avanzado", 
   assert.ok(!MILLING_ALLOWED_LOT_STAGES.includes(LotStage.RECEPCION));
   assert.ok(!MILLING_ALLOWED_LOT_STAGES.includes(LotStage.TERMINADO));
 });
-

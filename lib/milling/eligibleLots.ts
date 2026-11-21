@@ -9,4 +9,3 @@ export const MILLING_ALLOWED_LOT_STAGES: LotStage[] = [
   LotStage.DESTILACION,
   LotStage.RECTIFICACION,
 ];
-
