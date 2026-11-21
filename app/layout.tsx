@@ -25,6 +25,8 @@ const PUBLIC_MARKETING_PATHS = [
   "/TequilaElColotlense",
 ];
 
+const PUBLIC_MARKETING_PATHS = ["/tequilitros"];
+
 function matchesPath(pathname: string, path: string) {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
