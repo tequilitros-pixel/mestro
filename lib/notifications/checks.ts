@@ -84,7 +84,7 @@ export async function checkReconteoPendiente(): Promise<NotificationCheckResult>
       count === 1
         ? "Hay 1 reconteo de evento con faltantes sin surtir."
         : `Hay ${count} reconteos de eventos con faltantes sin surtir.`,
-    url: "/administration/inventory/eventos/events",
+    url: "/administration/inventory/events",
   };
 }
 

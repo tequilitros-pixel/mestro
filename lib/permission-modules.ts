@@ -151,6 +151,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "/timeclock/calendar", label: "Mi horario" },
       { key: "/timeclock/availability", label: "Mi disponibilidad" },
       { key: "/timeclock/hours", label: "Mi nómina y horas" },
+      { key: "/timeclock/payroll", label: "Nómina y pagos" },
       { key: "/timeclock/history", label: "Mi historial de turnos" },
       { key: "/timeclock/requests", label: "Mis solicitudes" },
       { key: "/timeclock/kiosk", label: "Modo kiosco de checador" },
@@ -235,6 +236,13 @@ export function canAccessModule(
   // Compatibilidad bidireccional /administration <-> /administration/inventory
   if (moduleKey === "/administration" && moduleKeys.includes("/administration/inventory")) return true;
   if (moduleKey === "/administration/inventory" && moduleKeys.includes("/administration")) return true;
+
+  // Workforce administrativo fue descontinuado. Un permiso histórico abre el
+  // horario original sin modificar los permisos ya almacenados.
+  if (
+    moduleKey === "/administration/schedule" &&
+    moduleKeys.includes("/administration/workforce")
+  ) return true;
 
   return moduleKeys.includes(moduleKey);
 }
@@ -452,14 +460,17 @@ export function isInventoryCountCaptureRole(role: string): boolean {
 
 /** Primera pantalla útil después de iniciar sesión, según los permisos asignados. */
 export function getDefaultPathForModuleKeys(moduleKeys: string[]): string {
+  const effectiveKeys = moduleKeys.includes("/administration/workforce")
+    ? [...moduleKeys, "/administration/schedule"]
+    : moduleKeys;
   const orderedKeys = PERMISSION_GROUPS.flatMap((group) =>
     group.modules.map((module) => module.key),
   );
 
   const defaultKey = orderedKeys.find((key) =>
-    moduleKeys.includes(key) ||
-    (key === "/pos" && moduleKeys.includes("/pospress")) ||
-    (key === "/administration/inventory" && moduleKeys.includes("/administration")),
+    effectiveKeys.includes(key) ||
+    (key === "/pos" && effectiveKeys.includes("/pospress")) ||
+    (key === "/administration/inventory" && effectiveKeys.includes("/administration")),
   );
 
   if (defaultKey === "/pos") return "/pospress";

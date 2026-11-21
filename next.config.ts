@@ -26,10 +26,22 @@ const nextConfig: NextConfig = {
         destination: "/workforce/:path*",
         permanent: true,
       },
+      // Workforce quedó descontinuado. Conservamos esta redirección temporal
+      // al horario administrativo que está actualmente en producción.
+      {
+        source: "/workforce",
+        destination: "/administration/schedule",
+        permanent: false,
+      },
+      {
+        source: "/administration/workforce/:path*",
+        destination: "/administration/schedule",
+        permanent: false,
+      },
       {
         source: "/administration/workforce-v1/:path*",
-        destination: "/administration/workforce/:path*",
-        permanent: true,
+        destination: "/administration/schedule",
+        permanent: false,
       },
     ];
   },
@@ -85,6 +97,18 @@ const nextConfig: NextConfig = {
           {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains",
+          },
+        ],
+      },
+      // El navegador debe volver a validar el worker en cada apertura para
+      // que una PWA instalada no quede atendiendo recursos de una versión
+      // anterior después de una publicación.
+      {
+        source: "/sw.js",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
           },
         ],
       },

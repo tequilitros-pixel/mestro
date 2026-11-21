@@ -585,10 +585,11 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       iconVariant: "green",
       operatorAllowed: true,
       permissionKey: "/timeclock",
+      group: "Mi jornada",
     },
     {
       href: "/timeclock/calendar",
-      label: "Mi horario",
+      label: "Horario",
       icon: ClockIcon,
       iconVariant: "blue",
       operatorAllowed: true,
@@ -596,7 +597,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
     },
     {
       href: "/timeclock/availability",
-      label: "Mi disponibilidad",
+      label: "Disponibilidad",
       icon: CalendarIcon,
       iconVariant: "amber",
       operatorAllowed: true,
@@ -612,7 +613,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
     },
     {
       href: "/timeclock/history",
-      label: "Historial de turnos",
+      label: "Historial de asistencia",
       icon: ClockIcon,
       iconVariant: "blue",
       operatorAllowed: true,
@@ -632,6 +633,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: StoreIcon,
       iconVariant: "purple",
       permissionKey: "/timeclock/kiosk",
+      group: "Operación y configuración",
     },
     {
       href: "/administration/schedule",
@@ -666,6 +668,7 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       icon: MapPinIcon,
       iconVariant: "cyan",
       permissionKey: "/timeclock/geofences",
+      group: "Operación y configuración",
     },
   ],
 

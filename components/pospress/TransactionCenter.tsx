@@ -42,7 +42,12 @@ function localBranchId(operation: OfflineOperation) {
   return typeof payload.branchId === "string" ? payload.branchId : "";
 }
 
-export default function TransactionCenter({ branches, workers, initialSales, canCancel, isAdmin }: { branches: Branch[]; workers: Branch[]; initialSales: Sale[]; canCancel: boolean; isAdmin: boolean }) {
+function localCashCutId(operation: OfflineOperation) {
+  const payload = operation.payload as { cashCutId?: string };
+  return typeof payload.cashCutId === "string" ? payload.cashCutId : "";
+}
+
+export default function TransactionCenter({ branches, workers, initialSales, canCancel, isAdmin, currentCashCutId }: { branches: Branch[]; workers: Branch[]; initialSales: Sale[]; canCancel: boolean; isAdmin: boolean; currentCashCutId?: string | null }) {
   const [sales, setSales] = useState(initialSales);
   const [operations, setOperations] = useState<OfflineOperation[]>([]);
   const [branchId, setBranchId] = useState(!isAdmin && branches.length === 1 ? branches[0].id : "");
@@ -148,6 +153,7 @@ export default function TransactionCenter({ branches, workers, initialSales, can
     }));
     const localItems: ViewItem[] = operations
       .filter((operation) => operation.kind === "pos.sale.create")
+      .filter((operation) => isAdmin || localCashCutId(operation) === currentCashCutId)
       .map((operation) => {
         const payload = operation.payload as { items?: Array<{ quantity?: number; description?: string; variantId?: string }> };
         const detail = (payload.items ?? []).map((item) => `${item.quantity ?? 1} × ${item.description ?? (item.variantId ? "Producto de catálogo" : "Artículo")}`).join(", ");
@@ -157,7 +163,7 @@ export default function TransactionCenter({ branches, workers, initialSales, can
     return [...serverItems, ...localItems]
       .filter((item) => !branchId || item.branchId === branchId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [branchId, branchName, operations, sales]);
+  }, [branchId, branchName, currentCashCutId, isAdmin, operations, sales]);
 
   async function actLocal(item: ViewItem, action: "cancel" | "retry") {
     setBusyId(item.id);
@@ -189,7 +195,7 @@ export default function TransactionCenter({ branches, workers, initialSales, can
         <div><p className="text-xs font-bold uppercase tracking-widest text-primary">POSpress</p><h1 className="text-3xl font-bold text-on-surface">Transacciones</h1><p className="mt-1 text-sm text-on-surface-variant">Ventas subidas y cobros guardados en este dispositivo.</p></div>
         <div className="flex flex-wrap gap-2"><Link href="/pospress" className="rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant">Nueva venta</Link><Link href="/pospress/tables" className="rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant">Mesas</Link><Link href="/pospress/pending-tabs" className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-600 dark:text-amber-400">Cuentas pendientes</Link><button onClick={() => void syncNow()} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-bold text-on-primary"><RefreshIcon className="h-4 w-4" />Sincronizar</button></div>
       </header>
-      <section className="flex flex-wrap items-center gap-3 rounded-xl border border-outline-variant bg-surface-container p-3 text-sm"><label className="text-xs font-semibold text-on-surface-variant">Sucursal<select value={branchId} onChange={(event) => setBranchId(event.target.value)} disabled={!isAdmin} className="mt-1 rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface"><option value="">Todas las sucursales</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label><label className="text-xs font-semibold text-on-surface-variant">Empleado<select value={soldById} onChange={(event) => setSoldById(event.target.value)} className="mt-1 rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface"><option value="">Todos los empleados</option>{workers.map((worker) => <option key={worker.id} value={worker.id}>{worker.name}</option>)}</select></label><span className="text-on-surface-variant">{isAdmin ? "Puedes consultar las sucursales autorizadas." : "Solo puedes consultar tu sucursal autorizada."} {snapshot.online ? "Conexión disponible" : "Sin conexión"} · {snapshot.pending + snapshot.failed} pendientes locales{loading ? " · actualizando…" : ""}</span></section>
+      <section className="flex flex-wrap items-center gap-3 rounded-xl border border-outline-variant bg-surface-container p-3 text-sm"><label className="text-xs font-semibold text-on-surface-variant">Sucursal<select value={branchId} onChange={(event) => setBranchId(event.target.value)} disabled={!isAdmin} className="mt-1 rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface">{isAdmin && <option value="">Todas las sucursales</option>}{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label><label className="text-xs font-semibold text-on-surface-variant">Empleado<select value={soldById} onChange={(event) => setSoldById(event.target.value)} className="mt-1 rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm text-on-surface"><option value="">Todos los empleados</option>{workers.map((worker) => <option key={worker.id} value={worker.id}>{worker.name}</option>)}</select></label><span className="text-on-surface-variant">{isAdmin ? "Puedes consultar las sucursales autorizadas." : "Solo puedes consultar la sucursal y el corte que tienes abiertos."} {snapshot.online ? "Conexión disponible" : "Sin conexión"} · {snapshot.pending + snapshot.failed} pendientes locales{loading ? " · actualizando…" : ""}</span></section>
       <div className="space-y-3">{items.length === 0 ? <div className="rounded-2xl border border-dashed border-outline-variant p-10 text-center text-sm text-on-surface-variant">No hay transacciones para mostrar hoy.</div> : items.map((item) => {
         const selected = selectedId === item.id;
         const local = item.source === "local";

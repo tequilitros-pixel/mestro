@@ -23,6 +23,7 @@ function declarationOperationId(countId: string, itemId: string, countDate: Date
 type ReconciledItem = {
   productId: string;
   before: string;
+  counted: string;
   after: string;
   unit: CatalogBaseUnit;
   movementId: string | null;
@@ -133,18 +134,38 @@ export async function reconcileWeeklyCountCutover(
     const balance = locked[0];
     if (!balance) throw new Error("BALANCE_NOT_FOUND");
 
-    const delta = counted.minus(balance.quantity);
+    // `quantityCounted` is the physical stock at the exact time this row was
+    // captured. A count can remain open while the branch keeps operating, so
+    // closing it must not undo sales, receipts, transfers, or reversals that
+    // were posted after `countedAt`.
+    const postCaptureMovements = await tx.inventoryMovement.findMany({
+      where: {
+        branchId: count.branchId,
+        inventoryProductId: product.id,
+        createdAt: { gt: item.countedAt! },
+      },
+      select: { quantityDelta: true },
+    });
+    const postCaptureDelta = postCaptureMovements.reduce(
+      (sum, movement) => sum.plus(movement.quantityDelta),
+      new Prisma.Decimal(0),
+    );
+    const { balanceAfter, correctionDelta } = calculateCountCutoverBalance({
+      currentBalance: balance.quantity,
+      countedQuantity: counted,
+      postCaptureDelta,
+    });
     let movementId: string | null = null;
-    if (!delta.isZero()) {
+    if (!correctionDelta.isZero()) {
       const movement = await tx.inventoryMovement.create({
         data: {
           branchId: count.branchId,
           inventoryProductId: product.id,
           movementType: "COUNT_CORRECTION",
-          quantityDelta: delta,
+          quantityDelta: correctionDelta,
           unit: product.inventoryBaseUnit,
           balanceBefore: balance.quantity,
-          balanceAfter: counted,
+          balanceAfter,
           sourceType: "COUNT",
           sourceId: input.countId,
           actorId: input.actorId,
@@ -156,6 +177,10 @@ export async function reconcileWeeklyCountCutover(
             countId: input.countId,
             countType: count.countType,
             authoritative: true,
+            countedQuantity: counted.toFixed(6),
+            countedAt: item.countedAt!.toISOString(),
+            postCaptureDelta: postCaptureDelta.toFixed(6),
+            postCaptureMovementCount: postCaptureMovements.length,
             ...(item.notes?.trim() ? { notes: item.notes.trim() } : {}),
           },
         },
@@ -163,7 +188,7 @@ export async function reconcileWeeklyCountCutover(
       movementId = movement.id;
       await tx.inventoryBalance.update({
         where: { id: balance.id },
-        data: { quantity: counted, version: { increment: 1 } },
+        data: { quantity: balanceAfter, version: { increment: 1 } },
       });
     }
 
@@ -198,7 +223,8 @@ export async function reconcileWeeklyCountCutover(
     reconciled.push({
       productId: product.id,
       before: balance.quantity.toFixed(6),
-      after: counted.toFixed(6),
+      counted: counted.toFixed(6),
+      after: balanceAfter.toFixed(6),
       unit: product.inventoryBaseUnit,
       movementId,
       declarationId: declaration.id,

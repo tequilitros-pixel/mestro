@@ -3,7 +3,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
 import {
   addDaysToDateOnly,
   formatDateOnly,
@@ -1199,6 +1199,21 @@ export async function getEmployeePayrollDetail(
   if (!isAdmin && (!period || !period.entries.some((e) =>
     e.userId === currentUser.id && (e.status === "APROBADA" || e.status === "PAGADA")
   ))) return { error: "El expediente todavía no está aprobado" };
+
+  // Un empleado solo puede abrir su propio expediente cuando ya fue
+  // aprobado o pagado. Quien administra nómina puede revisar borradores y
+  // revisiones de cualquier empleado. Esta ruta es de solo lectura.
+  if (
+    !hasPayrollPermission &&
+    (!period ||
+      !period.entries.some(
+        (entry) =>
+          entry.userId === currentUser.id &&
+          (entry.status === "APROBADA" || entry.status === "PAGADA"),
+      ))
+  ) {
+    return { error: "El expediente todavía no está aprobado" };
+  }
 
   if (period && period.status !== "BORRADOR") {
     const employee = await prisma.user.findUnique({

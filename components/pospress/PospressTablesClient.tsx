@@ -148,9 +148,8 @@ export default function PospressTablesClient({ branches }: { branches: Branch[] 
     };
   }, [branchId]);
 
-  const branch = branches.find((item) => item.id === branchId) ?? null;
   const selectedTable = TABLES.find((table) => table.id === selectedTableId) ?? null;
-  const activeOrder = orders.find((order) => order.branchId === branchId && order.tableId === selectedTableId) ?? null;
+  const activeOrder = orders.find((order) => order.branchId === branchId && order.cashCutId === branch?.openCashCutId && order.tableId === selectedTableId) ?? null;
   const activeCategory = categories.find((category) => category.id === categoryId) ?? null;
   const total = activeOrder?.lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0) ?? 0;
   const hasOpenCut = Boolean(branch?.openCashCutId) || (!isOnline && localOpenCut);

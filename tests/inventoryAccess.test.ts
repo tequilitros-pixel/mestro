@@ -18,6 +18,7 @@ test("las lecturas permitidas no habilitan formularios nuevos", () => {
   assert.equal(isInventoryManagerReadPath("/administration/inventory/branch-counts/new"), false);
   assert.equal(isInventoryManagerReadPath("/administration/inventory/branch-entries"), false);
   assert.equal(isInventoryCountCaptureRole("GERENTE"), true);
+  assert.equal(isInventoryCountCaptureRole("ENCARGADO"), true);
   assert.equal(isInventoryCountCaptureRole("OPERATOR"), true);
   assert.equal(isInventoryCountCaptureRole("CONSULTA"), false);
 });

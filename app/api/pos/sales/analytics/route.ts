@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { addDaysToDateOnly, businessDayStart } from "@/lib/dateOnly";
 import { withRlsContext } from "@/lib/rls";
+import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
 
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -20,6 +21,8 @@ export async function GET(request: NextRequest) {
   }
 
   const allowedBranchIds = await getAccessibleBranchIds();
+  const currentCashCut = user.role === "ADMIN" ? null : await getCurrentPospressCashCut(user);
+  if (user.role !== "ADMIN" && !currentCashCut) return NextResponse.json([]);
 
   const { searchParams } = new URL(request.url);
   const dateFrom = searchParams.get("dateFrom");
@@ -40,7 +43,9 @@ export async function GET(request: NextRequest) {
 
   const sales = await withRlsContext(user, (tx) => tx.posSale.findMany({
     where: {
-      branchId: allowedBranchIds ? { in: allowedBranchIds } : undefined,
+      ...(currentCashCut
+        ? { branchId: currentCashCut.branch.id, cashCutId: currentCashCut.id }
+        : { branchId: allowedBranchIds ? { in: allowedBranchIds } : undefined }),
       createdAt: { gte: rangeStart, lt: rangeEnd },
       status: "COMPLETADA",
     },

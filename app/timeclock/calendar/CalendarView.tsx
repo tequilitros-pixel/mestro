@@ -155,7 +155,7 @@ export default function CalendarView({ shifts, openShift, todayKey }: CalendarVi
           })}
         </div>
 
-        {shifts.length === 0 && <div className="rounded-2xl border border-dashed border-outline-variant p-6 text-center text-sm text-on-surface-variant"><CalendarIcon className="mx-auto mb-2 h-8 w-8" />No tienes turnos publicados en los próximos 21 días.</div>}
+        {effectiveShifts.length === 0 && <div className="rounded-2xl border border-dashed border-outline-variant p-6 text-center text-sm text-on-surface-variant"><CalendarIcon className="mx-auto mb-2 h-8 w-8" />No tienes turnos publicados en los próximos 21 días.</div>}
       </div>
     </main>
   );

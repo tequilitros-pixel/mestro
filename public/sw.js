@@ -55,7 +55,6 @@ self.addEventListener("install", (event) => {
   );
   self.skipWaiting();
 });
-
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     Promise.all([
@@ -68,7 +67,6 @@ self.addEventListener("activate", (event) => {
     ]),
   );
 });
-
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);

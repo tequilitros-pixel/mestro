@@ -73,6 +73,24 @@ export default function NuevoCortePage() {
   }, [branchId]);
 
   useEffect(() => {
+    if (!branchId) {
+      setPreviousNextFund(null);
+      return;
+    }
+    fetch(`/api/cash-cuts?branchId=${encodeURIComponent(branchId)}&status=CERRADO`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((cuts: Array<{ nextFund?: number | null }>) => {
+        const lastCut = Array.isArray(cuts) ? cuts[0] : null;
+        if (lastCut && typeof lastCut.nextFund === "number") {
+          setPreviousNextFund(lastCut.nextFund);
+        } else {
+          setPreviousNextFund(null);
+        }
+      })
+      .catch(() => setPreviousNextFund(null));
+  }, [branchId]);
+
+  useEffect(() => {
     const cachedBranches = localStorage.getItem("maestro:cash-cut-branches");
     if (cachedBranches) {
       window.setTimeout(() => setBranches(JSON.parse(cachedBranches)), 0);

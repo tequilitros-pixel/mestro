@@ -54,6 +54,8 @@ export const EVENT_TYPES = [
   "Otro",
 ] as const;
 
+export type QuoteStatus = "PENDING" | "APPROVED" | "CONFIRMED" | "REJECTED" | "CANCELLED" | "DRAFT";
+
 export interface TequilitrosQuoteMetadata {
   version: 1;
   type: "TEQUILITROS_QUOTE";
@@ -75,18 +77,24 @@ export interface TequilitrosQuoteMetadata {
   balanceRemaining: number;
   specialNotes?: string;
 
+  // Estatus de la cotización
+  status?: QuoteStatus;
+  approvedAt?: string;
+  rejectedAt?: string;
+
   // Empleado y Sucursal emisora
   createdById: string;
   creatorName: string;
   branchId?: string;
   branchName?: string;
 
-  // Contrato y Anticipo formal
+  // Contrato, Recibo y Anticipo formal
   isContractConfirmed?: boolean;
   contractFolio?: string; // Ej: CTR-2026-0827
+  receiptFolio?: string; // Ej: REC-2026-0827
   depositPaid?: number;
   depositMethod?: string; // "Efectivo en Sucursal" | "Transferencia Bancaria" | "Tarjeta"
-  depositPaidAt?: string;
+  depositPaidAt?: string; // Fecha en que se cubrió el anticipo
   depositReceivedById?: string;
   depositReceivedByName?: string;
   depositBranchName?: string;

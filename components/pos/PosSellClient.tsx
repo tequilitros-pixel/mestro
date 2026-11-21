@@ -61,6 +61,26 @@ type BranchOption = {
   openEventName?: string | null;
 };
 
+type DiscountRule = { id: string; name: string; percent: number };
+type DiscountRulesResponse = { blockedBy: string | null; discounts: DiscountRule[] };
+
+function isDiscountRulesResponse(value: unknown): value is DiscountRulesResponse {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { blockedBy?: unknown; discounts?: unknown };
+  return (
+    (typeof candidate.blockedBy === "string" || candidate.blockedBy === null) &&
+    Array.isArray(candidate.discounts) &&
+    candidate.discounts.every(
+      (rule): rule is DiscountRule =>
+        Boolean(rule) &&
+        typeof rule === "object" &&
+        typeof (rule as DiscountRule).id === "string" &&
+        typeof (rule as DiscountRule).name === "string" &&
+        typeof (rule as DiscountRule).percent === "number",
+    )
+  );
+}
+
 type LineDiscount = {
   kind: "DESCUENTO_NORMAL" | "CORTESIA";
   type: "PERCENT" | "AMOUNT";
@@ -442,7 +462,7 @@ export default function PosSellClient({
   }
 
   async function handleSavePendingTab() {
-    if (!pendingCustomerName.trim() || !branchId || cart.length === 0) return;
+    if (!pendingCustomerName.trim() || !branchId || !branch?.openCashCutId || cart.length === 0) return;
 
     const lines: PendingTabLine[] = cart.map((line) => {
       if (line.isCustom) {
@@ -468,6 +488,7 @@ export default function PosSellClient({
     const newTab: PendingTab = {
       id: crypto.randomUUID(),
       branchId,
+      cashCutId: branch?.openCashCutId ?? "",
       customerName: pendingCustomerName.trim(),
       phone: pendingCustomerPhone.trim() || undefined,
       notes: pendingCustomerNotes.trim() || undefined,
@@ -524,14 +545,14 @@ export default function PosSellClient({
               <>
                 <Link
                   href="/pospress/catalog"
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-outline-variant px-2.5 py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
                 >
                   <GearIcon className="h-4 w-4" />
                   Editar productos
                 </Link>
                 <Link
                   href="/pospress/discounts"
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-outline-variant px-2.5 py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
                 >
                   <TagIcon className="h-4 w-4" />
                   Editar descuentos
@@ -548,35 +569,35 @@ export default function PosSellClient({
             </Link>
             <Link
               href="/pospress/transactions"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-outline-variant px-2.5 py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
             >
               <ReceiptIcon className="h-4 w-4" />
               Transacciones
             </Link>
             <Link
               href="/pospress/tables"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-outline-variant px-2.5 py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
             >
               <GridIcon className="h-4 w-4" />
               Mesas
             </Link>
             <Link
               href="/pospress/pending-tabs"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-600 dark:text-amber-400 transition hover:bg-amber-500/20"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 transition hover:bg-amber-500/20"
             >
               <ClockIcon className="h-4 w-4" />
               Cuentas pendientes
             </Link>
             <Link
               href="/pospress/recipes"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-outline-variant px-2.5 py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
             >
               <TagIcon className="h-4 w-4" />
               Recetas y catálogo
             </Link>
             <Link
               href="/cash-cuts"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant px-3 py-2 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-outline-variant px-2.5 py-2 text-xs font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
             >
               Corte de caja
             </Link>
@@ -594,7 +615,7 @@ export default function PosSellClient({
           </p>
         )}
         {!hasOpenCut && branch && (
-          <div className="mx-4 mt-4 flex items-center gap-3 rounded-xl border border-secondary/30 bg-secondary/10 p-4">
+          <div className="mx-3 mt-3 flex items-center gap-2 rounded-lg border border-secondary/30 bg-secondary/10 p-3">
             <AlertIcon className="h-5 w-5 shrink-0 text-secondary" />
             <div className="flex-1">
               <p className="text-sm font-semibold text-on-surface">
@@ -614,7 +635,7 @@ export default function PosSellClient({
         )}
 
         {loadError && (
-          <div className="mx-4 mt-4 rounded-xl border border-error/30 bg-error/10 p-4 text-sm text-error">
+          <div className="mx-3 mt-3 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
             {loadError}
           </div>
         )}
@@ -717,10 +738,10 @@ export default function PosSellClient({
           )}
         </div>
 
-        <div className="border-t border-outline-variant p-4">
+        <div className="border-t border-outline-variant p-3">
           <button
             onClick={() => setShowKeypad(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-outline-variant py-3 text-sm font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-outline-variant py-2.5 text-xs font-semibold text-on-surface-variant transition hover:border-primary hover:text-on-surface"
           >
             <PlusIcon className="h-4 w-4" />
             Cobro personalizado
@@ -743,7 +764,7 @@ export default function PosSellClient({
           )}
         </div>
 
-        <div className="space-y-2 border-b border-outline-variant p-4">
+        <div className="space-y-2 border-b border-outline-variant p-3">
           <label className="flex items-center gap-2 text-sm font-semibold text-on-surface">
             <input
               type="checkbox"
@@ -773,7 +794,7 @@ export default function PosSellClient({
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-3">
           {cart.length === 0 && (
             <p className="text-center text-sm text-on-surface-variant">
               Toca un producto para agregarlo.
@@ -791,7 +812,7 @@ export default function PosSellClient({
               return (
                 <div
                   key={line.key}
-                  className="rounded-xl border border-outline-variant bg-surface-container/60 p-3"
+                  className="rounded-lg border border-outline-variant bg-surface-container/60 p-2.5"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0 flex-1">
@@ -897,7 +918,7 @@ export default function PosSellClient({
           </div>
         </div>
 
-        <div className="space-y-3 border-t border-outline-variant p-4">
+        <div className="space-y-2.5 border-t border-outline-variant p-3">
           <button
             onClick={() => setShowDiscount(true)}
             className="w-full text-left text-xs font-semibold text-primary hover:underline"
@@ -1629,6 +1650,7 @@ function PaymentModal({
       clientCreatedAt,
       displayTotal: total,
       branchId: branch.id,
+      cashCutId: branch.openCashCutId ?? undefined,
       discountAmount,
       discountReasonCode,
       discountReason: discountReasonNote,

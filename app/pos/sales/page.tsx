@@ -4,16 +4,21 @@ import { prisma } from "@/lib/prisma";
 import SalesDashboardClient from "@/components/pos/SalesDashboardClient";
 import { addDaysToDateOnly, businessDayStart, todayDateOnly } from "@/lib/dateOnly";
 import { withRlsContext } from "@/lib/rls";
+import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
 
 export default async function PosSalesPage() {
   const user = await getCurrentUserWithAnyModuleAccess(["/pos", "/pos/sales"]);
   if (!user) redirect("/profile");
   const allowedBranchIds = await getAccessibleBranchIds();
+  const isAdmin = user.role === "ADMIN";
+  const currentCashCut = isAdmin ? null : await getCurrentPospressCashCut(user);
 
   const branches = await prisma.branch.findMany({
     where: {
       active: true,
-      ...(allowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
+      ...(isAdmin
+        ? (allowedBranchIds ? { id: { in: allowedBranchIds } } : {})
+        : currentCashCut ? { id: currentCashCut.branch.id } : { id: "__no-open-pospress-cut__" }),
     },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
@@ -23,12 +28,16 @@ export default async function PosSalesPage() {
   const startOfToday = businessDayStart(today);
   const startOfTomorrow = businessDayStart(addDaysToDateOnly(today, 1));
 
-  const branchFilter = allowedBranchIds ? { in: allowedBranchIds } : undefined;
+  const saleScope = !isAdmin
+    ? currentCashCut
+      ? { branchId: currentCashCut.branch.id, cashCutId: currentCashCut.id }
+      : { id: "__no-open-pospress-sales__" }
+    : { branchId: allowedBranchIds ? { in: allowedBranchIds } : undefined };
 
   const [sales, analyticsSales] = await withRlsContext(user, (tx) => Promise.all([
     tx.posSale.findMany({
       where: {
-        branchId: branchFilter,
+        ...saleScope,
         createdAt: { gte: startOfToday, lt: startOfTomorrow },
       },
       include: {
@@ -47,7 +56,7 @@ export default async function PosSalesPage() {
     // cliente vuelve a pedir datos a /api/pos/sales/analytics.
     tx.posSale.findMany({
       where: {
-        branchId: branchFilter,
+        ...saleScope,
         createdAt: { gte: startOfToday, lt: startOfTomorrow },
         status: "COMPLETADA",
       },

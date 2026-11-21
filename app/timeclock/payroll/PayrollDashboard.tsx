@@ -69,6 +69,7 @@ export default function PayrollDashboard() {
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     getPayrollAnalytics(from, to)
       .then((result) => {
@@ -93,8 +94,16 @@ export default function PayrollDashboard() {
 
     return () => {
       cancelled = true;
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
     };
   }, [from, to, refreshKey]);
+
+  function retryLoad() {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    setRefreshKey((key) => key + 1);
+  }
 
   function handleRangeChange(value: string) {
     setRangeDays(value);

@@ -44,6 +44,8 @@ export default async function NewDistillationPage({
 
   const defaultSource = sources.find((s) => s.lotId === queryLotId) ?? sources[0];
 
+  const defaultSource = sources.find((s) => s.lotId === queryLotId) ?? sources[0];
+
   async function createDistillation(formData: FormData) {
     "use server";
     await requireModuleActionAccess("/distillation");

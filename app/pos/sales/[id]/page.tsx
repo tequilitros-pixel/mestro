@@ -6,6 +6,7 @@ import { withRlsContext } from "@/lib/rls";
 import { ChevronLeftIcon } from "@/components/ui/icons";
 import PrintReceiptButton from "./PrintReceiptButton";
 import { formatBusinessDateTime } from "@/lib/dateTime";
+import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
 
 const PAYMENT_LABELS: Record<string, string> = {
   EFECTIVO: "Efectivo",
@@ -30,6 +31,8 @@ export default async function PosReceiptPage({
   if (!user) redirect("/login");
 
   const { id } = await params;
+  const currentCashCut = user.role === "ADMIN" ? null : await getCurrentPospressCashCut(user);
+  if (user.role !== "ADMIN" && !currentCashCut) redirect("/pospress");
 
   const sale = await withRlsContext(user, (tx) => tx.posSale.findUnique({
     where: { id },
@@ -44,6 +47,10 @@ export default async function PosReceiptPage({
   }));
 
   if (!sale) notFound();
+
+  if (currentCashCut && (sale.branchId !== currentCashCut.branch.id || sale.cashCutId !== currentCashCut.id)) {
+    notFound();
+  }
 
   // RLS es defensa en profundidad; la autorización de la aplicación debe
   // cubrir cualquier rol no administrador, incluidos roles actuales o futuros.
