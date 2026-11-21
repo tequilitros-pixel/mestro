@@ -221,6 +221,7 @@ export default async function NewMillingPage({ searchParams }: { searchParams: P
               step="0.01"
               min="0.01"
               name="cookedKg"
+              placeholder="Kilos realmente procesados en esta jornada"
               id="cookedKg"
               placeholder="Kilos realmente molidos hoy"
               required
