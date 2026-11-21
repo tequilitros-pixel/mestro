@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
   const allowedBranchIds = await getAccessibleBranchIds();
   const { searchParams } = new URL(req.url);
   const requestedBranchId = searchParams.get("branchId");
+  const dateRange = user.role === "GERENTE" ? currentBusinessWeekRange() : undefined;
 
   if (requestedBranchId) {
     if (allowedBranchIds && !allowedBranchIds.includes(requestedBranchId)) {
@@ -67,7 +68,7 @@ export async function GET(req: NextRequest) {
   });
 
   const summaries = await Promise.all(
-    branches.map((b) => getBranchSafeSummary(b.id))
+    branches.map((b) => getBranchSafeSummary(b.id, dateRange))
   );
 
   return NextResponse.json(summaries);

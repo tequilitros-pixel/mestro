@@ -209,3 +209,14 @@ export function canWriteCashCut(
   if (!scope.canSeeHistory && cut.responsibleId !== scope.user.id) return false;
   return true;
 }
+
+export function currentBusinessWeekRange() {
+  const start = mondayOfWeek(todayDateOnly());
+  return { from: businessDayStart(start), toExclusive: businessDayStart(addDaysToDateOnly(start, 7)) };
+}
+
+export function isCurrentManagerBusinessWeek(role: UserRole, value: Date) {
+  if (role !== "GERENTE") return true;
+  const range = currentBusinessWeekRange();
+  return value >= range.from && value < range.toExclusive;
+}
