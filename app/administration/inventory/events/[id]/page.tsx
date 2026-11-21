@@ -2,8 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
-import { statusLabels } from "./EventStatusSelector";
-import EventActionsBar from "./EventActionsBar";
+import EventStatusSelector from "./EventStatusSelector";
 import AddCustomItemForm from "./AddCustomItemForm";
 import EventDetailTabs from "./EventDetailTabs";
 import RecountForm from "./RecountForm";
@@ -56,9 +55,9 @@ export default async function EventDetailPage({
 
   const [products, allowedBranchIds, eventSaleRows] = await Promise.all([
     prisma.inventoryProduct.findMany({
-      where: { isActive: true, archivedAt: null },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, unit: true, itemType: true, trackStock: true },
+    where: { isActive: true, archivedAt: null },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, unit: true, itemType: true, trackStock: true },
     }),
     getAccessibleBranchIds(),
     prisma.eventSaleConsumption.findMany({ where: { eventId: id, reversedAt: null }, select: { productId: true, quantity: true, unit: true } }),
@@ -243,11 +242,7 @@ export default async function EventDetailPage({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-full bg-surface-container-high px-3.5 py-1.5 text-xs font-semibold text-on-surface border border-outline-variant">
-              Estado: {statusLabels[event.status] ?? event.status}
-            </span>
-          </div>
+          <EventStatusSelector eventId={event.id} currentStatus={event.status} />
         </div>
       </div>
 
@@ -431,69 +426,15 @@ export default async function EventDetailPage({
     </section>
   );
 
-  const isCancelled = event.status === "CANCELLED";
-
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
       <div className="mx-auto max-w-6xl space-y-6">
-        <div>
-          <Link
-            href="/administration/inventory/events"
-            className="inline-block text-sm font-semibold text-on-surface-variant hover:text-on-surface"
-          >
-            ← Eventos
-          </Link>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-2xl font-bold text-on-surface sm:text-3xl">
-                  {event.clientName}
-                </h1>
-                <span className="rounded-md bg-surface-container-high px-2 py-0.5 font-mono text-xs text-on-surface-variant">
-                  {event.code}
-                </span>
-                {isCancelled && (
-                  <span className="rounded-full bg-error/15 px-2.5 py-0.5 text-xs font-bold text-error border border-error/25">
-                    Cancelado / Archivado
-                  </span>
-                )}
-              </div>
-              <p className="mt-1 text-xs sm:text-sm text-on-surface-variant">
-                📍 {event.location} · 🗓️ {formatBusinessDateTime(event.eventDate)} · 👥 {event.guestCount} invitados
-              </p>
-            </div>
-
-            <EventActionsBar
-              event={{
-                id: event.id,
-                code: event.code,
-                clientName: event.clientName,
-                clientPhone: event.clientPhone,
-                location: event.location,
-                eventDate: event.eventDate,
-                guestCount: event.guestCount,
-                saleAmount: saleAmount,
-                packageId: event.packageId,
-                equipmentKitId: event.equipmentKitId,
-                notes: event.notes,
-                status: event.status,
-                checkoutConfirmedAt: event.checkoutConfirmedAt,
-                returnConfirmedAt: event.returnConfirmedAt,
-              }}
-              packages={packages}
-              kits={kits}
-              isAdmin={isAdmin}
-            />
-          </div>
-        </div>
-
-        {isCancelled && (
-          <div className="rounded-xl border border-error/30 bg-error/10 p-4 text-xs sm:text-sm text-error flex items-center justify-between gap-3">
-            <span>
-              Este evento fue <strong>cancelado o archivado</strong>. Sus insumos no afectarán la operación a menos que lo reactives.
-            </span>
-          </div>
-        )}
+        <Link
+          href="/administration/inventory/events"
+          className="inline-block text-sm font-semibold text-on-surface-variant hover:text-on-surface"
+        >
+          ← Eventos
+        </Link>
 
         <EventDetailTabs
           resumen={<div className="space-y-6">{stockPanel}<EventSummary rows={consumption} saleAmount={saleAmount} complete={Boolean(event.returnConfirmedAt)} pendingReturns={pendingReturns} /></div>}

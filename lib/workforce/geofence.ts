@@ -1,21 +1,5 @@
 import { distanceMeters } from "@/lib/geo";
 
-export const BRANCH_GEOFENCE_MODES = ["OFF", "WARN", "BLOCK"] as const;
-export type BranchGeofenceMode = (typeof BRANCH_GEOFENCE_MODES)[number];
-export type GeofenceOutsideBehavior = "BLOCK" | "ALLOW_WITH_EXCEPTION";
-
-export type GlobalGeofencePolicy = {
-  requireGeolocationClockIn: boolean;
-  requireGeolocationClockOut: boolean;
-  geofenceOutsideBehavior: GeofenceOutsideBehavior;
-  requireOutsideGeofenceReview: boolean;
-  maximumGpsAccuracyMeters: number;
-};
-
-export type EffectiveGeofencePolicy = GlobalGeofencePolicy & {
-  mode: BranchGeofenceMode;
-};
-
 export type LocationFailure = "PERMISSION_DENIED" | "UNAVAILABLE";
 
 export type LocationSample = {
@@ -33,47 +17,8 @@ export type LocationInput =
 
 export type GeofenceBranch = {
   geofenceEnabled: boolean;
-  geofenceMode?: BranchGeofenceMode | null;
-  geofence?: { latitude: number; longitude: number; radius: number } | null;
+  geofence: { latitude: number; longitude: number; radius: number } | null;
 };
-
-export function globalGeofenceMode(
-  policy: Pick<
-    GlobalGeofencePolicy,
-    "requireGeolocationClockIn" | "requireGeolocationClockOut" | "geofenceOutsideBehavior"
-  >,
-): BranchGeofenceMode {
-  if (!policy.requireGeolocationClockIn && !policy.requireGeolocationClockOut) return "OFF";
-  return policy.geofenceOutsideBehavior === "BLOCK" ? "BLOCK" : "WARN";
-}
-
-export function resolveBranchGeofencePolicy(
-  branch: GeofenceBranch,
-  policy: GlobalGeofencePolicy,
-): EffectiveGeofencePolicy {
-  const hasConfiguredGeofence = Boolean(branch.geofenceEnabled && branch.geofence);
-  const usesGlobalPolicy = branch.geofenceMode == null;
-  const mode = branch.geofenceMode ?? (hasConfiguredGeofence ? globalGeofenceMode(policy) : "OFF");
-
-  if (usesGlobalPolicy) {
-    return {
-      ...policy,
-      mode,
-      requireGeolocationClockIn: mode === "OFF" ? false : policy.requireGeolocationClockIn,
-      requireGeolocationClockOut: mode === "OFF" ? false : policy.requireGeolocationClockOut,
-      requireOutsideGeofenceReview: mode === "OFF" ? false : policy.requireOutsideGeofenceReview,
-    };
-  }
-
-  return {
-    ...policy,
-    mode,
-    requireGeolocationClockIn: mode !== "OFF",
-    requireGeolocationClockOut: mode !== "OFF",
-    geofenceOutsideBehavior: mode === "BLOCK" ? "BLOCK" : "ALLOW_WITH_EXCEPTION",
-    requireOutsideGeofenceReview: mode === "WARN",
-  };
-}
 
 export type GeofenceResult = {
   result:
@@ -89,7 +34,7 @@ export type GeofenceResult = {
 };
 
 export function requiresLocation(branch: GeofenceBranch, policyEnabled: boolean) {
-  return policyEnabled && branch.geofenceEnabled && branch.geofence !== null;
+  return policyEnabled && branch.geofenceEnabled;
 }
 
 export function evaluateGeofence(
@@ -104,9 +49,15 @@ export function evaluateGeofence(
   if (!requiresLocation(branch, policyEnabled)) {
     return { result: "NOT_REQUIRED", checkedAt };
   }
+  if (!branch.geofence) return { result: "UNAVAILABLE", checkedAt };
 
   if (location?.failure) {
-    return { result: location.failure, checkedAt };
+    // JSON from a Server Action is untrusted even when TypeScript narrows it.
+    // Only failures may come from the device; success is calculated below.
+    const result = location.failure === "PERMISSION_DENIED" || location.failure === "UNAVAILABLE"
+      ? location.failure
+      : "UNAVAILABLE";
+    return { result, checkedAt };
   }
 
   if (!location?.sample) {
@@ -125,10 +76,10 @@ export function evaluateGeofence(
     return { result: "UNAVAILABLE", checkedAt };
   }
 
-  if (
-    accuracyMeters !== undefined &&
-    (!Number.isFinite(accuracyMeters) || accuracyMeters < 0 || accuracyMeters > maximumAccuracyMeters)
-  ) {
+  if (typeof accuracyMeters !== "number" || !Number.isFinite(accuracyMeters) || accuracyMeters < 0) {
+    return { result: "UNAVAILABLE", checkedAt };
+  }
+  if (accuracyMeters > maximumAccuracyMeters) {
     return { result: "LOW_ACCURACY", accuracyMeters, checkedAt };
   }
 
@@ -173,24 +124,5 @@ export function geofenceMessage(result: GeofenceResult) {
       return "No pudimos verificar tu ubicación.";
     default:
       return null;
-  }
-}
-
-export function geofenceResultLabel(result: GeofenceResult["result"] | string) {
-  switch (result) {
-    case "INSIDE":
-      return "Dentro de la sucursal";
-    case "OUTSIDE":
-      return "Fuera de la geozona";
-    case "PERMISSION_DENIED":
-      return "Permiso de ubicación rechazado";
-    case "LOW_ACCURACY":
-      return "Ubicación imprecisa";
-    case "UNAVAILABLE":
-      return "Ubicación no disponible";
-    case "NOT_REQUIRED":
-      return "Ubicación no requerida";
-    default:
-      return "Revisión de ubicación";
   }
 }

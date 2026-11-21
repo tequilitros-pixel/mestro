@@ -9,33 +9,23 @@ import { inventoryCountTypeLabel } from "@/lib/inventory/countScope";
 export default async function BranchCountsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string; branchId?: string }>;
+  searchParams: Promise<{ type?: string }>;
 }) {
   const user = await requireInventoryCountCaptureAccess();
   if (user.role !== "ADMIN") {
     redirect("/administration/inventory/branch-counts/new?type=WEEKLY");
   }
-  const params = await searchParams;
-  const requestedType = params.type;
+  const requestedType = (await searchParams).type;
   const countType = requestedType === "MONTHLY" ? "MONTHLY" : "WEEKLY";
   const allowedBranchIds = await getAccessibleBranchIds();
-  const branchWhere = {
-    active: true,
-    ...(allowedBranchIds === null ? {} : { id: { in: allowedBranchIds } }),
-  };
-  const branches = await prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } });
-  const selectedBranchId = params.branchId && branches.some((branch) => branch.id === params.branchId)
-    ? params.branchId
-    : null;
   const counts = await prisma.inventoryCount.findMany({
     where: {
       ...(allowedBranchIds === null ? {} : { branchId: { in: allowedBranchIds } }),
-      ...(selectedBranchId ? { branchId: selectedBranchId } : {}),
       countType,
     },
     orderBy: { countDate: "desc" },
     include: { branch: true },
-    take: 60,
+    take: 30,
   });
 
   return (
@@ -75,30 +65,6 @@ export default async function BranchCountsPage({
           </div>
         </div>
 
-        <section className="rounded-2xl border border-outline-variant bg-surface-container p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-outline">Selecciona una sucursal</p>
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-            <Link
-              href={`/administration/inventory/branch-counts?type=${countType}`}
-              className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${selectedBranchId === null ? "bg-primary text-on-primary" : "border border-outline-variant bg-background text-on-surface-variant hover:border-primary/40"}`}
-            >
-              Todas
-            </Link>
-            {branches.map((branch) => (
-              <Link
-                key={branch.id}
-                href={`/administration/inventory/branch-counts?type=${countType}&branchId=${encodeURIComponent(branch.id)}`}
-                className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${selectedBranchId === branch.id ? "bg-primary text-on-primary" : "border border-outline-variant bg-background text-on-surface-variant hover:border-primary/40"}`}
-              >
-                {branch.name}
-              </Link>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-on-surface-variant">
-            {selectedBranchId ? `Mostrando únicamente los conteos de ${branches.find((branch) => branch.id === selectedBranchId)?.name ?? "la sucursal seleccionada"}.` : "Selecciona una sucursal para consultar únicamente sus conteos."}
-          </p>
-        </section>
-
         <div className="rounded-2xl border border-outline-variant bg-surface-container divide-y divide-outline-variant">
           {counts.length === 0 && (
             <p className="p-6 text-sm text-on-surface-variant">Aún no hay conteos.</p>
@@ -120,12 +86,10 @@ export default async function BranchCountsPage({
                 className={`rounded-full px-3 py-1 text-xs ${
                   count.status === "CERRADO"
                     ? "bg-tertiary-fixed-dim/20 text-tertiary-fixed-dim"
-                    : count.status === "ANULADO"
-                      ? "bg-error/15 text-error"
-                      : "bg-secondary/20 text-secondary"
+                    : "bg-secondary/20 text-secondary"
                 }`}
               >
-                {count.status === "CERRADO" ? "Cerrado" : count.status === "ANULADO" ? "Anulado" : "Borrador"}
+                {count.status === "CERRADO" ? "Cerrado" : "Borrador"}
               </span>
             </Link>
           ))}

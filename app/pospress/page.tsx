@@ -2,7 +2,6 @@ import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getPosSaleBranchOptions } from "@/lib/pos/cashCutBranchGuard";
 import PosSellClient from "@/components/pos/PosSellClient";
-import { getPospressActiveScope } from "@/lib/pos/currentCashCut";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,8 +11,9 @@ export default async function PosPressPage({
 }: {
   searchParams: Promise<{ branchId?: string }>;
 }) {
-  const [user, query] = await Promise.all([
+  const [user, allowedBranchIds, query] = await Promise.all([
     getCurrentUser(),
+    getAccessibleBranchIds(),
     searchParams,
   ]);
 
@@ -28,6 +28,7 @@ export default async function PosPressPage({
       key={branches.map((branch) => branch.id).join(",")}
       branchLockMessage={branchLockMessage}
       title="Punto de Venta"
+      inventoryMode="v2"
       initialBranchId={selectedBranchId}
       branchOptions={branches}
       canManageCatalog={user?.role === "ADMIN"}

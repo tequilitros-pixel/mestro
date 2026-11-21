@@ -26,7 +26,7 @@ export default async function EditPosProductPage({
       select: { id: true, name: true },
     }),
     prisma.inventoryProduct.findMany({
-      where: { isActive: true, archivedAt: null },
+      where: { isActive: true },
       orderBy: { name: "asc" },
       select: { id: true, code: true, name: true, unit: true },
     }),

@@ -32,7 +32,7 @@ export type ActionResult =
       baseQuantity?: string;
       captureUnit?: InventoryCaptureUnit;
     }
-  | { success: false; error: string; openCountId?: string };
+  | { success: false; error: string };
 
 export async function createInventoryCountAction(
   formData: FormData,
@@ -70,7 +70,6 @@ export async function createInventoryCountAction(
       return {
         success: false,
         error: "Ya existe un conteo abierto para esta sucursal. Ciérralo antes de crear uno nuevo.",
-        openCountId: openCount.id,
       };
     }
 
@@ -303,10 +302,10 @@ export async function updateCountItemNotesAction(
 ): Promise<ActionResult> {
   try {
     const scopedItem = await prisma.inventoryCountItem.findUnique({
-      where: { id: input.itemId },
+      where: { id: itemId },
       select: { countId: true, count: { select: { branchId: true } } },
     });
-    if (!scopedItem || scopedItem.countId !== input.countId) throw new Error("PERMISSION_DENIED");
+    if (!scopedItem || scopedItem.countId !== countId) throw new Error("PERMISSION_DENIED");
     await authorizeCountBranch(scopedItem.count.branchId);
 
     await prisma.$transaction(async (tx) => {
@@ -359,7 +358,7 @@ export async function closeInventoryCountAction(
     revalidatePath(`/administration/inventory/branch-counts/${countId}`);
     revalidatePath("/administration/inventory/branch-counts");
 
-    return { success: true, message: "Conteo cerrado. El consumo registrado se consulta en el detalle." };
+    return { success: true, message: "Conteo cerrado y consumo calculado." };
   } catch (error) {
     console.error("Error closing inventory count:", error);
     if (error instanceof Error && error.message === "PERMISSION_DENIED") {
@@ -388,79 +387,5 @@ export async function closeInventoryCountAction(
       };
     }
     return { success: false, error: "No fue posible cerrar el conteo." };
-  }
-}
-
-/**
- * Conserva un borrador accidental como evidencia, sin afectar balances ni
- * movimientos. Sólo un conteo completamente vacío se puede anular.
- */
-export async function voidEmptyInventoryCountAction(
-  countId: string,
-): Promise<ActionResult> {
-  try {
-    const scope = await prisma.inventoryCount.findUnique({
-      where: { id: countId },
-      select: { branchId: true },
-    });
-    if (!scope) return { success: false, error: "Conteo no encontrado." };
-    const actor = await authorizeCountBranch(scope.branchId);
-
-    await prisma.$transaction(async (tx) => {
-      const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>`
-        SELECT "id", "status"::text FROM "InventoryCount" WHERE "id"=${countId} FOR UPDATE
-      `;
-      if (!locked[0]) throw new Error("COUNT_NOT_FOUND");
-      if (locked[0].status !== "BORRADOR") throw new Error("COUNT_NOT_DRAFT");
-
-      const capturedItems = await tx.inventoryCountItem.count({
-        where: {
-          countId,
-          OR: [
-            { quantityCounted: { not: null } },
-            { countedAt: { not: null } },
-          ],
-        },
-      });
-      if (capturedItems > 0) throw new Error("COUNT_NOT_EMPTY");
-
-      const voidedAt = new Date();
-      await tx.inventoryCount.update({
-        where: { id: countId },
-        data: { status: "ANULADO", voidedAt, voidedById: actor.id },
-      });
-      await tx.auditEvent.create({
-        data: {
-          actorId: actor.id,
-          branchId: scope.branchId,
-          action: "INVENTORY_COUNT_VOIDED_EMPTY",
-          entityType: "InventoryCount",
-          entityId: countId,
-          operationId: null,
-          metadata: {
-            countId,
-            voidedAt: voidedAt.toISOString(),
-            reason: "EMPTY_DRAFT",
-          },
-        },
-      });
-    });
-
-    revalidatePath(`/administration/inventory/branch-counts/${countId}`);
-    revalidatePath("/administration/inventory/branch-counts");
-    revalidatePath("/administration/inventory/branch-counts/new");
-    return { success: true, message: "Conteo vacío anulado. Ya puedes iniciar un conteo nuevo." };
-  } catch (error) {
-    console.error("Error voiding empty inventory count:", error);
-    if (error instanceof Error && error.message === "COUNT_NOT_EMPTY") {
-      return {
-        success: false,
-        error: "No se puede anular porque ya tiene cantidades capturadas. Consérvalo para revisión.",
-      };
-    }
-    if (error instanceof Error && error.message === "COUNT_NOT_DRAFT") {
-      return { success: false, error: "Este conteo ya no está abierto." };
-    }
-    return { success: false, error: "No fue posible anular el conteo." };
   }
 }

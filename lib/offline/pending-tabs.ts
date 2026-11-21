@@ -14,7 +14,6 @@ export type PendingTabStatus = "PENDIENTE" | "PAGADA" | "CANCELADA";
 export type PendingTab = {
   id: string;
   branchId: string;
-  cashCutId: string;
   customerName: string;
   phone?: string;
   notes?: string;
@@ -58,7 +57,7 @@ function calculateTotal(lines: PendingTabLine[]): number {
   return lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0);
 }
 
-export async function listLocalPendingTabs(branchId?: string, cashCutId?: string): Promise<PendingTab[]> {
+export async function listLocalPendingTabs(branchId?: string): Promise<PendingTab[]> {
   try {
     const db = await openDatabase();
     const tabs = await new Promise<PendingTab[]>((resolve, reject) => {
@@ -68,10 +67,7 @@ export async function listLocalPendingTabs(branchId?: string, cashCutId?: string
     });
     db.close();
 
-    const filtered = tabs.filter((tab) =>
-      (!branchId || tab.branchId === branchId) &&
-      (!cashCutId || tab.cashCutId === cashCutId),
-    );
+    const filtered = branchId ? tabs.filter((t) => t.branchId === branchId) : tabs;
     return filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch {
     return [];
@@ -145,6 +141,6 @@ export async function deleteLocalPendingTab(id: string): Promise<void> {
  * simulan como sincronizadas: una venta sólo se registra por la ruta auditada
  * de POS cuando se liquida la cuenta.
  */
-export async function syncPendingTabs(branchId?: string, cashCutId?: string): Promise<PendingTab[]> {
-  return listLocalPendingTabs(branchId, cashCutId);
+export async function syncPendingTabs(branchId?: string): Promise<PendingTab[]> {
+  return listLocalPendingTabs(branchId);
 }

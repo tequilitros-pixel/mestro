@@ -4,6 +4,7 @@ import { useEffect, useState, startTransition } from "react";
 import { Card } from "@/components/ui/Card";
 import { DateRangeCalendar } from "@/components/ui/DateRangeCalendar";
 import { DataPanel, FilterBar, MetricCard, PageHeader, SectionHeader } from "@/components/ui/CompactUI";
+import { formatCivilDate } from "@/lib/dateTime";
 
 interface BranchSales {
   branch: string;
@@ -41,7 +42,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
 
 const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(new Date(value));
+  formatCivilDate(value, { day: "2-digit", month: "short" });
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);

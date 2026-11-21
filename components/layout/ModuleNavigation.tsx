@@ -45,7 +45,7 @@ export default function ModuleNavigation({
 
   if (currentModule === "home") return null;
   const items = SUBMENUS[currentModule]
-    .filter((item) => !item.legacyAlias && isSubmenuItemVisible(role, moduleKeys, item))
+    .filter((item) => isSubmenuItemVisible(role, moduleKeys, item))
     .map((item) =>
       item.children
         ? {
@@ -116,7 +116,7 @@ export default function ModuleNavigation({
             role="dialog"
             aria-modal="true"
             aria-label="Secciones del módulo"
-            className="module-drawer absolute inset-y-0 left-0 flex min-h-0 w-[min(18rem,calc(100vw-2.5rem))] flex-col border-r border-outline-variant bg-surface-container-low p-3 shadow-2xl"
+            className="module-drawer absolute inset-y-0 left-0 w-[min(18rem,calc(100vw-2.5rem))] border-r border-outline-variant bg-surface-container-low p-3 shadow-2xl"
           >
             <div className="mb-3 flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-on-surface-variant">
@@ -226,21 +226,6 @@ function ModuleLinks({
   collapsed?: boolean;
   onNavigate?: () => void;
 }) {
-  const groupedItems = items.some((item) => item.group)
-    ? items.reduce<{ label: string; items: SubMenuItem[] }[]>((groups, item) => {
-        const label = item.group ?? "Otras secciones";
-        const currentGroup = groups.at(-1);
-
-        if (currentGroup?.label === label) {
-          currentGroup.items.push(item);
-        } else {
-          groups.push({ label, items: [item] });
-        }
-
-        return groups;
-      }, [])
-    : [{ label: "", items }];
-
   return (
     <nav aria-label="Navegación del módulo" className="flex-1 overflow-y-auto p-2">
       {items.map((item) => (
@@ -251,7 +236,6 @@ function ModuleLinks({
           role={role}
           moduleKeys={moduleKeys}
           collapsed={collapsed}
-          allItems={items}
           onNavigate={onNavigate}
         />
       ))}
@@ -265,7 +249,6 @@ function ModuleItem({
   role,
   moduleKeys,
   collapsed,
-  allItems,
   onNavigate,
 }: {
   item: SubMenuItem;
@@ -273,10 +256,9 @@ function ModuleItem({
   role: string;
   moduleKeys: string[];
   collapsed: boolean;
-  allItems: SubMenuItem[];
   onNavigate?: () => void;
 }) {
-  const active = isActive(pathname, item, allItems);
+  const active = isActive(pathname, item);
   const hasChildren = !collapsed && Boolean(item.children?.length);
   const [expansionOverride, setExpansionOverride] = useState<{
     pathname: string;
@@ -355,18 +337,9 @@ function ModuleItem({
   );
 }
 
-function isActive(pathname: string, item: SubMenuItem, allItems: SubMenuItem[]) {
-  if (pathname === item.href) return true;
-  if (item.children?.some((child) => child.href === pathname || matchesRoute(pathname, child.href))) {
-    return true;
-  }
-  if (!matchesRoute(pathname, item.href)) return false;
-
-  const hasMoreSpecificMatch = allItems.some(
-    (other) =>
-      other.href !== item.href &&
-      other.href.startsWith(item.href) &&
-      matchesRoute(pathname, other.href)
+function isActive(pathname: string, item: SubMenuItem) {
+  return (
+    matchesRoute(pathname, item.href) ||
+    Boolean(item.children?.some((child) => matchesRoute(pathname, child.href)))
   );
-  return !hasMoreSpecificMatch;
 }

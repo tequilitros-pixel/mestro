@@ -41,17 +41,8 @@ export default function NewCountForm({
       className="space-y-6 rounded-2xl border border-outline-variant bg-surface-container p-6"
     >
       {result && !result.success && (
-        <div className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error space-y-3">
-          <p>{result.error}</p>
-          {result.openCountId && (
-            <button
-              type="button"
-              onClick={() => router.push(`/administration/inventory/branch-counts/${result.openCountId}`)}
-              className="rounded-lg border border-error/40 bg-background px-3 py-2 text-xs font-bold text-on-surface hover:bg-surface-container-high"
-            >
-              Abrir conteo existente
-            </button>
-          )}
+        <div className="rounded-xl border border-error/40 bg-error/10 p-4 text-sm text-error">
+          {result.error}
         </div>
       )}
 
@@ -76,7 +67,7 @@ export default function NewCountForm({
         <select
           name="branchId"
           required
-          defaultValue={branches.length === 1 ? branches[0].id : ""}
+          defaultValue=""
           className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
         >
           <option value="" disabled>

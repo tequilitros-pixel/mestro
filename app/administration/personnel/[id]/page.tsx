@@ -75,10 +75,6 @@ export default async function EditPersonnelPage({
                     @{user.username}
                   </span>
 
-                  <span className="text-xs text-on-surface-variant">
-                    {user.workforceEmployee ? `Empleado: ${user.workforceEmployee.displayName ?? "Sin nombre"}` : "Sin empleado vinculado"}
-                  </span>
-
                   {user.active ? (
                     <span className="inline-flex items-center gap-1.5 text-xs font-bold text-tertiary-fixed-dim">
                       <span className="h-1.5 w-1.5 rounded-full bg-tertiary-fixed-dim" />

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getRecordingStatus } from "@/lib/brain/getRecordingStatus";
 import { computeStockMatrix } from "@/app/administration/inventory/lib/stock";
+import { addBusinessDays, businessDayStart, formatBusinessDateOnly } from "@/lib/dateTime";
 
 export type NotificationCheckResult = {
   title: string;
@@ -23,7 +24,6 @@ export async function checkStockBajo(): Promise<NotificationCheckResult> {
     const productMap = matrix.stockByBranch.get(branch.id);
     if (!productMap) continue;
     for (const product of products) {
-      if (matrix.uninitializedByBranch.get(branch.id)?.has(product.id)) continue;
       const stock = productMap.get(product.id) ?? 0;
       if (stock < Number(product.minimumStock)) {
         lowStock.push({ branchName: branch.name, productName: product.name });
@@ -48,8 +48,9 @@ export async function checkStockBajo(): Promise<NotificationCheckResult> {
 export async function checkLicorCaducidad(
   daysBeforeExpiration: number,
 ): Promise<NotificationCheckResult> {
-  const threshold = new Date();
-  threshold.setDate(threshold.getDate() + daysBeforeExpiration);
+  const threshold = businessDayStart(
+    addBusinessDays(formatBusinessDateOnly(new Date()), daysBeforeExpiration),
+  );
 
   const count = await prisma.liquorBottle.count({
     where: {
@@ -83,7 +84,7 @@ export async function checkReconteoPendiente(): Promise<NotificationCheckResult>
       count === 1
         ? "Hay 1 reconteo de evento con faltantes sin surtir."
         : `Hay ${count} reconteos de eventos con faltantes sin surtir.`,
-    url: "/administration/inventory/events",
+    url: "/administration/inventory/eventos/events",
   };
 }
 

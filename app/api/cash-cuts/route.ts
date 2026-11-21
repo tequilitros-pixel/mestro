@@ -13,20 +13,6 @@ const ROLES_QUE_PUEDEN_ABRIR_CORTE = ["ADMIN", "GERENTE", "ENCARGADO"];
 const CASH_CUT_STATUSES = ["ABIERTO", "CERRADO", "AUDITADO"] as const;
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-function isValidDateOnly(value: string | null): value is string {
-  if (!value || !DATE_ONLY_PATTERN.test(value)) return false;
-  const parsed = parseDateOnly(value);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-class OpenCashCutAlreadyExistsError extends Error {
-  constructor(
-    public readonly cashCut: { id: string; code: string },
-  ) {
-    super("Esta sucursal ya tiene un corte abierto.");
-  }
-}
-
 export async function GET(request: Request) {
   const scope = await getCashCutScope(["/cash-cuts", "/cash-cuts/daily"]);
 
@@ -37,8 +23,6 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const requestedBranchId = searchParams.get("branchId") ?? undefined;
   const status = searchParams.get("status") ?? undefined;
-  const period = searchParams.get("period") ?? "current-week";
-  const query = searchParams.get("q")?.trim().slice(0, 100) ?? "";
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const view = searchParams.get("view") ?? "current";
@@ -53,23 +37,8 @@ export async function GET(request: Request) {
   if (status && !CASH_CUT_STATUSES.includes(status as (typeof CASH_CUT_STATUSES)[number])) {
     return NextResponse.json({ error: "Estado inválido." }, { status: 400 });
   }
-  if (!CASH_CUT_PERIODS.includes(period as CashCutPeriod)) {
-    return NextResponse.json({ error: "Periodo inválido." }, { status: 400 });
-  }
-  if (!isGlobalAdmin && (period !== "current-week" || from || to)) {
-    return NextResponse.json(
-      { error: "Solo el administrador puede consultar periodos históricos." },
-      { status: 403 },
-    );
-  }
-  if (period === "custom" && (!isValidDateOnly(from) || !isValidDateOnly(to))) {
-    return NextResponse.json({ error: "Selecciona una fecha inicial y final válidas." }, { status: 400 });
-  }
-  if (period !== "custom" && (from || to)) {
-    return NextResponse.json({ error: "Las fechas solo aplican al periodo personalizado." }, { status: 400 });
-  }
-  if (from && to && from > to) {
-    return NextResponse.json({ error: "La fecha inicial no puede ser posterior a la final." }, { status: 400 });
+  if ((from && !DATE_ONLY_PATTERN.test(from)) || (to && !DATE_ONLY_PATTERN.test(to))) {
+    return NextResponse.json({ error: "Fecha inválida." }, { status: 400 });
   }
   let fromDate: Date | undefined;
   let toDate: Date | undefined;
@@ -83,23 +52,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Rango de fechas inválido." }, { status: 400 });
   }
 
-  if (requestedBranchId && !isGlobalAdmin && requestedBranchId !== scope.workingBranchId) {
-    return NextResponse.json({ error: "Solo puedes consultar la sucursal de trabajo actual." }, { status: 403 });
+  if (requestedBranchId && !isBranchAllowed(scope.branchIds, requestedBranchId)) {
+    return NextResponse.json({ error: "No tienes acceso a esa sucursal." }, { status: 403 });
   }
-  if (requestedBranchId && isGlobalAdmin) {
-    const branchExists = await prisma.branch.findFirst({
-      where: { id: requestedBranchId, active: true },
-      select: { id: true },
-    });
-    if (!branchExists) {
-      return NextResponse.json({ error: "Sucursal inválida." }, { status: 400 });
-    }
-  }
-
-  const range = getCashCutPeriodRange(period as CashCutPeriod, {
-    from: from ?? undefined,
-    to: to ?? undefined,
-  });
 
   if (view === "history") {
     const employee = searchParams.get("employee")?.trim() ?? "";
@@ -136,9 +91,10 @@ export async function GET(request: Request) {
   }
 
   /*
-   * withCashCutReadScope combina con AND y conserva el alcance del rol.
-   * Para ADMIN la ruta agrega el periodo y la sucursal solicitados; para
-   * los demás roles el propio alcance sigue fijando sucursal y semana.
+   * withCashCutScope combina con AND, no fusionando objetos. Por eso un
+   * ENCARGADO que pida ?status=CERRADO recibe lista vacia en vez de
+   * historial: su alcance ya fija status ABIERTO y responsibleId propio,
+   * y el filtro del querystring no puede sobreescribirlo.
    */
   const cashCuts = await prisma.cashCut.findMany({
     where: withCashCutReadScope(scope, {
@@ -154,7 +110,7 @@ export async function GET(request: Request) {
       branch: true,
       responsible: { select: { id: true, name: true } },
     },
-    orderBy: [{ date: "desc" }, { openedAt: "desc" }],
+    orderBy: { date: "desc" },
   });
 
   return NextResponse.json(cashCuts);

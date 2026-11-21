@@ -37,38 +37,6 @@ type Corte = {
 };
 
 type Orden = { campo: "date" | "code" | "branch" | "totalSales" | "difference"; asc: boolean };
-type Periodo = "current-week" | "last-week" | "current-month" | "current-year" | "custom";
-
-function Th({
-  campo,
-  children,
-  className = "",
-  orden,
-  onSort,
-}: {
-  campo?: Orden["campo"];
-  children: ReactNode;
-  className?: string;
-  orden: Orden;
-  onSort: (campo: Orden["campo"]) => void;
-}) {
-  return (
-    <th className={`sticky top-0 z-10 bg-surface-container-high px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant ${className}`}>
-      {campo ? (
-        <button
-          type="button"
-          onClick={() => onSort(campo)}
-          className="inline-flex items-center gap-1 hover:text-on-surface"
-        >
-          {children}
-          {orden.campo === campo && <span aria-hidden="true">{orden.asc ? "↑" : "↓"}</span>}
-        </button>
-      ) : (
-        children
-      )}
-    </th>
-  );
-}
 
 const POR_PAGINA = 25;
 
@@ -142,10 +110,6 @@ export default function TableroCortes({
 }) {
   const [status, setStatus] = useState("");
   const [busqueda, setBusqueda] = useState("");
-  const [periodo, setPeriodo] = useState<Periodo>("current-week");
-  const [branchId, setBranchId] = useState("");
-  const [desde, setDesde] = useState(currentWeek.startDate);
-  const [hasta, setHasta] = useState(currentWeek.endDate);
   const [cortes, setCortes] = useState<Corte[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -171,8 +135,6 @@ export default function TableroCortes({
   }
 
   useEffect(() => {
-    if (errorRango) return;
-
     const params = new URLSearchParams();
     if (status) params.set("status", status);
 
@@ -230,15 +192,15 @@ export default function TableroCortes({
   }, [cortes, busqueda, orden]);
 
   const indicadores = useMemo(() => {
-    const abiertos = filtrados.filter((c) => c.status === "ABIERTO").length;
-    const cerrados = filtrados.filter((c) => c.status !== "ABIERTO").length;
-    const venta = filtrados.reduce((s, c) => s + (c.totalSales ?? 0), 0);
-    const conDiferencia = filtrados.filter(
+    const abiertos = cortes.filter((c) => c.status === "ABIERTO").length;
+    const cerrados = cortes.filter((c) => c.status !== "ABIERTO").length;
+    const venta = cortes.reduce((s, c) => s + (c.totalSales ?? 0), 0);
+    const conDiferencia = cortes.filter(
       (c) => c.status !== "ABIERTO" && c.difference !== null && c.difference !== 0,
     );
     const porRevisar = conDiferencia.filter((c) => c.status !== "AUDITADO").length;
     return { abiertos, cerrados, venta, diferencias: conDiferencia.length, porRevisar };
-  }, [filtrados]);
+  }, [cortes]);
 
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA));
   const visibles = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
@@ -255,28 +217,6 @@ export default function TableroCortes({
     setPagina(1);
     setOrden((o) => (o.campo === campo ? { campo, asc: !o.asc } : { campo, asc: false }));
   };
-
-  const nombreSucursal = branchId
-    ? branches.find((branch) => branch.id === branchId)?.name ?? "Sucursal seleccionada"
-    : canUseHistoricalFilters
-      ? "Todas las sucursales"
-      : branches[0]?.name ?? "sin definir";
-
-  const nombrePeriodo: Record<Periodo, string> = {
-    "current-week": `Esta semana (${currentWeek.startDate} al ${currentWeek.endDate})`,
-    "last-week": "Semana pasada",
-    "current-month": "Este mes",
-    "current-year": "Todo el año",
-    custom: `${desde} al ${hasta}`,
-  };
-
-  const ordenarPor = (campo: Orden["campo"]) => {
-    setPagina(1);
-    setOrden((o) => (o.campo === campo ? { campo, asc: !o.asc } : { campo, asc: false }));
-  };
-
-  const errorVisible = errorRango ?? error;
-  const cargandoVisible = cargando && !errorRango;
 
   return (
     <main className="page-frame max-w-7xl space-y-4">
@@ -312,7 +252,7 @@ export default function TableroCortes({
       <FilterBar className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <div className="lg:col-span-2">
           <label htmlFor="q" className="mb-1.5 block text-xs font-semibold text-on-surface-variant">
-            Corte o responsable
+            Buscar
           </label>
           <input
             id="q"
@@ -356,10 +296,10 @@ export default function TableroCortes({
         )}
       </FilterBar>
 
-      {cargandoVisible && <p className="text-sm text-on-surface-variant">Cargando…</p>}
-      {errorVisible && <p className="text-sm text-error">{errorVisible}</p>}
+      {cargando && <p className="text-sm text-on-surface-variant">Cargando…</p>}
+      {error && <p className="text-sm text-error">{error}</p>}
 
-      {!cargandoVisible && !errorVisible && filtrados.length === 0 && (
+      {!cargando && !error && filtrados.length === 0 && (
         <EmptyState>
           {!branches.length
             ? "No hay una sucursal de trabajo definida. Inicia un corte o pide que te asignen una única sucursal."
@@ -369,7 +309,7 @@ export default function TableroCortes({
         </EmptyState>
       )}
 
-      {!cargandoVisible && !errorVisible && filtrados.length > 0 && (
+      {!cargando && filtrados.length > 0 && (
         <>
           {/* Escritorio */}
           <div className="hidden overflow-x-auto rounded-xl border border-outline-variant md:block">

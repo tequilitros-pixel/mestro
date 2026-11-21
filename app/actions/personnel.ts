@@ -7,8 +7,6 @@ import { getCurrentUser } from "@/lib/auth";
 import { businessDayStart } from "@/lib/dateOnly";
 import type { UserRole } from "@prisma/client";
 import { normalizeMexicanPhone } from "@/lib/phone";
-import { revokeAllUserSessions } from "@/lib/session";
-import { createUserRecord } from "@/lib/personnel/user-service";
 
 export async function getPersonnel(includeArchived = false) {
   return prisma.user.findMany({
@@ -21,7 +19,6 @@ export async function getPersonnel(includeArchived = false) {
       phone: true,
       role: true,
       active: true,
-      workforceEmployee: { select: { id: true, displayName: true, active: true } },
       branches: { include: { branch: { select: { id: true, name: true } } } },
     },
     orderBy: { name: "asc" },
@@ -48,7 +45,6 @@ export async function getPersonnelById(userId: string) {
         select: { branchId: true, amount: true },
       },
       pinHash: true,
-      workforceEmployee: { select: { id: true, displayName: true, active: true } },
       branches: { include: { branch: { select: { id: true, name: true } } } },
     },
   });
@@ -84,12 +80,37 @@ export async function createPersonnel(input: CreatePersonnelInput) {
     return { error: "No tienes permiso para crear usuarios" };
   }
 
-  let user;
-  try {
-    user = await prisma.$transaction((tx) => createUserRecord(tx, input));
-  } catch (cause) {
-    return { error: cause instanceof Error ? cause.message : "No fue posible crear el usuario" };
+  if (input.password.length < 8) {
+    return { error: "La contraseña debe tener al menos 8 caracteres" };
   }
+
+  const existing = await prisma.user.findUnique({
+    where: { username: input.username },
+  });
+  if (existing) {
+    return { error: "Ese nombre de usuario ya existe" };
+  }
+
+  const hashedPassword = await bcrypt.hash(input.password, 10);
+  const phone = input.phone?.trim() ? normalizeMexicanPhone(input.phone) : null;
+  if (input.phone?.trim() && !phone) return { error: "El teléfono debe tener 10 dígitos." };
+  if (phone && await prisma.user.findUnique({ where: { phone } })) {
+    return { error: "Ese teléfono ya está registrado." };
+  }
+
+  const user = await prisma.user.create({
+    data: {
+      name: input.name,
+      username: input.username,
+      email: input.email || undefined,
+      phone,
+      password: hashedPassword,
+      role: input.role,
+      branches: {
+        create: input.branchIds.map((branchId) => ({ branchId })),
+      },
+    },
+  });
 
   revalidatePath("/administration/personnel");
   return { user };
@@ -248,7 +269,6 @@ export async function updatePersonnelActive(userId: string, active: boolean) {
   }
 
   await prisma.user.update({ where: { id: userId }, data: { active } });
-  if (!active) await revokeAllUserSessions(userId);
   revalidatePath("/administration/personnel");
   return { success: true };
 }

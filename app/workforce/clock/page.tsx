@@ -1,12 +1,12 @@
-import { ClockStatus } from "./ClockStatus";
-import { clockError, clockSuccess, userClockEventLabel } from "./presentation";
 import { randomUUID } from "node:crypto";
-import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { getCurrentUser } from "@/lib/auth";
 import { formatBusinessTime } from "@/lib/dateTime";
 import { getClockDashboard } from "@/lib/workforce/clock/service";
-import { resolveBranchGeofencePolicy } from "@/lib/workforce/geofence";
+import {
+  workforceClockAction,
+  workforceCorrectionRequestAction,
+} from "@/app/actions/workforceClock";
 import { ClockActionForm } from "./ClockActionForm";
 
 export default async function ClockPage({
@@ -32,12 +32,18 @@ export default async function ClockPage({
       </Card>
     );
   }
-  const primary = dashboard.state === "NO_SESSION"
-    ? "CLOCK_IN"
-    : dashboard.state === "CLOCKED_IN"
-      ? "CLOCK_OUT"
-      : null;
-  const label = primary === "CLOCK_IN" ? "Iniciar turno" : primary === "CLOCK_OUT" ? "Terminar turno" : null;
+  const branch = dashboard.shifts[0]?.branch ?? dashboard.branches[0];
+  const primary =
+    dashboard.state === "NO_SESSION"
+      ? "CLOCK_IN"
+      : dashboard.state === "ON_BREAK"
+        ? "BREAK_END"
+        : "CLOCK_OUT";
+  const label = {
+    CLOCK_IN: "Registrar entrada",
+    BREAK_END: "Terminar descanso",
+    CLOCK_OUT: "Registrar salida",
+  }[primary];
   const back = "/workforce/clock";
   const availableBranches = [
     ...dashboard.branches,
@@ -45,25 +51,16 @@ export default async function ClockPage({
       .map((shift) => shift.branch)
       .filter((candidate) => !dashboard.branches.some((item) => item.id === candidate.id)),
   ];
-  const dashboardTimezone = dashboard.companyTimezone ?? "America/Mexico_City";
-  const preferredBranchId = dashboard.state === "NO_SESSION"
-    ? dashboard.shifts[0]?.branchId
-    : dashboard.displayEvents.at(-1)?.branchId;
-  const branch = availableBranches.find((item) => item.id === preferredBranchId)
-    ?? dashboard.shifts[0]?.branch
-    ?? dashboard.branches[0];
-  const formatShiftTime = (value: Date, timezone: string | null | undefined) =>
-    new Intl.DateTimeFormat("es-MX", {
-      timeZone: timezone ?? dashboardTimezone,
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    }).format(value);
+  const requiresForAction = primary === "CLOCK_IN"
+    ? dashboard.locationPolicy.requireGeolocationClockIn
+    : primary === "CLOCK_OUT"
+      ? dashboard.locationPolicy.requireGeolocationClockOut
+      : false;
   return (
     <section className="mx-auto max-w-xl space-y-4">
       {query.saved ? (
         <p role="status" className="rounded-xl bg-primary/10 p-3 font-semibold">
-          {query.saved === "Evento registrado." || query.saved === "Operación ya registrada." ? clockSuccess(dashboard.lastEvent?.type) : query.saved}
+          {query.saved}
         </p>
       ) : null}
       {query.error ? (
@@ -71,25 +68,13 @@ export default async function ClockPage({
           role="alert"
           className="rounded-xl bg-error/10 p-3 font-semibold text-error"
         >
-          {clockError(query.error)}
+          {query.error}
         </p>
       ) : null}
       <Card className="space-y-3 text-center">
-        <ClockStatus
-          events={dashboard.displayEvents.map((event) => ({
-            type: event.type,
-            occurredAt: event.occurredAt.toISOString(),
-            branchId: event.branchId,
-          }))}
-          name={dashboard.employment.employee.displayName ?? "Empleado"}
-          branches={availableBranches.map((item) => ({
-            id: item.id,
-            name: item.name,
-            timezone: item.timezone ?? dashboardTimezone,
-          }))}
-          serverNow={dashboard.displayNow.getTime()}
-          state={dashboard.state}
-        />
+        <p className="text-sm text-on-surface-variant">Estado actual</p>
+        <h2 className="text-3xl font-black">{dashboard.state}</h2>
+        <p>{dashboard.employment.employee.displayName}</p>
         {dashboard.shifts[0] ? (
           <p className="rounded-lg bg-surface-container p-3 text-sm">
             Turno publicado · {dashboard.shifts[0].branch.name}
@@ -99,37 +84,111 @@ export default async function ClockPage({
             {formatBusinessTime(dashboard.shifts[0].endAt)}
           </p>
         ) : (
-          <p className="border-t border-outline-variant pt-3 text-sm font-semibold text-on-surface-variant">
-            Trabajo no programado · permitido por la política actual.
+          <p className="rounded-lg bg-secondary/10 p-3 text-sm">
+            Sin turno publicado cercano · trabajo no programado permitido con
+            advertencia.
           </p>
         )}
       </Card>
       {branch ? (
         <Card className="space-y-3">
-          {primary && label ? (
-            <ClockActionForm
-              branches={availableBranches.map((item) => ({
-                id: item.id,
-                name: item.name,
-                requiresLocation: primary === "CLOCK_IN"
-                  ? resolveBranchGeofencePolicy(item, dashboard.locationPolicy).requireGeolocationClockIn
-                  : primary === "CLOCK_OUT"
-                    ? resolveBranchGeofencePolicy(item, dashboard.locationPolicy).requireGeolocationClockOut
-                    : false,
-              }))}
-              defaultBranchId={branch.id}
-              type={primary}
-              idempotencyKey={randomUUID()}
-              returnTo={back}
-              label={label}
-            />
+          <ClockActionForm
+            branches={availableBranches.map((item) => ({
+              id: item.id,
+              name: item.name,
+              requiresLocation: Boolean(requiresForAction && item.geofenceEnabled && item.geofenceId),
+            }))}
+            defaultBranchId={branch.id}
+            type={primary}
+            idempotencyKey={randomUUID()}
+            returnTo={back}
+            label={label}
+          />
+          {dashboard.state === "CLOCKED_IN" ? (
+            <form action={workforceClockAction}>
+              <input type="hidden" name="returnTo" value={back} />
+              <input type="hidden" name="branchId" value={branch.id} />
+              <input type="hidden" name="type" value="BREAK_START" />
+              <input type="hidden" name="idempotencyKey" value={randomUUID()} />
+              <button className="min-h-12 w-full rounded-xl border border-outline-variant px-4 py-3 font-bold">
+                Iniciar descanso
+              </button>
+            </form>
           ) : null}
         </Card>
       ) : (
         <Card>No hay sucursal autorizada ni Shift publicado cercano.</Card>
       )}
       <Card>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-bold">¿Algo no coincide?</h2><p className="text-sm text-on-surface-variant">Solicita una corrección sin modificar tus horas de inmediato.</p></div><Link href="/workforce/requests" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-primary px-4 py-3 font-bold text-primary">Solicitar corrección</Link></div>
+        <details>
+          <summary className="cursor-pointer font-bold">
+            Solicitar corrección
+          </summary>
+          <form
+            action={workforceCorrectionRequestAction}
+            className="mt-3 space-y-2"
+          >
+            <input type="hidden" name="returnTo" value={back} />
+            <label className="block text-sm">
+              Tipo
+              <select name="type" className="mt-1 w-full rounded-lg border p-3">
+                <option value="ADD_MISSING_EVENT">Evento faltante</option>
+                <option value="MODIFY_OCCURRED_TIME">Hora incorrecta</option>
+                <option value="VOID_EVENT">Evento duplicado</option>
+              </select>
+            </label>
+            <label className="block text-sm">
+              Evento observado
+              <select
+                name="targetClockEventId"
+                className="mt-1 w-full rounded-lg border p-3"
+              >
+                <option value="">No aplica</option>
+                {dashboard.lastEvent ? (
+                  <option
+                    value={dashboard.lastEvent.originalClockEventId ?? ""}
+                  >
+                    {dashboard.lastEvent.type} ·{" "}
+                    {dashboard.lastEvent.occurredAt.toISOString()}
+                  </option>
+                ) : null}
+              </select>
+            </label>
+            <input type="hidden" name="branchId" value={branch?.id ?? ""} />
+            <label className="block text-sm">
+              Evento propuesto
+              <select
+                name="proposedEventType"
+                className="mt-1 w-full rounded-lg border p-3"
+              >
+                <option value="CLOCK_IN">CLOCK_IN</option>
+                <option value="BREAK_START">BREAK_START</option>
+                <option value="BREAK_END">BREAK_END</option>
+                <option value="CLOCK_OUT">CLOCK_OUT</option>
+              </select>
+            </label>
+            <label className="block text-sm">
+              Hora propuesta
+              <input
+                name="proposedOccurredAt"
+                type="datetime-local"
+                className="mt-1 w-full rounded-lg border p-3"
+              />
+            </label>
+            <label className="block text-sm">
+              Razón
+              <textarea
+                required
+                minLength={5}
+                name="reason"
+                className="mt-1 w-full rounded-lg border p-3"
+              />
+            </label>
+            <button className="min-h-12 w-full rounded-xl border border-primary px-4 py-3 font-bold text-primary">
+              Enviar solicitud
+            </button>
+          </form>
+        </details>
       </Card>
     </section>
   );

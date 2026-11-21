@@ -2,7 +2,6 @@ import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getPosSaleBranchOptions } from "@/lib/pos/cashCutBranchGuard";
 import PospressTablesClient from "@/components/pospress/PospressTablesClient";
-import { getPospressActiveScope } from "@/lib/pos/currentCashCut";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

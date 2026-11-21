@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
 import { cancelPosSaleAtomic } from "@/lib/pos/cancelSale";
-import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
 
 const ROLES_QUE_PUEDEN_CANCELAR = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -22,10 +21,6 @@ export async function POST(
   }
 
   const { id } = await params;
-  const currentCashCut = user.role === "ADMIN" ? null : await getCurrentPospressCashCut(user);
-  if (user.role !== "ADMIN" && !currentCashCut) {
-    return NextResponse.json({ error: "No tienes un corte de caja abierto asignado." }, { status: 403 });
-  }
 
   const body = await request.json().catch(() => ({}));
   const cancelReason = typeof body?.reason === "string" ? body.reason.trim() : null;
@@ -33,13 +28,7 @@ export async function POST(
   if (operationId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(operationId)) {
     return NextResponse.json({ error: "El identificador de operación no es válido." }, { status: 400 });
   }
-  const result = await cancelPosSaleAtomic({
-    saleId: id,
-    user,
-    reason: cancelReason || null,
-    operationId,
-    requiredCashCutId: currentCashCut?.id,
-  });
+  const result = await cancelPosSaleAtomic({ saleId: id, user, reason: cancelReason || null, operationId });
   if (result.kind === "not_found") return NextResponse.json({ error: "Venta no encontrada" }, { status: 404 });
   if (result.kind === "closed_cut") return NextResponse.json({ error: "El corte de caja de esta venta ya está cerrado. Solo un administrador puede cancelarla." }, { status: 403 });
   return NextResponse.json({ ...result.sale, duplicate: result.kind === "duplicate" });

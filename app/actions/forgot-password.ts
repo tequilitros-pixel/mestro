@@ -20,13 +20,9 @@ export async function forgotPasswordAction(formData: FormData) {
     redirect("/forgot-password?error=1");
   }
 
-  // El correo puede conservar mayúsculas desde registros anteriores.
-  // No elegir una cuenta si existen dos registros iguales sin distinguir mayúsculas.
-  const matchingUsers = await prisma.user.findMany({
-    where: { email: { equals: email, mode: "insensitive" } },
-    take: 2,
+  const user = await prisma.user.findUnique({
+    where: { email },
   });
-  const user = matchingUsers.length === 1 ? matchingUsers[0] : null;
   const fingerprint = await requestFingerprint();
   const allowed = await consumeAuthAttempt({
     scope: "password-reset-send",
@@ -55,7 +51,7 @@ export async function forgotPasswordAction(formData: FormData) {
       },
     });
 
-    await sendPasswordResetEmail(user.email!, code);
+    await sendPasswordResetEmail(email, code);
   }
 
   redirect(

@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { getUserModuleKeys } from "@/app/actions/permissions";
 import { getMyTimeClockSummary } from "@/app/actions/timeclock";
 import { getMyApprovedPayrollHistory } from "@/app/actions/employeePayrollHistory";
 import EmployeePayrollView from "./EmployeePayrollView";
@@ -17,10 +16,7 @@ export default async function PayrollPage({
     redirect("/login");
   }
 
-  const moduleKeys = user.role !== "ADMIN" ? await getUserModuleKeys(user.id) : [];
-  const isPayrollManager = user.role === "ADMIN" || moduleKeys.includes("/timeclock/payroll");
-
-  if (!isPayrollManager) {
+  if (user.role !== "ADMIN") {
     const [summary, historyResult, query] = await Promise.all([
       getMyTimeClockSummary(),
       getMyApprovedPayrollHistory(),
@@ -36,7 +32,6 @@ export default async function PayrollPage({
       <EmployeePayrollView
         userId={user.id}
         userName={user.name}
-        userId={user.id}
         summary={summary}
         history={history}
         initialTab={initialTab}

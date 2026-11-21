@@ -1,17 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { computeStockMatrix, totalStockByProduct, type StockMatrix } from "./stock";
+import { computeStockMatrix, totalStockByProduct } from "./stock";
 import {
   addBusinessDays,
   businessDayStart,
   formatBusinessDateOnly,
   formatCivilDate,
 } from "@/lib/dateTime";
-import {
-  getCommercialQuantity,
-  getCommercialUnitLabel,
-  getNormalizedContentPerUnit,
-  type InventoryProductUnitConfig,
-} from "@/lib/inventory/units";
 
 /**
  * Analítica del inventario para el tablero de inicio.
@@ -24,13 +18,6 @@ import {
 
 const ANALYTICS_DAYS = 30;
 const STALE_DAYS = 60;
-
-export type InventoryAnalyticsRange = {
-  /** Fecha civil incluida, en formato YYYY-MM-DD. */
-  from: string;
-  /** Fecha civil incluida, en formato YYYY-MM-DD. */
-  to: string;
-};
 
 const ENTRY_TYPE_LABELS: Record<string, string> = {
   COMPRA: "Compras",
@@ -126,7 +113,6 @@ export type InventoryAnalytics = {
     movements: number;
     consumedUnits: number;
     receivedUnits: number;
-    receivedCost: number;
     consumedCost: number;
     wasteUnits: number;
     wasteCost: number;
@@ -166,16 +152,7 @@ export type InventoryAnalytics = {
   }>;
   branches: InventoryBranchAnalytics[];
   movementTypes: Array<{ name: string; movements: number; units: number }>;
-  daily: Array<{
-    date: string;
-    label: string;
-    consumed: number;
-    received: number;
-    waste: number;
-    consumedCost: number;
-    receivedCost: number;
-    wasteCost: number;
-  }>;
+  daily: Array<{ date: string; label: string; consumed: number; received: number; waste: number }>;
   lowStock: Array<{
     id: string;
     name: string;
@@ -251,25 +228,6 @@ function netConsumedCost(acc: Pick<ProductAccumulator, "consumedCostOut" | "cons
   return Math.max(0, acc.consumedCostOut - acc.consumedCostReversal);
 }
 
-function commercialQuantity(quantity: number, product: InventoryProductUnitConfig) {
-  return getCommercialQuantity(quantity, product) ?? quantity;
-}
-
-function commercialUnit(product: InventoryProductUnitConfig) {
-  return getCommercialUnitLabel(product) ?? product.unit ?? "unidad";
-}
-
-/**
- * Legacy entries are stored in their displayed unit. V2 movements are stored
- * in the canonical base unit (for example ML), while unitCost remains the
- * cost of one commercial presentation (for example one 1.8 L bottle).
- */
-function baseUnitCost(product: InventoryProductUnitConfig & { unitCost?: unknown }) {
-  const cost = Number(product.unitCost ?? 0);
-  const content = getNormalizedContentPerUnit(product);
-  return content && content > 0 ? cost / content : cost;
-}
-
 function addConsumed(
   acc: ProductAccumulator | BranchAccumulator,
   quantity: number,
@@ -299,24 +257,12 @@ function addWaste(acc: ProductAccumulator | BranchAccumulator, quantity: number,
 }
 
 export async function getInventoryAnalytics(
-  daysOrRange: number | InventoryAnalyticsRange = ANALYTICS_DAYS,
+  days = ANALYTICS_DAYS,
   allowedBranchIds: string[] | null = null,
-  stockMatrixPromise?: Promise<StockMatrix>,
 ): Promise<InventoryAnalytics> {
   const today = formatBusinessDateOnly(new Date());
-  const range = typeof daysOrRange === "number"
-    ? {
-        from: addBusinessDays(today, -(Math.max(1, daysOrRange) - 1)),
-        to: today,
-      }
-    : daysOrRange;
-  const days = Math.max(
-    1,
-    Math.round((Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / 86_400_000) + 1,
-  );
-  const since = businessDayStart(range.from);
-  const until = businessDayStart(addBusinessDays(range.to, 1));
-  const staleSince = businessDayStart(addBusinessDays(range.to, -STALE_DAYS));
+  const since = businessDayStart(addBusinessDays(today, -(days - 1)));
+  const staleSince = businessDayStart(addBusinessDays(today, -STALE_DAYS));
   const branchWhere = {
     active: true,
     ...(allowedBranchIds === null ? {} : { id: { in: allowedBranchIds } }),
@@ -326,35 +272,21 @@ export async function getInventoryAnalytics(
   const [products, branches, entries, v2Movements, balances, declarations, branchMinimums, lastMovements, lastV2Movements] = await Promise.all([
     prisma.inventoryProduct.findMany({
       where: { archivedAt: null, trackStock: true },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        category: true,
-        unit: true,
-        unitCost: true,
-        minimumStock: true,
-        isActive: true,
-        inventoryBaseUnit: true,
-        handlingUnit: true,
-        contentPerUnit: true,
-        contentUnit: true,
-        normalizedContentPerUnit: true,
-      },
+      select: { id: true, code: true, name: true, category: true, unit: true, unitCost: true, minimumStock: true, isActive: true },
       orderBy: { name: "asc" },
     }),
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.inventoryEntry.findMany({
-      where: { entryDate: { gte: since, lt: until }, ...branchFilter },
+      where: { entryDate: { gte: since }, ...branchFilter },
       select: { productId: true, branchId: true, type: true, quantity: true, unitCost: true, entryDate: true, branch: { select: { id: true, name: true } } },
     }),
     prisma.inventoryMovement.findMany({
-      where: { createdAt: { gte: since, lt: until }, ...branchFilter },
+      where: { createdAt: { gte: since }, ...branchFilter },
       select: { inventoryProductId: true, branchId: true, movementType: true, quantityDelta: true, createdAt: true },
     }),
     prisma.inventoryBalance.findMany({ where: branchFilter, select: { branchId: true, inventoryProductId: true } }),
     prisma.inventoryCountDeclaration.findMany({
-      where: { createdAt: { gte: since, lt: until }, ...branchFilter },
+      where: { createdAt: { gte: since }, ...branchFilter },
       select: { branchId: true, inventoryProductId: true, expectedQuantity: true, declaredQuantity: true },
     }),
     prisma.branchInventoryMinimum.findMany({ where: branchFilter, select: { branchId: true, inventoryProductId: true, minimumQuantity: true } }),
@@ -380,36 +312,18 @@ export async function getInventoryAnalytics(
     const current = movement._max.createdAt;
     if (!previous || (current && current > previous)) lastMovementByProduct.set(movement.inventoryProductId, current);
   }
-  const stockMatrix = await (stockMatrixPromise ?? computeStockMatrix(products.map((product) => product.id), allowedBranchIds));
+  const stockMatrix = await computeStockMatrix(products.map((product) => product.id), allowedBranchIds);
 
   const productAcc = new Map<string, ProductAccumulator>();
   const categoryAcc = new Map<string, { consumed: number; cost: number; waste: number; products: Set<string>; movements: number }>();
   const branchAcc = new Map<string, BranchAccumulator>();
   const typeAcc = new Map<string, { movements: number; units: number }>();
-  const dailyAcc = new Map<string, {
-    consumedOut: number;
-    consumedReversal: number;
-    consumedCostOut: number;
-    consumedCostReversal: number;
-    received: number;
-    receivedCost: number;
-    waste: number;
-    wasteCost: number;
-  }>();
+  const dailyAcc = new Map<string, { consumedOut: number; consumedReversal: number; received: number; waste: number }>();
 
   for (const branch of branches) branchAcc.set(branch.id, emptyBranchAccumulator(branch.id, branch.name));
   for (let index = days - 1; index >= 0; index -= 1) {
-    const date = addBusinessDays(range.to, -index);
-    dailyAcc.set(date, {
-      consumedOut: 0,
-      consumedReversal: 0,
-      consumedCostOut: 0,
-      consumedCostReversal: 0,
-      received: 0,
-      receivedCost: 0,
-      waste: 0,
-      wasteCost: 0,
-    });
+    const date = addBusinessDays(today, -index);
+    dailyAcc.set(date, { consumedOut: 0, consumedReversal: 0, received: 0, waste: 0 });
   }
 
   function productAccumulator(productId: string) {
@@ -451,52 +365,33 @@ export async function getInventoryAnalytics(
       addConsumed(productValue, quantity, unitCost, reversal);
       addConsumed(branchValue, quantity, unitCost, reversal);
       if (day) {
-        if (reversal) {
-          day.consumedReversal += amount;
-          day.consumedCostReversal += amount * unitCost;
-        } else {
-          day.consumedOut += amount;
-          day.consumedCostOut += amount * unitCost;
-        }
+        if (reversal) day.consumedReversal += amount;
+        else day.consumedOut += amount;
       }
     } else if (entry.type === "SALIDA_EVENTO" || entry.type === "REGRESO_EVENTO") {
       const reversal = entry.type === "REGRESO_EVENTO" || quantity > 0;
       addConsumed(productValue, quantity, unitCost, reversal);
       addConsumed(branchValue, quantity, unitCost, reversal);
       if (day) {
-        if (reversal) {
-          day.consumedReversal += amount;
-          day.consumedCostReversal += amount * unitCost;
-        } else {
-          day.consumedOut += amount;
-          day.consumedCostOut += amount * unitCost;
-        }
+        if (reversal) day.consumedReversal += amount;
+        else day.consumedOut += amount;
       }
     } else if (entry.type === "AJUSTE" && quantity < 0) {
       addWaste(productValue, quantity, unitCost);
       addWaste(branchValue, quantity, unitCost);
-      if (day) {
-        day.waste += amount;
-        day.wasteCost += amount * unitCost;
-      }
+      if (day) day.waste += amount;
     } else if (entry.type === "TRASPASO") {
       if (quantity < 0) branchValue.transfersOut += amount;
       else branchValue.transfersIn += amount;
       if (quantity > 0) {
         addReceived(productValue, quantity, unitCost);
         addReceived(branchValue, quantity, unitCost);
-        if (day) {
-          day.received += amount;
-          day.receivedCost += amount * unitCost;
-        }
+        if (day) day.received += amount;
       }
     } else if (quantity > 0) {
       addReceived(productValue, quantity, unitCost);
       addReceived(branchValue, quantity, unitCost);
-      if (day) {
-        day.received += amount;
-        day.receivedCost += amount * unitCost;
-      }
+      if (day) day.received += amount;
     }
   }
 
@@ -507,7 +402,7 @@ export async function getInventoryAnalytics(
     if (!product) continue;
     const quantity = Number(movement.quantityDelta);
     const amount = Math.abs(quantity);
-    const unitCost = baseUnitCost(product);
+    const unitCost = Number(product.unitCost ?? 0);
     const productValue = productAccumulator(movement.inventoryProductId);
     const branchValue = branchAccumulator(movement.branchId, branchById.get(movement.branchId)?.name);
     const day = dailyAcc.get(formatBusinessDateOnly(movement.createdAt));
@@ -520,42 +415,27 @@ export async function getInventoryAnalytics(
       case "SALE_CONSUMPTION":
         addConsumed(productValue, quantity, unitCost);
         addConsumed(branchValue, quantity, unitCost);
-        if (day) {
-          day.consumedOut += amount;
-          day.consumedCostOut += amount * unitCost;
-        }
+        if (day) day.consumedOut += amount;
         break;
       case "SALE_REVERSAL":
         addConsumed(productValue, quantity, unitCost, true);
         addConsumed(branchValue, quantity, unitCost, true);
-        if (day) {
-          day.consumedReversal += amount;
-          day.consumedCostReversal += amount * unitCost;
-        }
+        if (day) day.consumedReversal += amount;
         break;
       case "EVENT_LOAD":
         addConsumed(productValue, quantity, unitCost);
         addConsumed(branchValue, quantity, unitCost);
-        if (day) {
-          day.consumedOut += amount;
-          day.consumedCostOut += amount * unitCost;
-        }
+        if (day) day.consumedOut += amount;
         break;
       case "EVENT_RETURN":
         addConsumed(productValue, quantity, unitCost, true);
         addConsumed(branchValue, quantity, unitCost, true);
-        if (day) {
-          day.consumedReversal += amount;
-          day.consumedCostReversal += amount * unitCost;
-        }
+        if (day) day.consumedReversal += amount;
         break;
       case "ADJUSTMENT_OUT":
         addWaste(productValue, quantity, unitCost);
         addWaste(branchValue, quantity, unitCost);
-        if (day) {
-          day.waste += amount;
-          day.wasteCost += amount * unitCost;
-        }
+        if (day) day.waste += amount;
         break;
       case "TRANSFER_OUT":
         branchValue.transfersOut += amount;
@@ -564,20 +444,14 @@ export async function getInventoryAnalytics(
         branchValue.transfersIn += amount;
         addReceived(productValue, quantity, unitCost);
         addReceived(branchValue, quantity, unitCost);
-        if (day) {
-          day.received += amount;
-          day.receivedCost += amount * unitCost;
-        }
+        if (day) day.received += amount;
         break;
       case "RECEIPT":
       case "ADJUSTMENT_IN":
         if (quantity > 0) {
           addReceived(productValue, quantity, unitCost);
           addReceived(branchValue, quantity, unitCost);
-          if (day) {
-            day.received += amount;
-            day.receivedCost += amount * unitCost;
-          }
+          if (day) day.received += amount;
         }
         break;
       case "COUNT_CORRECTION":
@@ -612,9 +486,8 @@ export async function getInventoryAnalytics(
     const productMap = stockMatrix.stockByBranch.get(branch.id);
     if (!productMap) continue;
     for (const product of products) {
-      if (stockMatrix.uninitializedByBranch.get(branch.id)?.has(product.id)) continue;
       const stock = productMap.get(product.id) ?? 0;
-      branchValue.currentStockValue += stock * baseUnitCost(product);
+      branchValue.currentStockValue += stock * Number(product.unitCost ?? 0);
       if (stock > 0) branchValue.stockedProducts += 1;
       if (stock <= 0) branchValue.outOfStockCount += 1;
       if (stock < 0) branchValue.negativeProductCount += 1;
@@ -654,37 +527,28 @@ export async function getInventoryAnalytics(
         name: product.name,
         code: product.code,
         category: product.category,
-        unit: commercialUnit(product),
-        consumed: round(commercialQuantity(consumed, product)),
-        received: round(commercialQuantity(acc.received, product)),
-        waste: round(commercialQuantity(acc.waste, product)),
+        unit: product.unit,
+        consumed,
+        received: acc.received,
+        waste: acc.waste,
         wasteCost: acc.wasteCost,
         mismatches: acc.mismatches,
-        mismatchUnits: round(commercialQuantity(acc.mismatchUnits, product)),
+        mismatchUnits: acc.mismatchUnits,
         movements: acc.movements,
         cost: netConsumedCost(acc),
-        stock: round(commercialQuantity(stock, product)),
-        minimumStock: round(commercialQuantity(Number(product.minimumStock), product)),
+        stock,
+        minimumStock: Number(product.minimumStock),
         daysOfCover: coverageOf(stock, consumed),
       }];
     })
     .sort((a, b) => b.consumed - a.consumed);
 
   const lowStock = products
-    .filter((product) => product.isActive && stockMatrix.branches.every((branch) => !stockMatrix.uninitializedByBranch.get(branch.id)?.has(product.id)))
+    .filter((product) => product.isActive)
     .map((product) => {
       const stock = totalStockByProduct(stockMatrix, product.id);
       const consumed = productAcc.has(product.id) ? netConsumed(productAcc.get(product.id)!) : 0;
-      return {
-        id: product.id,
-        name: product.name,
-        category: product.category,
-        unit: commercialUnit(product),
-        stock: round(commercialQuantity(stock, product)),
-        minimumStock: round(commercialQuantity(Number(product.minimumStock), product)),
-        consumed: round(commercialQuantity(consumed, product)),
-        daysOfCover: coverageOf(stock, consumed),
-      };
+      return { id: product.id, name: product.name, category: product.category, unit: product.unit, stock, minimumStock: Number(product.minimumStock), consumed, daysOfCover: coverageOf(stock, consumed) };
     })
     .filter((product) => product.minimumStock > 0 && product.stock <= product.minimumStock)
     .sort((a, b) => a.stock - b.stock);
@@ -697,14 +561,7 @@ export async function getInventoryAnalytics(
     })
     .map((product) => {
       const last = lastMovementByProduct.get(product.id) ?? null;
-      return {
-        id: product.id,
-        name: product.name,
-        category: product.category,
-        unit: commercialUnit(product),
-        stock: round(commercialQuantity(totalStockByProduct(stockMatrix, product.id), product)),
-        lastMovement: last ? last.toISOString() : null,
-      };
+      return { id: product.id, name: product.name, category: product.category, unit: product.unit, stock: totalStockByProduct(stockMatrix, product.id), lastMovement: last ? last.toISOString() : null };
     })
     .sort((a, b) => b.stock - a.stock);
 
@@ -740,9 +597,6 @@ export async function getInventoryAnalytics(
     consumed: round(Math.max(0, value.consumedOut - value.consumedReversal)),
     received: round(value.received),
     waste: round(value.waste),
-    consumedCost: round(Math.max(0, value.consumedCostOut - value.consumedCostReversal)),
-    receivedCost: round(value.receivedCost),
-    wasteCost: round(value.wasteCost),
   }));
 
   return {
@@ -753,7 +607,6 @@ export async function getInventoryAnalytics(
       movements: branchesResult.reduce((sum, branch) => sum + branch.movements, 0),
       consumedUnits: branchesResult.reduce((sum, branch) => sum + branch.consumed, 0),
       receivedUnits: branchesResult.reduce((sum, branch) => sum + branch.received, 0),
-      receivedCost: branchesResult.reduce((sum, branch) => sum + branch.receivedCost, 0),
       consumedCost: branchesResult.reduce((sum, branch) => sum + branch.consumedCost, 0),
       wasteUnits: branchesResult.reduce((sum, branch) => sum + branch.waste, 0),
       wasteCost: branchesResult.reduce((sum, branch) => sum + branch.wasteCost, 0),
@@ -762,7 +615,7 @@ export async function getInventoryAnalytics(
       shortageUnits: branchesResult.reduce((sum, branch) => sum + branch.shortageUnits, 0),
       surplusUnits: branchesResult.reduce((sum, branch) => sum + branch.surplusUnits, 0),
       lowStockCount: lowStock.length,
-      outOfStockCount: products.filter((product) => product.isActive && stockMatrix.branches.every((branch) => !stockMatrix.uninitializedByBranch.get(branch.id)?.has(product.id)) && totalStockByProduct(stockMatrix, product.id) <= 0).length,
+      outOfStockCount: products.filter((product) => product.isActive && totalStockByProduct(stockMatrix, product.id) <= 0).length,
       staleCount: stale.length,
     },
     topProducts,

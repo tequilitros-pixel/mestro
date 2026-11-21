@@ -10,9 +10,11 @@ import {
   parseDateOnly,
   todayDateOnly,
 } from "@/lib/dateOnly";
+import { formatBusinessDateOnly } from "@/lib/dateTime";
 import { distanceMeters, hasGeofence } from "@/lib/geo";
 import {
   BRANCH_LOCATION_SELECT,
+  checkGeofence,
   matchTodaysScheduledShift,
   type Coords,
 } from "@/lib/timeclockShared";
@@ -27,15 +29,10 @@ export async function getMyOpenShift() {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const [entry, policy] = await Promise.all([prisma.timeClockEntry.findFirst({
+  return prisma.timeClockEntry.findFirst({
     where: { userId: user.id, clockOut: null },
     include: { branch: { select: BRANCH_LOCATION_SELECT } },
-  }), getLocationPolicy()]);
-  if (!entry) return null;
-  return {
-    ...entry,
-    locationRequired: requiresLocation(entry.branch, policy.requireGeolocationClockOut),
-  };
+  });
 }
 
 export async function getMyRecentLocationRequest() {
@@ -68,9 +65,9 @@ export async function getMyBranches() {
   // programado ahí para hoy (ScheduledShift). Si solo tiene el turno
   // programado, también debe poder checar entrada sin que un admin
   // tenga que darle de alta la sucursal aparte.
-  const [assigned, scheduledToday, policy] = await Promise.all([
+  const [assigned, scheduledToday] = await Promise.all([
     prisma.userBranch.findMany({
-      where: { userId: user.id, branch: { active: true } },
+      where: { userId: user.id },
       include: { branch: { select: BRANCH_LOCATION_SELECT } },
     }),
     // DESCANSO (día libre) no tiene sucursal: no aplica para checar entrada.
@@ -78,7 +75,6 @@ export async function getMyBranches() {
       where: { userId: user.id, date: { gte: todayStart, lt: todayEnd }, type: "TURNO", publicationStatus: "PUBLISHED" },
       include: { branch: { select: BRANCH_LOCATION_SELECT } },
     }),
-    getLocationPolicy(),
   ]);
 
   const byId = new Map<string, (typeof assigned)[number]["branch"]>();
@@ -87,10 +83,7 @@ export async function getMyBranches() {
     if (s.branch) byId.set(s.branch.id, s.branch);
   }
 
-  return Array.from(byId.values()).map((branch) => ({
-    ...branch,
-    locationRequired: requiresLocation(branch, policy.requireGeolocationClockIn),
-  }));
+  return Array.from(byId.values());
 }
 
 /**
@@ -121,7 +114,7 @@ export async function getNearbyBranches(coords: Coords) {
   });
 }
 
-export async function clockInAction(branchId: string, location?: LocationInput) {
+export async function clockInAction(branchId: string, coords?: Coords) {
   const user = await getCurrentUser();
   if (!user) {
     return { error: "No autorizado" };
@@ -144,40 +137,31 @@ export async function clockInAction(branchId: string, location?: LocationInput) 
   const branch = await prisma.branch.findUnique({
     where: { id: branchId },
     select: BRANCH_LOCATION_SELECT,
-  }), getLocationPolicy(), canClockAtBranch(user.id, branchId)]);
+  });
 
-  if (!branch || !branch.active) {
+  if (!branch) {
     return { error: "Sucursal no encontrada" };
   }
-  if (!authorized) return { error: "No tienes autorización para checar en esta sucursal." };
 
-  const geofenceResult = evaluateGeofence(branch, location, policy.requireGeolocationClockIn, policy.maximumAccuracyMeters);
-  const decision = geofenceDecision(geofenceResult.result, policy.outsideBehavior);
-  if (!decision.allow) return { error: geofenceMessage(geofenceResult) ?? "No pudimos validar tu ubicación.", geofenceResult: geofenceResult.result };
+  const geofenceResult = checkGeofence(branch, coords);
+  if (geofenceResult && "error" in geofenceResult) {
+    return { error: geofenceResult.error };
+  }
 
   const scheduledShiftId = await matchTodaysScheduledShift(user.id, branchId);
 
-  const entry = await prisma.$transaction(async (tx) => {
-    const created = await tx.timeClockEntry.create({
-      data: { userId: user.id, branchId, clockIn: new Date(), scheduledShiftId },
-    });
-    await tx.clockGeolocationEvidence.create({
-      data: {
-        timeClockId: created.id,
-        action: "CLOCK_IN",
-        result: geofenceResult.result,
-        distanceMeters: geofenceResult.distanceMeters,
-        accuracyMeters: geofenceResult.accuracyMeters,
-        checkedAt: geofenceResult.checkedAt,
-        reviewStatus: decision.needsReview && policy.requireOutsideReview ? "PENDING" : "NOT_REQUIRED",
-      },
-    });
-    return created;
+  const entry = await prisma.timeClockEntry.create({
+    data: {
+      userId: user.id,
+      branchId,
+      clockIn: new Date(),
+      scheduledShiftId,
+    },
   });
 
   revalidatePath("/timeclock");
 
-  return { success: true, entry, warning: decision.needsReview ? geofenceMessage(geofenceResult) : null };
+  return { success: true, entry };
 }
 
 /** Registra una entrada provisional; solo ADMIN puede convertirla en checada. */
@@ -240,7 +224,7 @@ export async function clockOutAction(
   entryId: string,
   clockInAdjusted: string,
   clockOutAdjusted: string,
-  location?: LocationInput,
+  coords?: Coords,
 ) {
   const user = await getCurrentUser();
   if (!user) {
@@ -260,10 +244,10 @@ export async function clockOutAction(
     return { error: "Este turno ya está cerrado" };
   }
 
-  const policy = await getLocationPolicy();
-  const geofenceResult = evaluateGeofence(entry.branch, location, policy.requireGeolocationClockOut, policy.maximumAccuracyMeters);
-  const decision = geofenceDecision(geofenceResult.result, policy.outsideBehavior);
-  if (!decision.allow) return { error: geofenceMessage(geofenceResult) ?? "No pudimos validar tu ubicación.", geofenceResult: geofenceResult.result };
+  const geofenceResult = checkGeofence(entry.branch, coords);
+  if (geofenceResult && "error" in geofenceResult) {
+    return { error: geofenceResult.error };
+  }
 
   const clockIn = new Date(clockInAdjusted);
   const clockOut = new Date(clockOutAdjusted);
@@ -276,79 +260,18 @@ export async function clockOutAction(
     return { error: "La hora de salida debe ser después de la entrada" };
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.timeClockEntry.update({
-      where: { id: entryId },
-      data: { clockIn, clockOut, confirmedByEmployee: true },
-    });
-    await tx.clockGeolocationEvidence.upsert({
-      where: { timeClockId_action: { timeClockId: entryId, action: "CLOCK_OUT" } },
-      update: {},
-      create: {
-        timeClockId: entryId,
-        action: "CLOCK_OUT",
-        result: geofenceResult.result,
-        distanceMeters: geofenceResult.distanceMeters,
-        accuracyMeters: geofenceResult.accuracyMeters,
-        checkedAt: geofenceResult.checkedAt,
-        reviewStatus: decision.needsReview && policy.requireOutsideReview ? "PENDING" : "NOT_REQUIRED",
-      },
-    });
-  });
-
-  revalidatePath("/timeclock");
-
-  return { success: true, warning: decision.needsReview ? geofenceMessage(geofenceResult) : null };
-}
-
-/**
- * Cierra una sesión olvidada que lleva abierta al menos un día. No pide
- * geolocalización porque ya no es una salida en sitio, y queda sin confirmar
- * para que nómina la revise antes de pagarla.
- */
-export async function closeForgottenShiftAction(
-  entryId: string,
-  clockInAdjusted: string,
-  clockOutAdjusted: string,
-) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "No autorizado" };
-
-  const entry = await prisma.timeClockEntry.findUnique({
-    where: { id: entryId },
-  });
-
-  if (!entry || entry.userId !== user.id) return { error: "Turno no encontrado" };
-  if (entry.clockOut) return { error: "Este turno ya está cerrado" };
-  if (Date.now() - entry.clockIn.getTime() < FORGOTTEN_SHIFT_THRESHOLD_MS) {
-    return { error: "Esta opción solo aplica a sesiones abiertas desde hace más de 24 horas." };
-  }
-
-  const clockIn = new Date(clockInAdjusted);
-  const clockOut = new Date(clockOutAdjusted);
-  if (Number.isNaN(clockIn.getTime()) || Number.isNaN(clockOut.getTime())) {
-    return { error: "Las horas no son válidas" };
-  }
-  if (clockOut <= clockIn) {
-    return { error: "La hora de salida debe ser después de la entrada" };
-  }
-
-  const note = "Cierre excepcional de sesión olvidada; requiere revisión de nómina.";
   await prisma.timeClockEntry.update({
     where: { id: entryId },
     data: {
       clockIn,
       clockOut,
-      confirmedByEmployee: false,
-      notes: entry.notes ? `${entry.notes}\n${note}` : note,
+      confirmedByEmployee: true,
     },
   });
 
   revalidatePath("/timeclock");
-  revalidatePath("/timeclock/payroll");
-  revalidatePath("/administration/personnel/timeclock");
 
-  return { success: true, warning: "La sesión se cerró y quedó marcada para revisión de nómina." };
+  return { success: true };
 }
 
 /**
@@ -825,8 +748,8 @@ export async function createManualTimeClockEntryAction(input: {
         branchId: input.branchId,
         type: "TURNO",
         date: {
-          gte: new Date(clockIn.toISOString().slice(0, 10) + "T00:00:00.000Z"),
-          lt: new Date(clockIn.toISOString().slice(0, 10) + "T23:59:59.999Z"),
+          gte: parseDateOnly(formatBusinessDateOnly(clockIn)),
+          lt: parseDateOnly(addDaysToDateOnly(formatBusinessDateOnly(clockIn), 1)),
         },
       },
       select: { id: true },

@@ -2,12 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   PERMISSION_GROUPS,
-  canAccessModule,
-  getDefaultPathForModuleKeys,
   getModuleKeyForPath,
   isAdminOnlyPath,
   isAlwaysAvailablePath,
-  isConfigurablePermissionKey,
 } from "../lib/permission-modules";
 import {
   MAIN_MODULES,
@@ -34,15 +31,15 @@ const allLeaves = Object.values(SUBMENUS).flatMap(leaves);
 test("Punto de Venta separa vender, transacciones y ventas resumen", () => {
   const main = MAIN_MODULES.find((module) => module.module === "pos");
   const sale = SUBMENUS.pos.find((item) => item.label === "Punto de Venta");
-  const transactions = SUBMENUS.pos.find((item) => item.label === "Transacciones y ventas");
-  const summary = SUBMENUS.pos.find((item) => item.label === "Resumen de ventas");
+  const transactions = SUBMENUS.pos.find((item) => item.label === "Transacciones");
+  const summary = SUBMENUS.pos.find((item) => item.label === "Ventas resumen");
 
   assert.equal(main?.href, "/pospress");
   assert.equal(main?.label, "Ventas");
   assert.equal(sale?.permissionKey, "/pos");
-  assert.equal(transactions?.permissionKey, "/pos");
+  assert.equal(transactions?.permissionKey, "/pos/sales");
   assert.equal(summary?.href, "/pos/sales");
-  assert.equal(summary?.permissionKey, "/pos/sales");
+  assert.deepEqual(summary?.permissionKeys, ["/pos", "/pos/sales"]);
   assert.equal(getSubmenuItemDestination("GERENTE", ["/pos"], sale!), "/pospress");
   assert.equal(getMainModuleDestination("GERENTE", ["/pos"], main!), "/pospress");
   assert.equal(
@@ -69,11 +66,6 @@ test("la ruta de ventas resumen no es interceptada por la entrada de POSpress", 
     redirects.some((redirect) => redirect.source === "/pos/:path*"),
     false,
     "las pantallas reales bajo /pos deben permanecer accesibles",
-  );
-  assert.equal(
-    redirects.some((redirect) => redirect.source === "/administration/pos2/:path*"),
-    false,
-    "el panel y sus módulos administrativos POS 2.0 deben permanecer accesibles",
   );
 });
 
@@ -107,7 +99,7 @@ test("cada pestaña delegable está representada en el catálogo de permisos", (
   }
 });
 
-test("Vender no concede Ventas resumen ni Transacciones", () => {
+test("Vender concede Punto de Venta y Ventas resumen, pero no Transacciones", () => {
   const items = SUBMENUS.pos;
   const visible = (label: string) =>
     isSubmenuItemVisible("GERENTE", ["/pos"], items.find((item) => item.label === label)!);
@@ -115,12 +107,12 @@ test("Vender no concede Ventas resumen ni Transacciones", () => {
   assert.equal(visible("Punto de Venta"), true);
   assert.equal(visible("Mesas"), true);
   assert.equal(visible("Transacciones"), false);
-  assert.equal(visible("Ventas resumen"), false);
+  assert.equal(visible("Ventas resumen"), true);
   assert.equal(
     isSubmenuItemVisible(
       "GERENTE",
       ["/pos/sales"],
-      items.find((item) => item.label === "Resumen de ventas")!,
+      items.find((item) => item.label === "Ventas resumen")!,
     ),
     true,
   );
@@ -152,13 +144,12 @@ test("Cortes activa su módulo principal sin conceder las demás pantallas", () 
   assert.deepEqual(visible, ["Cortes"]);
 });
 
-test("el historial de cortes es configurable por permiso", () => {
+test("el historial de cortes queda reservado a administración", () => {
   const history = SUBMENUS["cash-cuts"]
     .find((item) => item.label === "Control")!
     .children!.find((item) => item.href === "/cash-cuts/history")!;
-  assert.equal(isConfigurablePermissionKey(history.href), true);
-  assert.equal(isSubmenuItemVisible("GERENTE", ["/cash-cuts/safe"], history), false);
-  assert.equal(isSubmenuItemVisible("GERENTE", ["/cash-cuts/safe", "/cash-cuts/history"], history), true);
+  assert.equal(isAdminOnlyPath(history.href), true);
+  assert.equal(isSubmenuItemVisible("GERENTE", ["/cash-cuts/safe", "/cash-cuts/history"], history), false);
   assert.equal(isSubmenuItemVisible("ADMIN", [], history), true);
 });
 
@@ -177,20 +168,6 @@ test("Caldera pertenece al módulo de Producción", () => {
 test("permisos obsoletos no desactivan la compatibilidad del operador", () => {
   const boiler = SUBMENUS.production.find((item) => item.href === "/boiler")!;
   assert.equal(isSubmenuItemVisible("OPERATOR", ["/permiso-antiguo"], boiler), true);
-});
-
-test("ENCARGADO con permiso de conteo puede entrar desde Inventario sin ver administración extra", () => {
-  const countKey = "/administration/inventory/branch-counts";
-  const count = SUBMENUS.administration.find((item) => item.label === "Sucursales")!
-    .children!.find((item) => item.href === countKey)!;
-  const inventoryModule = MAIN_MODULES.find((module) => module.module === "administration")!;
-
-  assert.equal(isSubmenuItemVisible("ENCARGADO", [countKey], count), true);
-  assert.equal(isMainModuleVisible("ENCARGADO", [countKey], inventoryModule), true);
-  assert.equal(getMainModuleDestination("ENCARGADO", [countKey], inventoryModule), countKey);
-  assert.equal(isSubmenuItemVisible("ENCARGADO", [], count), false);
-  assert.equal(isSubmenuItemVisible("CONSULTA", [countKey], count), false);
-  assert.equal(isSubmenuItemVisible("ENCARGADO", [countKey], SUBMENUS.administration.find((item) => item.href === "/administration/inventory/branch-counts/statistics")!), false);
 });
 
 test("Gerente ve las superficies de inventario de solo lectura", () => {

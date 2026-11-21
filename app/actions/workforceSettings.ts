@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { createWorkforcePolicyVersion } from "@/lib/workforce/settings/service";
+import { parseDateOnly } from "@/lib/dateOnly";
 
 const path = "/administration/workforce/settings";
 const text = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
@@ -16,7 +17,7 @@ export async function createWorkforceSettingsVersionAction(form: FormData) {
     await createWorkforcePolicyVersion(
       { id: user.id, role: user.role },
       {
-        effectiveFrom: new Date(`${text(form, "effectiveFrom")}T00:00:00.000Z`),
+        effectiveFrom: parseDateOnly(text(form, "effectiveFrom")),
         reason: text(form, "reason"),
         confirmLegalChange: checked(form, "confirmLegalChange"),
         companyTimezone: text(form, "companyTimezone"),

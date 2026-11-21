@@ -7,8 +7,6 @@ export const PUBLIC_PATHS = [
   "/terms-of-service",
   "/support",
   "/tequilitros",
-  "/tienda",
-  "/TequilaElColotlense",
   "/offline.html",
   "/robots.txt",
   "/sitemap.xml",

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserWithAnyModuleAccess, getAccessibleBranchIds } from "@/lib/auth";
 import { PaymentMethod, PosBenefitReason, Prisma } from "@prisma/client";
@@ -15,16 +15,11 @@ import {
   type PospressInventoryRequirement,
 } from "@/lib/pos/pospressInventory";
 import { DomainError } from "@/lib/domain/errors";
+import { appendAuditEvent } from "@/lib/pos2/audit";
+import { appendOutboxEvent } from "@/lib/pos2/outbox";
+import { evaluateCapabilityShadow } from "@/lib/pos2/capabilities";
 import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
 import { assertCashCutBranch, lockCashCutOwner } from "@/lib/pos/cashCutBranchGuard";
-
-function hashPayload(payload: unknown): string {
-  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
-}
-
-function hashPayload(payload: unknown): string {
-  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
-}
 
 const ROLES_QUE_PUEDEN_VENDER = ["ADMIN", "GERENTE", "ENCARGADO"];
 
@@ -80,8 +75,8 @@ export async function GET(request: NextRequest) {
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
 
-  const currentCashCut = await getCurrentPospressCashCut(user);
-  const scopedBranchId = currentCashCut?.branch.id;
+  const currentCashCut = user.role === "ADMIN" ? null : await getCurrentPospressCashCut(user);
+  const scopedBranchId = user.role === "ADMIN" ? undefined : currentCashCut?.branch.id;
 
   if (user.role !== "ADMIN" && !currentCashCut) return NextResponse.json([]);
   if (scopedBranchId && branchId && branchId !== scopedBranchId) {
@@ -142,7 +137,6 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const {
     branchId,
-    cashCutId,
     items,
     discountAmount: rawDiscountAmount,
     discountReason,
@@ -155,7 +149,6 @@ export async function POST(request: NextRequest) {
     inventoryMode,
   }: {
     branchId?: string;
-    cashCutId?: string;
     items?: CartItemInput[];
     discountAmount?: number;
     discountReason?: string;
@@ -173,7 +166,7 @@ export async function POST(request: NextRequest) {
   }
 
   const salePayloadHash = hashPayload({
-    branchId, cashCutId, items, discountAmount: rawDiscountAmount, discountReason,
+    branchId, items, discountAmount: rawDiscountAmount, discountReason,
     discountReasonCode, employeeBuyerId, payments,
     inventoryMode: inventoryMode ?? "legacy",
     authorization: authorization ? { managerId: authorization.managerId } : undefined,
@@ -194,25 +187,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado en esta sucursal" }, { status: 403 });
   }
 
-  // El corte abierto es la frontera operativa de un cajero. No se acepta una
-  // sucursal enviada por el navegador si no coincide con el corte autorizado
-  // del usuario, aunque éste tenga acceso histórico a más de una sucursal.
-  const currentCashCut = user.role === "ADMIN" ? null : await getCurrentPospressCashCut(user);
-  if (user.role !== "ADMIN") {
-    if (!currentCashCut) {
-      return NextResponse.json(
-        { error: "No tienes un corte de caja abierto asignado para cobrar." },
-        { status: 403 },
-      );
-    }
-    if (branchId !== currentCashCut.branch.id) {
-      return NextResponse.json({ error: "Solo puedes cobrar en la sucursal de tu corte abierto." }, { status: 403 });
-    }
-    if (!cashCutId || cashCutId !== currentCashCut.id) {
-      return NextResponse.json({ error: "El corte de caja cambió. Actualiza POSPress antes de cobrar." }, { status: 409 });
-    }
-  }
-
   // El chequeo de idempotencia va DESPUÉS de validar acceso a la
   // sucursal: si no, un clientOperationId adivinado o reutilizado
   // podría devolver los datos de una venta de otra sucursal.
@@ -221,9 +195,6 @@ export async function POST(request: NextRequest) {
     if (existing) {
       if (!(await hasBranchAccess(existing.branchId))) {
         return NextResponse.json({ error: "No autorizado en esta sucursal" }, { status: 403 });
-      }
-      if (currentCashCut && existing.cashCutId !== currentCashCut.id) {
-        return NextResponse.json({ error: "Esta operación pertenece a otro corte de caja." }, { status: 403 });
       }
       if (existing.clientPayloadHash && existing.clientPayloadHash !== salePayloadHash) {
         const error = new DomainError("IDEMPOTENCY_KEY_REUSED", { operationId: clientOperationId });
@@ -292,33 +263,11 @@ export async function POST(request: NextRequest) {
     orderBy: { openedAt: "desc" },
   });
 
-  // Si tiene un corte abierto en una sucursal distinta a la que intenta vender, se bloquea estrictamente
-  if (userOpenCut && userOpenCut.branchId !== branchId) {
-    return NextResponse.json(
-      {
-        error: `Tienes un corte de caja abierto en la sucursal "${userOpenCut.branch.name}". Solo puedes vender en esa sucursal mientras tu corte siga abierto.`,
-      },
-      { status: 403 }
-    );
-  }
-
-  // El corte de caja a vincular es específicamente el corte abierto del usuario, o el de la sucursal
-  const openCashCut =
-    userOpenCut && userOpenCut.branchId === branchId
-      ? userOpenCut
-      : await prisma.cashCut.findFirst({
-          where: { branchId, status: "ABIERTO" },
-          orderBy: { openedAt: "desc" },
-        });
-
   if (!openCashCut) {
     return NextResponse.json(
       { error: "Esta sucursal no tiene un corte de caja abierto. Ábrelo antes de cobrar." },
       { status: 400 }
     );
-  }
-  if (cashCutId && cashCutId !== openCashCut.id) {
-    return NextResponse.json({ error: "El corte de caja cambió. Actualiza POSPress antes de cobrar." }, { status: 409 });
   }
 
   // Resolvemos cada línea del carrito: producto de catálogo (con
@@ -653,6 +602,7 @@ export async function POST(request: NextRequest) {
       include: { items: true, payments: true, branch: true },
     });
 
+    const inventoryRequirements: Array<{ productId: string; quantity: number }> = [];
     const pospressInventoryRequirements: PospressInventoryRequirement[] = [];
     const eventInventoryRequirements: Array<{ inventoryProductId: string; quantity: Prisma.Decimal; unit: typeof variants[number]["ingredients"][number]["unit"] }> = [];
     for (const item of resolvedItems) {
@@ -673,13 +623,10 @@ export async function POST(request: NextRequest) {
           }
           pospressInventoryRequirements.push({
             inventoryProductId: ingredient.inventoryProductId,
+            quantity,
+            unit: ingredient.unit,
           });
         }
-        pospressInventoryRequirements.push({
-          inventoryProductId: ingredient.inventoryProductId,
-          quantity,
-          unit: ingredient.unit,
-        });
       }
     }
     if (openCashCut.eventStockIsolated && openCashCut.eventId) {
@@ -699,6 +646,8 @@ export async function POST(request: NextRequest) {
         operationId: clientOperationId ?? randomUUID(),
         requirements: pospressInventoryRequirements,
       });
+    } else {
+      await consumePosInventory(tx, { branchId, saleCode: code, requirements: inventoryRequirements });
     }
 
     // Suma los pagos de esta venta al corte de caja abierto de la

@@ -10,7 +10,7 @@ import CocktailCatalog from "./components/CocktailCatalog";
 import TequilitrosCup3D from "./components/TequilitrosCup3D";
 import BookingSteps from "./components/BookingSteps";
 import VideoPlayer from "./components/VideoPlayer";
-
+import EventQuote from "./EventQuote";
 import FloatingWhatsApp from "./components/FloatingWhatsApp";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://maestro-destiladora.space";
@@ -31,15 +31,15 @@ const serviceAreas = [
 const faqList = [
   {
     q: "¿Cuánto cuesta contratar un bartender para eventos con barra móvil?",
-    a: "En Tequilitros Eventos ofrecemos dos modalidades transparentes: Barra Libre a $90 MXN por persona, servicio de 4 horas con todos los productos necesarios para los cócteles del menú y sin cobros extra por bebidas e insumos dentro del horario (viáticos y horas adicionales aparte), o Barra a Consumo a $250 MXN por hora de atención de bartender más únicamente las bebidas e insumos que tus invitados consuman.",
+    a: "En Tequilitros Eventos ofrecemos dos modalidades transparentes: Barra Libre a $90 MXN por persona por un servicio continuo de 4 horas con cócteles ilimitados (la opción preferida para bodas y XV años), o Barra a Consumo a $250 MXN por hora de atención de bartender más únicamente las bebidas e insumos que tus invitados consuman.",
   },
   {
     q: "¿Cuál es la diferencia entre Barra Libre y Barra a Consumo?",
-    a: "En Barra Libre pagas $90 MXN por persona por 4 horas. Incluye todos los productos necesarios para preparar los cócteles del menú: tequila, licores, mezcladores, hielo, vasos e insumos. Sin cobros extra por consumo de bebidas ni ingredientes durante las 4 horas contratadas. Viáticos y horas extra, si aplican, se cotizan por separado antes de contratar. En Barra a Consumo pagas $250 MXN por cada hora de atención en barra más únicamente los productos que realmente se consuman al final tras el conteo frente a ti (ideal para eventos donde el consumo es moderado).",
+    a: "En Barra Libre pagas una tarifa fija de $90 MXN por persona por un servicio de 4 horas; tus invitados toman cócteles sin límite y tu costo es 100% predecible (ideal para bodas y XV años). En Barra a Consumo pagas $250 MXN por cada hora de atención en barra más únicamente los productos que realmente se consuman al final tras el conteo frente a ti (ideal para eventos donde el consumo es moderado).",
   },
   {
-    q: "¿Qué incluye Barra Libre y qué no incluye?",
-    a: "Incluye todos los productos necesarios para preparar los cócteles del menú: tequila, licores, mezcladores, hielo, vasos e insumos. Sin cobros extra por consumo de bebidas ni ingredientes durante las 4 horas contratadas. Viáticos y horas extra, si aplican, se cotizan por separado antes de contratar. No incluye meseros, servicio en mesas ni distribución de bebidas a los invitados. En Barra a Consumo los productos se cobran según el consumo real.",
+    q: "¿Qué incluye el paquete de mixología de eventos y qué no incluye?",
+    a: "INCLUYE: Personal de preparación (bartenders profesionales), bebidas y tequila artesanal de la casa (blanco, reposado, sangrita y licores), mezcladores, hielo ilimitado, vasos de 32 oz (946 ml) e insumos completos (fruta fresca del día, limón, sal, salsas y escarchados Tajín). NO INCLUYE: Meseros de piso, servicio en mesas ni distribución entre los invitados (los invitados acuden directamente a la barra móvil a solicitar sus bebidas).",
   },
   {
     q: "¿Qué cócteles preparan los bartenders en los eventos?",
@@ -177,7 +177,7 @@ function jsonLd() {
                 "@type": "Service",
                 name: "Paquete Barra Libre con Bartender (4 horas)",
                 description:
-                  "$90 MXN por persona · Barra Libre de 4 horas. Incluye todos los productos necesarios para preparar los cócteles del menú (tequila, mezcladores, hielo, vasos e insumos), sin cobros extra por consumo de bebidas. Viáticos y horas extra se cotizan aparte si aplican.",
+                  "$90 MXN por persona · Servicio continuo de 4 horas, bartenders dedicados, tequila artesanal, mezcladores, hielo, vasos de 32 oz y 7 cócteles oficiales sin límite.",
               },
             },
             {
@@ -351,7 +351,7 @@ export default function TequilitrosPage() {
             <p className={styles.sectionSubtitle}>
               Tú eliges cómo pagar tu servicio de bartender y barra móvil: un costo fijo predecible por
               persona en Barra Libre ($90/persona) o pagar únicamente lo que tus invitados consuman en
-              Barra a Consumo ($250/hr + productos consumidos). En Barra Libre se incluyen todos los ingredientes y productos para los cócteles del menú sin cargos adicionales por consumo; viáticos y horas extra se acuerdan aparte.
+              Barra a Consumo ($250/hr). En ambas modalidades nos encargamos de todo el servicio e insumos.
             </p>
           </div>
 
@@ -376,8 +376,8 @@ export default function TequilitrosPage() {
                   </span>
                 </div>
                 <p className="mt-4 text-xs leading-relaxed text-[#D2DAE0] sm:text-sm">
-                  Incluye todos los productos necesarios para preparar las bebidas del menú, como tequila,
-                  mezcladores, hielo, vasos e insumos. No hay cobros extra por su consumo durante las 4 horas contratadas.
+                  Los invitados toman sin límite durante el horario contratado. Costo 100% predecible según
+                  los invitados confirmados.
                 </p>
 
                 <ul className="mt-6 space-y-2.5 border-t border-[#242E37] pt-5 text-xs text-[#F5F2EB]">
@@ -385,13 +385,13 @@ export default function TequilitrosPage() {
                     <span className="text-[#30D158]">✓</span> Servicio continuo de 4 horas
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="text-[#30D158]">✓</span> Todos los productos necesarios para preparar los cócteles del menú
+                    <span className="text-[#30D158]">✓</span> Barra libre de cócteles del menú
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="text-[#30D158]">✓</span> Sin cobros extra por bebidas ni insumos durante las 4 horas
+                    <span className="text-[#30D158]">✓</span> Hora extra con costo adicional acordado previamente
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="text-[#30D158]">✓</span> Viáticos y horas extra (si aplican), informados antes de contratar
+                    <span className="text-[#30D158]">✓</span> Más viáticos según ubicación
                   </li>
                 </ul>
               </div>
@@ -454,7 +454,7 @@ export default function TequilitrosPage() {
           {/* Comparativa Oficial: Qué Incluye y Qué No Incluye */}
           <div className="mt-8 overflow-hidden rounded-2xl border border-[#242E37] bg-[#0E1318]">
             <div className="border-b border-[#242E37] bg-[#141B22] px-6 py-3 font-mono text-xs font-bold uppercase tracking-widest text-[#E28735]">
-              Productos disponibles en las dos modalidades: incluidos en Barra Libre y por consumo en Barra a Consumo
+              En las Dos Modalidades: Barra Libre y Barra a Consumo
             </div>
             <div className="grid grid-cols-1 gap-6 p-6 sm:grid-cols-2 sm:p-8">
               <div>
@@ -507,8 +507,8 @@ export default function TequilitrosPage() {
               Calcula tu Paquete para Eventos <em>en Segundos.</em>
             </h2>
             <p className={styles.sectionSubtitle}>
-              Elige tu modalidad, invitados, duración y lugar para obtener un presupuesto orientativo.
-              Envíanos los detalles por WhatsApp para confirmar disponibilidad y precio final.
+              Mueve la barra con tu número de invitados y conoce al instante el total a pagar, el anticipo del 50%
+              y los viáticos aplicables para tu boda o fiesta.
             </p>
           </div>
 
@@ -696,6 +696,11 @@ export default function TequilitrosPage() {
             ))}
           </div>
         </section>
+
+        {/* ================================================================
+            10. FORMULARIO DE COTIZACIÓN DIRECTA (EVENT QUOTE)
+            ================================================================ */}
+        <EventQuote />
 
         {/* ================================================================
             11. REDES SOCIALES Y CONTACTO

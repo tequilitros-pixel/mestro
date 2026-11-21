@@ -4,7 +4,6 @@ import { getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
 import { withRlsContext } from "@/lib/rls";
 import { sendSaleReceiptEmail } from "@/lib/email";
 import { formatBusinessDateTime } from "@/lib/dateTime";
-import { getCurrentPospressCashCut } from "@/lib/pos/currentCashCut";
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -20,10 +19,6 @@ export async function POST(
   }
 
   const { id } = await params;
-  const currentCashCut = user.role === "ADMIN" ? null : await getCurrentPospressCashCut(user);
-  if (user.role !== "ADMIN" && !currentCashCut) {
-    return NextResponse.json({ error: "No tienes un corte de caja abierto asignado." }, { status: 403 });
-  }
   let body: { email?: string };
 
   try {
@@ -51,9 +46,6 @@ export async function POST(
   );
 
   if (sale) {
-    if (currentCashCut && (sale.branchId !== currentCashCut.branch.id || sale.cashCutId !== currentCashCut.id)) {
-      return NextResponse.json({ error: "Venta no encontrada" }, { status: 404 });
-    }
     if (user.role !== "ADMIN") {
       const hasAccess = await prisma.userBranch.findFirst({
         where: { userId: user.id, branchId: sale.branchId },

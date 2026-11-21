@@ -6,14 +6,14 @@ import { ServiceEventStatus } from "@prisma/client";
 import { updateEventStatusAction } from "../actions";
 import { useToast } from "@/components/ui/Toast";
 
-export const statusLabels: Record<ServiceEventStatus, string> = {
+const statusLabels: Record<ServiceEventStatus, string> = {
   DRAFT: "Borrador",
   PREPARING: "Preparando",
   READY: "Listo",
   IN_PROGRESS: "En curso",
   RETURN_PENDING: "Pendiente de regreso",
   COMPLETED: "Completado",
-  CANCELLED: "Cancelado / Archivado",
+  CANCELLED: "Cancelado",
 };
 
 export default function EventStatusSelector({

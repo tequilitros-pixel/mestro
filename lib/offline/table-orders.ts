@@ -12,7 +12,6 @@ export type LocalTableLine = {
 export type LocalTableOrder = {
   id: string;
   branchId: string;
-  cashCutId: string;
   tableId: string;
   tableLabel: string;
   lines: LocalTableLine[];
@@ -48,7 +47,7 @@ async function writeOrder(order: LocalTableOrder) {
   window.dispatchEvent(new Event("maestro:tables-changed"));
 }
 
-export async function listLocalTableOrders(branchId?: string, cashCutId?: string) {
+export async function listLocalTableOrders() {
   const database = await openDatabase();
   const orders = await new Promise<LocalTableOrder[]>((resolve, reject) => {
     const request = database.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).getAll();
@@ -56,12 +55,7 @@ export async function listLocalTableOrders(branchId?: string, cashCutId?: string
     request.onerror = () => reject(request.error);
   });
   database.close();
-  return orders
-    .filter((order) =>
-      (!branchId || order.branchId === branchId) &&
-      (!cashCutId || order.cashCutId === cashCutId),
-    )
-    .sort((a, b) => a.tableLabel.localeCompare(b.tableLabel, "es"));
+  return orders.sort((a, b) => a.tableLabel.localeCompare(b.tableLabel, "es"));
 }
 
 export async function saveLocalTableOrder(order: LocalTableOrder) {

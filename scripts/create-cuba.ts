@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { CatalogBaseUnit, Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
@@ -11,16 +11,7 @@ const apply = process.argv.includes("--apply");
 const pool = new Pool({ connectionString });
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
-type CubaVariant = {
-  name: string;
-  priceFrom: string;
-  ice: number;
-  cup: "POS-ING-VASO-MED" | "POS-ING-VASO-GDE";
-  soda: number;
-  tequila?: number;
-};
-
-const VARIANTS: readonly CubaVariant[] = [
+const VARIANTS = [
   { name: "Mediano", priceFrom: "Mediano", ice: 250, cup: "POS-ING-VASO-MED", soda: 180, tequila: 30 },
   { name: "Grande", priceFrom: "Grande", ice: 500, cup: "POS-ING-VASO-GDE", soda: 360, tequila: 60 },
   { name: "Mediano sin tequila", priceFrom: "Mediano sin tequila", ice: 250, cup: "POS-ING-VASO-MED", soda: 180, tequila: 0 },
@@ -57,7 +48,7 @@ async function main() {
     price: prices.get(variant.priceFrom)!.price,
     ingredients: [
       { code: "POS-ING-TORONJA-REF", quantity: variant.soda, unit: "ML" },
-      ...("tequila" in variant && variant.tequila ? [{ code: "POS-ING-TEQUILA", quantity: variant.tequila, unit: "ML" }] : []),
+      ...(variant.tequila ? [{ code: "POS-ING-TEQUILA", quantity: variant.tequila, unit: "ML" }] : []),
       { code: "EXTRA-HIELO", quantity: variant.ice, unit: "G" },
       { code: variant.cup, quantity: 1, unit: "UNIT" },
     ],

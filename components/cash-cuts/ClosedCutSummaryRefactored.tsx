@@ -4,6 +4,7 @@ import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 import { ChevronLeftIcon } from "@/components/ui/icons";
 import { Accordion } from "./CashCutAccordion";
 import { CashCutSummaryCard } from "./CashCutSummaryCard";
+import { formatBusinessDateTime } from "@/lib/dateTime";
 
 interface CashCut {
   id: string;
@@ -43,7 +44,7 @@ interface CashCut {
 }
 
 const formatMoney = (v: number | null) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(v ?? 0);
-const formatDateTime = (v: string | null) => v ? new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Mexico_City" }).format(new Date(v)) : "Sin registrar";
+const formatDateTime = (v: string | null) => v ? formatBusinessDateTime(v) : "Sin registrar";
 
 const METODOS = [
   { key: "EFECTIVO", label: "Efectivo" },

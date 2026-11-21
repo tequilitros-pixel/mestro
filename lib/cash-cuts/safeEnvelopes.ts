@@ -163,10 +163,7 @@ export async function generateEnvelopeCode(
   branchCode: string,
   cutDate: Date
 ): Promise<string> {
-  const y = cutDate.getFullYear();
-  const m = String(cutDate.getMonth() + 1).padStart(2, "0");
-  const d = String(cutDate.getDate()).padStart(2, "0");
-  const prefix = `${branchCode}-${y}${m}${d}`;
+  const prefix = `${branchCode}-${formatDateOnly(cutDate).replace(/-/g, "")}`;
 
   const existing = await tx.cashSafeEnvelope.count({
     where: { code: { startsWith: `${prefix}-` } },
@@ -176,9 +173,7 @@ export async function generateEnvelopeCode(
 }
 
 /**
- * Crea (o recupera, si ya existe) el sobre de un corte cerrado y lo recibe
- * automaticamente en caja fuerte. El monto ya fue contado y asignado al
- * sobre durante el cierre, por lo que no necesita una segunda aprobacion.
+ * Crea (o recupera, si ya existe) el sobre de un corte cerrado.
  * Idempotente: si el cierre se reintenta (doble clic, retry de
  * red), NUNCA produce un segundo sobre para el mismo cashCutId.
  *

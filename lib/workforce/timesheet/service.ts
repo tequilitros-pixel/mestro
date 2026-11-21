@@ -3,11 +3,6 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { aggregateWeek, dateKey, mondayOf, sundayOf, timesheetReadiness } from "./rules";
-import {
-  isSyntheticWorkforceRecord,
-  normalizeEmploymentStatusFilter,
-  type EmploymentStatusFilter,
-} from "./visibility";
 
 type Tx = Prisma.TransactionClient;
 export type TimesheetActor = {
@@ -15,21 +10,11 @@ export type TimesheetActor = {
   role: string;
   accessibleBranchIds: string[] | null;
 };
-type TargetBusinessDate = Date;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const signedMinutes = (type: string, minutes: number) =>
   type === "REMOVE_PAYABLE_TIME" ? -minutes : minutes;
 const transaction = <T>(fn: (tx: Tx) => Promise<T>) =>
   prisma.$transaction(fn, { maxWait: 5_000, timeout: 20_000 });
-
-function periodStartKeys(dates: TargetBusinessDate[]) {
-  const unique = new Map<string, Date>();
-  for (const date of dates) {
-    const start = mondayOf(date);
-    unique.set(dateKey(start), start);
-  }
-  return [...unique.values()];
-}
 
 function assertMonday(start: Date) {
   if (start.getUTCDay() !== 1) throw new Error("El periodo debe iniciar en lunes.");
@@ -120,32 +105,25 @@ async function recomputeTx(tx: Tx, timesheetId: string) {
     timesheet.periodStart,
     timesheet.periodEnd,
   );
+  if (timesheet.status === "APPROVED" || timesheet.status === "LOCKED") {
+    if (timesheet.approvedSourceFingerprint !== facts.fingerprint) {
+      await tx.timesheet.update({
+        where: { id: timesheet.id },
+        data: { requiresAdjustment: true, sourceFingerprint: facts.fingerprint },
+      });
+      await tx.workforceOvertimeCalculation.updateMany({
+        where: { timesheetId: timesheet.id, status: "FINAL" },
+        data: { status: "STALE" },
+      });
+    }
+    return tx.timesheet.findUniqueOrThrow({ where: { id: timesheet.id } });
+  }
   const aggregates = aggregateWeek({
     periodStart: timesheet.periodStart,
     sessions: facts.sessions,
     shifts: facts.shifts,
     issues: facts.issues,
   });
-  if (timesheet.status === "APPROVED" || timesheet.status === "LOCKED") {
-    if (timesheet.sourceFingerprint !== facts.fingerprint) {
-      await tx.timesheet.update({
-        where: { id: timesheet.id },
-        data: {
-          requiresAdjustment: true,
-          sourceFingerprint: facts.fingerprint,
-          reviewedById: null,
-          reviewedAt: null,
-          version: { increment: 1 },
-        },
-      });
-      await tx.workforceOvertimeCalculation.updateMany({
-        where: { timesheetId: timesheet.id, status: "FINAL" },
-        data: { status: "STALE" },
-      });
-    } else {
-      return tx.timesheet.findUniqueOrThrow({ where: { id: timesheet.id } });
-    }
-  }
   for (const day of aggregates) {
     const existing = timesheet.lines.find(
       (line) => dateKey(line.businessDate) === dateKey(day.businessDate),
@@ -228,34 +206,6 @@ async function recomputeTx(tx: Tx, timesheetId: string) {
   });
 }
 
-export async function requestTimesheetReview(
-  actor: TimesheetActor,
-  input: { timesheetId: string; expectedVersion: number; reason: string },
-) {
-  if (actor.role !== "ADMIN") throw new Error("No autorizado.");
-  if (input.reason.trim().length < 5) throw new Error("Razón obligatoria.");
-  return transaction(async (tx) => {
-    const sheet = await tx.timesheet.findUniqueOrThrow({
-      where: { id: input.timesheetId },
-      include: { lines: true },
-    });
-    if (sheet.version !== input.expectedVersion) throw new Error("STALE_VERSION");
-    if (sheet.status !== "APPROVED") throw new Error("Timesheet no reenviable.");
-    if (!sheet.requiresAdjustment) throw new Error("Timesheet no requiere revisión.");
-    await recomputeTx(tx, sheet.id);
-    const updated = await tx.timesheet.update({
-      where: { id: sheet.id },
-      data: {
-        status: "REVIEW",
-        reviewedById: actor.id,
-        reviewedAt: new Date(),
-        version: { increment: 1 },
-      },
-    });
-    return { timesheet: updated };
-  });
-}
-
 export async function ensureAndRecomputeTimesheet(employmentId: string, inputDate: Date) {
   const periodStart = mondayOf(inputDate);
   return transaction(async (tx) => {
@@ -270,16 +220,7 @@ export async function ensureAndRecomputeTimesheet(employmentId: string, inputDat
           include: {
             adjustments: true,
             workSessionLinks: {
-              include: {
-                workSession: {
-                  include: {
-                    branch: true,
-                    shift: true,
-                    attendanceExceptions: true,
-                    clockEventLinks: { include: { clockEvent: true }, orderBy: { sequence: "asc" } },
-                  },
-                },
-              },
+              include: { workSession: { include: { branch: true, shift: true, attendanceExceptions: true } } },
             },
           },
           orderBy: { businessDate: "asc" },
@@ -289,25 +230,9 @@ export async function ensureAndRecomputeTimesheet(employmentId: string, inputDat
   });
 }
 
-export async function signalTimesheetsForEmployment(
-  tx: Tx,
-  employmentId: string,
-  businessDates?: TargetBusinessDate[],
-) {
-  const sheetCache = await tx.timesheet.findMany({ where: { employmentId } });
-  const byPeriod = new Map(sheetCache.map((sheet) => [dateKey(sheet.periodStart), sheet]));
-  if (!businessDates?.length) {
-    for (const sheet of sheetCache) await recomputeTx(tx, sheet.id);
-    return;
-  }
-  for (const periodStart of periodStartKeys(businessDates)) {
-    const key = dateKey(periodStart);
-    const existing = byPeriod.get(key);
-    const sheet = existing
-      ? existing
-      : await ensureTimesheetTx(tx, employmentId, periodStart);
-    await recomputeTx(tx, sheet.id);
-  }
+export async function signalTimesheetsForEmployment(tx: Tx, employmentId: string) {
+  const sheets = await tx.timesheet.findMany({ where: { employmentId } });
+  for (const sheet of sheets) await recomputeTx(tx, sheet.id);
 }
 
 export async function addTimesheetAdjustment(
@@ -375,21 +300,7 @@ export async function approveTimesheet(
       throw new Error("Timesheet bloqueado por integridad de tiempo.");
     const updated = await tx.timesheet.update({
       where: { id: sheet.id },
-      data: {
-        status: "APPROVED",
-        requiresAdjustment: false,
-        reviewedById: actor.id,
-        reviewedAt: new Date(),
-        approvedById: sheet.approvedById ?? actor.id,
-        approvedAt: sheet.approvedAt ?? new Date(),
-        approvalIdempotencyKey: input.idempotencyKey,
-        approvedSourceFingerprint: sheet.sourceFingerprint,
-        approvedBaseMinutes: sheet.baseWorkedMinutes,
-        approvedAdjustmentMinutes: sheet.adjustmentMinutes,
-        approvedEffectiveMinutes: sheet.effectiveMinutes,
-        approvedIssuesSnapshot: issues.map((issue) => ({ type: issue.type, businessDate: dateKey(issue.businessDate), status: issue.status })),
-        version: { increment: 1 },
-      },
+      data: { status: "APPROVED", approvedById: actor.id, approvedAt: new Date(), approvalIdempotencyKey: input.idempotencyKey, approvedSourceFingerprint: sheet.sourceFingerprint, approvedBaseMinutes: sheet.baseWorkedMinutes, approvedAdjustmentMinutes: sheet.adjustmentMinutes, approvedEffectiveMinutes: sheet.effectiveMinutes, approvedIssuesSnapshot: issues.map((issue) => ({ type: issue.type, businessDate: dateKey(issue.businessDate), status: issue.status })), version: { increment: 1 } },
     });
     return { timesheet: updated, idempotent: false };
   });
@@ -421,7 +332,6 @@ export async function getTimesheetBoard(
   search?: string,
   status?: string,
   branchId?: string,
-  employmentStatus?: EmploymentStatusFilter,
 ) {
   if (actor.role !== "ADMIN") throw new Error("No autorizado.");
   if (
@@ -431,17 +341,8 @@ export async function getTimesheetBoard(
   )
     throw new Error("Sucursal no autorizada.");
   const start = mondayOf(inputDate), end = sundayOf(start);
-  const employmentFilter = normalizeEmploymentStatusFilter(employmentStatus);
   const where: Prisma.EmploymentWhereInput = {
     AND: [
-      ...(employmentFilter === "ALL"
-        ? []
-        : [
-            {
-              status: employmentFilter as "ACTIVE" | "INACTIVE" | "TERMINATED",
-            },
-          ]),
-      ...(employmentFilter === "ACTIVE" ? [{ employee: { active: true } }] : []),
       { OR: [{ startedAt: null }, { startedAt: { lte: end } }] },
       { OR: [{ endedAt: null }, { endedAt: { gte: start } }] },
       ...(search
@@ -477,12 +378,7 @@ export async function getTimesheetBoard(
     include: { employee: true }, orderBy: { employee: { displayName: "asc" } },
   });
   const sheets = [];
-  const visibleEmployments = employments.filter(
-    (employment) =>
-      employmentFilter !== "ACTIVE" ||
-      (employment.employee.active && !isSyntheticWorkforceRecord(employment.employee.displayName)),
-  );
-  for (const employment of visibleEmployments) {
+  for (const employment of employments) {
     const sheet = await ensureAndRecomputeTimesheet(employment.id, start);
     if (!status || sheet.status === status) sheets.push(sheet);
   }

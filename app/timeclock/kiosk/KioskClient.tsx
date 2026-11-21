@@ -13,11 +13,6 @@ import { getInitials } from "@/lib/personnelRoles";
 
 type Branch = { id: string; name: string };
 
-function asLocationInput(coords: { latitude: number; longitude: number } | null | undefined) {
-  if (!coords) return undefined;
-  return { sample: { latitude: coords.latitude, longitude: coords.longitude, checkedAt: new Date().toISOString() } };
-}
-
 function getCurrentPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
     if (!("geolocation" in navigator)) {
@@ -127,8 +122,8 @@ export default function KioskClient() {
     setError(null);
 
     const result = employee.hasOpenShift
-      ? await kioskClockOutAction(employee.id, pinValue, asLocationInput(coords))
-      : await kioskClockInAction(employee.id, pinValue, branch.id, asLocationInput(coords));
+      ? await kioskClockOutAction(employee.id, pinValue, coords ?? undefined)
+      : await kioskClockInAction(employee.id, pinValue, branch.id, coords ?? undefined);
 
     setBusy(false);
 

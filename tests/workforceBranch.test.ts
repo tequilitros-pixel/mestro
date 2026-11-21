@@ -33,20 +33,3 @@ test("branch administration deactivates records without physical delete", () => 
   assert.doesNotMatch(actions, /prisma\.branch\.delete/);
   assert.match(actions, /active:\s*input\.active/);
 });
-
-test("branch administration persists an enabled geofence through the canonical action", () => {
-  const actions = readFileSync("app/actions/workforceBranches.ts", "utf8");
-  const manager = readFileSync("app/administration/workforce/branches/BranchesManager.tsx", "utf8");
-  assert.doesNotMatch(actions, /Geolocalización desactivada\. Próximamente/);
-  assert.match(actions, /persistBranchGeofence/);
-  assert.match(manager, /geofence:\s*\{/);
-  assert.doesNotMatch(manager, /updateBranchGeofenceAction/);
-  assert.doesNotMatch(manager, /fieldset disabled/);
-});
-
-test("branch save keeps address and cancel remains write-free", () => {
-  const actions = readFileSync("app/actions/workforceBranches.ts", "utf8");
-  const manager = readFileSync("app/administration/workforce/branches/BranchesManager.tsx", "utf8");
-  assert.match(actions, /address: input\.address\?\.trim\(\) \|\| null/);
-  assert.match(manager, /<button onClick=\{onClose\}[^>]*>Cancelar<\/button>/);
-});

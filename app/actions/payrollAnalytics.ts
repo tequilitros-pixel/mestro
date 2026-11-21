@@ -1,6 +1,6 @@
 "use server";
 
-import { rawPrisma as prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
   parseDateOnly,

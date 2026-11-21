@@ -6,8 +6,6 @@ import {
   publishEmployeeScheduleAction,
   publishWeekAction,
   unpublishWeekAction,
-  publishScheduleScopeAction,
-  unpublishScheduleScopeAction,
   copyPreviousWeekAction,
   moveScheduledShiftAction,
   copyShiftToCellAction,
@@ -63,9 +61,7 @@ type Shift = {
 type GridData = {
   weekStart: string | Date;
   weekEnd: string | Date;
-  status: "DRAFT" | "PARTIAL" | "PUBLISHED";
-  publishedShiftCount: number;
-  totalShiftCount: number;
+  status: "DRAFT" | "PUBLISHED";
   weeklyHourThreshold: number;
   employees: Employee[];
   branches: BranchLite[];
@@ -147,16 +143,6 @@ function formatHours(hours: number) {
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
-}
-
-function rgbaFromHex(color: string, alpha: number) {
-  const hex = color.replace("#", "");
-  const normalized = hex.length === 3 ? hex.split("").map((part) => part + part).join("") : hex;
-  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return color;
-  const red = Number.parseInt(normalized.slice(0, 2), 16);
-  const green = Number.parseInt(normalized.slice(2, 4), 16);
-  const blue = Number.parseInt(normalized.slice(4, 6), 16);
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
 function formatWeekRange(weekStart: string) {

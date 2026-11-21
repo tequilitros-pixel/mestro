@@ -64,12 +64,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       void syncNow();
       void (async () => {
         try {
-          if ("serviceWorker" in navigator) {
-            await navigator.serviceWorker.register("/sw.js", {
-              scope: "/",
-              updateViaCache: "none",
-            });
-          }
+          if ("serviceWorker" in navigator) await navigator.serviceWorker.register("/sw.js", { scope: "/" });
         } catch (error) {
           console.error("No fue posible registrar el modo offline", error);
         }

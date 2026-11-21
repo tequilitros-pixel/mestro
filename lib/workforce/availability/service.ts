@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { assertAvailabilityAccess } from "./authorization";
 import { dateOnly, effectiveAvailability, requiresManagerAttention, shiftAvailabilityConflict, validateTimeRange, type EffectiveAvailability } from "./rules";
+import { parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
 
 export type WorkforceActor = { id: string; role: string };
 
@@ -54,7 +55,7 @@ export async function saveAvailabilityRule(actor: WorkforceActor, input: { emplo
   if (!Number.isInteger(input.dayOfWeek) || input.dayOfWeek < 0 || input.dayOfWeek > 6) throw new Error("Día de semana inválido.");
   validateTimeRange(input.startTime, input.endTime);
   const effectiveFrom = dateOnly(input.effectiveFrom);
-  if (effectiveFrom < dateOnly(new Date())) throw new Error("Sólo se puede editar disponibilidad recurrente futura.");
+  if (effectiveFrom < parseDateOnly(todayDateOnly())) throw new Error("Sólo se puede editar disponibilidad recurrente futura.");
   const attention = await attentionFor(employment.id, effectiveFrom, new Date());
   await prisma.$transaction(async (tx) => {
     const next = await tx.availabilityRule.findFirst({ where: { employmentId: employment.id, dayOfWeek: input.dayOfWeek, effectiveFrom: { gt: effectiveFrom } }, orderBy: { effectiveFrom: "asc" } });
@@ -68,7 +69,7 @@ export async function saveAvailabilityRule(actor: WorkforceActor, input: { emplo
 export async function saveAvailabilityException(actor: WorkforceActor, input: { employeeId: string; date: Date; state: "AVAILABLE" | "UNAVAILABLE"; startTime: string | null; endTime: string | null; reason: string | null }) {
   const { employment } = await employeeForAccess(actor, input.employeeId);
   const date = dateOnly(input.date);
-  if (date < dateOnly(new Date())) throw new Error("Sólo se pueden editar excepciones futuras.");
+  if (date < parseDateOnly(todayDateOnly())) throw new Error("Sólo se pueden editar excepciones futuras.");
   validateTimeRange(input.startTime, input.endTime);
   const attention = await attentionFor(employment.id, date, new Date());
   await prisma.availabilityException.upsert({
@@ -82,7 +83,7 @@ export async function saveAvailabilityException(actor: WorkforceActor, input: { 
 export async function deleteAvailabilityException(actor: WorkforceActor, employeeId: string, dateInput: Date) {
   const { employment } = await employeeForAccess(actor, employeeId);
   const date = dateOnly(dateInput);
-  if (date < dateOnly(new Date())) throw new Error("No se puede borrar una excepción pasada.");
+  if (date < parseDateOnly(todayDateOnly())) throw new Error("No se puede borrar una excepción pasada.");
   const attention = await attentionFor(employment.id, date, new Date());
   await prisma.availabilityException.deleteMany({ where: { employmentId: employment.id, date } });
   return attention;

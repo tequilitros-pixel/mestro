@@ -31,12 +31,11 @@ export type Coords = { latitude: number; longitude: number };
  */
 export function checkGeofence(
   branch: {
-    geofenceEnabled?: boolean;
     geofence: { latitude: number; longitude: number; radius: number } | null;
   },
   coords: Coords | null | undefined
 ): { error: string } | { distance: number } | null {
-  if (!branch.geofence || branch.geofenceEnabled === false) return null;
+  if (!hasGeofence(branch)) return null;
 
   if (!coords) {
     return {

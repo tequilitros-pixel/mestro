@@ -3,7 +3,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, getCurrentUserWithAnyModuleAccess } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import {
   addDaysToDateOnly,
   formatDateOnly,
@@ -19,7 +19,6 @@ import { resolveBranchHourlyRate, summarizeHourlyRates, type HourlyRateRow } fro
 import { formatCivilDate } from "@/lib/dateTime";
 import { calculatePayrollHourlyBreakdown, calculatePayrollSupplement, effectiveSupplementPercent, sumPayrollSupplements, supplementFromSnapshotAdjustments, isPayrollRoundingDeduction, type PayrollSupplementBreakdown } from "@/lib/payroll/contractualSupplement";
 import { sendPayrollReviewEmail } from "@/lib/email";
-import { createNotification, createNotificationsForUsers } from "@/app/actions/notifications";
 
 /**
  * ==========================================================
@@ -1200,21 +1199,6 @@ export async function getEmployeePayrollDetail(
     e.userId === currentUser.id && (e.status === "APROBADA" || e.status === "PAGADA")
   ))) return { error: "El expediente todavía no está aprobado" };
 
-  // Un empleado solo puede abrir su propio expediente cuando ya fue
-  // aprobado o pagado. Quien administra nómina puede revisar borradores y
-  // revisiones de cualquier empleado. Esta ruta es de solo lectura.
-  if (
-    !hasPayrollPermission &&
-    (!period ||
-      !period.entries.some(
-        (entry) =>
-          entry.userId === currentUser.id &&
-          (entry.status === "APROBADA" || entry.status === "PAGADA"),
-      ))
-  ) {
-    return { error: "El expediente todavía no está aprobado" };
-  }
-
   if (period && period.status !== "BORRADOR") {
     const employee = await prisma.user.findUnique({
       where: { id: userId },
@@ -1338,10 +1322,7 @@ export async function getEmployeePayrollDetail(
   const live = await computeLiveEmployeeDetail(userId, mondayStr);
   if ("error" in live) return live;
 
-  return {
-    success: true,
-    data: { ...live, period: periodInfoFrom(period) },
-  };
+  return { success: true, data: { ...live, period: periodInfoFrom(period) } };
 }
 
 /**
@@ -1426,56 +1407,6 @@ export async function deletePayrollAdjustmentAction(id: string) {
  * Envía la semana a revisión y crea los expedientes iniciales. Cada
  * pendiente puede seguir corrigiéndose; se congela al aprobarlo.
  */
-export async function savePayrollSupplementRateAction(input: { userId: string; percent: number; effectiveFrom: string }) {
-  const admin = await requireAdmin();
-  if (!admin) return { error: "No tienes permiso" };
-
-  const percent = Number(input.percent);
-  if (!input.userId || !Number.isFinite(percent) || percent < 0 || percent > 100) {
-    return { error: "Captura un porcentaje entre 0 y 100." };
-  }
-
-  const effectiveFrom = parseDateOnly(input.effectiveFrom);
-  if (Number.isNaN(effectiveFrom.getTime())) {
-    return { error: "La fecha de vigencia no es válida." };
-  }
-
-  const employee = await prisma.user.findUnique({ where: { id: input.userId }, select: { id: true } });
-  if (!employee) return { error: "Empleado no encontrado." };
-
-  await prisma.$transaction(async (tx) => {
-    const sameDate = await tx.payrollSupplementRate.findFirst({
-      where: { userId: input.userId, effectiveFrom },
-      select: { id: true },
-    });
-
-    await tx.payrollSupplementRate.updateMany({
-      where: {
-        userId: input.userId,
-        effectiveFrom: { lt: effectiveFrom },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gt: effectiveFrom } }],
-      },
-      data: { effectiveTo: effectiveFrom },
-    });
-
-    if (sameDate) {
-      await tx.payrollSupplementRate.update({
-        where: { id: sameDate.id },
-        data: { percent, effectiveTo: null, createdById: admin.id },
-      });
-    } else {
-      await tx.payrollSupplementRate.create({
-        data: { userId: input.userId, percent, effectiveFrom, createdById: admin.id },
-      });
-    }
-  });
-
-  revalidatePath("/timeclock/payroll");
-  revalidatePath("/administration/workforce");
-  revalidateTag("payroll-analytics", "max");
-  return { success: true };
-}
-
 export async function submitPayrollPeriodAction(weekStart: string) {
   const admin = await requireAdmin();
   if (!admin) return { error: "No tienes permiso" };
@@ -1547,8 +1478,8 @@ export async function submitPayrollPeriodAction(weekStart: string) {
   void (async () => {
     try {
       const admins = await prisma.user.findMany({
-        where: { role: "ADMIN", active: true },
-        select: { id: true, email: true },
+        where: { role: "ADMIN", active: true, email: { not: null } },
+        select: { email: true },
       });
 
       const toEmails = admins.map((a) => a.email!).filter(Boolean);
@@ -1711,33 +1642,8 @@ export async function markPayrollPeriodPaidAction(weekStart: string) {
       where: { id: period.id },
       data: { status: "PAGADA", paidById: admin.id, paidAt: new Date() },
     });
-    return { success: true, periodId: period.id };
+    return { success: true };
   });
-
-  if (result.success && "periodId" in result && result.periodId) {
-    // Notificar a todos los empleados pagados para que consulten y firmen su recibo
-    void (async () => {
-      try {
-        const entries = await prisma.payrollEntry.findMany({
-          where: { periodId: result.periodId },
-          select: { userId: true },
-        });
-        const userIds = entries.map((e) => e.userId);
-        if (userIds.length > 0) {
-          await createNotificationsForUsers(userIds, {
-            title: "💵 Pago de nómina emitido",
-            body: `Tu pago de la semana ${mondayStr} ha sido procesado. Tu recibo oficial ya está disponible para consulta y firma digital.`,
-            category: "PAYROLL",
-            priority: "HIGH",
-            href: "/timeclock/my-payroll",
-            metadata: { weekStart: mondayStr },
-          });
-        }
-      } catch (notifErr) {
-        console.error("[markPayrollPeriodPaidAction] Error enviando notificaciones:", notifErr);
-      }
-    })();
-  }
 
   revalidatePath("/timeclock/payroll");
   revalidateTag("payroll-analytics", "max");

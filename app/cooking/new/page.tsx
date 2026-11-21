@@ -17,8 +17,6 @@ export default async function NewCookingPage({ searchParams }: { searchParams: P
     orderBy: { createdAt: "desc" },
   });
 
-  const selectedLot = lots.find((l) => l.id === queryLotId) ?? lots[0];
-
   const ovens = await findAvailableEquipment(["HORNO"]);
 
   async function createCooking(formData: FormData) {
@@ -38,8 +36,6 @@ export default async function NewCookingPage({ searchParams }: { searchParams: P
     // lo tomó mientras este formulario estaba abierto, no se crea
     // nada y se regresa al listado en vez de dejar dos lotes en el
     // mismo equipo.
-    const lot = await prisma.lot.findFirst({ where: { id: lotId, archivedAt: null, stage: { in: [LotStage.RECEPCION, LotStage.COCCION] } }, select: { id: true } });
-    if (!lot) redirect("/cooking/new?error=lote-no-disponible");
     const reserved = await reserveEquipment(prisma, equipmentId, agaveKg);
 
     if (!reserved) {
@@ -108,7 +104,7 @@ export default async function NewCookingPage({ searchParams }: { searchParams: P
       <form action={createCooking} className="mt-8 space-y-6 rounded-2xl bg-surface-container p-8">
         <div>
           <label className="mb-2 block text-sm font-semibold text-on-surface-variant">Lote</label>
-          <select name="lotId" defaultValue={queryLotId ?? lots[0]?.id} required className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary">
+          <select name="lotId" required className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary">
             {lots.map((lot) => (
               <option key={lot.id} value={lot.id}>
                 {lot.code} — {lot.agaveKg.toLocaleString()} kg
@@ -130,7 +126,7 @@ export default async function NewCookingPage({ searchParams }: { searchParams: P
 
         <div>
           <label className="mb-2 block text-sm font-semibold text-on-surface-variant">Kg de agave cargados</label>
-          <input name="agaveKg" type="number" defaultValue={selectedLot?.agaveKg} required className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary" />
+          <input name="agaveKg" type="number" required className="w-full rounded-xl border border-outline-variant bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary" />
         </div>
 
         <div>

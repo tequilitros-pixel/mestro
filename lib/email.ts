@@ -11,12 +11,6 @@ export async function sendPasswordResetEmail(
   to: string,
   code: string
 ) {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    throw new Error("RESEND_API_KEY no está configurada");
-  }
-
-  const resend = new Resend(apiKey);
   await resend.emails.send({
     from: FROM_ADDRESS,
     to,

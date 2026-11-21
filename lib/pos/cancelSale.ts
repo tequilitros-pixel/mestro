@@ -13,7 +13,6 @@ export async function cancelPosSaleAtomic(input: {
   reason: string | null;
   resolutionType?: "CANCELACION" | "REEMBOLSO";
   operationId?: string;
-  requiredCashCutId?: string;
 }) {
   return prisma.$transaction(async (tx) => {
     await setRlsContext(tx, input.user);
@@ -31,9 +30,6 @@ export async function cancelPosSaleAtomic(input: {
       },
     });
     if (!sale) return { kind: "not_found" as const };
-    if (input.requiredCashCutId && sale.cashCutId !== input.requiredCashCutId) {
-      return { kind: "not_found" as const };
-    }
     if (input.user.role !== "ADMIN") {
       const access = await tx.userBranch.findFirst({ where: { userId: input.user.id, branchId: sale.branchId }, select: { id: true } });
       if (!access) return { kind: "not_found" as const };

@@ -4,11 +4,6 @@ const isDevelopment = process.env.NODE_ENV !== "production";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
-  // La tienda pública debe poder publicarse mientras los módulos de nómina
-  // pendientes se alinean con sus migraciones Prisma por separado.
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   async redirects() {
     return [
       {
@@ -22,26 +17,19 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
+        source: "/administration/pos2/:path*",
+        destination: "/pospress",
+        permanent: true,
+      },
+      {
         source: "/workforce-v1/:path*",
         destination: "/workforce/:path*",
         permanent: true,
       },
-      // Workforce quedó descontinuado. Conservamos esta redirección temporal
-      // al horario administrativo que está actualmente en producción.
-      {
-        source: "/workforce",
-        destination: "/administration/schedule",
-        permanent: false,
-      },
-      {
-        source: "/administration/workforce/:path*",
-        destination: "/administration/schedule",
-        permanent: false,
-      },
       {
         source: "/administration/workforce-v1/:path*",
-        destination: "/administration/schedule",
-        permanent: false,
+        destination: "/administration/workforce/:path*",
+        permanent: true,
       },
     ];
   },
@@ -97,18 +85,6 @@ const nextConfig: NextConfig = {
           {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains",
-          },
-        ],
-      },
-      // El navegador debe volver a validar el worker en cada apertura para
-      // que una PWA instalada no quede atendiendo recursos de una versión
-      // anterior después de una publicación.
-      {
-        source: "/sw.js",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "no-cache, no-store, must-revalidate",
           },
         ],
       },

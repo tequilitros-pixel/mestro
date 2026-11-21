@@ -8,6 +8,7 @@ import DenominationWizard from "@/components/cash-cuts/DenominationWizard";
 import type { CashDenominationCount } from "@/lib/cash-cuts/denominations";
 import { enqueueOperation } from "@/lib/offline/queue";
 import { todayDateOnly } from "@/lib/dateOnly";
+import { formatBusinessDate } from "@/lib/dateTime";
 
 interface Branch {
   id: string;
@@ -36,10 +37,7 @@ interface EligibleEvent {
 }
 
 const formatEventDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("es-MX", {
-    day: "numeric",
-    month: "short",
-  });
+  formatBusinessDate(iso, { day: "numeric", month: "short" });
 
 export default function NuevoCortePage() {
   const router = useRouter();
@@ -49,48 +47,11 @@ export default function NuevoCortePage() {
   const [counting, setCounting] = useState(false);
   const [events, setEvents] = useState<EligibleEvent[]>([]);
   const [eventId, setEventId] = useState("");
-  const [previousNextFund, setPreviousNextFund] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openedCut, setOpenedCut] = useState<{ id: string; warnings: StockWarning[] } | null>(null);
   // Reutilizar la misma clave ante doble toque, reintento o corte ya creado.
   const openingOperationId = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!branchId) {
-      setPreviousNextFund(null);
-      return;
-    }
-    fetch(`/api/cash-cuts?branchId=${encodeURIComponent(branchId)}&status=CERRADO`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((cuts: Array<{ nextFund?: number | null }>) => {
-        const lastCut = Array.isArray(cuts) ? cuts[0] : null;
-        if (lastCut && typeof lastCut.nextFund === "number") {
-          setPreviousNextFund(lastCut.nextFund);
-        } else {
-          setPreviousNextFund(null);
-        }
-      })
-      .catch(() => setPreviousNextFund(null));
-  }, [branchId]);
-
-  useEffect(() => {
-    if (!branchId) {
-      setPreviousNextFund(null);
-      return;
-    }
-    fetch(`/api/cash-cuts?branchId=${encodeURIComponent(branchId)}&status=CERRADO`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((cuts: Array<{ nextFund?: number | null }>) => {
-        const lastCut = Array.isArray(cuts) ? cuts[0] : null;
-        if (lastCut && typeof lastCut.nextFund === "number") {
-          setPreviousNextFund(lastCut.nextFund);
-        } else {
-          setPreviousNextFund(null);
-        }
-      })
-      .catch(() => setPreviousNextFund(null));
-  }, [branchId]);
 
   useEffect(() => {
     const cachedBranches = localStorage.getItem("maestro:cash-cut-branches");
@@ -157,7 +118,7 @@ export default function NuevoCortePage() {
         envelopeNumber: null, nextFund: null, event: null,
       }));
       localStorage.setItem(`maestro:open-cash-cut:${branchId}`, id);
-      router.push(`/pospress?branchId=${encodeURIComponent(branchId)}`);
+      router.push(`/cash-cuts/daily/${id}`);
       return;
     }
     try {
@@ -207,18 +168,6 @@ export default function NuevoCortePage() {
             ))}
           </select>
         </Card>
-
-        {previousNextFund !== null && (
-          <Card highlight className="border-primary/40 bg-primary/5">
-            <CardLabel>Fondo reportado por el turno anterior</CardLabel>
-            <p className="mt-1 text-2xl font-bold text-on-surface">
-              ${previousNextFund.toFixed(2)}
-            </p>
-            <p className="mt-1 text-xs text-on-surface-variant">
-              El cajero saliente declaró haber dejado este importe físico en caja. Verifica que coincida con tu conteo.
-            </p>
-          </Card>
-        )}
 
         <Card>
           <CardLabel>Fecha</CardLabel>

@@ -95,7 +95,6 @@ export async function createScheduleEventAction(input: EventInput) {
         position: input.position?.trim() || null,
         publicationStatus: "DRAFT" as const,
         eventId: event.id,
-        publicationStatus: "DRAFT" as const,
       })),
     });
 
@@ -190,7 +189,6 @@ export async function updateScheduleEventAction(input: EventInput & { eventId: s
           position: input.position?.trim() || null,
           publicationStatus: "DRAFT" as const,
           eventId: input.eventId,
-          publicationStatus: "DRAFT" as const,
         })),
       });
     }

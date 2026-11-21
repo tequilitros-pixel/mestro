@@ -56,15 +56,6 @@ export async function getDistillationSources(lotId?: string): Promise<Source[]> 
       },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.distillationReceiver.findMany({
-      where: { status: DistillationReceiverStatus.READY },
-      include: {
-        lot: { select: { code: true } },
-        transfers: true,
-        rectifications: { select: { loadedLiters: true, status: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
   ]);
 
   // Una fuente marcada como tina vacía no es inventario físico disponible.
@@ -137,24 +128,6 @@ export async function getDistillationSources(lotId?: string): Promise<Source[]> 
     }
   }
 
-  for (const receiver of receivers) {
-    const stock = receiverTotals(receiver);
-    if (stock.availableLiters > EPSILON) {
-      result.push({
-        id: receiver.id,
-        lotId: receiver.lotId,
-        lotCode: receiver.lot.code,
-        type: DistillationType.RECTIFICACION,
-        sourceKind: "RECEIVER",
-        label: "Rectificación desde tanque receptor",
-        tankName: receiver.name,
-        availableLiters: stock.availableLiters,
-        sourceLiters: stock.receivedLiters,
-        initialAlcohol: stock.initialAlcohol,
-      });
-    }
-  }
-
   return result;
 }
 
@@ -189,8 +162,8 @@ export async function startDistillationRun(input: {
 
     if (input.type === DistillationType.DESTROZADO) {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Fermentation" WHERE "id" = ${input.sourceId} FOR UPDATE`);
-      const source = await tx.fermentation.findUnique({ where: { id: input.sourceId }, include: { lot: { select: { archivedAt: true } } } });
-      if (!source || source.status !== "TERMINADA" || source.lot.archivedAt) {
+      const source = await tx.fermentation.findUnique({ where: { id: input.sourceId } });
+      if (!source || source.status !== "TERMINADA") {
         throw new DistillationOperationError("La fermentación ya no está disponible.", "SOURCE_UNAVAILABLE");
       }
       const [lot, drained] = await Promise.all([

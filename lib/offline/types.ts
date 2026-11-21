@@ -17,12 +17,20 @@ export type OfflineOperation = {
   id: string;
   kind:
     | "cooking.event.create"
+    | "boiler.session.start"
+    | "boiler.session.stop"
+    | "boiler.gas.reading.create"
+    | "boiler.pressure.reading.create"
+    | "boiler.event.create"
+    | "boiler.maintenance.create"
+    | "boiler.incident.create"
+    | "steam.interval.start"
+    | "steam.pressure.create"
+    | "steam.interval.stop"
+    | "sweet-honey.recovery.create"
     | "milling.discharge.create"
     | "fermentation.reading.create"
     | "distillation.event.create"
-    | "liquor.batch.create"
-    | "liquor.batch.step.complete"
-    | "liquor.bottling.create"
     | "pos.sale.create"
     | "pos.sale.email"
     | "timeclock.clock-in"
@@ -36,8 +44,6 @@ export type OfflineOperation = {
   createdAt: string;
   attempts: number;
   status: OfflineOperationStatus;
-  /** Last time a tab atomically claimed this operation for synchronizing. */
-  syncStartedAt?: string;
   lastError?: string;
 };
 

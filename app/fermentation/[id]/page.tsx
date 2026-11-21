@@ -26,7 +26,6 @@ import {
   evaluateFermentation,
 } from "@/lib/fermentation/fermentationMetrics";
 import { analyzeFermentationKinetics } from "@/lib/processCalculations";
-import { notifyFermentationAlert } from "@/lib/notifications/tequilaAlerts";
 import ProcessSwitcher from "@/components/production/ProcessSwitcher";
 import ProcessBoilerUsage from "@/components/boiler/ProcessBoilerUsage";
 
@@ -138,24 +137,6 @@ export default async function FermentationDetailPage({ params }: Props) {
       },
     });
 
-    const allReadings = await prisma.fermentationReading.findMany({
-      where: { fermentationId: id },
-      orderBy: { createdAt: "asc" },
-      select: { createdAt: true, brix: true, alcohol: true, ph: true, temperature: true },
-    });
-
-    const kinetics = analyzeFermentationKinetics(allReadings);
-    notifyFermentationAlert({
-      lotCode: fermentation.lot.code,
-      fermentationId: id,
-      tankName: fermentation.tank,
-      status: kinetics.status,
-      brix,
-      temperature,
-      ph,
-      isStuckRisk: kinetics.isStuckRisk,
-    }).catch((err) => console.error("Error dispatching fermentation alert:", err));
-
     redirect(`/fermentation/${id}?saved=1`);
   }
 
@@ -256,17 +237,6 @@ export default async function FermentationDetailPage({ params }: Props) {
       fermentationLotId,
       LotStage.DESTILACION
     );
-
-    notifyFermentationAlert({
-      lotCode: fermentation.lot.code,
-      fermentationId: id,
-      tankName: fermentation.tank,
-      status: "TERMINADA",
-      brix: finalBrix,
-      temperature: null,
-      ph: finalPh,
-      isStuckRisk: false,
-    }).catch((err) => console.error("Error dispatching fermentation finish alert:", err));
 
     redirect(`/fermentation/${id}?finished=1`);
   }

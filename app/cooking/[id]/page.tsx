@@ -8,14 +8,11 @@ import {
 } from "@prisma/client";
 import { startSteamAction, changeSteamPressureAction, stopSteamAction, createSweetHoneyRecoveryAction } from "../actions";
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
 import { advanceLotStage } from "@/lib/lotStage";
 import { businessDayStart, formatBusinessDateOnly } from "@/lib/dateTime";
-import { notifyCookingAlert } from "@/lib/notifications/tequilaAlerts";
 
 import CookingCharts from "@/components/CookingCharts";
 import FinishCookingModal from "@/components/FinishCookingModal";
-import TemperatureSavedConfirmation from "@/components/cooking/TemperatureSavedConfirmation";
 import PageTabs from "@/components/ui/PageTabs";
 import OfflineCookingForm from "@/components/offline/OfflineCookingForm";
 import OfflineBoilerForm from "@/components/offline/OfflineBoilerForm";
@@ -45,17 +42,12 @@ import { calculateSteamEnergyMetrics } from "@/lib/processCalculations";
 
 type Props = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ temperatureSaved?: string | string[]; register?: string | string[] }>;
 };
 
 export default async function CookingDetailPage({
   params,
-  searchParams,
 }: Props) {
   const { id } = await params;
-  const query = await searchParams;
-  const temperatureSaved = query.temperatureSaved === "1";
-  const returnToTemperatureRegistration = query.register === "temperature";
 
   const cooking = await prisma.cooking.findUnique({
     where: { id },
@@ -325,18 +317,7 @@ export default async function CookingDetailPage({
       },
     });
 
-    const maxTemp = Math.max(temperatureTop, temperatureMiddle, temperatureBottom);
-    if (maxTemp > 105 || (hasStartedVapor && maxTemp < 75)) {
-      notifyCookingAlert({
-        lotCode: cooking.lot.code,
-        cookingId: id,
-        ovenName: cooking.equipment.name,
-        type: "TEMP_WARNING",
-        temperature: maxTemp,
-      }).catch((err) => console.error("Error dispatching cooking temp alert:", err));
-    }
-
-    redirect(`/cooking/${id}?temperatureSaved=1`);
+    redirect(`/cooking/${id}?saved=1`);
   }
 
   async function finishCooking(
@@ -460,15 +441,6 @@ export default async function CookingDetailPage({
     if (result.count === 0) {
       redirect(`/cooking/${id}`);
     }
-
-    notifyCookingAlert({
-      lotCode: cooking.lot.code,
-      cookingId: id,
-      ovenName: cooking.equipment.name,
-      type: "FINISHED",
-      finalAgaveKg,
-      sweetHoneyLiters: finalSweetHoneyLiters,
-    }).catch((err) => console.error("Error dispatching cooking finished alert:", err));
 
     redirect(`/cooking/${id}?finished=1`);
   }
@@ -845,7 +817,8 @@ export default async function CookingDetailPage({
               </p>
             </div>
 
-            <div className="space-y-8">
+            {!hasStartedVapor ? <SteamActionPanel cookingId={id} intervals={cooking.steamIntervals} currentSteam={currentSteam} activeBoilers={activeBoilers} /> : (
+              <div className="space-y-8">
                 <OfflineCookingForm
                   cookingId={id}
                   fallbackAction={addTemperatureEvent}
@@ -900,15 +873,6 @@ export default async function CookingDetailPage({
                   </button>
                 </OfflineCookingForm>
 
-                {!hasStartedVapor ? (
-                  <SteamActionPanel
-                    cookingId={id}
-                    intervals={cooking.steamIntervals}
-                    currentSteam={currentSteam}
-                    activeBoilers={activeBoilers}
-                  />
-                ) : (
-                  <>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   <SteamActionPanel
                     cookingId={id}
@@ -973,9 +937,8 @@ export default async function CookingDetailPage({
                     action={finishCooking}
                   />
                 </div>
-                  </>
-                )}
               </div>
+            )}
           </section>
         )}
             {hasFinished && (
@@ -1207,23 +1170,9 @@ export default async function CookingDetailPage({
         </header>
 
         <div className="caldera-cocimiento-tabs mt-8">
-          <PageTabs
-            tabs={tabs}
-            defaultTab={
-              temperatureSaved || returnToTemperatureRegistration
-                ? "registrar"
-                : undefined
-            }
-          />
+          <PageTabs tabs={tabs} />
         </div>
       </div>
-
-      {temperatureSaved && (
-        <TemperatureSavedConfirmation
-          closeHref={`/cooking/${id}`}
-          registerAnotherHref={`/cooking/${id}?register=temperature`}
-        />
-      )}
     </main>
   );
 }
@@ -1622,7 +1571,7 @@ function SteamActionPanel({ cookingId, currentSteam, activeBoilers }: { cookingI
   const changing = changeSteamPressureAction.bind(null, cookingId);
   const stopping = stopSteamAction.bind(null, cookingId);
   const injecting = currentSteam?.state === "INYECTANDO";
-  return <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 md:col-span-2 lg:col-span-3"><h3 className="text-lg font-bold">Vapor por intervalo</h3><p className="mt-1 text-sm text-on-surface-variant">Cada cambio conserva hora, unidad original y presión canónica PSI; al refrescar se reconstruye el estado.</p>{!injecting ? activeBoilers.length === 0 ? <div className="mt-4 rounded-xl border border-outline-variant bg-surface p-4 text-sm text-on-surface-variant"><p>No hay una caldera encendida para iniciar la inyección de vapor.</p><Link href="/boiler" className="mt-3 inline-flex rounded-lg bg-primary px-3 py-2 font-semibold text-on-primary">Ir a encender caldera</Link></div> : <OfflineBoilerForm kind="steam.interval.start" entityField="cookingId" entityId={cookingId} fallbackAction={starting} className="mt-4 grid gap-3 sm:grid-cols-4"><label className="grid gap-1 text-sm font-semibold">Caldera<select name="boilerSessionId" required className="rounded-xl border border-outline-variant bg-surface px-3 py-2">{activeBoilers.map((boiler) => <option key={boiler.id} value={boiler.id}>{boiler.equipment.name}</option>)}</select></label><label className="grid gap-1 text-sm font-semibold">Presión<input name="pressureValue" type="number" min="0" step="0.001" required className="rounded-xl border border-outline-variant bg-surface px-3 py-2" /></label><label className="grid gap-1 text-sm font-semibold">Unidad<select name="pressureUnit" className="rounded-xl border border-outline-variant bg-surface px-3 py-2"><option value="PSI">PSI</option><option value="KG_CM2">kg/cm²</option></select></label><button className="self-end rounded-xl bg-primary px-4 py-2 font-bold text-on-primary">Iniciar inyección</button></OfflineBoilerForm> : <div className="mt-4 grid gap-3 sm:grid-cols-3"><OfflineBoilerForm kind="steam.pressure.create" entityField="cookingId" entityId={cookingId} fallbackAction={changing} className="grid gap-2 sm:col-span-2 sm:grid-cols-3"><input type="hidden" name="boilerSessionId" value={currentSteam.boilerSessionId} /><input type="hidden" name="intervalId" value={currentSteam.id} /><input name="pressureValue" type="number" min="0" step="0.001" required placeholder="Nueva presión" className="rounded-xl border border-outline-variant bg-surface px-3 py-2" /><select name="pressureUnit" className="rounded-xl border border-outline-variant bg-surface px-3 py-2"><option value="PSI">PSI</option><option value="KG_CM2">kg/cm²</option></select><button className="rounded-xl border border-primary px-4 py-2 font-bold text-primary">Registrar cambio</button></OfflineBoilerForm><OfflineBoilerForm kind="steam.interval.stop" entityField="cookingId" entityId={cookingId} fallbackAction={stopping}><button className="w-full rounded-xl bg-surface-container-highest px-4 py-2 font-bold">Detener vapor</button></OfflineBoilerForm></div>}</div>;
+  return <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 md:col-span-2 lg:col-span-3"><h3 className="text-lg font-bold">Vapor por intervalo</h3><p className="mt-1 text-sm text-on-surface-variant">Cada cambio conserva hora, unidad original y presión canónica PSI; al refrescar se reconstruye el estado.</p>{!injecting ? <OfflineBoilerForm kind="steam.interval.start" entityField="cookingId" entityId={cookingId} fallbackAction={starting} className="mt-4 grid gap-3 sm:grid-cols-4"><label className="grid gap-1 text-sm font-semibold">Caldera<select name="boilerSessionId" required className="rounded-xl border border-outline-variant bg-surface px-3 py-2">{activeBoilers.map((boiler) => <option key={boiler.id} value={boiler.id}>{boiler.equipment.name}</option>)}</select></label><label className="grid gap-1 text-sm font-semibold">Presión<input name="pressureValue" type="number" min="0" step="0.001" required className="rounded-xl border border-outline-variant bg-surface px-3 py-2" /></label><label className="grid gap-1 text-sm font-semibold">Unidad<select name="pressureUnit" className="rounded-xl border border-outline-variant bg-surface px-3 py-2"><option value="PSI">PSI</option><option value="KG_CM2">kg/cm²</option></select></label><button className="self-end rounded-xl bg-primary px-4 py-2 font-bold text-on-primary">Iniciar inyección</button></OfflineBoilerForm> : <div className="mt-4 grid gap-3 sm:grid-cols-3"><OfflineBoilerForm kind="steam.pressure.create" entityField="cookingId" entityId={cookingId} fallbackAction={changing} className="grid gap-2 sm:col-span-2 sm:grid-cols-3"><input type="hidden" name="boilerSessionId" value={currentSteam.boilerSessionId} /><input type="hidden" name="intervalId" value={currentSteam.id} /><input name="pressureValue" type="number" min="0" step="0.001" required placeholder="Nueva presión" className="rounded-xl border border-outline-variant bg-surface px-3 py-2" /><select name="pressureUnit" className="rounded-xl border border-outline-variant bg-surface px-3 py-2"><option value="PSI">PSI</option><option value="KG_CM2">kg/cm²</option></select><button className="rounded-xl border border-primary px-4 py-2 font-bold text-primary">Registrar cambio</button></OfflineBoilerForm><OfflineBoilerForm kind="steam.interval.stop" entityField="cookingId" entityId={cookingId} fallbackAction={stopping}><button className="w-full rounded-xl bg-surface-container-highest px-4 py-2 font-bold">Detener vapor</button></OfflineBoilerForm></div>}</div>;
 }
 
 function SweetHoneyRecoveryForm({ cookingId, lotId, action }: { cookingId: string; lotId: string; action: (formData: FormData) => Promise<void> }) {

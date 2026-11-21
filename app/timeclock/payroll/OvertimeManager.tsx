@@ -16,6 +16,7 @@ import {
   type PayrollSettingsValues,
 } from "@/app/actions/overtime";
 import { getBranchesForAssignment } from "@/app/actions/personnel";
+import { formatCivilDate } from "@/lib/dateTime";
 
 const GLOBAL_SCOPE = "__global__";
 
@@ -29,11 +30,7 @@ const money = (value: number) =>
 const hours = (value: number) => `${value.toFixed(1)} h`;
 
 const formatWeek = (iso: string) =>
-  new Date(`${iso}T12:00:00`).toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  formatCivilDate(`${iso}T00:00:00.000Z`, { day: "2-digit", month: "short", year: "numeric" });
 
 const STATUS_STYLES: Record<OvertimeRow["status"], string> = {
   PENDIENTE: "bg-secondary/15 text-secondary",

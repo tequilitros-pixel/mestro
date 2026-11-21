@@ -1,18 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireModuleAccess } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { workforceV1Enabled } from "@/lib/workforce/config";
 
-const tabs = [
-  ["employees", "Empleados"], ["schedule", "Programar horarios"],
-  ["clock", "Checador"],
-  ["clock-corrections", "Solicitudes"], ["attendance", "Asistencia"],
-  ["timesheets", "Horas trabajadas"], ["overtime", "Horas extra"],
-  ["payroll", "Nómina"], ["branches", "Sucursales"], ["settings", "Configuración"],
-];
-export default async function WorkforceLayout({ children }: { children: React.ReactNode }) {
+export default async function WorkforceV1Layout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   if (!workforceV1Enabled()) notFound();
-  await requireModuleAccess("/administration/workforce");
+  await requireAdmin();
   return (
     <main className="mx-auto w-full max-w-7xl p-4 sm:p-6">
       <header className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -28,6 +25,7 @@ export default async function WorkforceLayout({ children }: { children: React.Re
           </p>
         </div>
         <nav className="flex gap-2 overflow-x-auto pb-1">
+          <Link className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold" href="/administration/workforce/branches">Sucursales</Link>
           <Link
             className="whitespace-nowrap rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold"
             href="/administration/workforce"

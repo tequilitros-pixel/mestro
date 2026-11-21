@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { dateKey, formatMinutes, mondayOf } from "@/lib/workforce/timesheet/rules";
 import { getOvertimeBoard } from "@/lib/workforce/overtime/service";
 import { finalizeWorkforceOvertimeAction, setWorkforceJornadaAction } from "@/app/actions/workforceOvertime";
+import { parseDateOnly, todayDateOnly } from "@/lib/dateOnly";
 
 const field = "min-h-11 w-full rounded-lg border border-outline-variant bg-surface px-3 py-2";
 const days = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -10,7 +11,7 @@ const days = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 export default async function WorkforceOvertimePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireAdmin();
   const query = await searchParams;
-  const week = query.week && /^\d{4}-\d{2}-\d{2}$/.test(query.week) ? mondayOf(new Date(`${query.week}T00:00:00.000Z`)) : mondayOf(new Date());
+  const week = query.week && /^\d{4}-\d{2}-\d{2}$/.test(query.week) ? mondayOf(parseDateOnly(query.week)) : mondayOf(parseDateOnly(todayDateOnly()));
   const board = await getOvertimeBoard(week, query.search || undefined);
   const route = `/administration/workforce/overtime?week=${dateKey(board.start)}${query.search ? `&search=${encodeURIComponent(query.search)}` : ""}`;
   const rows = query.status ? board.rows.filter((row) => row.ok ? row.data.mode === query.status : query.status === "BLOCKED") : board.rows;

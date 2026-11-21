@@ -1,7 +1,6 @@
 "use client";
 
-import { claimQueuedOperation, listOperations, removeOperation, updateOperation } from "./queue";
-import { describeSyncFailure, getUnconfirmedSaleIds, shouldAutomaticallySyncOperation } from "./syncPolicy";
+import { listOperations, removeOperation, updateOperation } from "./queue";
 
 let activeSync: Promise<void> | null = null;
 
@@ -21,16 +20,10 @@ async function runSync() {
 
   const operations = await listOperations();
   let blocked = false;
-  const failedSaleIds = getUnconfirmedSaleIds(operations);
+  const failedSaleIds = new Set<string>();
 
   for (const operation of operations) {
     if (!navigator.onLine) break;
-    // Cancelled sales are audit-only. Failed sales require an explicit retry
-    // rather than being re-sent by the 30-second background sync loop.
-    if (!shouldAutomaticallySyncOperation(operation)) {
-      if (operation.kind === "pos.sale.create" && operation.status === "failed") blocked = true;
-      continue;
-    }
     const saleId = String((operation.payload as Record<string, unknown>).saleId ?? "");
     // Un recibo electrónico sólo puede salir después de que su venta esté
     // confirmada. Nunca enviamos un comprobante de un cobro que el servidor
@@ -41,43 +34,36 @@ async function runSync() {
     // Las ventas y correos de recibo son independientes; conserva el orden de los demás eventos.
     if (blocked && operation.kind !== "pos.sale.create" && operation.kind !== "pos.sale.email") continue;
 
-    // Atomically check current state and claim this id; another tab may
-    // have cancelled or started synchronizing it since listOperations().
-    const syncing = await claimQueuedOperation(operation.id);
-    if (!syncing) {
-      // Another tab may be uploading this sale (or have just changed its
-      // status). Never advance a queued cash-cut close past an unresolved sale.
-      if (operation.kind === "pos.sale.create") blocked = true;
-      continue;
-    }
+    const syncing = { ...operation, status: "syncing" as const };
+    await updateOperation(syncing);
 
     try {
       // Las colas antiguas podían asignar dos IDs al mismo cobro. No sabemos
       // cuál recibió el servidor: conservar ambos y exigir conciliación.
-      const originalId = (syncing.payload as Record<string, unknown>).clientOperationId;
-      if (syncing.kind === "pos.sale.create" && originalId && originalId !== syncing.id) {
+      const originalId = (operation.payload as Record<string, unknown>).clientOperationId;
+      if (operation.kind === "pos.sale.create" && originalId && originalId !== operation.id) {
         throw new Error("POS_IDENTITY_REVIEW_REQUIRED: El cobro conserva dos identificadores. Verifica la venta en servidor antes de reintentar.");
       }
-      const endpoint = syncing.kind === "pos.sale.create"
+      const endpoint = operation.kind === "pos.sale.create"
         ? "/api/pos/sales"
-        : syncing.kind === "pos.sale.email"
-          ? `/api/pos/sales/${String((syncing.payload as Record<string, unknown>).saleId)}/receipt-email`
-          : syncing.kind.startsWith("timeclock.")
+        : operation.kind === "pos.sale.email"
+          ? `/api/pos/sales/${String((operation.payload as Record<string, unknown>).saleId)}/receipt-email`
+          : operation.kind.startsWith("timeclock.")
             ? "/api/timeclock/sync"
-          : syncing.kind === "cash-cut.open"
+          : operation.kind === "cash-cut.open"
             ? "/api/cash-cuts"
-            : syncing.kind === "cash-cut.inflow.create"
-              ? `/api/cash-cuts/${String((syncing.payload as Record<string, unknown>).cashCutId)}/entradas`
-              : syncing.kind === "cash-cut.outflow.create"
-                ? `/api/cash-cuts/${String((syncing.payload as Record<string, unknown>).cashCutId)}/salidas`
-                : syncing.kind === "cash-cut.close"
-                  ? `/api/cash-cuts/${String((syncing.payload as Record<string, unknown>).cashCutId)}/cerrar`
-                  : syncing.kind === "cash-cut.venta.set"
-                    ? `/api/cash-cuts/${String((syncing.payload as Record<string, unknown>).cashCutId)}/ventas`
+            : operation.kind === "cash-cut.inflow.create"
+              ? `/api/cash-cuts/${String((operation.payload as Record<string, unknown>).cashCutId)}/entradas`
+              : operation.kind === "cash-cut.outflow.create"
+                ? `/api/cash-cuts/${String((operation.payload as Record<string, unknown>).cashCutId)}/salidas`
+                : operation.kind === "cash-cut.close"
+                  ? `/api/cash-cuts/${String((operation.payload as Record<string, unknown>).cashCutId)}/cerrar`
+                  : operation.kind === "cash-cut.venta.set"
+                    ? `/api/cash-cuts/${String((operation.payload as Record<string, unknown>).cashCutId)}/ventas`
           : "/api/sync/operations";
-      const directApiOperation = syncing.kind === "pos.sale.create" || syncing.kind === "pos.sale.email" || syncing.kind.startsWith("cash-cut.");
+      const directApiOperation = operation.kind === "pos.sale.create" || operation.kind === "pos.sale.email" || operation.kind.startsWith("cash-cut.");
       const body = directApiOperation
-        ? { ...syncing.payload, clientOperationId: syncing.id, clientCreatedAt: syncing.createdAt }
+        ? { ...operation.payload, clientOperationId: operation.id, clientCreatedAt: operation.createdAt }
         : operation;
       const response = await fetch(endpoint, {
         method: "POST",
@@ -85,13 +71,13 @@ async function runSync() {
         body: JSON.stringify(body),
       });
 
+      if (response.status === 401 || response.status === 403) {
+        throw new Error("La sesión no está autorizada para sincronizar");
+      }
+
       const result = (await response.json().catch(() => null)) as
         | { success?: boolean; error?: string | { message?: string } }
         | null;
-
-      if (response.status === 401 || response.status === 403) {
-        throw new Error(describeSyncFailure(result, response.status));
-      }
 
       const accepted = directApiOperation
         ? response.ok
@@ -101,7 +87,7 @@ async function runSync() {
         throw new Error(message ?? `Error de sincronización (${response.status})`);
       }
 
-      await removeOperation(syncing.id);
+      await removeOperation(operation.id);
       try {
         localStorage.setItem("maestro:last-synced-at", new Date().toISOString());
       } catch {
@@ -110,10 +96,9 @@ async function runSync() {
     } catch (error) {
       if (operation.kind === "pos.sale.create") failedSaleIds.add(operation.id);
       await updateOperation({
-        ...syncing,
-        attempts: syncing.attempts + 1,
+        ...operation,
+        attempts: operation.attempts + 1,
         status: "failed",
-        syncStartedAt: undefined,
         lastError: error instanceof Error ? error.message : "Error desconocido",
       });
 

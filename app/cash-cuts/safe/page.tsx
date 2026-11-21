@@ -47,13 +47,7 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
 
 const formatDateTime = (value: string) =>
-  new Intl.DateTimeFormat("es-MX", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  formatBusinessDateTime(value);
 
 export default function SafePage() {
   const [summaries, setSummaries] = useState<BranchSafeSummary[]>([]);

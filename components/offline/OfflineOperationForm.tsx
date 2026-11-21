@@ -54,6 +54,7 @@ export default function OfflineOperationForm({
 
     setSaving(true);
     const { formData, payload } = serializeForm(form);
+    let queued = false;
 
     try {
       await enqueueOperation({
@@ -62,11 +63,12 @@ export default function OfflineOperationForm({
         createdAt: new Date().toISOString(),
         payload: { ...payload, [entityField]: entityId },
       });
+      queued = true;
       form.reset();
       await syncOfflineQueue();
       if (navigator.onLine) router.refresh();
     } catch (error) {
-      if (navigator.onLine && fallbackAction) {
+      if (!queued && navigator.onLine && fallbackAction) {
         await fallbackAction(formData);
         return;
       }

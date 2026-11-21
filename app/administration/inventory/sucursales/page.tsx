@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { totalStockByProduct } from "../lib/stock";
+import { computeStockMatrix, totalStockByProduct } from "../lib/stock";
 import {
   InventoryFlowChart,
   InventoryBranchComparisonChart,
   InventoryPeriodComparisonChart,
   InventoryRankingChart,
   InventoryShareChart,
-  InventorySalesComparisonChart,
 } from "../InventoryCharts";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 import { getInventoryDashboardData } from "../lib/dashboard";
@@ -23,22 +22,11 @@ import PageTabs from "@/components/ui/PageTabs";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
 import { isInventoryCountCaptureRole } from "@/lib/permission-modules";
 import {
-  businessWeekRange,
   formatBusinessDate,
-  formatBusinessDateOnly,
-  formatCivilDate,
 } from "@/lib/dateTime";
-import { formatInventoryDashboardQuantity } from "@/lib/inventory/units";
 
 const formatDate = (value: Date) =>
   formatBusinessDate(value, { day: "2-digit", month: "short" });
-
-const formatMoney = (value: number) =>
-  new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
-    maximumFractionDigits: 0,
-  }).format(value);
 
 const entryTypeLabels: Record<string, string> = {
   COMPRA: "Compra",
@@ -74,13 +62,7 @@ const quickActions = [
   },
 ];
 
-export default async function SucursalesInventoryPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ period?: string; offset?: string }>;
-}) {
-  const params = await searchParams;
-  const selectedPeriod = periodSelection(parsePeriod(params.period), parseOffset(params.offset));
+export default async function SucursalesInventoryPage() {
   const user = await getCurrentUser();
   const allowedBranchIds = await getAccessibleBranchIds();
   const permissionRows = user?.role === "ADMIN" ? [] : await prisma.modulePermission.findMany({
@@ -97,10 +79,10 @@ export default async function SucursalesInventoryPage({
   );
   const branchFilter = allowedBranchIds === null ? {} : { branchId: { in: allowedBranchIds } };
 
-  const [products, recentEntries, dashboard, selectedAnalytics, previousAnalytics, selectedSales] = await Promise.all([
+  const [products, recentEntries, dashboard] = await Promise.all([
     prisma.inventoryProduct.findMany({
       where: { isActive: true, archivedAt: null, trackStock: true },
-      select: { id: true, name: true, unit: true, minimumStock: true, inventoryBaseUnit: true, handlingUnit: true, contentPerUnit: true, contentUnit: true, normalizedContentPerUnit: true },
+      select: { id: true, name: true, unit: true, minimumStock: true },
     }),
     prisma.inventoryEntry.findMany({
       where: branchFilter,
@@ -109,12 +91,9 @@ export default async function SucursalesInventoryPage({
       include: { product: true, branch: true },
     }),
     getInventoryDashboardData(allowedBranchIds),
-    getInventoryAnalytics(selectedPeriod.range, allowedBranchIds),
-    getInventoryAnalytics(selectedPeriod.previousRange, allowedBranchIds),
-    getInventorySalesAnalytics(selectedPeriod.range, allowedBranchIds),
   ]);
 
-  const matrix = dashboard.stockMatrix;
+  const matrix = await computeStockMatrix(products.map((p) => p.id), allowedBranchIds);
 
   const lowStockProducts = products
     .map((product) => ({
@@ -123,7 +102,6 @@ export default async function SucursalesInventoryPage({
     }))
     .filter(
       (product) =>
-        matrix.branches.every((branch) => !matrix.uninitializedByBranch.get(branch.id)?.has(product.id)) &&
         Number(product.minimumStock) > 0 &&
         product.stock < Number(product.minimumStock)
     )
@@ -131,35 +109,32 @@ export default async function SucursalesInventoryPage({
 
   const control = dashboard.analytics;
   const weekly = dashboard.weeklyAnalytics;
-  const periodAnalytics = selectedAnalytics;
-  const periodPreviousAnalytics = previousAnalytics;
-  const periodSales = selectedSales;
   const mostConsumedProduct = control.topProducts[0] ?? null;
   const mostConsumedProductWeekly = weekly.topProducts[0] ?? null;
-  const mostActiveBranch = [...control.branches].sort((a, b) => b.consumedCost - a.consumedCost)[0] ?? null;
-  const mostActiveBranchWeekly = [...weekly.branches].sort((a, b) => b.consumedCost - a.consumedCost)[0] ?? null;
-  const mostWastefulBranch = [...control.branches].sort((a, b) => b.wasteCost - a.wasteCost)[0] ?? null;
-  const mostMismatchedBranch = [...control.branches].sort((a, b) => b.mismatches - a.mismatches)[0] ?? null;
+  const mostActiveBranch = [...control.branches].sort((a, b) => b.consumed - a.consumed)[0] ?? null;
+  const mostActiveBranchWeekly = [...weekly.branches].sort((a, b) => b.consumed - a.consumed)[0] ?? null;
+  const mostWastefulBranch = [...control.branches].sort((a, b) => b.waste - a.waste)[0] ?? null;
+  const mostMismatchedBranch = [...control.branches].sort((a, b) => b.mismatchUnits - a.mismatchUnits)[0] ?? null;
   const mismatchProducts = [...control.topProducts]
     .filter((product) => product.mismatches > 0)
     .sort((a, b) => b.mismatchUnits - a.mismatchUnits)
     .slice(0, 12);
   const branchComparison = [...control.branches]
-    .filter((branch) => branch.consumedCost > 0 || branch.wasteCost > 0 || branch.mismatches > 0)
-    .sort((a, b) => (b.consumedCost + b.wasteCost) - (a.consumedCost + a.wasteCost) || b.mismatches - a.mismatches)
+    .filter((branch) => branch.consumed > 0 || branch.waste > 0 || branch.mismatchUnits > 0)
+    .sort((a, b) => Math.max(b.consumed, b.waste, b.mismatchUnits) - Math.max(a.consumed, a.waste, a.mismatchUnits))
     .slice(0, 10)
     .map((branch) => ({
       name: branch.name,
-      consumed: Math.round(branch.consumedCost * 10) / 10,
-      waste: Math.round(branch.wasteCost * 10) / 10,
-      mismatches: branch.mismatches,
+      consumed: Math.round(branch.consumed * 10) / 10,
+      waste: Math.round(branch.waste * 10) / 10,
+      mismatchUnits: Math.round(branch.mismatchUnits * 10) / 10,
     }));
   const weeklyBranchById = new Map(weekly.branches.map((branch) => [branch.id, branch]));
   const branchPeriodComparison = control.branches
     .map((branch) => ({
       name: branch.name,
-      weekly: Math.round((weeklyBranchById.get(branch.id)?.consumedCost ?? 0) * 10) / 10,
-      monthly: Math.round(branch.consumedCost * 10) / 10,
+      weekly: Math.round((weeklyBranchById.get(branch.id)?.consumed ?? 0) * 10) / 10,
+      monthly: Math.round(branch.consumed * 10) / 10,
     }))
     .filter((branch) => branch.weekly > 0 || branch.monthly > 0)
     .sort((a, b) => b.monthly - a.monthly)
@@ -190,58 +165,6 @@ export default async function SucursalesInventoryPage({
     .filter((product) => product.weekly > 0 || product.monthly > 0)
     .sort((a, b) => b.monthly - a.monthly)
     .slice(0, 12);
-  const periodPreviousBranchById = new Map(periodPreviousAnalytics.branches.map((branch) => [branch.id, branch]));
-  const periodSalesByBranchId = new Map(periodSales.byBranch.map((branch) => [branch.id, branch]));
-  const periodBranchRows = periodAnalytics.branches.map((branch) => {
-    const sales = periodSalesByBranchId.get(branch.id)?.sales ?? 0;
-    const previous = periodPreviousBranchById.get(branch.id);
-    return {
-      id: branch.id,
-      name: branch.name,
-      consumed: branch.consumedCost,
-      previousConsumed: previous?.consumedCost ?? 0,
-      sales,
-      transactions: periodSalesByBranchId.get(branch.id)?.transactions ?? 0,
-      ratio: branch.consumedCost > 0 ? sales / branch.consumedCost : null,
-    };
-  });
-  for (const salesBranch of periodSales.byBranch) {
-    if (periodBranchRows.some((branch) => branch.id === salesBranch.id)) continue;
-    const previous = periodPreviousBranchById.get(salesBranch.id);
-    periodBranchRows.push({
-      id: salesBranch.id,
-      name: salesBranch.name,
-      consumed: 0,
-      previousConsumed: previous?.consumedCost ?? 0,
-      sales: salesBranch.sales,
-      transactions: salesBranch.transactions,
-      ratio: null,
-    });
-  }
-  periodBranchRows.sort((a, b) => b.consumed - a.consumed || b.sales - a.sales || a.name.localeCompare(b.name));
-  const periodBranchComparison = periodBranchRows
-    .filter((branch) => branch.consumed > 0 || branch.previousConsumed > 0)
-    .slice(0, 12)
-    .map((branch) => ({ name: branch.name, weekly: branch.previousConsumed, monthly: branch.consumed }));
-  const periodSalesComparison = periodBranchRows
-    .filter((branch) => branch.consumed > 0 || branch.sales > 0)
-    .slice(0, 12)
-    .map((branch) => ({ name: branch.name, consumed: branch.consumed, sales: branch.sales }));
-  const periodProductCosts = periodAnalytics.topProducts
-    .filter((product) => product.cost > 0)
-    .slice(0, 10)
-    .map((product) => ({ name: product.name, value: Math.round(product.cost * 10) / 10 }));
-  const periodFlowData = selectedPeriod.kind === "year"
-    ? Array.from(periodAnalytics.daily.reduce((map, day) => {
-        const key = day.date.slice(0, 7);
-        const current = map.get(key) ?? { label: key, consumed: 0, received: 0, waste: 0 };
-        current.consumed += day.consumedCost;
-        current.received += day.receivedCost;
-        current.waste += day.wasteCost;
-        map.set(key, current);
-        return map;
-      }, new Map<string, { label: string; consumed: number; received: number; waste: number }>()).values())
-    : periodAnalytics.daily.map((day) => ({ label: day.label, consumed: day.consumedCost, received: day.receivedCost, waste: day.wasteCost }));
   const negativeRows = dashboard.negativeLegacy.slice(0, 20);
   const negativeByBranch = Array.from(
     dashboard.negativeLegacy.reduce((map, row) => {
@@ -268,7 +191,7 @@ export default async function SucursalesInventoryPage({
               Inventario de sucursales
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-on-surface-variant sm:text-base">
-              Stock por sucursal, movimientos y conteos semanales. Las comparativas entre sucursales usan valor estimado; los productos se muestran en su presentación configurada.
+              Stock por sucursal, movimientos y conteos semanales.
             </p>
           </div>
 
@@ -340,7 +263,6 @@ export default async function SucursalesInventoryPage({
         )}
 
         <PageTabs
-          defaultTab="resumen"
           tabs={[
             {
               key: "control",
@@ -359,24 +281,24 @@ export default async function SucursalesInventoryPage({
 
                   <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
                     <Card>
-                      <CardLabel>Valor consumido</CardLabel>
-                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.consumedCost)}</CardValue>
+                      <CardLabel>Consumo neto</CardLabel>
+                      <CardValue>{control.totals.consumedUnits.toFixed(1)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        costo estimado · {control.totals.movements} movimientos
+                        unidades · {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.consumedCost)}
                       </p>
                     </Card>
                     <Card>
-                      <CardLabel>Costo de mermas</CardLabel>
-                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.wasteCost)}</CardValue>
+                      <CardLabel>Mermas</CardLabel>
+                      <CardValue>{control.totals.wasteUnits.toFixed(1)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        valor estimado de pérdidas
+                        costo {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.wasteCost)}
                       </p>
                     </Card>
                     <Card>
                       <CardLabel>Diferencias</CardLabel>
                       <CardValue>{control.totals.mismatchCount}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        registros con diferencia contra el conteo esperado
+                        {control.totals.mismatchUnits.toFixed(1)} unidades · faltantes {control.totals.shortageUnits.toFixed(1)}
                       </p>
                     </Card>
                     <Card>
@@ -394,12 +316,12 @@ export default async function SucursalesInventoryPage({
                         {mostActiveBranch?.name ?? "Sin datos"}
                       </p>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {mostActiveBranch ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(mostActiveBranch.consumedCost) : "Todavía no hay salidas"}
+                        {mostActiveBranch ? `${mostActiveBranch.consumed.toFixed(1)} unidades` : "Todavía no hay salidas"}
                       </p>
                     </Card>
                     <Card>
-                      <CardLabel>Valor recibido</CardLabel>
-                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.receivedCost)}</CardValue>
+                      <CardLabel>Entradas del periodo</CardLabel>
+                      <CardValue>{control.totals.receivedUnits.toFixed(1)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
                         {control.totals.movements} movimientos registrados
                       </p>
@@ -408,26 +330,26 @@ export default async function SucursalesInventoryPage({
 
                   <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
                     <Card>
-                      <CardLabel>Valor consumido · 7 días</CardLabel>
-                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(weekly.totals.consumedCost)}</CardValue>
+                      <CardLabel>Consumo · 7 días</CardLabel>
+                      <CardValue>{weekly.totals.consumedUnits.toFixed(1)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
                         {weekly.totals.movements} movimientos
                       </p>
                     </Card>
                     <Card>
-                      <CardLabel>Valor recibido · 7 días</CardLabel>
-                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(weekly.totals.receivedCost)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">costo estimado</p>
+                      <CardLabel>Entradas · 7 días</CardLabel>
+                      <CardValue>{weekly.totals.receivedUnits.toFixed(1)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">unidades recibidas</p>
                     </Card>
                     <Card>
-                      <CardLabel>Costo de mermas · 7 días</CardLabel>
-                      <CardValue>{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(weekly.totals.wasteCost)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">valor estimado</p>
+                      <CardLabel>Mermas · 7 días</CardLabel>
+                      <CardValue>{weekly.totals.wasteUnits.toFixed(1)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">pérdidas registradas</p>
                     </Card>
                     <Card>
                       <CardLabel>Diferencias · 7 días</CardLabel>
                       <CardValue>{weekly.totals.mismatchCount}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">registros con diferencia</p>
+                      <p className="mt-1 text-xs text-on-surface-variant">{weekly.totals.mismatchUnits.toFixed(1)} unidades</p>
                     </Card>
                     <Card>
                       <CardLabel>Producto líder · 7 días</CardLabel>
@@ -444,7 +366,7 @@ export default async function SucursalesInventoryPage({
                         {mostActiveBranchWeekly?.name ?? "Sin datos"}
                       </p>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {mostActiveBranchWeekly ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(mostActiveBranchWeekly.consumedCost) : "Sin salidas"}
+                        {mostActiveBranchWeekly ? `${mostActiveBranchWeekly.consumed.toFixed(1)} unidades` : "Sin salidas"}
                       </p>
                     </Card>
                   </section>
@@ -453,7 +375,7 @@ export default async function SucursalesInventoryPage({
                     <Card>
                       <CardLabel>Consumo por sucursal · semanal vs mensual</CardLabel>
                       {branchPeriodComparison.length > 0 ? (
-                        <InventoryPeriodComparisonChart data={branchPeriodComparison} money />
+                        <InventoryPeriodComparisonChart data={branchPeriodComparison} />
                       ) : (
                         <p className="py-12 text-center text-sm text-on-surface-variant">Sin consumo registrado.</p>
                       )}
@@ -501,11 +423,11 @@ export default async function SucursalesInventoryPage({
                   <section className="grid gap-4 lg:grid-cols-3">
                     <Card>
                       <CardLabel>Evolución · últimos 30 días</CardLabel>
-                      <InventoryFlowChart data={control.daily.map((day) => ({ label: day.label, consumed: day.consumedCost, received: day.receivedCost, waste: day.wasteCost }))} money />
+                      <InventoryFlowChart data={control.daily} />
                     </Card>
                     <Card>
                       <CardLabel>Evolución · últimos 7 días</CardLabel>
-                      <InventoryFlowChart data={weekly.daily.map((day) => ({ label: day.label, consumed: day.consumedCost, received: day.receivedCost, waste: day.wasteCost }))} money />
+                      <InventoryFlowChart data={weekly.daily} />
                     </Card>
                     <Card>
                       <CardLabel>Tipos de movimiento</CardLabel>
@@ -546,14 +468,14 @@ export default async function SucursalesInventoryPage({
                       <CardLabel>Sucursal con más merma</CardLabel>
                       <p className="mt-3 text-lg font-bold text-on-surface">{mostWastefulBranch?.name ?? "Sin datos"}</p>
                       <p className="mt-1 text-sm text-on-surface-variant">
-                        {mostWastefulBranch ? new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(mostWastefulBranch.wasteCost) : "Sin mermas registradas"}
+                        {mostWastefulBranch ? `${mostWastefulBranch.waste.toFixed(1)} unidades · ${new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(mostWastefulBranch.wasteCost)}` : "Sin mermas registradas"}
                       </p>
                     </Card>
                     <Card>
                       <CardLabel>Sucursal con más diferencias</CardLabel>
                       <p className="mt-3 text-lg font-bold text-on-surface">{mostMismatchedBranch?.name ?? "Sin datos"}</p>
                       <p className="mt-1 text-sm text-on-surface-variant">
-                        {mostMismatchedBranch ? `${mostMismatchedBranch.mismatches} registros con diferencia` : "Sin diferencias registradas"}
+                        {mostMismatchedBranch ? `${mostMismatchedBranch.mismatches} productos · ${mostMismatchedBranch.shortageUnits.toFixed(1)} unidades faltantes` : "Sin diferencias registradas"}
                       </p>
                     </Card>
                     <Card>
@@ -580,9 +502,10 @@ export default async function SucursalesInventoryPage({
                             <thead>
                               <tr className="border-b border-outline-variant text-left text-xs text-outline">
                                 <th className="pb-2 font-medium">Sucursal</th>
-                                <th className="pb-2 text-right font-medium">Consumo · 7 días</th>
-                                <th className="pb-2 text-right font-medium">Consumo · 30 días</th>
-                                <th className="pb-2 text-right font-medium">Costo merma</th>
+                                <th className="pb-2 text-right font-medium">7 días</th>
+                                <th className="pb-2 text-right font-medium">30 días</th>
+                                <th className="pb-2 text-right font-medium">Costo</th>
+                                <th className="pb-2 text-right font-medium">Merma</th>
                                 <th className="pb-2 text-right font-medium">Diferencias</th>
                                 <th className="pb-2 text-right font-medium">Bajo mínimo</th>
                                 <th className="pb-2 text-right font-medium">Negativos</th>
@@ -596,10 +519,11 @@ export default async function SucursalesInventoryPage({
                                   <td className="py-3 font-semibold text-on-surface">
                                     <span className="mr-2 text-xs text-outline">#{index + 1}</span>{branch.name}
                                   </td>
-                                <td className="py-3 text-right text-secondary">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(weeklyBranchById.get(branch.id)?.consumedCost ?? 0)}</td>
-                                <td className="py-3 text-right text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.consumedCost)}</td>
-                                <td className="py-3 text-right text-error">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.wasteCost)}</td>
-                                <td className="py-3 text-right text-secondary">{branch.mismatches}</td>
+                                  <td className="py-3 text-right text-secondary">{(weeklyBranchById.get(branch.id)?.consumed ?? 0).toFixed(1)}</td>
+                                  <td className="py-3 text-right text-on-surface-variant">{branch.consumed.toFixed(1)}</td>
+                                  <td className="py-3 text-right text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.consumedCost)}</td>
+                                  <td className="py-3 text-right text-error">{branch.waste.toFixed(1)}</td>
+                                  <td className="py-3 text-right text-secondary">{branch.mismatches} · {branch.mismatchUnits.toFixed(1)}</td>
                                   <td className="py-3 text-right text-on-surface-variant">{branch.lowStockCount}</td>
                                   <td className="py-3 text-right text-error">{branch.negativeProductCount}</td>
                                   <td className="py-3 text-right text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.currentStockValue)}</td>
@@ -739,152 +663,60 @@ export default async function SucursalesInventoryPage({
               icon: <ChartLineIcon className="h-4 w-4" />,
               content: (
                 <>
-                  <section className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-                    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Resumen por periodo</p>
-                        <h2 className="mt-1 text-2xl font-bold text-on-surface">{selectedPeriod.label}</h2>
-                        <p className="mt-1 text-sm text-on-surface-variant">
-                          Consulta el gasto de cada sucursal y de todas juntas. Los importes son costo estimado de inventario.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {(Object.keys(PERIOD_LABELS) as PeriodKind[]).map((kind) => (
-                          <Link
-                            key={kind}
-                            href={periodHref(kind, kind === selectedPeriod.kind ? selectedPeriod.offset : 0)}
-                            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${selectedPeriod.kind === kind ? "bg-primary text-on-primary" : "border border-outline-variant bg-surface-container-high text-on-surface-variant hover:text-on-surface"}`}
-                          >
-                            {PERIOD_LABELS[kind]}
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="mt-5 flex items-center justify-between gap-3 rounded-xl border border-outline-variant bg-surface-container-high/60 p-2">
-                      <Link
-                        href={periodHref(selectedPeriod.kind, selectedPeriod.offset - 1)}
-                        className="rounded-lg px-3 py-2 text-sm font-semibold text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
-                      >
-                        ← {PERIOD_LABELS[selectedPeriod.kind]} anterior
-                      </Link>
-                      <span className="text-center text-sm font-semibold text-on-surface">{selectedPeriod.label}</span>
-                      {selectedPeriod.offset < 0 ? (
-                        <Link
-                          href={periodHref(selectedPeriod.kind, selectedPeriod.offset + 1)}
-                          className="rounded-lg px-3 py-2 text-sm font-semibold text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
-                        >
-                          Siguiente →
-                        </Link>
-                      ) : (
-                        <span className="rounded-lg px-3 py-2 text-sm text-outline">Periodo actual</span>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                    <Card>
-                      <CardLabel>Consumo de inventario</CardLabel>
-                      <CardValue>{formatMoney(periodAnalytics.totals.consumedCost)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">{periodAnalytics.totals.movements} movimientos</p>
-                    </Card>
-                    <Card>
-                      <CardLabel>Ventas netas POS</CardLabel>
-                      <CardValue>{formatMoney(periodSales.totalSales)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">{periodSales.transactions} tickets completados</p>
-                    </Card>
-                    <Card>
-                      <CardLabel>Costo de mermas</CardLabel>
-                      <CardValue>{formatMoney(periodAnalytics.totals.wasteCost)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">pérdidas estimadas del periodo</p>
-                    </Card>
-                    <Card>
-                      <CardLabel>Sucursales con movimiento</CardLabel>
-                      <CardValue>{periodBranchRows.filter((branch) => branch.consumed > 0 || branch.sales > 0).length}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">de {periodAnalytics.branches.length} visibles</p>
-                    </Card>
-                  </section>
-
                   <section className="grid gap-5 lg:grid-cols-2">
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-                      <h2 className="mb-1 text-sm font-semibold text-on-surface-variant">Gasto por sucursal · periodo actual vs anterior</h2>
-                      <p className="mb-3 text-xs text-on-surface-variant">{selectedPeriod.label} frente a {selectedPeriod.previousLabel}</p>
-                      {periodBranchComparison.length > 0 ? (
-                        <InventoryPeriodComparisonChart
-                          data={periodBranchComparison}
-                          money
-                          firstLabel={selectedPeriod.previousLabel}
-                          secondLabel={selectedPeriod.label}
-                        />
-                      ) : (
-                        <p className="py-12 text-center text-sm text-on-surface-variant">Sin consumo registrado.</p>
-                      )}
+                      <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
+                        Evolución del inventario · últimos 30 días
+                      </h2>
+                      <InventoryFlowChart data={control.daily} />
                     </div>
+
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-                      <h2 className="mb-1 text-sm font-semibold text-on-surface-variant">Consumo de inventario vs ventas</h2>
-                      <p className="mb-3 text-xs text-on-surface-variant">La comparación usa el mismo periodo y la misma sucursal.</p>
-                      {periodSalesComparison.length > 0 ? (
-                        <InventorySalesComparisonChart data={periodSalesComparison} />
-                      ) : (
-                        <p className="py-12 text-center text-sm text-on-surface-variant">Sin ventas o consumo registrado.</p>
-                      )}
+                      <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
+                        Evolución del inventario · últimos 7 días
+                      </h2>
+                      <InventoryFlowChart data={weekly.daily} />
                     </div>
                   </section>
 
-                  <section className="grid gap-5 lg:grid-cols-2">
+                  <section className="mt-5 grid gap-5 lg:grid-cols-2">
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-                      <h2 className="mb-1 text-sm font-semibold text-on-surface-variant">Productos más consumidos</h2>
-                      <p className="mb-3 text-xs text-on-surface-variant">Ordenados por costo estimado del inventario consumido.</p>
-                      {periodProductCosts.length > 0 ? (
-                        <InventoryRankingChart data={periodProductCosts} valueLabel="Costo de consumo" money />
-                      ) : (
-                        <p className="py-12 text-center text-sm text-on-surface-variant">Sin consumo registrado.</p>
-                      )}
+                      <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
+                        Consumo por sucursal · semanal vs mensual
+                      </h2>
+                      <InventoryPeriodComparisonChart data={branchPeriodComparison} />
                     </div>
+
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-                      <h2 className="mb-1 text-sm font-semibold text-on-surface-variant">Movimiento diario del periodo</h2>
-                      <p className="mb-3 text-xs text-on-surface-variant">Entradas, consumo y mermas en costo estimado.</p>
-                      <InventoryFlowChart data={periodFlowData} money />
+                      <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
+                        Productos con más movimiento · semanal vs mensual
+                      </h2>
+                      <InventoryPeriodComparisonChart data={productPeriodComparison} />
                     </div>
                   </section>
 
-                  <Card>
-                    <CardLabel>Gasto y ventas por sucursal · {selectedPeriod.label}</CardLabel>
-                    {periodBranchRows.length === 0 ? (
-                      <p className="mt-3 text-sm text-on-surface-variant">No hay sucursales visibles.</p>
-                    ) : (
-                      <div className="mt-3 overflow-x-auto">
-                        <table className="w-full min-w-[760px] text-sm">
-                          <thead>
-                            <tr className="border-b border-outline-variant text-left text-xs text-outline">
-                              <th className="pb-2 font-medium">Sucursal</th>
-                              <th className="pb-2 text-right font-medium">Consumo inventario</th>
-                              <th className="pb-2 text-right font-medium">Ventas netas</th>
-                              <th className="pb-2 text-right font-medium">Ventas / consumo</th>
-                              <th className="pb-2 text-right font-medium">Tickets</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-outline-variant">
-                            {periodBranchRows.map((branch, index) => (
-                              <tr key={branch.id}>
-                                <td className="py-3 font-semibold text-on-surface"><span className="mr-2 text-xs text-outline">#{index + 1}</span>{branch.name}</td>
-                                <td className="py-3 text-right text-secondary">{formatMoney(branch.consumed)}</td>
-                                <td className="py-3 text-right text-on-surface">{formatMoney(branch.sales)}</td>
-                                <td className="py-3 text-right text-on-surface-variant">{branch.ratio === null ? "—" : `${branch.ratio.toFixed(1)}×`}</td>
-                                <td className="py-3 text-right text-on-surface-variant">{branch.transactions}</td>
-                              </tr>
-                            ))}
-                            <tr className="border-t-2 border-outline-variant font-bold">
-                              <td className="py-3 text-on-surface">Todas las sucursales</td>
-                              <td className="py-3 text-right text-secondary">{formatMoney(periodAnalytics.totals.consumedCost)}</td>
-                              <td className="py-3 text-right text-on-surface">{formatMoney(periodSales.totalSales)}</td>
-                              <td className="py-3 text-right text-on-surface-variant">{periodAnalytics.totals.consumedCost > 0 ? `${(periodSales.totalSales / periodAnalytics.totals.consumedCost).toFixed(1)}×` : "—"}</td>
-                              <td className="py-3 text-right text-on-surface-variant">{periodSales.transactions}</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </Card>
+                  <section className="mt-5 grid gap-4 grid-cols-2 lg:grid-cols-4">
+                    <Card>
+                      <CardLabel>Consumo semanal</CardLabel>
+                      <CardValue>{weekly.totals.consumedUnits.toFixed(1)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">unidades en 7 días</p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Consumo mensual</CardLabel>
+                      <CardValue>{control.totals.consumedUnits.toFixed(1)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">unidades en 30 días</p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Merma semanal</CardLabel>
+                      <CardValue>{weekly.totals.wasteUnits.toFixed(1)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">unidades registradas</p>
+                    </Card>
+                    <Card>
+                      <CardLabel>Diferencias mensuales</CardLabel>
+                      <CardValue>{control.totals.mismatchCount}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">en declaraciones de conteo</p>
+                    </Card>
+                  </section>
 
                   <section className="mt-5">
 
@@ -910,7 +742,8 @@ export default async function SucursalesInventoryPage({
                               {product.name}
                             </span>
                             <span className="text-error">
-                              {formatInventoryDashboardQuantity(product.stock, product)} / min{" "}{formatInventoryDashboardQuantity(product.minimumStock, product)}
+                              {product.stock.toFixed(1)} / min{" "}
+                              {Number(product.minimumStock)} {product.unit}
                             </span>
                           </div>
                         ))}

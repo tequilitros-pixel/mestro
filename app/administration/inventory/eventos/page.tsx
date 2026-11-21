@@ -40,25 +40,18 @@ export default async function EventosInventoryPage() {
     upcomingEvents,
   ] = await Promise.all([
     prisma.serviceEvent.count({
-      where: {
-        status: { notIn: ["COMPLETED", "CANCELLED"] },
-        NOT: { AND: [{ code: { startsWith: "COT-" } }, { status: "DRAFT" }] },
-      },
+      where: { status: { notIn: ["COMPLETED", "CANCELLED"] } },
     }),
     prisma.serviceEvent.count({ where: { status: "RETURN_PENDING" } }),
     prisma.eventPackage.count({ where: { isActive: true } }),
     prisma.serviceEvent.findMany({
-      where: {
-        eventDate: { gte: recentStart },
-        NOT: { AND: [{ code: { startsWith: "COT-" } }, { status: "DRAFT" }] },
-      },
+      where: { eventDate: { gte: recentStart } },
       include: { items: true },
     }),
     prisma.serviceEvent.findMany({
       where: {
         eventDate: { gte: now },
         status: { notIn: ["COMPLETED", "CANCELLED"] },
-        NOT: { AND: [{ code: { startsWith: "COT-" } }, { status: "DRAFT" }] },
       },
       orderBy: { eventDate: "asc" },
       take: 6,

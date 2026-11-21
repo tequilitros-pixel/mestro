@@ -5,7 +5,7 @@ import {
   resolveOwnEmployee,
   type WorkforceActor,
 } from "@/lib/workforce/availability/service";
-import { calendarStatus, latestPublishedRevisions } from "./rules";
+import { effectiveCalendarStatus } from "./rules";
 
 export type CalendarShift = {
   id: string;
@@ -39,56 +39,36 @@ export async function getEmployeeCalendar(
         orderBy: { revisionNumber: "desc" },
         take: 1,
       },
-      publicationLinks: {
-        include: {
-          publication: { select: { publishedAt: true, version: true } },
-          shiftRevision: { include: { branch: true } },
-        },
-      },
+      publicationLinks: { select: { shiftRevisionId: true } },
     },
     orderBy: { startAt: "asc" },
   });
-  const latestPublishedByShiftId = new Map(
-    latestPublishedRevisions(
-      shifts.flatMap((shift) =>
-        shift.publicationLinks.map(({ publication, shiftRevision }) => ({
-          shiftId: shift.id,
-          publicationPublishedAt: publication.publishedAt,
-          revisionNumber: shiftRevision.revisionNumber,
-          revisionStatus: shiftRevision.status,
-          businessDate: shiftRevision.businessDate,
-          startAt: shiftRevision.startAt,
-          endAt: shiftRevision.endAt,
-          branchName: shiftRevision.branch.name,
-          branchTimezone: shiftRevision.branch.timezone,
-        })),
-      ),
-    ).map((snapshot) => [snapshot.shiftId, snapshot] as const),
-  );
   return {
     employee,
     employment,
     shifts: shifts.map((shift): CalendarShift => {
       const revision = shift.revisions[0];
-      const published = latestPublishedByShiftId.get(shift.id);
+      const historicalRevisionIds = new Set(
+        shift.publicationLinks.map((item) => item.shiftRevisionId),
+      );
       return {
         id: shift.id,
-        businessDate: published?.businessDate ?? revision?.businessDate ?? shift.businessDate,
-        startAt: published?.startAt ?? revision?.startAt ?? shift.startAt,
-        endAt: published?.endAt ?? revision?.endAt ?? shift.endAt,
-        branchName: published?.branchName ?? revision?.branch.name ?? shift.branch.name,
+        businessDate: revision?.businessDate ?? shift.businessDate,
+        startAt: revision?.startAt ?? shift.startAt,
+        endAt: revision?.endAt ?? shift.endAt,
+        branchName: revision?.branch.name ?? shift.branch.name,
         branchTimezone:
-          published?.branchTimezone ??
           revision?.branch.timezone ??
           shift.branch.timezone ??
           "America/Mexico_City",
-        status:
-          shift.status === "CANCELLED"
-            ? "CANCELLED"
-            : published
-              ? calendarStatus(published)
-              : "NEW",
-        revisionNumber: published?.revisionNumber ?? revision?.revisionNumber ?? 0,
+        status: effectiveCalendarStatus({
+          status: revision?.status ?? shift.status,
+          hasPublicationLink: shift.publicationLinks.length > 0,
+          latestRevisionLinked: revision
+            ? historicalRevisionIds.has(revision.id)
+            : false,
+        }),
+        revisionNumber: revision?.revisionNumber ?? 0,
       };
     }),
   };

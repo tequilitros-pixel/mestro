@@ -1,6 +1,5 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { cache } from "react";
 import { rawPrisma as prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { hashSessionToken } from "@/lib/session";
@@ -9,14 +8,12 @@ import {
   canAccessModule,
   isConfigurablePermissionKey,
   isAdminOnlyPath,
-  canCaptureInventoryCount,
-  INVENTORY_COUNT_CAPTURE_MODULE_KEY,
+  isInventoryCountCaptureRole,
 } from "@/lib/permission-modules";
 
 
 
-// React caches this only within a single server request, never across users.
-export const getCurrentSession = cache(async function getCurrentSession() {
+export async function getCurrentSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get("maestro_session")?.value;
 
@@ -29,7 +26,7 @@ export const getCurrentSession = cache(async function getCurrentSession() {
 
   if (!session || session.expiresAt <= new Date() || !session.user.active) return null;
   return session;
-});
+}
 export async function getCurrentUser() {
   return (await getCurrentSession())?.user ?? null;
 }
@@ -37,7 +34,9 @@ export async function requireAdmin() {
   const user = await getCurrentUser();
 
   if (!user || user.role !== "ADMIN") {
-    redirect("/cooking");
+    // /cooking puede requerir un permiso que el usuario no tenga y provocar
+    // un ciclo de redirecciones. El perfil es un destino autenticado seguro.
+    redirect(user ? "/profile" : "/login");
   }
 
   return user;
@@ -49,35 +48,17 @@ export async function requireAdminAction() {
   return user;
 }
 
-async function hasInventoryCountCaptureAccess(user: { id: string; role: string }) {
-  if (canCaptureInventoryCount(user.role, [])) return true;
-  if (user.role !== "ENCARGADO") return false;
-
-  const grant = await prisma.modulePermission.findUnique({
-    where: {
-      userId_moduleKey: {
-        userId: user.id,
-        moduleKey: INVENTORY_COUNT_CAPTURE_MODULE_KEY,
-      },
-    },
-    select: { id: true },
-  });
-  return canCaptureInventoryCount(
-    user.role,
-    grant ? [INVENTORY_COUNT_CAPTURE_MODULE_KEY] : [],
-  );
-}
-
 export async function requireInventoryCountCaptureAccess() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (!(await hasInventoryCountCaptureAccess(user))) redirect("/profile");
+  if (!user || !isInventoryCountCaptureRole(user.role)) {
+    redirect(user ? "/profile" : "/login");
+  }
   return user;
 }
 
 export async function requireInventoryCountCaptureActionAccess() {
   const user = await getCurrentUser();
-  if (!user || !(await hasInventoryCountCaptureAccess(user))) {
+  if (!user || !isInventoryCountCaptureRole(user.role)) {
     throw new Error("PERMISSION_DENIED");
   }
   return user;
@@ -128,15 +109,28 @@ export async function requireModuleAccess(moduleKey: string) {
 
   if (isAdminOnlyPath(moduleKey)) redirect("/profile");
 
-  const storedPermissions = await prisma.modulePermission.findMany({
-    where: { userId: user.id },
-    select: { moduleKey: true },
-  });
-  const moduleKeys = storedPermissions.map((permission) => permission.moduleKey);
+  if (user.role === "OPERATOR") {
+    const storedPermissions = await prisma.modulePermission.findMany({
+      where: { userId: user.id },
+      select: { moduleKey: true },
+    });
+    const hasConfiguredPermissions = storedPermissions.some((permission) =>
+      isConfigurablePermissionKey(permission.moduleKey),
+    );
 
-  if (!canAccessModule(user.role, moduleKeys, moduleKey)) {
-    redirect("/profile");
+    if (
+      !hasConfiguredPermissions &&
+      LEGACY_OPERATOR_PERMISSION_KEYS.some((key) => key === moduleKey)
+    ) {
+      return user;
+    }
   }
+
+  const permission = await prisma.modulePermission.findUnique({
+    where: { userId_moduleKey: { userId: user.id, moduleKey } },
+  });
+
+  if (!permission) redirect("/profile");
 
   return user;
 }
@@ -149,10 +143,12 @@ export async function getAccessibleBranchIds(): Promise<string[] | null> {
     return null;
   }
 
-  const branches = await prisma.userBranch.findMany({
+  // Authentication uses the raw client, but branch membership is RLS-protected.
+  const { withRlsContext } = await import("@/lib/rls");
+  const branches = await withRlsContext(user, (tx) => tx.userBranch.findMany({
     where: { userId: user.id },
     select: { branchId: true },
-  });
+  }));
 
   return branches.map((b) => b.branchId);
 }
