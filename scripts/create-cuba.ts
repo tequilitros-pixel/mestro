@@ -57,7 +57,7 @@ async function main() {
     price: prices.get(variant.priceFrom)!.price,
     ingredients: [
       { code: "POS-ING-TORONJA-REF", quantity: variant.soda, unit: "ML" },
-      ...(variant.tequila ? [{ code: "POS-ING-TEQUILA", quantity: variant.tequila, unit: "ML" }] : []),
+      ...("tequila" in variant && variant.tequila ? [{ code: "POS-ING-TEQUILA", quantity: variant.tequila, unit: "ML" }] : []),
       { code: "EXTRA-HIELO", quantity: variant.ice, unit: "G" },
       { code: variant.cup, quantity: 1, unit: "UNIT" },
     ],

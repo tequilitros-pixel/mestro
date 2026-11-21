@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { computeHourlyPay, payrollWeekInstantRange } from "@/lib/payroll/legacyRules";
 import { calculatePayrollSupplement, effectiveSupplementPercent } from "@/lib/payroll/contractualSupplement";
 import { resolveBranchHourlyRate } from "@/lib/payroll/branchRates";
+import { calculatePayrollSupplement, effectiveSupplementPercent } from "@/lib/payroll/contractualSupplement";
 
 /**
  * Snapshot que un trabajador puede consultar de su propia nómina. Los
