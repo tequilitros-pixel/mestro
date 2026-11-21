@@ -14,6 +14,33 @@ export const EMPTY_PAYROLL_SUPPLEMENT: PayrollSupplementBreakdown = {
 };
 const cents = (amount: number) => Math.round((amount + Number.EPSILON) * 100) / 100;
 
+export type PayrollHourlyBreakdown = {
+  baseHourlyRate: number;
+  supplementHourlyRate: number;
+  totalHourlyRate: number;
+};
+
+/** Convierte el adicional semanal ya calculado en un desglose claro por hora. */
+export function calculatePayrollHourlyBreakdown(
+  baseHourlyRate: number | null,
+  hoursWorked: number,
+  supplementTotal: number,
+): PayrollHourlyBreakdown | null {
+  if (
+    baseHourlyRate === null || !Number.isFinite(baseHourlyRate) || baseHourlyRate < 0 ||
+    !Number.isFinite(hoursWorked) || hoursWorked <= 0 ||
+    !Number.isFinite(supplementTotal) || supplementTotal < 0
+  ) return null;
+
+  const base = cents(baseHourlyRate);
+  const supplement = cents(supplementTotal / hoursWorked);
+  return {
+    baseHourlyRate: base,
+    supplementHourlyRate: supplement,
+    totalHourlyRate: cents(base + supplement),
+  };
+}
+
 export function calculatePayrollSupplement(basePay: number, percent: number | null): PayrollSupplementBreakdown {
   if (!Number.isFinite(basePay) || basePay <= 0 || percent === null || !Number.isFinite(percent) || percent <= 0) {
     return { ...EMPTY_PAYROLL_SUPPLEMENT };
