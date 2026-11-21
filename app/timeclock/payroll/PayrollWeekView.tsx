@@ -23,6 +23,7 @@ import {
   approvePayrollEntryAction,
   reopenPayrollEntryAction,
   closePayrollReviewAction,
+  markPayrollPeriodPaidAction,
   reopenPayrollPeriodAction,
   justifyIncidentAction,
   unjustifyIncidentAction,
@@ -44,6 +45,7 @@ import {
 } from "@/lib/dateOnly";
 import { useToast } from "@/components/ui/Toast";
 import { payrollApprovalProgress } from "@/lib/payroll/approvalProgress";
+import { calculatePayrollHourlyBreakdown } from "@/lib/payroll/contractualSupplement";
 import { PayrollSmartAudit } from "@/components/payroll/PayrollSmartAudit";
 
 const STATUS_LABELS: Record<PayrollPeriodInfo["status"], string> = {
@@ -332,11 +334,11 @@ export default function PayrollWeekView() {
                     table.period.submittedAt ? formatDateTime(table.period.submittedAt) : ""
                   }`}
                 {table.period.status === "APROBADA" &&
-                  `Entrega autorizada por ${table.period.approvedByName ?? "—"} · ${
+                  `Pago autorizado por ${table.period.approvedByName ?? "—"} · ${
                     table.period.approvedAt ? formatDateTime(table.period.approvedAt) : ""
                   }`}
                 {table.period.status === "PAGADA" &&
-                  `Pagada por recibos firmados · ${
+                  `Pagada por ${table.period.paidByName ?? "—"} · ${
                     table.period.paidAt ? formatDateTime(table.period.paidAt) : ""
                   }`}
               </p>
@@ -378,9 +380,13 @@ export default function PayrollWeekView() {
                     <span>📦</span>
                     Descargar todos los recibos (PDF)
                   </a>
-                  <span className="inline-flex items-center rounded-xl border border-outline-variant px-3 py-2 text-xs font-semibold text-on-surface-variant">
-                    Entrega autorizada · el pago se confirma con la firma de cada empleado
-                  </span>
+                  <button
+                    disabled={actionBusy}
+                    onClick={() => handlePeriodAction(markPayrollPeriodPaidAction, "Semana marcada como pagada")}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary disabled:opacity-50"
+                  >
+                    <CheckIcon className="h-3.5 w-3.5" /> Marcar pagada
+                  </button>
                   <button
                     disabled={actionBusy}
                     onClick={() =>
@@ -470,7 +476,7 @@ export default function PayrollWeekView() {
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1220px] border-separate border-spacing-0 text-sm">
+                <table className="w-full min-w-[1420px] border-separate border-spacing-0 text-sm">
                   <thead className="bg-surface-container-high">
                     <tr className="text-left text-[11px] uppercase tracking-wide text-outline">
                       <th className="sticky left-0 z-20 w-56 border-b border-r border-outline-variant bg-surface-container-high px-4 py-3 font-bold">Empleado</th>
@@ -480,7 +486,9 @@ export default function PayrollWeekView() {
                         </th>
                       ))}
                       <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Total horas</th>
-                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Pago por hora</th>
+                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Tarifa base / h</th>
+                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Prestaciones / h</th>
+                      <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Total / h</th>
                       <th className="border-b border-r border-outline-variant px-3 py-3 text-right font-bold">Total a pagar</th>
                       <th className="border-b border-outline-variant px-3 py-3 text-center font-bold">Estado / Firma</th>
                     </tr>
@@ -511,11 +519,12 @@ export default function PayrollWeekView() {
                         </td>
                         <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-semibold tabular-nums text-on-surface">
                           {employee.variableRate ? "Varias tarifas" : employee.hourlyRate === null ? "—" : money(employee.hourlyRate)}
-                          {(employee.supplementTotal ?? 0) > 0 && (
-                            <span className="block text-[10px] font-normal text-on-surface-variant">
-                              +{money(employee.supplementTotal ?? 0)} adicional semanal
-                            </span>
-                          )}
+                        </td>
+                        <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-semibold tabular-nums text-on-surface">
+                          {employee.variableRate || employee.hourlyRate === null ? "—" : money(employee.supplementHourlyRate ?? 0)}
+                        </td>
+                        <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-black tabular-nums text-primary">
+                          {employee.variableRate || employee.totalHourlyRate === null || employee.totalHourlyRate === undefined ? "—" : money(employee.totalHourlyRate)}
                         </td>
                         <td className="border-b border-r border-outline-variant px-3 py-2.5 text-right font-black tabular-nums text-on-surface">
                           {employee.missingRate && employee.adjustmentsTotal === 0
@@ -612,6 +621,17 @@ function EmployeeDetailModal({
       (detail.period.status === "REVISION" && detail.approval.status !== "REVISION")
     : false;
   const branchOptions = detail?.branches ?? [];
+  const hourlyRates = detail?.days.flatMap((day) => day.entries
+    .filter((entry) => entry.clockOut && entry.hourlyRate !== undefined)
+    .map((entry) => entry.hourlyRate)
+    .filter((rate): rate is number => typeof rate === "number")) ?? [];
+  const hasVariableHourlyRate = new Set(hourlyRates).size > 1;
+  const uniformHourlyRate = !hasVariableHourlyRate && hourlyRates.length > 0
+    ? hourlyRates[0]
+    : detail?.employee.hourlyRate ?? null;
+  const hourlyBreakdown = detail && !hasVariableHourlyRate
+    ? calculatePayrollHourlyBreakdown(uniformHourlyRate, detail.totalHours, detail.supplement?.total ?? 0)
+    : null;
 
   function navigateToEmployee(nextUserId: string) {
     if (editingEntry || showAdjustForm || justifyingDate) {
@@ -870,7 +890,7 @@ function EmployeeDetailModal({
               </button>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
               <Card className="p-3">
                 <CardLabel>Horas trabajadas</CardLabel>
                 <p className="text-lg font-bold text-on-surface">{hours(detail.totalHours)}</p>
@@ -878,14 +898,22 @@ function EmployeeDetailModal({
               <Card className="p-3">
                 <CardLabel>Tarifa base por hora</CardLabel>
                 <p className="text-lg font-bold text-on-surface">
-                  {new Set(detail.days.flatMap((day) => day.entries.filter((entry) => entry.clockOut && entry.hourlyRate !== undefined).map((entry) => entry.hourlyRate))).size > 1
+                  {hasVariableHourlyRate
                     ? "Varias tarifas"
-                    : detail.employee.hourlyRate === null ? "—" : money(detail.employee.hourlyRate)}
+                    : uniformHourlyRate === null ? "—" : money(uniformHourlyRate)}
                 </p>
               </Card>
               <Card className="p-3">
-                <CardLabel>Sueldo base por horas</CardLabel>
-                <p className="text-lg font-bold text-on-surface">{money(detail.basePay)}</p>
+                <CardLabel>Prestaciones por hora</CardLabel>
+                <p className="text-lg font-bold text-on-surface">
+                  {hourlyBreakdown ? money(hourlyBreakdown.supplementHourlyRate) : "—"}
+                </p>
+              </Card>
+              <Card className="p-3">
+                <CardLabel>Total por hora</CardLabel>
+                <p className="text-lg font-bold text-primary">
+                  {hourlyBreakdown ? money(hourlyBreakdown.totalHourlyRate) : "—"}
+                </p>
               </Card>
               <Card className="p-3">
                 <CardLabel>Total a pagar</CardLabel>

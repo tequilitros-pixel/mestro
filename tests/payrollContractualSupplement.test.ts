@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculatePayrollSupplement, effectiveSupplementPercent, sumPayrollSupplements, supplementFromSnapshotAdjustments, isPayrollRoundingDeduction, reconcilePayrollReceipt } from "../lib/payroll/contractualSupplement";
+import { calculatePayrollHourlyBreakdown, calculatePayrollSupplement, effectiveSupplementPercent, sumPayrollSupplements, supplementFromSnapshotAdjustments, isPayrollRoundingDeduction, reconcilePayrollReceipt } from "../lib/payroll/contractualSupplement";
 
 test("anexo de contrato: 40 pesos/h, 40 horas, adicional 12%", () => {
   const b = calculatePayrollSupplement(1600, 12);
   assert.deepEqual(b, { aguinaldoReference: 96, vacationsReference: 76.8, vacationPremiumReference: 19.2, total: 192 });
   assert.equal(1600 + b.total, 1792);
+});
+test("muestra tarifa, prestaciones y total por hora sin mezclar el total semanal", () => {
+  const hourly = calculatePayrollHourlyBreakdown(40, 40, 192);
+  assert.deepEqual(hourly, { baseHourlyRate: 40, supplementHourlyRate: 4.8, totalHourlyRate: 44.8 });
 });
 test("sin configuración no se altera el sueldo", () => {
   assert.equal(calculatePayrollSupplement(1600, 0).total, 0);

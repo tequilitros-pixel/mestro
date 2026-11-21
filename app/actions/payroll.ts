@@ -17,7 +17,7 @@ import {
 } from "@/lib/payroll/legacyRules";
 import { resolveBranchHourlyRate, summarizeHourlyRates, type HourlyRateRow } from "@/lib/payroll/branchRates";
 import { formatCivilDate } from "@/lib/dateTime";
-import { calculatePayrollSupplement, effectiveSupplementPercent, sumPayrollSupplements, supplementFromSnapshotAdjustments, isPayrollRoundingDeduction, type PayrollSupplementBreakdown } from "@/lib/payroll/contractualSupplement";
+import { calculatePayrollHourlyBreakdown, calculatePayrollSupplement, effectiveSupplementPercent, sumPayrollSupplements, supplementFromSnapshotAdjustments, isPayrollRoundingDeduction, type PayrollSupplementBreakdown } from "@/lib/payroll/contractualSupplement";
 import { sendPayrollReviewEmail } from "@/lib/email";
 
 /**
@@ -147,6 +147,8 @@ export type PayrollWeekEmployee = {
   totalHours: number;
   estimatedPay: number;
   supplementTotal?: number;
+  supplementHourlyRate?: number | null;
+  totalHourlyRate?: number | null;
   adjustmentsTotal: number;
   finalPay: number;
   approval: PayrollEmployeeApproval;
@@ -393,6 +395,9 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
       computeHourlyPay(shift.hours, shift.rate),
       effectiveSupplementPercent(supplementRatesByUser.get(employee.id) ?? [], shift.clockIn),
     )));
+    const hourlyBreakdown = variableRate
+      ? null
+      : calculatePayrollHourlyBreakdown(hourlyRate, totalHours, supplement.total);
     const estimatedPay = basePay + supplement.total;
     const adjustmentsTotal = netAdjustmentAmount(employeeAdjustments);
     const finalPay = estimatedPay + adjustmentsTotal;
@@ -410,6 +415,8 @@ async function computeLiveWeekEmployees(mondayStr: string, includedUserIds: stri
       totalHours,
       estimatedPay,
       supplementTotal: supplement.total,
+      supplementHourlyRate: hourlyBreakdown?.supplementHourlyRate ?? null,
+      totalHourlyRate: hourlyBreakdown?.totalHourlyRate ?? null,
       adjustmentsTotal,
       finalPay,
       approval: { status: "BORRADOR", approvedByName: null, approvedAt: null },
@@ -1088,6 +1095,14 @@ export async function getPayrollWeekTable(
           .filter((shift) => shift.clockOut)
           .map((shift) => shift.hourlyRate === undefined ? (entry.hourlyRate === null ? null : Number(entry.hourlyRate)) : shift.hourlyRate));
         const snapshotSummary = summarizeHourlyRates(snapshotRates, entry.hourlyRate === null ? null : Number(entry.hourlyRate));
+        const supplement = supplementFromSnapshotAdjustments(entry.adjustmentsSnapshot as PayrollAdjustmentRow[]);
+        const hourlyBreakdown = snapshotSummary.variableRate
+          ? null
+          : calculatePayrollHourlyBreakdown(
+              entry.hourlyRate !== null ? Number(entry.hourlyRate) : null,
+              Number(entry.totalHours),
+              supplement.total,
+            );
         return {
           id: user.id,
           name: user.name,
@@ -1100,7 +1115,9 @@ export async function getPayrollWeekTable(
           overtimeHours: Number(entry.overtimeHours),
           totalHours: Number(entry.totalHours),
           estimatedPay: Number(entry.totalPay) - Number(entry.adjustmentsTotal),
-          supplementTotal: supplementFromSnapshotAdjustments(entry.adjustmentsSnapshot as PayrollAdjustmentRow[]).total,
+          supplementTotal: supplement.total,
+          supplementHourlyRate: hourlyBreakdown?.supplementHourlyRate ?? null,
+          totalHourlyRate: hourlyBreakdown?.totalHourlyRate ?? null,
           adjustmentsTotal: Number(entry.adjustmentsTotal),
           finalPay: Number(entry.totalPay),
           approval: {
@@ -1599,12 +1616,38 @@ export async function approvePayrollEntryAction(weekStart: string, userId: strin
   return result;
 }
 
-/** Compatibilidad: la semana ya no puede marcarse pagada manualmente.
- * Cada trabajador la confirma firmando su recibo. */
-export async function markPayrollPeriodPaidAction(_weekStart: string) {
+/** APROBADA -> PAGADA. Solo administración; la firma se conserva como comprobante posterior. */
+export async function markPayrollPeriodPaidAction(weekStart: string) {
   const admin = await requireAdmin();
   if (!admin) return { error: "No tienes permiso" };
-  return { error: "El estado PAGADA se registra automáticamente al firmar de recibido todos los trabajadores. No se permite marcar sin firma." };
+
+  const mondayStr = mondayOfWeek(weekStart);
+  const result = await prisma.$transaction(async (tx) => {
+    const periods = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT "id", "status"::text AS "status"
+      FROM "PayrollPeriod"
+      WHERE "weekStart" = ${parseDateOnly(mondayStr)}
+      FOR UPDATE
+    `;
+    const period = periods[0];
+    if (!period || period.status !== "APROBADA") {
+      return { error: "Esta semana no está aprobada para pago" };
+    }
+
+    await tx.payrollEntry.updateMany({
+      where: { periodId: period.id, status: "APROBADA" },
+      data: { status: "PAGADA" },
+    });
+    await tx.payrollPeriod.update({
+      where: { id: period.id },
+      data: { status: "PAGADA", paidById: admin.id, paidAt: new Date() },
+    });
+    return { success: true };
+  });
+
+  revalidatePath("/timeclock/payroll");
+  revalidateTag("payroll-analytics", "max");
+  return result;
 }
 
 /**

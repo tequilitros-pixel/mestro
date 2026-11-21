@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { mondayOfWeek, parseDateOnly } from "@/lib/dateOnly";
-import { shouldClosePayrollPeriodOnReceipt } from "@/lib/payroll/receiptSettlement";
 
 /** Firma personal e inmutable del recibo aprobado o pagado. */
 export async function savePayrollSignatureAction(input: {
@@ -32,8 +31,7 @@ export async function savePayrollSignatureAction(input: {
   } catch {
     return { error: "Semana de nómina inválida" };
   }
-  // Serializar firmas y cierre de periodo bajo el mismo bloqueo, incluso
-  // si dos empleados confirman su recibo al mismo tiempo.
+  // La firma se guarda bajo bloqueo para conservar su carácter inmutable.
   const result = await prisma.$transaction(async (tx) => {
     const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>`
       SELECT "id", "status"::text AS "status"
@@ -64,23 +62,10 @@ export async function savePayrollSignatureAction(input: {
         status: { in: ["APROBADA", "PAGADA"] },
         signedAt: null,
       },
-      data: { signatureData, signedAt: now, signedByName: user.name, status: "PAGADA" },
+      data: { signatureData, signedAt: now, signedByName: user.name },
     });
     if (updated.count !== 1) {
       return { error: "El recibo cambió o ya fue firmado. Actualiza la página." };
-    }
-
-    // La semana sólo está PAGADA cuando cada expediente está PAGADO.
-    // En particular, no cerrar una semana con compañeros sin firmar.
-    const pendingCount = await tx.payrollEntry.count({
-      where: { periodId: period.id, status: { not: "PAGADA" } },
-    });
-    const totalCount = await tx.payrollEntry.count({ where: { periodId: period.id } });
-    if (shouldClosePayrollPeriodOnReceipt(period.status, totalCount, pendingCount)) {
-      await tx.payrollPeriod.update({
-        where: { id: period.id },
-        data: { status: "PAGADA", paidAt: now },
-      });
     }
 
     return { success: true, signedAt: now.toISOString(), signedByName: user.name };
