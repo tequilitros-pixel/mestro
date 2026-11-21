@@ -774,6 +774,37 @@ export const SUBMENUS: Record<Exclude<AppModule, "home">, SubMenuItem[]> = {
       operatorAllowed: true,
     },
   ],
+
+  "tequilitros-quote": [
+    {
+      href: "/cotizador-tequilitros",
+      label: "Cotizador",
+      icon: PartyIcon,
+      iconVariant: "orange",
+      operatorAllowed: true,
+    },
+    {
+      href: "/cotizador-tequilitros/calendario",
+      label: "Calendario",
+      icon: CalendarIcon,
+      iconVariant: "amber",
+      operatorAllowed: true,
+    },
+    {
+      href: "/cotizador-tequilitros/historial",
+      label: "Cotizaciones",
+      icon: ListChecksIcon,
+      iconVariant: "blue",
+      operatorAllowed: true,
+    },
+    {
+      href: "/cotizador-tequilitros/contratos",
+      label: "Recibos y Contratos",
+      icon: ClipboardIcon,
+      iconVariant: "purple",
+      operatorAllowed: true,
+    },
+  ],
 };
 
 export function matchesRoute(pathname: string, href: string) {
@@ -820,6 +851,10 @@ export function getCurrentModule(pathname: string): AppModule {
 
   if (matchesRoute(pathname, "/administration")) {
     return "administration";
+  }
+
+  if (matchesRoute(pathname, "/cotizador-tequilitros")) {
+    return "tequilitros-quote";
   }
 
   if (matchesRoute(pathname, "/cotizador-tequilitros")) {

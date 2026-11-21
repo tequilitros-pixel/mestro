@@ -3,7 +3,6 @@
 import { useMemo, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
 import {
-  createMultiVariantProductAction,
   createPosCategoryAction,
   createPosProductAction,
   createPosVariantAction,
@@ -455,16 +454,6 @@ export default function PosCatalogManager({
               + Nueva Categoría
             </button>
 
-            {/* Botón Mágico Charro Negro */}
-            <button
-              onClick={handleCreateFullCharroNegro}
-              disabled={pending}
-              className="inline-flex items-center gap-2 rounded-xl bg-amber-500/15 border border-amber-500/40 px-4 py-2.5 text-sm font-bold text-amber-500 hover:bg-amber-500/25 transition shadow-sm"
-              title="Crea el producto Charro Negro con sus 4 variedades listas (Mediano, Grande, Mediano sin tequila, Grande sin tequila)"
-            >
-              <span>🥃</span> + Agregar Charro Negro Completo
-            </button>
-
             <button
               onClick={handleOpenNewProduct}
               className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary shadow-lg shadow-primary/20 hover:opacity-95 active:scale-95 transition"
@@ -533,7 +522,7 @@ export default function PosCatalogManager({
             <div className="rounded-2xl border border-dashed border-outline-variant p-12 text-center text-on-surface-variant">
               <p className="text-base font-semibold">No se encontraron productos.</p>
               <p className="text-xs mt-1">
-                Haz clic en "+ Agregar Charro Negro Completo" o "+ Nuevo Producto" para comenzar.
+                Haz clic en "+ Nuevo Producto" para comenzar.
               </p>
             </div>
           ) : (
