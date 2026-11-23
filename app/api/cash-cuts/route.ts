@@ -109,11 +109,20 @@ export async function GET(request: Request) {
     include: {
       branch: true,
       responsible: { select: { id: true, name: true } },
+      salesByMethod: { select: { amount: true } },
     },
     orderBy: { date: "desc" },
   });
 
-  return NextResponse.json(cashCuts);
+  // El total de un corte ABIERTO se consolida al cerrarlo. Mientras
+  // está activo, leer lo efectivamente acumulado en los métodos de pago.
+  // Esto no modifica la caja ni duplica las ventas registradas por el POS.
+  return NextResponse.json(cashCuts.map(({ salesByMethod, ...cut }) => ({
+    ...cut,
+    totalSales: cut.status === "ABIERTO"
+      ? Math.round(salesByMethod.reduce((sum, payment) => sum + payment.amount, 0) * 100) / 100
+      : cut.totalSales,
+  })));
 }
 
 export async function POST(request: Request) {

@@ -49,6 +49,7 @@ export async function GET(
             total: true,
             createdAt: true,
             soldBy: { select: { id: true, name: true } },
+            payments: { select: { method: true, amount: true } },
             items: {
               select: {
                 id: true,

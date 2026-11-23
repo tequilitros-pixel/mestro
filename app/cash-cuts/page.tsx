@@ -34,6 +34,7 @@ export default async function CashCutsPage() {
         code: true,
         openedAt: true,
         totalSales: true,
+        salesByMethod: { select: { amount: true } },
         startingFund: true,
         branch: { select: { name: true } },
         responsible: { select: { name: true } },
@@ -64,7 +65,7 @@ export default async function CashCutsPage() {
                 openedAt: corte.openedAt.toISOString(),
                 branchName: corte.branch.name,
                 responsibleName: corte.responsible.name,
-                totalSales: corte.totalSales,
+                totalSales: Math.round(corte.salesByMethod.reduce((sum, payment) => sum + payment.amount, 0) * 100) / 100,
                 startingFund: corte.startingFund,
               }
             : null
