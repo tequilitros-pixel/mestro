@@ -47,6 +47,7 @@ export default function WeeklyEntryForm({
 }) {
   const [values, setValues] = useState<Record<string, RowValue>>({});
   const [branchId, setBranchId] = useState("");
+  const [notes, setNotes] = useState("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [saving, setSaving] = useState(false);
@@ -120,6 +121,7 @@ export default function WeeklyEntryForm({
     setResult(null);
     operationId.current ??= generateClientOperationId();
     formData.set("branchId", branchId);
+    formData.set("notes", notes);
     formData.set("items", JSON.stringify(review.map(({ productId, quantity, loosePieces, captureUnit }) => ({
       productId, quantity, ...(loosePieces !== undefined ? { loosePieces } : {}), captureUnit,
     }))));
@@ -138,6 +140,7 @@ export default function WeeklyEntryForm({
         operationId.current = null;
         setReview(null);
         setValues({});
+        setNotes("");
         setSearch("");
         setCategory("");
       }
@@ -167,7 +170,7 @@ export default function WeeklyEntryForm({
         </label>
         <label className="space-y-2">
           <span className="text-sm font-semibold text-on-surface-variant">Nota de la entrada</span>
-          <input name="notes" placeholder="Ej. Surtido semanal · 12 de octubre" maxLength={500} className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none placeholder:text-outline focus:border-primary" />
+          <input name="notes" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Ej. Surtido semanal · 12 de octubre" maxLength={500} className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none placeholder:text-outline focus:border-primary" />
         </label>
       </div>
 
@@ -247,6 +250,7 @@ export default function WeeklyEntryForm({
         <section className="space-y-4 rounded-xl border border-outline-variant bg-background p-4" aria-label="Revisar antes de guardar">
           <h2 className="text-lg font-bold">Revisar antes de guardar</h2>
           <p className="text-sm text-on-surface-variant">Sucursal: <strong>{branches.find((b) => b.id === branchId)?.name}</strong> · {review.length} productos. Aún no se ha registrado ninguna entrada.</p>
+          {notes.trim() && <p className="text-sm text-on-surface-variant">Nota: {notes.trim()}</p>}
           <div className="divide-y divide-outline-variant">
             {review.map((item) => (
               <div key={item.productId} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
@@ -269,7 +273,7 @@ export default function WeeklyEntryForm({
           <div className="divide-y divide-outline-variant">
             {receipt.items.map((item) => (
               <div key={item.productId} className="flex flex-wrap justify-between gap-2 py-2 text-sm">
-                <span>{item.productName}</span><span className="font-semibold">{item.display}</span>
+                <span>{item.productName}</span><span className="text-right font-semibold">{item.display}<span className="block text-xs font-normal text-on-surface-variant">Equivale a {item.equivalent}</span></span>
               </div>
             ))}
           </div>
