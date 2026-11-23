@@ -24,7 +24,7 @@ type CountException = {
   code: string;
   branch: string;
   countDate: Date;
-  changedProducts: bigint;
+  changedProducts: number;
 };
 type MovementException = {
   id: string;
@@ -75,7 +75,7 @@ export default async function ReconciliationAuditPage() {
 
   const countExceptions = await prisma.$queryRaw<CountException[]>`
     SELECT c.id,c.code,b.name AS branch,c."countDate",
-      COUNT(*)::bigint AS "changedProducts"
+      COUNT(*)::integer AS "changedProducts"
     FROM "InventoryCount" c
     JOIN "Branch" b ON b.id=c."branchId"
     JOIN "InventoryCountItem" i ON i."countId"=c.id
@@ -91,8 +91,8 @@ export default async function ReconciliationAuditPage() {
     const grouped = new Map<string, CountException>();
     for (const row of rows) {
       const previous = grouped.get(row.id);
-      if (previous) previous.changedProducts += 1n;
-      else grouped.set(row.id, { ...row, changedProducts: 1n });
+      if (previous) previous.changedProducts += 1;
+      else grouped.set(row.id, { ...row, changedProducts: 1 });
     }
     return [...grouped.values()].sort((a,b) => b.countDate.getTime()-a.countDate.getTime());
   });
