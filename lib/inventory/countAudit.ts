@@ -15,14 +15,15 @@ export function isPotentialInventoryCountOutlier(input: {
   const { expected, counted, normalizedContentPerUnit, missingCost } = input;
   if (counted === null || !Number.isFinite(counted) || counted < 0) return false;
   if (!Number.isFinite(expected) || expected <= 0) return false;
-  if (!Number.isFinite(missingCost) || missingCost < 5000) return false;
+  if (!Number.isFinite(missingCost) || missingCost < 0) return false;
   const presentation =
     normalizedContentPerUnit !== null &&
     Number.isFinite(normalizedContentPerUnit) &&
     normalizedContentPerUnit > 0
       ? normalizedContentPerUnit
       : 1;
-  return expected > 50 * Math.max(counted, presentation);
+  return expected > 50 * Math.max(counted, presentation)
+    && (missingCost >= 5000 || expected - counted >= 1000 * presentation);
 }
 
 /**
@@ -45,5 +46,5 @@ export function isImplausibleInventoryIncrease(input: {
   const cost = costPerBaseUnit !== null && Number.isFinite(costPerBaseUnit) && costPerBaseUnit > 0
     ? costPerBaseUnit : 0;
   return captured > 50 * Math.max(expected, factor)
-    && (captured - expected) * cost >= 5000;
+    && ((captured - expected) * cost >= 5000 || captured - expected >= 1000 * factor);
 }
