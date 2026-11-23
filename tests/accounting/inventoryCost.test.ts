@@ -22,7 +22,7 @@ test("el costo del resumen semanal se calcula por ml y g, no por presentación c
   const aguaMineral = costPerInventoryBaseUnit({
     unitCost: 28, inventoryBaseUnit: "ML", normalizedContentPerUnit: 1750,
   });
-  assert.ok(hielo !== null && aguaMineral !== null);
+  if (hielo === null || aguaMineral === null) throw new Error("Faltan factores de conversión");
   assert.equal(Number((21000 * hielo).toFixed(2)), 84);
   assert.equal(Number((7790 * aguaMineral).toFixed(2)), 124.64);
   // Multiplicar 21,000 gramos por $20/bolsa sobrevalúa la diferencia 5,000 veces.
