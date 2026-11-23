@@ -145,7 +145,7 @@ export default async function CountDetailPage({
               {hasUncomputedFlow ? " Las entradas y el consumo por venta no se calculan en este corte; se consultan en Movimientos." : ""}
             </p>
           </div>
-        )
+        )}
 
         {editable && pendingItems.length > 0 && (
           <div
