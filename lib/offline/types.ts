@@ -45,6 +45,7 @@ export type OfflineOperation = {
   attempts: number;
   status: OfflineOperationStatus;
   lastError?: string;
+  syncStartedAt?: string;
 };
 
 export type SyncSnapshot = {

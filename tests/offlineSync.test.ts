@@ -26,6 +26,6 @@ test("el indicador separa operaciones fallidas de las pendientes", () => {
       pending: 8,
       lastSyncedAt: null,
     }),
-    "1 con error · 8 pendientes · Reintentar",
+    "1 con error · 8 pendientes · Revisar",
   );
 });

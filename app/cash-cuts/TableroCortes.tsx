@@ -239,6 +239,7 @@ export default function TableroCortes({
       <nav aria-label="Vistas de cortes" className="flex gap-2 border-b border-outline-variant pb-2 text-sm font-bold">
         <span aria-current="page" className="rounded-lg bg-primary px-4 py-2 text-on-primary">Cortes actuales</span>
         {canArchive && <Link href="/cash-cuts/history" className="rounded-lg px-4 py-2 text-on-surface-variant hover:bg-surface-container">Historial</Link>}
+        {canArchive && <Link href="/administration/audit/conciliacion" className="rounded-lg px-4 py-2 font-bold text-secondary hover:bg-surface-container">Auditoría y conciliación</Link>}
       </nav>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
