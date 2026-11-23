@@ -379,7 +379,7 @@ export async function closeInventoryCountAction(
       };
     }
     const outdatedRows = error instanceof Error
-      ? /^COUNT_RECAPTURE_REQUIRED:(\\d+):(.+)$/.exec(error.message)
+      ? /^COUNT_RECAPTURE_REQUIRED:(\d+):(.+)$/.exec(error.message)
       : null;
     if (outdatedRows) {
       return {
