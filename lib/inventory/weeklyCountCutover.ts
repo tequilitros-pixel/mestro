@@ -2,6 +2,8 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type CatalogBaseUnit } from "@prisma/client";
 import { appendAuditEvent } from "@/lib/pos2/audit";
+import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
+import { isImplausibleInventoryIncrease } from "@/lib/inventory/countAudit";
 
 function declarationOperationId(countId: string, itemId: string, countDate: Date) {
   const entropy = createHash("sha256")
@@ -77,9 +79,21 @@ export async function reconcileWeeklyCountCutover(
     if (counted.isNegative()) throw new Error("INVALID_COUNT");
 
     await tx.$executeRaw`INSERT INTO "InventoryBalance" ("id","branchId","inventoryProductId","quantity","unit","version","createdAt","updatedAt") VALUES (${randomUUID()},${count.branchId},${product.id},0,${product.inventoryBaseUnit}::"CatalogBaseUnit",1,NOW(),NOW()) ON CONFLICT ("branchId","inventoryProductId") DO NOTHING`;
-    const locked = await tx.$queryRaw<Array<{ id: string; quantity: Prisma.Decimal }>>`SELECT "id","quantity" FROM "InventoryBalance" WHERE "branchId"=${count.branchId} AND "inventoryProductId"=${product.id} FOR UPDATE`;
+    const locked = await tx.$queryRaw<Array<{ id: string; quantity: Prisma.Decimal; unit: CatalogBaseUnit }>>`SELECT "id","quantity","unit" FROM "InventoryBalance" WHERE "branchId"=${count.branchId} AND "inventoryProductId"=${product.id} FOR UPDATE`;
     const balance = locked[0];
     if (!balance) throw new Error("BALANCE_NOT_FOUND");
+    if (balance.unit !== product.inventoryBaseUnit) throw new Error("COUNT_UNIT_MISMATCH");
+
+    const normalizedFactor = product.normalizedContentPerUnit === null
+      ? null : Number(product.normalizedContentPerUnit);
+    if (isImplausibleInventoryIncrease({
+      expected: Math.max(0, Number(balance.quantity)),
+      captured: Number(counted),
+      normalizedContentPerUnit: normalizedFactor,
+      costPerBaseUnit: costPerInventoryBaseUnit(product),
+    }) && !item.notes?.trim()) {
+      throw new Error("COUNT_UNVERIFIED_INCREASE:" + product.name);
+    }
 
     const delta = counted.minus(balance.quantity);
     let movementId: string | null = null;
@@ -138,8 +152,11 @@ export async function reconcileWeeklyCountCutover(
         previousQuantity: balance.quantity,
         entriesQuantity: 0,
         quantityConsumed: 0,
-        unitCostAtTime: product.unitCost,
-        costTotal: 0,
+        // El snapshot registra costo por ML/G/UNIT, nunca por botella/bolsa.
+        unitCostAtTime: costPerInventoryBaseUnit(product),
+        // No se infiere el consumo semanal de una corrección de conteo.
+        quantityConsumed: null,
+        costTotal: null,
       },
     });
 
