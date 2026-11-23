@@ -117,6 +117,7 @@ interface CashCut {
     total: number;
     createdAt: string;
     soldBy: { id: string; name: string };
+    payments: Array<{ method: string; amount: number }>;
     items: Array<{
       id: string;
       name: string;
