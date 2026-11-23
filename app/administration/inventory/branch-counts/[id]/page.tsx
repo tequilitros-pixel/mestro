@@ -11,7 +11,7 @@ import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresenta
 import { formatBusinessDateTime } from "@/lib/dateTime";
 import { inventoryCountTypeLabel, isProductIncludedInInventoryCount } from "@/lib/inventory/countScope";
 import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
-import { isPotentialInventoryCountOutlier, isImplausibleInventoryIncrease } from "@/lib/inventory/countAudit";
+import { isPotentialInventoryCountOutlier, isImplausibleInventoryIncrease, countAmountInPesos } from "@/lib/inventory/countAudit";
 
 export default async function CountDetailPage({
   params,
@@ -71,8 +71,8 @@ export default async function CountDetailPage({
     const missing = actual === null ? 0 : Math.max(0, expected - actual);
     const surplus = actual === null ? 0 : Math.max(0, actual - expected);
     const costPerBase = costPerInventoryBaseUnit(item.product) ?? 0;
-    const missingCost = missing * costPerBase;
-    const surplusCost = surplus * costPerBase;
+    const missingCost = countAmountInPesos(missing, costPerBase);
+    const surplusCost = countAmountInPesos(surplus, costPerBase);
     const presentation = item.product.normalizedContentPerUnit === null
       ? null : Number(item.product.normalizedContentPerUnit);
     const requiresReview = isPotentialInventoryCountOutlier({
