@@ -40,6 +40,12 @@ const entryTypeLabels: Record<string, string> = {
 
 const quickActions = [
   {
+    label: "Auditoría y conciliación",
+    href: "/administration/audit/conciliacion",
+    permissionKey: "/administration/audit/conciliacion",
+    adminOnly: true,
+  },
+  {
     label: "Dashboard de conteos semanales",
     href: "/administration/inventory/branch-counts/statistics",
     permissionKey: "/administration/inventory/branch-counts/statistics",
