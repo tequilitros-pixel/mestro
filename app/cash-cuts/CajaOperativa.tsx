@@ -192,6 +192,12 @@ export default function CajaOperativa({
           </Link>
         </div>
         <Link
+          href={`/cash-cuts/daily/${corte.id}#transacciones-corte`}
+          className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-primary/50 bg-primary/10 px-5 text-sm font-bold text-primary transition hover:bg-primary/15"
+        >
+          Ver transacciones en vivo
+        </Link>
+        <Link
           href={`/pospress?branchId=${encodeURIComponent(corte.branchId)}`}
           className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-secondary/40 bg-secondary/10 px-5 text-sm font-bold text-secondary transition hover:bg-secondary/15 active:scale-[0.98]"
         >
