@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma, type CatalogBaseUnit } from "@prisma/client";
 import { randomUUID } from "node:crypto";
+import { normalizePosRecipeQuantity } from "@/lib/pos/normalizeRecipeQuantity";
 import { DomainError } from "@/lib/domain/errors";
 
 export type PospressInventoryRequirement = {
@@ -176,7 +177,7 @@ async function applyPospressInventoryDeltas(
   return created;
 }
 
-export function consumePospressInventoryV2(
+export async function consumePospressInventoryV2(
   tx: Prisma.TransactionClient,
   input: {
     branchId: string;
@@ -187,19 +188,57 @@ export function consumePospressInventoryV2(
   },
 ) {
   const operationId = input.operationId ?? randomUUID();
-  return applyPospressInventoryDeltas(tx, {
-    branchId: input.branchId,
-    actorId: input.actorId,
-    operationId,
-    deltas: input.requirements.map((requirement) => ({
+  const productIds = [...new Set(input.requirements.map((requirement) => requirement.inventoryProductId))];
+  const products = await tx.inventoryProduct.findMany({
+    where: { id: { in: productIds } },
+    select: {
+      id: true,
+      name: true,
+      inventoryBaseUnit: true,
+      handlingUnit: true,
+      contentPerUnit: true,
+      contentUnit: true,
+      normalizedContentPerUnit: true,
+    },
+  });
+  const productsById = new Map(products.map((product) => [product.id, product]));
+
+  const deltas = input.requirements.map((requirement) => {
+    const product = productsById.get(requirement.inventoryProductId);
+    if (!product) {
+      throw new DomainError("INVENTORY_ITEM_NOT_FOUND", {
+        inventoryProductId: requirement.inventoryProductId,
+      });
+    }
+
+    const normalized = normalizePosRecipeQuantity(requirement.quantity, requirement.unit, product);
+    if (!normalized) {
+      throw new DomainError(
+        "INVENTORY_UNIT_MISMATCH",
+        {
+          inventoryProductId: requirement.inventoryProductId,
+          expected: product.inventoryBaseUnit,
+          received: requirement.unit,
+        },
+        `Revisa la unidad de la receta de ${product.name}: no coincide con el inventario y no tiene conversión de presentación válida.`,
+      );
+    }
+    return {
       inventoryProductId: requirement.inventoryProductId,
-      quantityDelta: new Prisma.Decimal(requirement.quantity).negated(),
-      unit: requirement.unit,
+      quantityDelta: normalized.quantity.negated(),
+      unit: normalized.unit,
       sourceId: input.saleId,
       movementType: "SALE_CONSUMPTION" as const,
       sourceType: "SALE" as const,
       reasonCode: "POSPRESS_SALE",
-    })),
+    };
+  });
+
+  return applyPospressInventoryDeltas(tx, {
+    branchId: input.branchId,
+    actorId: input.actorId,
+    operationId,
+    deltas,
   });
 }
 
