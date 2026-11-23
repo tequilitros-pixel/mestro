@@ -19,6 +19,7 @@ type CashException = {
   paid: number;
   pos: number;
 };
+type EarlySale = { id: string; code: string; cashCutId: string; branch: string; createdAt: Date; openedAt: Date; total: number };
 type CountException = {
   id: string;
   code: string;
@@ -119,6 +120,20 @@ export default async function ReconciliationAuditPage() {
     GROUP BY p.id ORDER BY p.name
   `;
 
+  const longOpenCuts = await prisma.cashCut.findMany({
+    where: { status: "ABIERTO", openedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+    select: { id: true, code: true, openedAt: true, branch: { select: { name: true } } },
+    orderBy: { openedAt: "asc" },
+    take: 30,
+  });
+  const salesBeforeOpening = await prisma.$queryRaw<EarlySale[]>`
+    SELECT s.id,s.code,s."cashCutId",b.name AS branch,s."createdAt",c."openedAt",s.total
+    FROM "PosSale" s JOIN "CashCut" c ON c.id=s."cashCutId"
+    JOIN "Branch" b ON b.id=s."branchId"
+    WHERE s."createdAt"<c."openedAt"-INTERVAL '2 minutes'
+    ORDER BY s."createdAt" DESC LIMIT 30
+  `;
+
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
       <div className="mx-auto max-w-6xl space-y-8">
@@ -153,6 +168,30 @@ export default async function ReconciliationAuditPage() {
             })}
           </div>
         </section>
+        {(longOpenCuts.length > 0 || salesBeforeOpening.length > 0) && (
+          <section className="rounded-2xl border border-outline-variant bg-surface-container p-5">
+            <h2 className="text-lg font-bold">Fechas de operación por conciliar</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Cortes abiertos por más de 24 horas y ventas históricas con fecha previa a la apertura del corte asignado.
+              No se cerró ninguna caja ni se cambiaron fechas automáticamente.
+            </p>
+            <div className="mt-4 space-y-2">
+              {longOpenCuts.map((row) => (
+                <Link key={row.id} href={`/cash-cuts/daily/${row.id}`} className="flex flex-wrap justify-between gap-2 rounded-lg border border-outline-variant p-3 text-sm hover:bg-surface-container-high">
+                  <strong>{row.code} · {row.branch.name}</strong>
+                  <span className="text-secondary">Abierto desde {date(row.openedAt)} · Revisar cierre</span>
+                </Link>
+              ))}
+              {salesBeforeOpening.map((row) => (
+                <Link key={row.id} href={`/cash-cuts/daily/${row.cashCutId}`} className="flex flex-wrap justify-between gap-2 rounded-lg border border-outline-variant p-3 text-sm hover:bg-surface-container-high">
+                  <strong>{row.code} · {row.branch}</strong>
+                  <span className="text-secondary">Venta {date(row.createdAt)} · Apertura {date(row.openedAt)} · {currency(row.total)}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="rounded-2xl border border-outline-variant bg-surface-container p-5">
           <h2 className="text-lg font-bold">Conteos con saldo cambiado después de la captura ({countExceptions.length})</h2>
           <p className="mt-1 text-sm text-on-surface-variant">Requieren cotejar el horario de conteo con ventas, entradas y cierres. Los nuevos cierres ya bloquean el saldo neto desactualizado.</p>
