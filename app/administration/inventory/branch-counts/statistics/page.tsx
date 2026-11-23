@@ -11,6 +11,7 @@ import {
 } from "@/lib/inventory/units";
 import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
 import { isPotentialInventoryCountOutlier } from "@/lib/inventory/countAudit";
+import { consolidateSaleConsumption } from "@/lib/inventory/saleConsumptionSummary";
 import CountDashboardCharts from "./CountDashboardCharts";
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -125,8 +126,7 @@ export default async function BranchCountStatisticsPage({
   };
   const movementWhere: Prisma.InventoryMovementWhereInput = {
     branchId: branchFilter,
-    movementType: InventoryMovementTypeV2.SALE_CONSUMPTION,
-    quantityDelta: { lt: 0 },
+    movementType: { in: [InventoryMovementTypeV2.SALE_CONSUMPTION, InventoryMovementTypeV2.SALE_REVERSAL] },
     ...(dateFilter ? { createdAt: dateFilter } : {}),
   };
   const branchWhere = allowedBranchIds === null ? { active: true } : { active: true, id: { in: allowedBranchIds } };
@@ -183,7 +183,7 @@ export default async function BranchCountStatisticsPage({
     }),
     prisma.inventoryMovement.groupBy({
       where: movementWhere,
-      by: ["branchId", "inventoryProductId", "unit"],
+      by: ["branchId", "inventoryProductId", "unit", "movementType"],
       _sum: { quantityDelta: true },
       _count: { _all: true },
     }),
@@ -243,6 +243,7 @@ export default async function BranchCountStatisticsPage({
     branchId: string;
     inventoryProductId: string;
     unit: string;
+    movementType: InventoryMovementTypeV2;
     _sum: { quantityDelta: Prisma.Decimal | null };
     _count: { _all: number };
   }>;
@@ -270,35 +271,49 @@ export default async function BranchCountStatisticsPage({
   const productNames = new Map(productCodes.map((p) => [p.id, `${p.name} (${p.code})`]));
   const productConfigs = new Map(productCodes.map((p) => [p.id, p]));
 
-  // 1. TOP CONSUMO: Ordenado por valor financiero consumido ($) y velocidad de agotamiento
-  const consumption = consumptionGroupRows
+  // 1. TOP CONSUMO: un producto puede tener ventas en varias sucursales.
+  // Agrupamos por artículo+unidad y restamos las devoluciones antes de
+  // valorizar. Un movimiento de inventario no equivale a un ticket POS.
+  const branchNames = new Map(branches.map((b) => [b.id, b.name]));
+  const consumption = consolidateSaleConsumption(
+    consumptionGroupRows.map((group) => ({
+      inventoryProductId: group.inventoryProductId,
+      branchId: group.branchId,
+      unit: group.unit,
+      movementType: group.movementType as "SALE_CONSUMPTION" | "SALE_REVERSAL",
+      quantityDelta: Number(group._sum.quantityDelta ?? 0),
+      movements: group._count._all,
+    })),
+  )
     .map((group) => {
-      // A historical movement can remain after its catalog item was removed. Keep
-      // it visible with a neutral cost/unit configuration instead of inventing a
-      // cost or failing the entire statistics screen.
       const p = productConfigs.get(group.inventoryProductId) ?? {
         unit: group.unit,
         inventoryBaseUnit: group.unit,
         unitCost: null,
       };
-      const amount = Math.abs(Number(group._sum.quantityDelta ?? 0));
       const baseCost = costPerInventoryBaseUnit(p) ?? (p.unitCost ? Number(p.unitCost) : 0);
-      const totalCost = amount * baseCost;
       return {
-        id: group.inventoryProductId,
+        id: `${group.inventoryProductId}:${group.unit}`,
         name: productNames.get(group.inventoryProductId) ?? "Producto histórico",
         product: p,
-        amount,
-        totalCost,
-        count: group._count._all,
+        amount: group.amount,
+        totalCost: group.amount * baseCost,
+        count: group.saleMovements,
+        reversals: group.reversalMovements,
+        branches: group.branches.map((row) => ({
+          name: branchNames.get(row.branchId) ?? "Sucursal histórica",
+          amount: row.amount,
+        })),
       };
     })
+    .filter((product) => product.amount > 0)
     .sort((a, b) => b.totalCost - a.totalCost || b.amount - a.amount);
 
-  const branchNames = new Map(branches.map((b) => [b.id, b.name]));
   const consumptionByBranch = [
     ...consumptionGroupRows
       .reduce((map, group) => {
+        // Solo contar descuentos por venta: las devoluciones no son consumo.
+        if (group.movementType !== InventoryMovementTypeV2.SALE_CONSUMPTION) return map;
         const current = map.get(group.branchId) ?? {
           name: branchNames.get(group.branchId) ?? "Sucursal histórica",
           movements: 0,
@@ -885,9 +900,9 @@ export default async function BranchCountStatisticsPage({
           </DataCard>
 
           {/* Top Consumo / Rotación rápida */}
-          <DataCard title="Top Productos que más Rápido se están Agotando">
+          <DataCard title="Productos con mayor consumo POS valorizado">
             <p className="mb-3 text-xs text-on-surface-variant">
-              Productos de mayor rotación y consumo por ventas o recetas dentro del periodo.
+              Ventas POS netas de devoluciones, agrupadas por producto entre sucursales. Importes a costo de inventario, no a precio de venta.
             </p>
             {consumption.length === 0 ? (
               <Empty />
@@ -904,8 +919,13 @@ export default async function BranchCountStatisticsPage({
                           {idx + 1}. {item.name}
                         </p>
                         <p className="text-xs text-on-surface-variant">
-                          {item.count} órdenes o recetas aplicadas
+                          {item.count} movimientos de venta{item.reversals > 0 ? ` · ${item.reversals} devoluciones` : ""}
                         </p>
+                        {item.branches.length > 1 && (
+                          <p className="mt-1 text-[11px] text-on-surface-variant">
+                            {item.branches.map((row) => `${row.name}: ${formatQuantity(row.amount, item.product)}`).join(" · ")}
+                          </p>
+                        )}
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="font-bold text-primary">{formatMoney(item.totalCost)}</p>
