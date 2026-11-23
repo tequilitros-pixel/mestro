@@ -673,7 +673,7 @@ export default async function BranchCountStatisticsPage({
                     <th className="px-3 py-2.5 text-center">Conteos</th>
                     <th className="px-3 py-2.5 text-right">Exactitud</th>
                     <th className="px-3 py-2.5 text-right">Productos Afectados</th>
-                    <th className="px-3 py-2.5 text-right">Pérdida en Faltantes ($)</th>
+                    <th className="px-3 py-2.5 text-right">Faltantes estimados (MXN)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant">
@@ -726,6 +726,11 @@ export default async function BranchCountStatisticsPage({
                         ) : (
                           <span className="text-emerald-400">$0.00</span>
                         )}
+                        {b.reviewCost > 0 && (
+                          <span className="block text-xs font-medium text-amber-400">
+                            {formatMoney(b.reviewCost)} en revisión
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -754,7 +759,7 @@ export default async function BranchCountStatisticsPage({
                     <th className="px-3 py-2.5">Responsable</th>
                     <th className="px-3 py-2.5 text-right">Exactitud</th>
                     <th className="px-3 py-2.5 text-right">Descuadres</th>
-                    <th className="px-3 py-2.5 text-right">Faltante en Dinero ($)</th>
+                    <th className="px-3 py-2.5 text-right">Faltante estimado (MXN)</th>
                     <th className="px-3 py-2.5 text-center">Acción</th>
                   </tr>
                 </thead>
@@ -813,6 +818,11 @@ export default async function BranchCountStatisticsPage({
                           <span className="text-error">{formatMoney(c.missingCost)}</span>
                         ) : (
                           <span className="text-emerald-400">$0.00</span>
+                        )}
+                        {c.reviewCost > 0 && (
+                          <span className="block text-xs font-medium text-amber-400">
+                            {formatMoney(c.reviewCost)} en revisión
+                          </span>
                         )}
                       </td>
                       <td className="px-3 py-3 text-center">
@@ -1080,6 +1090,11 @@ function CountTable({
             <tr key={`${row.countId}-${row.productId}`} className="border-t border-outline-variant">
               <td className="px-3 py-2">
                 <span className="font-semibold text-on-surface">{row.productName}</span>
+                {row.requiresReview && (
+                  <span className="block text-xs font-semibold text-amber-400">
+                    Saldo extraordinario: requiere revisión
+                  </span>
+                )}
                 {row.notes && (
                   <span className="block text-xs font-medium text-amber-500">
                     Motivo: {row.notes}
