@@ -302,7 +302,7 @@ export default async function SucursalesInventoryPage() {
                       <CardLabel>Diferencias</CardLabel>
                       <CardValue>{control.totals.mismatchCount}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {control.totals.mismatchUnits.toFixed(1)} unidades · faltantes {control.totals.shortageUnits.toFixed(1)}
+                        conteos comparados producto por producto
                       </p>
                     </Card>
                     <Card>
@@ -379,7 +379,7 @@ export default async function SucursalesInventoryPage() {
                     <Card>
                       <CardLabel>Costo de consumo por sucursal (MXN) · 7 vs 30 días</CardLabel>
                       {branchPeriodComparison.length > 0 ? (
-                        <InventoryPeriodComparisonChart data={branchPeriodComparison} />
+                        <InventoryPeriodComparisonChart data={branchPeriodComparison} money />
                       ) : (
                         <p className="py-12 text-center text-sm text-on-surface-variant">Sin consumo registrado.</p>
                       )}
@@ -387,7 +387,7 @@ export default async function SucursalesInventoryPage() {
                     <Card>
                       <CardLabel>Costo de productos consumidos (MXN) · 7 vs 30 días</CardLabel>
                       {productPeriodComparison.length > 0 ? (
-                        <InventoryPeriodComparisonChart data={productPeriodComparison} />
+                        <InventoryPeriodComparisonChart data={productPeriodComparison} money />
                       ) : (
                         <p className="py-12 text-center text-sm text-on-surface-variant">Sin consumo registrado.</p>
                       )}
@@ -427,11 +427,11 @@ export default async function SucursalesInventoryPage() {
                   <section className="grid gap-4 lg:grid-cols-3">
                     <Card>
                       <CardLabel>Valor de movimientos (MXN) · últimos 30 días</CardLabel>
-                      <InventoryFlowChart data={control.dailyCost} />
+                      <InventoryFlowChart data={control.dailyCost} money />
                     </Card>
                     <Card>
                       <CardLabel>Valor de movimientos (MXN) · últimos 7 días</CardLabel>
-                      <InventoryFlowChart data={weekly.dailyCost} />
+                      <InventoryFlowChart data={weekly.dailyCost} money />
                     </Card>
                     <Card>
                       <CardLabel>Tipos de movimiento</CardLabel>
@@ -447,9 +447,9 @@ export default async function SucursalesInventoryPage() {
 
                   <section className="grid gap-4 lg:grid-cols-2">
                     <Card>
-                      <CardLabel>Costo de consumo y merma (MXN); diferencias por conteo</CardLabel>
+                      <CardLabel>Costo de consumo y merma por sucursal (MXN)</CardLabel>
                       {branchComparison.length > 0 ? (
-                        <InventoryBranchComparisonChart data={branchComparison} />
+                        <InventoryBranchComparisonChart data={branchComparison} money />
                       ) : (
                         <p className="py-12 text-center text-sm text-on-surface-variant">Sin datos de sucursales en el periodo.</p>
                       )}
@@ -632,7 +632,7 @@ export default async function SucursalesInventoryPage() {
                             <tr className="border-b border-outline-variant text-left text-xs text-outline">
                               <th className="pb-2 font-medium">Producto</th>
                               <th className="pb-2 text-right font-medium">Conteos con diferencia</th>
-                              <th className="pb-2 text-right font-medium">Unidades</th>
+                              <th className="pb-2 text-right font-medium">Diferencia física</th>
                               <th className="pb-2 text-right font-medium">Consumo del mes</th>
                             </tr>
                           </thead>
@@ -641,8 +641,8 @@ export default async function SucursalesInventoryPage() {
                               <tr key={product.id}>
                                 <td className="py-3 font-semibold text-on-surface">{product.name}</td>
                                 <td className="py-3 text-right text-secondary">{product.mismatches}</td>
-                                <td className="py-3 text-right text-secondary">{product.mismatchUnits.toFixed(1)} {product.unit}</td>
-                                <td className="py-3 text-right text-on-surface-variant">{product.consumed.toFixed(1)} {product.unit}</td>
+                                <td className="py-3 text-right text-secondary">{formatHumanInventoryQuantity(product.mismatchUnits, product.baseUnit)}</td>
+                                <td className="py-3 text-right text-on-surface-variant">{formatHumanInventoryQuantity(product.consumed, product.baseUnit)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -671,32 +671,32 @@ export default async function SucursalesInventoryPage() {
                   <section className="grid gap-5 lg:grid-cols-2">
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
                       <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
-                        Evolución del inventario · últimos 30 días
+                        Valor de entradas y salidas · últimos 30 días (MXN)
                       </h2>
-                      <InventoryFlowChart data={control.daily} />
+                      <InventoryFlowChart data={control.dailyCost} money />
                     </div>
 
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
                       <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
-                        Evolución del inventario · últimos 7 días
+                        Valor de entradas y salidas · últimos 7 días (MXN)
                       </h2>
-                      <InventoryFlowChart data={weekly.daily} />
+                      <InventoryFlowChart data={weekly.dailyCost} money />
                     </div>
                   </section>
 
                   <section className="mt-5 grid gap-5 lg:grid-cols-2">
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
                       <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
-                        Consumo por sucursal · semanal vs mensual
+                        Costo de consumo por sucursal (MXN) · semanal vs mensual
                       </h2>
-                      <InventoryPeriodComparisonChart data={branchPeriodComparison} />
+                      <InventoryPeriodComparisonChart data={branchPeriodComparison} money />
                     </div>
 
                     <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
                       <h2 className="mb-4 text-sm font-semibold text-on-surface-variant">
-                        Productos con más movimiento · semanal vs mensual
+                        Costo de productos consumidos (MXN) · semanal vs mensual
                       </h2>
-                      <InventoryPeriodComparisonChart data={productPeriodComparison} />
+                      <InventoryPeriodComparisonChart data={productPeriodComparison} money />
                     </div>
                   </section>
 
