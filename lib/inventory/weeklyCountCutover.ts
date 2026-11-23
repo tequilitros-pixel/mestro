@@ -69,6 +69,39 @@ export async function reconcileWeeklyCountCutover(
   for (const productId of [...new Set(count.items.map((item) => item.productId))].sort()) {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${count.branchId}:${productId}`},0))::text`;
   }
+  // Una captura física no puede reconciliarse directamente con el saldo del
+  // cierre si hubo ventas/entradas posteriores: eso produciría un doble ajuste.
+  // Exigir recapturar solo los productos cuyo saldo NETO cambió desde su
+  // timestamp de conteo. Todo ocurre bajo los mismos advisory locks del POS.
+  const countedItems = count.items.filter((item) =>
+    item.product.isActive && item.product.trackStock && item.product.inventoryBaseUnit && item.countedAt,
+  );
+  if (countedItems.length > 0) {
+    const oldest = new Date(Math.min(...countedItems.map((item) => item.countedAt!.getTime())));
+    const laterMovements = await tx.inventoryMovement.findMany({
+      where: {
+        branchId: count.branchId,
+        inventoryProductId: { in: countedItems.map((item) => item.productId) },
+        createdAt: { gt: oldest },
+      },
+      select: { inventoryProductId: true, quantityDelta: true, createdAt: true },
+    });
+    const staleItems = countedItems.filter((item) => {
+      const delta = laterMovements.reduce((sum, movement) =>
+        movement.inventoryProductId === item.productId &&
+        movement.createdAt.getTime() > item.countedAt!.getTime()
+          ? sum.plus(movement.quantityDelta) : sum,
+      new Prisma.Decimal(0));
+      return !delta.isZero();
+    });
+    if (staleItems.length > 0) {
+      throw new Error(
+        "COUNT_RECAPTURE_REQUIRED:" + staleItems.length + ":" +
+        staleItems.slice(0, 4).map((item) => item.product.name).join(", "),
+      );
+    }
+  }
+
   const reconciled: ReconciledItem[] = [];
   for (const item of count.items) {
     const product = item.product;
