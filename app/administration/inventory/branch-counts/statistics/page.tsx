@@ -197,12 +197,12 @@ export default async function BranchCountStatisticsPage({
     }),
   ]);
 
-  // Comparar capturas físicas con movimientos posteriores hasta el cierre.
+  // Comparar capturas físicas con el saldo NETO de movimientos posteriores hasta el cierre.
   // Un saldo conciliado al cierre no equivale necesariamente al saldo en el
   // momento del conteo. Las diferencias de esas capturas requieren revisión.
   const postCaptureMovements = counts.length > 0
     ? await prisma.$queryRaw<Array<{ countId: string; productId: string }>>`
-        SELECT DISTINCT i."countId" AS "countId", i."productId" AS "productId"
+        SELECT i."countId" AS "countId", i."productId" AS "productId"
         FROM "InventoryCountItem" i
         JOIN "InventoryCount" c ON c.id = i."countId"
         JOIN "InventoryMovement" m
@@ -212,6 +212,8 @@ export default async function BranchCountStatisticsPage({
          AND m."createdAt" < c."closedAt"
          AND m."sourceId" <> c.id
         WHERE i."countId" IN (${Prisma.join(counts.map((count) => count.id))})
+        GROUP BY i."countId", i."productId"
+        HAVING SUM(m."quantityDelta") <> 0
       `
     : [];
   const staleCaptureKeys = new Set(
@@ -243,7 +245,7 @@ export default async function BranchCountStatisticsPage({
       const staleCapture = staleCaptureKeys.has(`${count.id}:${item.productId}`);
       const reviewReasons = [
         ...(outlier ? ["Saldo extraordinario"] : []),
-        ...(staleCapture ? ["Hubo movimientos después de la captura física"] : []),
+        ...(staleCapture ? ["Cambió el saldo después de la captura física"] : []),
       ];
       const requiresReview = reviewReasons.length > 0;
       const reviewCost = requiresReview ? missingCost + surplusCost : 0;
@@ -701,7 +703,7 @@ export default async function BranchCountStatisticsPage({
           <DataCard title="Revisar diferencias extraordinarias y capturas desactualizadas">
             <p className="mb-4 text-sm text-on-surface-variant">
               Los registros originales se conservan. Se separan los saldos extraordinarios y
-              las partidas donde hubo ventas, entradas u otros movimientos entre la captura
+              las partidas donde el saldo cambió por ventas, entradas u otros movimientos entre la captura
               física y el cierre. No es correcto reconocer esas diferencias como pérdidas
               sin conciliarlas; el importe es bruto y no modifica las existencias.
             </p>
@@ -734,7 +736,7 @@ export default async function BranchCountStatisticsPage({
             </p>
             <div className="space-y-3 text-sm text-on-surface">
               {staleCaptureRows.length > 0 && (
-                <p><strong>{staleCaptureRows.length} productos en {staleCaptureCounts} conteos con movimientos posteriores a la captura.</strong>
+                <p><strong>{staleCaptureRows.length} productos en {staleCaptureCounts} conteos con cambios netos de saldo posteriores a la captura.</strong>
                   {" "}La comparación con el saldo del cierre puede producir faltantes o sobrantes engañosos.
                   {" "}Estas diferencias se muestran en revisión y no se suman a faltantes ordinarios.
                 </p>
