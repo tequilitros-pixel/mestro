@@ -1,6 +1,7 @@
 "use client";
 
 import { claimQueuedOperation, completeClaimedOperation, failClaimedOperation, listOperations } from "./queue";
+import { offlineQueueDecision } from "./syncPolicy";
 
 let activeSync: Promise<void> | null = null;
 
@@ -24,9 +25,9 @@ async function runSync() {
   // como evidencia local y jamás se transmiten.
   for (const queued of operations) {
     if (!navigator.onLine) break;
-    if (queued.status === "cancelled") continue;
-    if (queued.status === "failed" || queued.status === "syncing") break;
-    if (queued.status !== "pending") continue;
+    const decision = offlineQueueDecision(queued.status);
+    if (decision === "skip") continue;
+    if (decision === "stop") break;
 
     // Un recibo depende de la venta que lo originó. Si esa venta sigue en
     // la cola (incluso en otra pestaña), no se adelanta el correo.
