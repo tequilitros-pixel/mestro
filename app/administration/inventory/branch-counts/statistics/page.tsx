@@ -660,7 +660,7 @@ export default async function BranchCountStatisticsPage({
           <SummaryCard
             label="Faltantes estimados"
             value={formatMoney(totalMissingCost)}
-            detail={`${totalMissingProducts.toLocaleString("es-MX")} renglones sin anomalías extraordinarias · pendientes de conciliar`}
+            detail={`${totalMissingProducts.toLocaleString("es-MX")} renglones sin alertas extraordinarias ni capturas desactualizadas · pendientes de conciliar`}
             highlight="error"
           />
           <SummaryCard
@@ -676,9 +676,9 @@ export default async function BranchCountStatisticsPage({
             highlight={mostDifficultCount && mostDifficultCount.missingCost > 0 ? "error" : "normal"}
           />
           <SummaryCard
-            label="Diferencias extraordinarias"
+            label="Diferencias por revisar"
             value={formatMoney(totalReviewCost)}
-            detail={`${reviewRows.length} registros en revisión · no incluidos en faltantes estimados`}
+            detail={`${reviewRows.length} partidas con diferencias en revisión · separadas de faltantes estimados`}
             highlight={reviewRows.length > 0 ? "warning" : "normal"}
           />
           <SummaryCard
@@ -696,14 +696,12 @@ export default async function BranchCountStatisticsPage({
         </section>
 
         {reviewRows.length > 0 && (
-          <DataCard title="Revisar saldos extraordinarios antes de reconocer pérdidas">
+          <DataCard title="Revisar diferencias extraordinarias y capturas desactualizadas">
             <p className="mb-4 text-sm text-on-surface-variant">
-              Estos registros se conservan íntegros en sus conteos originales. Se identifican cuando
-              el saldo teórico o la cantidad capturada supera 50 veces la referencia previa
-              y el impacto estimado llega a $5,000, o a 1,000 presentaciones físicas.
-              Pueden incluir tanto el origen de un saldo inflado como su posterior corrección:
-              su suma es un monto bruto para revisar, no una pérdida económica.
-              No se modifican automáticamente las existencias.
+              Los registros originales se conservan. Se separan los saldos extraordinarios y
+              las partidas donde hubo ventas, entradas u otros movimientos entre la captura
+              física y el cierre. No es correcto reconocer esas diferencias como pérdidas
+              sin conciliarlas; el importe es bruto y no modifica las existencias.
             </p>
             <p className="mb-3 font-bold text-amber-400">{formatMoney(totalReviewCost)} pendientes de verificación ({reviewRows.length} registros)</p>
             <div className="space-y-2">
@@ -717,6 +715,7 @@ export default async function BranchCountStatisticsPage({
                     <strong className="block">{row.productName} · {row.branchName}</strong>
                     <span className="block text-xs text-on-surface-variant">{formatDate(row.countDate)} · {row.countCode}</span>
                     <span className="block text-xs text-on-surface-variant">Teórico: {formatQuantity(row.expected, row.product)} · Contado: {formatQuantity(row.actual ?? 0, row.product)}</span>
+                    <span className="block text-xs font-medium text-amber-400">{row.reviewReasons.join(" · ")}</span>
                   </span>
                   <span className="font-bold text-amber-400">{row.surplus > 0 ? "Sobrante" : "Faltante"}: {formatMoney(row.reviewCost)} en revisión</span>
                 </Link>
@@ -725,13 +724,19 @@ export default async function BranchCountStatisticsPage({
           </DataCard>
         )}
 
-        {(legacyCounts.length > 0 || missingCostRows.length > 0 || repeatedCountDays.length > 0) && (
+        {(legacyCounts.length > 0 || missingCostRows.length > 0 || repeatedCountDays.length > 0 || staleCaptureRows.length > 0) && (
           <DataCard title="Calidad de datos del historial">
             <p className="mb-3 text-sm text-on-surface-variant">
               Advertencias de auditoría: estos datos pueden afectar la interpretación de los importes
               y porcentajes, pero no se alteran ni se eliminan automáticamente.
             </p>
             <div className="space-y-3 text-sm text-on-surface">
+              {staleCaptureRows.length > 0 && (
+                <p><strong>{staleCaptureRows.length} productos en {staleCaptureCounts} conteos con movimientos posteriores a la captura.</strong>
+                  {" "}La comparación con el saldo del cierre puede producir faltantes o sobrantes engañosos.
+                  {" "}Estas diferencias se muestran en revisión y no se suman a faltantes ordinarios.
+                </p>
+              )}
               {missingCostRows.length > 0 && (
                 <p><strong>{missingCostRows.length} renglones con diferencias sin costo configurado.</strong>
                   {" "}Su diferencia física existe, pero el reporte no puede valorizarla en pesos.
@@ -921,7 +926,12 @@ export default async function BranchCountStatisticsPage({
                               </span>
                             ) : (
                               <span className="block text-[11px] text-emerald-400">
-                                Todo justificado
+                                Sin faltantes ordinarios sin justificar
+                              </span>
+                            )}
+                            {c.staleRows > 0 && (
+                              <span className="block text-[11px] font-medium text-amber-400">
+                                {c.staleRows} capturas con movimientos posteriores
                               </span>
                             )}
                           </div>
@@ -1045,7 +1055,7 @@ export default async function BranchCountStatisticsPage({
         {/* SECCIÓN 4: PRIORIDAD DE REVISIÓN INDIVIDUAL (DESCUADRES MÁS FUERTES) */}
         <DataCard title="Partidas con mayor faltante estimado">
           <p className="mb-3 text-xs text-on-surface-variant">
-            Diferencias físicas sin señales de anomalía extraordinaria, ordenadas por costo estimado. Deben conciliarse con los responsables.
+            Diferencias físicas sin alertas extraordinarias ni movimientos posteriores a la captura, ordenadas por costo estimado. Deben conciliarse.
           </p>
           {missingRows.length === 0 ? (
             <Empty />
@@ -1089,7 +1099,7 @@ export default async function BranchCountStatisticsPage({
 
           <DataCard title="Desviaciones mayores al 10%">
             <p className="mb-3 text-xs text-on-surface-variant">
-              Discrepancia porcentual entre teórico y contado que excede la tolerancia habitual.
+              Discrepancia porcentual mayor al 10%, excluyendo partidas pendientes de revisión. Este umbral es solo un filtro de análisis, no una tolerancia aprobada.
             </p>
             <CountTable rows={deviationRows} mode="deviation" />
           </DataCard>
