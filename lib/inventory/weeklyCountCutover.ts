@@ -184,7 +184,6 @@ export async function reconcileWeeklyCountCutover(
       data: {
         previousQuantity: balance.quantity,
         entriesQuantity: 0,
-        quantityConsumed: 0,
         // El snapshot registra costo por ML/G/UNIT, nunca por botella/bolsa.
         unitCostAtTime: costPerInventoryBaseUnit(product),
         // No se infiere el consumo semanal de una corrección de conteo.
