@@ -10,6 +10,7 @@ import {
   type InventoryProductUnitConfig,
 } from "@/lib/inventory/units";
 import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
+import { isPotentialInventoryCountOutlier } from "@/lib/inventory/countAudit";
 import CountDashboardCharts from "./CountDashboardCharts";
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -31,6 +32,7 @@ type CountAnalysisRow = {
   variance: number | null;
   missing: number;
   missingCost: number;
+  requiresReview: boolean;
   deviation: number;
 };
 
@@ -45,6 +47,7 @@ type CountSummaryItem = {
   discrepantProducts: number;
   missingProducts: number;
   missingCost: number;
+  reviewCost: number;
   exactRate: number;
   justifiedCount: number;
   unjustifiedCount: number;
@@ -59,6 +62,7 @@ type BranchAuditRow = {
   exactRows: number;
   exactRate: number;
   missingCost: number;
+  reviewCost: number;
   riskLevel: "CRITICAL" | "ATTENTION" | "HEALTHY";
 };
 
@@ -196,6 +200,14 @@ export default async function BranchCountStatisticsPage({
         (item.unitCostAtTime ? Number(item.unitCostAtTime) : 0);
       const missing = variance === null ? 0 : Math.max(0, -variance);
       const missingCost = missing * baseCost;
+      const requiresReview = isPotentialInventoryCountOutlier({
+        expected,
+        counted: actual,
+        normalizedContentPerUnit: item.product.normalizedContentPerUnit === null
+          ? null
+          : Number(item.product.normalizedContentPerUnit),
+        missingCost,
+      });
 
       return {
         countId: count.id,
@@ -213,6 +225,7 @@ export default async function BranchCountStatisticsPage({
         variance,
         missing,
         missingCost,
+        requiresReview,
         deviation:
           variance === null
             ? 0
@@ -309,6 +322,7 @@ export default async function BranchCountStatisticsPage({
       exactRows: 0,
       exactRate: 100,
       missingCost: 0,
+      reviewCost: 0,
       riskLevel: "HEALTHY",
     };
 
@@ -317,9 +331,13 @@ export default async function BranchCountStatisticsPage({
       if (row.variance === 0) cur.exactRows += 1;
     }
     if (row.missing > 0) {
-      cur.affectedProducts += 1;
-      cur.missingRows += 1;
-      cur.missingCost += row.missingCost;
+      if (row.requiresReview) {
+        cur.reviewCost += row.missingCost;
+      } else {
+        cur.affectedProducts += 1;
+        cur.missingRows += 1;
+        cur.missingCost += row.missingCost;
+      }
     }
     branchSummaryMap.set(row.branchName, cur);
   }
@@ -348,11 +366,12 @@ export default async function BranchCountStatisticsPage({
       const measured = countRows.filter((r) => r.actual !== null);
       const exactItems = measured.filter((r) => r.variance === 0).length;
       const exactRate = measured.length > 0 ? Math.round((exactItems / measured.length) * 100) : 0;
-      const missingProducts = countRows.filter((r) => r.missing > 0).length;
-      const discrepantProducts = countRows.filter((r) => r.variance !== 0).length;
-      const missingCost = countRows.reduce((sum, r) => sum + r.missingCost, 0);
+      const missingProducts = countRows.filter((r) => r.missing > 0 && !r.requiresReview).length;
+      const discrepantProducts = countRows.filter((r) => r.variance !== null && r.variance !== 0).length;
+      const missingCost = countRows.reduce((sum, r) => sum + (r.requiresReview ? 0 : r.missingCost), 0);
+      const reviewCost = countRows.reduce((sum, r) => sum + (r.requiresReview ? r.missingCost : 0), 0);
       const justifiedCount = countRows.filter((r) => Boolean(r.notes?.trim())).length;
-      const unjustifiedCount = countRows.filter((r) => r.missing > 0 && !r.notes?.trim()).length;
+      const unjustifiedCount = countRows.filter((r) => r.missing > 0 && !r.requiresReview && !r.notes?.trim()).length;
 
       return {
         id: count.id,
@@ -365,6 +384,7 @@ export default async function BranchCountStatisticsPage({
         discrepantProducts,
         missingProducts,
         missingCost,
+        reviewCost,
         exactRate,
         justifiedCount,
         unjustifiedCount,
@@ -387,7 +407,7 @@ export default async function BranchCountStatisticsPage({
   >();
 
   for (const r of rows) {
-    if (r.missing > 0) {
+    if (r.missing > 0 && !r.requiresReview) {
       const cur = productLossMap.get(r.productId) ?? {
         productId: r.productId,
         productName: r.productName,
@@ -413,14 +433,15 @@ export default async function BranchCountStatisticsPage({
   const totalMeasured = rows.filter((row) => row.actual !== null).length;
   const exactRows = rows.filter((row) => row.actual !== null && row.variance === 0).length;
   const exactRate = totalMeasured > 0 ? Math.round((exactRows / totalMeasured) * 100) : 0;
-  const totalMissingCost = rows.reduce((sum, r) => sum + r.missingCost, 0);
-  const totalMissingProducts = rows.filter((r) => r.missing > 0).length;
+  const reviewRows = rows.filter((row) => row.requiresReview).sort((a, b) => b.missingCost - a.missingCost);
+  const totalReviewCost = reviewRows.reduce((sum, row) => sum + row.missingCost, 0);
+  const totalMissingCost = rows.reduce((sum, r) => sum + (r.requiresReview ? 0 : r.missingCost), 0);
+  const totalMissingProducts = rows.filter((r) => r.missing > 0 && !r.requiresReview).length;
   const worstBranch = branchSummary[0];
   const mostDifficultCount = countSummaries[0];
   const topDepletingProduct = consumption[0];
-  const topLossProduct = topLossProducts[0];
 
-  const missingRows = rows.filter((row) => row.missing > 0).sort((a, b) => b.missingCost - a.missingCost);
+  const missingRows = rows.filter((row) => row.missing > 0 && !row.requiresReview).sort((a, b) => b.missingCost - a.missingCost);
   const absentRows = rows.filter((row) => row.expected > 0 && row.actual === 0).sort((a, b) => b.expected - a.expected);
   const deviationRows = rows.filter((row) => row.expected > 0 && row.deviation > 0.1).sort((a, b) => b.deviation - a.deviation);
 
@@ -433,7 +454,7 @@ export default async function BranchCountStatisticsPage({
           missingRows: 0,
           branches: new Set<string>(),
         };
-        if (row.missing > 0) {
+        if (row.missing > 0 && !row.requiresReview) {
           current.missingRows += 1;
           current.branches.add(row.branchName);
         }
