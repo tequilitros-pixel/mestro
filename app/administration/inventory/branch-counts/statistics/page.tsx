@@ -159,6 +159,7 @@ export default async function BranchCountStatisticsPage({
         countType: true,
         branch: { select: { name: true } },
         createdBy: { select: { id: true, name: true } },
+        declarations: { select: { id: true } },
         items: {
           select: {
             productId: true,
@@ -377,8 +378,9 @@ export default async function BranchCountStatisticsPage({
     .map((b) => {
       const exactRate = b.measuredRows > 0 ? Math.round((b.exactRows / b.measuredRows) * 100) : 100;
       let riskLevel: "CRITICAL" | "ATTENTION" | "HEALTHY" = "HEALTHY";
-      if (b.missingCost >= 1000 || exactRate < 80) riskLevel = "CRITICAL";
-      else if (b.missingCost >= 300 || exactRate < 92) riskLevel = "ATTENTION";
+      // La coincidencia exacta (hasta el ml/g) no es una medida de riesgo financiero.
+      if (b.missingCost >= 1000) riskLevel = "CRITICAL";
+      else if (b.missingCost >= 300 || b.reviewCost > 0) riskLevel = "ATTENTION";
       return { ...b, exactRate, riskLevel };
     })
     .sort((a, b) => b.missingCost - a.missingCost || b.missingRows - a.missingRows);
@@ -494,6 +496,19 @@ export default async function BranchCountStatisticsPage({
       affectedBranches: day.branches.size,
     }))
     .reverse();
+
+  const legacyCounts = counts.filter((count) => count.declarations.length === 0);
+  const missingCostRows = rows.filter((row) =>
+    row.actual !== null && row.variance !== 0 && row.unitCost <= 0,
+  );
+  const groupedDates = counts.reduce((map, count) => {
+    const key = `${count.branchId}:${count.countDate.toISOString().slice(0, 10)}:${count.countType}`;
+    const matches = map.get(key) ?? [];
+    matches.push(count);
+    map.set(key, matches);
+    return map;
+  }, new Map<string, typeof counts>());
+  const repeatedCountDays = [...groupedDates.values()].filter((group) => group.length > 1);
 
   const periodLabel = allHistory ? "Todo el historial" : `${dateFrom} a ${dateTo}`;
   const filterSuffix = [
@@ -647,11 +662,12 @@ export default async function BranchCountStatisticsPage({
         {reviewRows.length > 0 && (
           <DataCard title="Revisar saldos extraordinarios antes de reconocer pérdidas">
             <p className="mb-4 text-sm text-on-surface-variant">
-              Estos registros se conservan íntegros en sus conteos originales, pero su cantidad teórica
-              supera 50 veces la cantidad contada o una presentación comercial y la diferencia
-              estimada es de al menos $5,000. Son indicios para auditar posibles errores de captura,
-              unidades o saldo inicial; no son una corrección automática de existencias.
-              Se muestran aparte de los faltantes ordinarios para no distorsionar los rankings.
+              Estos registros se conservan íntegros en sus conteos originales. Se identifican cuando
+              el saldo teórico o la cantidad capturada supera 50 veces la referencia previa
+              y el impacto estimado llega a $5,000, o a 1,000 presentaciones físicas.
+              Pueden incluir tanto el origen de un saldo inflado como su posterior corrección:
+              su suma es un monto bruto para revisar, no una pérdida económica.
+              No se modifican automáticamente las existencias.
             </p>
             <p className="mb-3 font-bold text-amber-400">{formatMoney(totalReviewCost)} pendientes de verificación ({reviewRows.length} registros)</p>
             <div className="space-y-2">
@@ -666,9 +682,48 @@ export default async function BranchCountStatisticsPage({
                     <span className="block text-xs text-on-surface-variant">{formatDate(row.countDate)} · {row.countCode}</span>
                     <span className="block text-xs text-on-surface-variant">Teórico: {formatQuantity(row.expected, row.product)} · Contado: {formatQuantity(row.actual ?? 0, row.product)}</span>
                   </span>
-                  <span className="font-bold text-amber-400">{formatMoney(row.reviewCost)} en revisión</span>
+                  <span className="font-bold text-amber-400">{row.surplus > 0 ? "Sobrante" : "Faltante"}: {formatMoney(row.reviewCost)} en revisión</span>
                 </Link>
               ))}
+            </div>
+          </DataCard>
+        )}
+
+        {(legacyCounts.length > 0 || missingCostRows.length > 0 || repeatedCountDays.length > 0) && (
+          <DataCard title="Calidad de datos del historial">
+            <p className="mb-3 text-sm text-on-surface-variant">
+              Advertencias de auditoría: estos datos pueden afectar la interpretación de los importes
+              y porcentajes, pero no se alteran ni se eliminan automáticamente.
+            </p>
+            <div className="space-y-3 text-sm text-on-surface">
+              {missingCostRows.length > 0 && (
+                <p><strong>{missingCostRows.length} renglones con diferencias sin costo configurado.</strong>
+                  {" "}Su diferencia física existe, pero el reporte no puede valorizarla en pesos.
+                  {" "}Productos: {[...new Set(missingCostRows.map((row) => row.productName))].join(", ")}.
+                </p>
+              )}
+              {legacyCounts.length > 0 && (
+                <div>
+                  <p><strong>{legacyCounts.length} conteos históricos sin declaraciones de conciliación V2.</strong>
+                    {" "}Conservar como historial; revisar la trazabilidad antes de usarlos como referencia contable.
+                  </p>
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    {legacyCounts.map((count) => count.code).join(" · ")}
+                  </p>
+                </div>
+              )}
+              {repeatedCountDays.length > 0 && (
+                <div>
+                  <p><strong>{repeatedCountDays.length} fechas con más de un conteo cerrado en la misma sucursal.</strong>
+                    {" "}No se debe interpretar cada uno como una semana distinta.
+                  </p>
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    {repeatedCountDays.map((group) =>
+                      `${group[0].branch.name}: ${formatDate(group[0].countDate)} (${group.map((count) => count.code).join(", ")})`,
+                    ).join(" · ")}
+                  </p>
+                </div>
+              )}
             </div>
           </DataCard>
         )}
