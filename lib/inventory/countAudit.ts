@@ -48,3 +48,10 @@ export function isImplausibleInventoryIncrease(input: {
   return captured > 50 * Math.max(expected, factor)
     && ((captured - expected) * cost >= 5000 || captured - expected >= 1000 * factor);
 }
+
+/** Los importes del reporte se suman a partir de cada partida redondeada a centavos. */
+export function countAmountInPesos(quantityBase: number, costPerBaseUnit: number): number {
+  if (!Number.isFinite(quantityBase) || quantityBase <= 0
+    || !Number.isFinite(costPerBaseUnit) || costPerBaseUnit <= 0) return 0;
+  return Math.round((quantityBase * costPerBaseUnit + Number.EPSILON) * 100) / 100;
+}
