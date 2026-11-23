@@ -200,6 +200,22 @@ function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
   const posTotal = posSales.reduce((sum, sale) => sum + sale.total, 0);
   const discountTotal = posSales.reduce((sum, sale) => sum + sale.discountAmount, 0);
   const manualSales = Math.max(0, (cashCut.totalSales ?? 0) - posTotal);
+  // No corregir dinero automáticamente: señalar pagos POS que no tienen
+  // su correspondiente importe en el resumen de métodos del corte.
+  const postedPayments = new Map<string, number>();
+  for (const sale of posSales) {
+    for (const payment of sale.payments ?? []) {
+      postedPayments.set(payment.method, (postedPayments.get(payment.method) ?? 0) + payment.amount);
+    }
+  }
+  const methodDiscrepancies = [...postedPayments.entries()]
+    .map(([method, total]) => {
+      const registered = cashCut.salesByMethod
+        .filter((item) => item.method === method)
+        .reduce((sum, item) => sum + item.amount, 0);
+      return { method, total, registered, missing: Math.round((total - registered) * 100) / 100 };
+    }).filter((item) => item.missing > 0.02);
+
 
   return (
     <div className="space-y-5">
@@ -299,6 +315,23 @@ function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
         </div>
       </section>
 
+      {methodDiscrepancies.length > 0 && (
+        <section className="rounded-xl border border-secondary/50 bg-secondary/10 p-4">
+          <h2 className="font-bold text-on-surface">Pagos del POS pendientes de conciliación</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Se detectaron pagos de tickets que superan el registro del mismo método en este corte.
+            Compara comprobantes y movimientos antes de registrar un ajuste; no se modificó dinero.
+          </p>
+          <ul className="mt-3 space-y-1 text-sm">
+            {methodDiscrepancies.map((item) => (
+              <li key={item.method} className="flex flex-wrap justify-between gap-2">
+                <span>{METODOS.find((method) => method.key === item.method)?.label ?? item.method}</span>
+                <strong className="text-secondary">Pendiente {formatMoney(item.missing)} · POS {formatMoney(item.total)} · Corte {formatMoney(item.registered)}</strong>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <CutTransactionsPanel cashCutId={cashCut.id} initialSales={posSales} isOpen={false} />
 
       <section>
