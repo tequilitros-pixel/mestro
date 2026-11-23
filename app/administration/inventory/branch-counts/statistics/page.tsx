@@ -10,7 +10,7 @@ import {
   type InventoryProductUnitConfig,
 } from "@/lib/inventory/units";
 import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
-import { isPotentialInventoryCountOutlier } from "@/lib/inventory/countAudit";
+import { isPotentialInventoryCountOutlier, isImplausibleInventoryIncrease } from "@/lib/inventory/countAudit";
 import { consolidateSaleConsumption } from "@/lib/inventory/saleConsumptionSummary";
 import CountDashboardCharts from "./CountDashboardCharts";
 
@@ -33,6 +33,9 @@ type CountAnalysisRow = {
   variance: number | null;
   missing: number;
   missingCost: number;
+  surplus: number;
+  surplusCost: number;
+  reviewCost: number;
   requiresReview: boolean;
   deviation: number;
 };
@@ -199,15 +202,20 @@ export default async function BranchCountStatisticsPage({
         costPerInventoryBaseUnit(item.product) ??
         (item.unitCostAtTime ? Number(item.unitCostAtTime) : 0);
       const missing = variance === null ? 0 : Math.max(0, -variance);
+      const surplus = variance === null ? 0 : Math.max(0, variance);
       const missingCost = missing * baseCost;
+      const surplusCost = surplus * baseCost;
+      const presentation = item.product.normalizedContentPerUnit === null
+        ? null : Number(item.product.normalizedContentPerUnit);
       const requiresReview = isPotentialInventoryCountOutlier({
-        expected,
-        counted: actual,
-        normalizedContentPerUnit: item.product.normalizedContentPerUnit === null
-          ? null
-          : Number(item.product.normalizedContentPerUnit),
-        missingCost,
-      });
+        expected, counted: actual, normalizedContentPerUnit: presentation, missingCost,
+      }) || (actual !== null && isImplausibleInventoryIncrease({
+        expected: Math.max(0, expected),
+        captured: actual,
+        normalizedContentPerUnit: presentation,
+        costPerBaseUnit: baseCost,
+      }));
+      const reviewCost = requiresReview ? missingCost + surplusCost : 0;
 
       return {
         countId: count.id,
@@ -225,6 +233,9 @@ export default async function BranchCountStatisticsPage({
         variance,
         missing,
         missingCost,
+        surplus,
+        surplusCost,
+        reviewCost,
         requiresReview,
         deviation:
           variance === null
@@ -345,14 +356,13 @@ export default async function BranchCountStatisticsPage({
       cur.measuredRows += 1;
       if (row.variance === 0) cur.exactRows += 1;
     }
-    if (row.missing > 0) {
-      if (row.requiresReview) {
-        cur.reviewCost += row.missingCost;
-      } else {
+    if (row.requiresReview) {
+      cur.reviewCost += row.reviewCost;
+    }
+    if (row.missing > 0 && !row.requiresReview) {
         cur.affectedProducts += 1;
         cur.missingRows += 1;
         cur.missingCost += row.missingCost;
-      }
     }
     branchSummaryMap.set(row.branchName, cur);
   }
@@ -384,7 +394,7 @@ export default async function BranchCountStatisticsPage({
       const missingProducts = countRows.filter((r) => r.missing > 0 && !r.requiresReview).length;
       const discrepantProducts = countRows.filter((r) => r.variance !== null && r.variance !== 0).length;
       const missingCost = countRows.reduce((sum, r) => sum + (r.requiresReview ? 0 : r.missingCost), 0);
-      const reviewCost = countRows.reduce((sum, r) => sum + (r.requiresReview ? r.missingCost : 0), 0);
+      const reviewCost = countRows.reduce((sum, r) => sum + r.reviewCost, 0);
       const justifiedCount = countRows.filter((r) => Boolean(r.notes?.trim())).length;
       const unjustifiedCount = countRows.filter((r) => r.missing > 0 && !r.requiresReview && !r.notes?.trim()).length;
 
@@ -448,13 +458,13 @@ export default async function BranchCountStatisticsPage({
   const totalMeasured = rows.filter((row) => row.actual !== null).length;
   const exactRows = rows.filter((row) => row.actual !== null && row.variance === 0).length;
   const exactRate = totalMeasured > 0 ? Math.round((exactRows / totalMeasured) * 100) : 0;
-  const reviewRows = rows.filter((row) => row.requiresReview).sort((a, b) => b.missingCost - a.missingCost);
-  const totalReviewCost = reviewRows.reduce((sum, row) => sum + row.missingCost, 0);
+  const reviewRows = rows.filter((row) => row.requiresReview).sort((a, b) => b.reviewCost - a.reviewCost);
+  const totalReviewCost = reviewRows.reduce((sum, row) => sum + row.reviewCost, 0);
   const totalMissingCost = rows.reduce((sum, r) => sum + (r.requiresReview ? 0 : r.missingCost), 0);
+  const totalSurplusCost = rows.reduce((sum, r) => sum + (r.requiresReview ? 0 : r.surplusCost), 0);
   const totalMissingProducts = rows.filter((r) => r.missing > 0 && !r.requiresReview).length;
   const worstBranch = branchSummary[0];
   const mostDifficultCount = countSummaries[0];
-  const topDepletingProduct = consumption[0];
 
   const missingRows = rows.filter((row) => row.missing > 0 && !row.requiresReview).sort((a, b) => b.missingCost - a.missingCost);
   const absentRows = rows.filter((row) => row.expected > 0 && row.actual === 0).sort((a, b) => b.expected - a.expected);
@@ -621,15 +631,15 @@ export default async function BranchCountStatisticsPage({
             highlight={reviewRows.length > 0 ? "warning" : "normal"}
           />
           <SummaryCard
-            label="Mayor Agotamiento"
-            value={topDepletingProduct ? topDepletingProduct.name : "Sin consumo"}
-            detail={topDepletingProduct ? `${formatMoney(topDepletingProduct.totalCost)} (${formatQuantity(topDepletingProduct.amount, topDepletingProduct.product)})` : "Sin datos de ventas"}
+            label="Sobrantes estimados"
+            value={formatMoney(totalSurplusCost)}
+            detail="Aumentos físicos ordinarios frente al saldo teórico · pendientes de conciliar"
             highlight="normal"
           />
           <SummaryCard
-            label="Exactitud Global"
+            label="Coincidencia exacta"
             value={`${exactRate}%`}
-            detail={`${exactRows.toLocaleString("es-MX")} de ${totalMeasured.toLocaleString("es-MX")} exactos`}
+            detail={`${exactRows.toLocaleString("es-MX")} de ${totalMeasured.toLocaleString("es-MX")} renglones iguales hasta el ml, g o pieza; no es un porcentaje de merma`}
             highlight={exactRate >= 90 ? "success" : exactRate >= 75 ? "warning" : "error"}
           />
         </section>
@@ -656,7 +666,7 @@ export default async function BranchCountStatisticsPage({
                     <span className="block text-xs text-on-surface-variant">{formatDate(row.countDate)} · {row.countCode}</span>
                     <span className="block text-xs text-on-surface-variant">Teórico: {formatQuantity(row.expected, row.product)} · Contado: {formatQuantity(row.actual ?? 0, row.product)}</span>
                   </span>
-                  <span className="font-bold text-amber-400">{formatMoney(row.missingCost)} en revisión</span>
+                  <span className="font-bold text-amber-400">{formatMoney(row.reviewCost)} en revisión</span>
                 </Link>
               ))}
             </div>
