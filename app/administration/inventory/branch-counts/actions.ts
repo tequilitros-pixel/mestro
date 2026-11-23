@@ -73,12 +73,6 @@ export async function createInventoryCountAction(
       };
     }
 
-    const previousCount = await prisma.inventoryCount.findFirst({
-      where: { branchId, status: "CERRADO", countType: countTypeRaw },
-      orderBy: { countDate: "desc" },
-      include: { items: true },
-    });
-
     const products = (await prisma.inventoryProduct.findMany({
       where: {
         isActive: true,
@@ -94,16 +88,20 @@ export async function createInventoryCountAction(
     const code = `CNT-${Date.now()}`;
 
     const count = await prisma.$transaction(async (tx) => {
+      // Las existencias teóricas son el saldo V2 ACTUAL de esta sucursal,
+      // no lo contado la semana pasada: ventas/entradas/ajustes cambian el saldo.
+      const liveBalances = await tx.inventoryBalance.findMany({
+        where: { branchId, inventoryProductId: { in: products.map((product) => product.id) } },
+        select: { inventoryProductId: true, quantity: true },
+      });
+      const baseByProductId = new Map(liveBalances.map((balance) => [balance.inventoryProductId, balance.quantity]));
       const created = await tx.inventoryCount.create({
         data: { code, branchId, countDate, countType: countTypeRaw, status: "BORRADOR", createdById: currentUser.id },
         select: { id: true },
       });
 
       for (const product of products) {
-        const previousItem = previousCount?.items.find(
-          (i) => i.productId === product.id,
-        );
-        const previousQuantity = previousItem?.quantityCounted ?? 0;
+        const previousQuantity = baseByProductId.get(product.id) ?? 0;
 
         await tx.inventoryCountItem.create({
           data: {
@@ -170,10 +168,11 @@ export async function addInventoryCountProductAction(
       });
       if (existing) return "already-added" as const;
 
-      const previousCount = await tx.inventoryCount.findFirst({
-        where: { branchId: count.branchId, status: "CERRADO", countType: count.countType },
-        orderBy: { countDate: "desc" },
-        select: { items: { where: { productId }, select: { quantityCounted: true } } },
+      const liveBalance = await tx.inventoryBalance.findUnique({
+        where: {
+          branchId_inventoryProductId: { branchId: count.branchId, inventoryProductId: productId },
+        },
+        select: { quantity: true },
       });
       await tx.inventoryCountItem.create({
         data: {
@@ -181,7 +180,7 @@ export async function addInventoryCountProductAction(
           productId,
           quantityCounted: null,
           countedAt: null,
-          previousQuantity: previousCount?.items[0]?.quantityCounted ?? 0,
+          previousQuantity: liveBalance?.quantity ?? 0,
         },
       });
       return "added" as const;
@@ -366,6 +365,18 @@ export async function closeInventoryCountAction(
     }
     if (error instanceof Error && error.message === "COUNT_ALREADY_CLOSED") {
       return { success: false, error: "Este conteo ya está cerrado." };
+    }
+    if (error instanceof Error && error.message === "COUNT_UNIT_MISMATCH") {
+      return { success: false, error: "Una unidad de saldo no coincide con la presentación del producto. Revisa el inventario antes de cerrar." };
+    }
+    const unexpectedIncrease = error instanceof Error
+      ? /^COUNT_UNVERIFIED_INCREASE:(.+)$/.exec(error.message)
+      : null;
+    if (unexpectedIncrease) {
+      return {
+        success: false,
+        error: `Revisa la cantidad de "${unexpectedIncrease[1]}": supera ampliamente lo esperado. Corrígela o agrega una justificación específica al renglón antes de cerrar.`,
+      };
     }
     const missingProductsMatch = error instanceof Error
       ? /^COUNT_PRODUCTS_MISSING:(\d+)$/.exec(error.message)
