@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { generateClientOperationId } from "@/lib/pos2/offline/canonical";
-import { getInventoryCaptureDescriptor, getPiecePresentationSize, formatCommercialPresentation } from "@/lib/inventory/units";
+import { getInventoryCaptureDescriptor, getPiecePresentationSize, getNormalizedContentPerUnit, getInventoryBaseUnitLabel, formatCommercialPresentation } from "@/lib/inventory/units";
 import { createWeeklyInventoryReceiptAction, type ActionResult } from "../actions";
 
 export type WeeklyProduct = {
@@ -20,6 +20,8 @@ export type WeeklyProduct = {
 
 type Branch = { id: string; name: string };
 type RowValue = { quantity: string; loosePieces: string };
+type ReviewItem = { productId: string; productName: string; quantity: string; loosePieces?: string; captureUnit: "BASE" | "PRESENTATION"; display: string; equivalent: string };
+type Receipt = { id: string; branch: string; time: string; items: ReviewItem[] };
 
 const numberInputStyle = {
   color: "var(--color-on-surface)",
@@ -45,10 +47,14 @@ export default function WeeklyEntryForm({
 }) {
   const [values, setValues] = useState<Record<string, RowValue>>({});
   const [branchId, setBranchId] = useState("");
+  const [notes, setNotes] = useState("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ActionResult | null>(null);
+  const [review, setReview] = useState<ReviewItem[] | null>(null);
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [uncertain, setUncertain] = useState(false);
   const operationId = useRef<string | null>(null);
 
   const categories = useMemo(
@@ -63,7 +69,7 @@ export default function WeeklyEntryForm({
     });
   }, [category, products, search]);
 
-  const capturedCount = Object.values(values).filter((value) => value.quantity.trim() !== "" || value.loosePieces.trim() !== "").length;
+  const capturedCount = Object.values(values).filter((value) => Number(value.quantity || 0) > 0 || Number(value.loosePieces || 0) > 0).length;
 
   function updateValue(productId: string, key: keyof RowValue, value: string) {
     setValues((current) => ({
@@ -72,40 +78,76 @@ export default function WeeklyEntryForm({
     }));
   }
 
-  async function handleSubmit(formData: FormData) {
-    const items = products.flatMap((product) => {
+  function prepareReview() {
+    setResult(null);
+    if (!branchId) return setResult({ success: false, error: "Selecciona una sucursal." });
+    const prepared: ReviewItem[] = [];
+    for (const product of products) {
       const value = values[product.id];
-      if (!value || (value.quantity.trim() === "" && value.loosePieces.trim() === "")) return [];
-      const descriptor = getInventoryCaptureDescriptor(0, product);
+      if (!value || (!value.quantity.trim() && !value.loosePieces.trim())) continue;
+      const quantity = Number(value.quantity || 0), loose = Number(value.loosePieces || 0);
       const packageSize = getPiecePresentationSize(product);
-      const hasPositiveQuantity = Number(value.quantity || 0) > 0 || Number(value.loosePieces || 0) > 0;
-      if (!hasPositiveQuantity) return [];
-      return [{
-        productId: product.id,
-        quantity: value.quantity.trim() || (packageSize !== null ? "0" : ""),
-        ...(packageSize !== null && value.loosePieces.trim() !== "" ? { loosePieces: value.loosePieces.trim() } : {}),
+      if (!Number.isFinite(quantity) || !Number.isFinite(loose) || quantity < 0 || loose < 0
+        || (packageSize === null && loose !== 0)
+        || (packageSize !== null && (!Number.isInteger(quantity) || !Number.isInteger(loose) || loose >= packageSize))) {
+        return setResult({ success: false, error: "Revisa la cantidad de " + product.name + "." });
+      }
+      if (quantity === 0 && loose === 0) continue;
+      const descriptor = getInventoryCaptureDescriptor(0, product);
+      const factor = getNormalizedContentPerUnit(product);
+      if (descriptor.captureUnit === "PRESENTATION" && factor === null) {
+        return setResult({ success: false, error: "Falta configurar la presentación de " + product.name + "." });
+      }
+      const base = descriptor.captureUnit === "PRESENTATION" ? quantity * (factor ?? 1) + loose : quantity;
+      prepared.push({
+        productId: product.id, productName: product.name,
+        quantity: value.quantity.trim() || "0",
+        ...(packageSize !== null && value.loosePieces.trim() ? { loosePieces: value.loosePieces.trim() } : {}),
         captureUnit: descriptor.captureUnit,
-      }];
-    }).filter((item) => item.quantity !== "");
+        display: packageSize !== null
+          ? String(quantity) + " paquetes" + (loose > 0 ? " + " + String(loose) + " piezas sueltas" : "")
+          : String(quantity) + " " + descriptor.unitLabel,
+        equivalent: base.toLocaleString("es-MX", { maximumFractionDigits: 3 }) + " " + getInventoryBaseUnitLabel(product),
+      });
+    }
+    if (!prepared.length) return setResult({ success: false, error: "Captura al menos una cantidad." });
+    setReview(prepared);
+    setUncertain(false);
+  }
 
+  async function handleSubmit(formData: FormData) {
+    if (!review || saving || receipt) return;
     setSaving(true);
     setResult(null);
     operationId.current ??= generateClientOperationId();
     formData.set("branchId", branchId);
-    formData.set("items", JSON.stringify(items));
+    formData.set("notes", notes);
+    formData.set("items", JSON.stringify(review.map(({ productId, quantity, loosePieces, captureUnit }) => ({
+      productId, quantity, ...(loosePieces !== undefined ? { loosePieces } : {}), captureUnit,
+    }))));
     formData.set("operationId", operationId.current);
     try {
       const response = await createWeeklyInventoryReceiptAction(formData);
       setResult(response);
+      setUncertain(false);
       if (response.success) {
+        setReceipt({
+          id: response.id || operationId.current || "",
+          branch: branches.find((branch) => branch.id === branchId)?.name || branchId,
+          time: new Date().toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Mexico_City" }),
+          items: review,
+        });
         operationId.current = null;
+        setReview(null);
         setValues({});
+        setNotes("");
+        setSearch("");
+        setCategory("");
       }
     } catch {
-      setResult({ success: false, error: "No se pudo confirmar la entrada. Revisa tu conexión y vuelve a intentar." });
-    } finally {
-      setSaving(false);
-    }
+      setUncertain(true);
+      setResult({ success: false, error: "No se pudo confirmar el registro. Reintenta esta misma captura para comprobarlo sin duplicarla." });
+    } finally { setSaving(false); }
   }
 
   return (
@@ -116,6 +158,8 @@ export default function WeeklyEntryForm({
         </div>
       )}
 
+      {!review && !receipt && (
+      <>
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <label className="space-y-2">
           <span className="text-sm font-semibold text-on-surface-variant">Sucursal</span>
@@ -126,7 +170,7 @@ export default function WeeklyEntryForm({
         </label>
         <label className="space-y-2">
           <span className="text-sm font-semibold text-on-surface-variant">Nota de la entrada</span>
-          <input name="notes" placeholder="Ej. Surtido semanal · 12 de octubre" maxLength={500} className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none placeholder:text-outline focus:border-primary" />
+          <input name="notes" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Ej. Surtido semanal · 12 de octubre" maxLength={500} className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none placeholder:text-outline focus:border-primary" />
         </label>
       </div>
 
@@ -139,13 +183,13 @@ export default function WeeklyEntryForm({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-on-surface-variant">
-        <span>{visibleProducts.length} productos visibles · {capturedCount} con cantidad capturada</span>
+        <span>{visibleProducts.length} productos visibles · {capturedCount} con entrada</span>
         <span>Presiona Enter para avanzar al siguiente campo.</span>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-outline-variant">
-        <div className="min-w-[720px]">
-          <div className="grid grid-cols-[minmax(0,1fr)_9rem_11rem] gap-3 border-b border-outline-variant bg-surface-container-high px-4 py-3 text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
+        <div className="min-w-[560px]">
+          <div className="grid grid-cols-[minmax(0,1fr)_8rem_13rem] gap-3 border-b border-outline-variant bg-surface-container-high px-4 py-3 text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
             <span>Producto</span>
             <span>Categoría</span>
             <span>Cantidad</span>
@@ -160,7 +204,7 @@ export default function WeeklyEntryForm({
               : "Piezas sueltas";
             const pieceUnitLabel = loosePiecesLabel.startsWith("Vasos") ? "vasos" : "piezas";
             return (
-              <div key={product.id} className="grid grid-cols-[minmax(0,1fr)_9rem_11rem] items-center gap-3 border-b border-outline-variant px-4 py-3 last:border-b-0">
+              <div key={product.id} className="grid grid-cols-[minmax(0,1fr)_8rem_13rem] items-center gap-3 border-b border-outline-variant px-4 py-3 last:border-b-0">
                 <div className="min-w-0">
                   <p className="truncate font-medium text-on-surface">{product.name}</p>
                   <p className="truncate text-xs text-on-surface-variant">{product.code}{presentation ? ` · ${presentation}` : ` · ${product.unit}`}</p>
@@ -194,12 +238,49 @@ export default function WeeklyEntryForm({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-xs leading-5 text-on-surface-variant">
-          Se registra como compra en lote. La operación es atómica: si un producto tiene un problema, no se guarda sólo una parte.
+          Las filas sin cantidad se omiten. Revisa la lista antes de guardar todo en una sola operación.
         </p>
-        <button type="submit" disabled={saving || !branchId} className="rounded-xl bg-primary px-5 py-3 font-semibold text-on-primary transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60">
-          {saving ? "Guardando…" : "Guardar entrada semanal"}
+        <button type="button" onClick={prepareReview} disabled={saving || !branchId || capturedCount === 0} className="rounded-xl bg-primary px-5 py-3 font-semibold text-on-primary transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60">
+          Revisar entrada ({capturedCount})
         </button>
       </div>
+      </>
+      )}
+      {review && !receipt && (
+        <section className="space-y-4 rounded-xl border border-outline-variant bg-background p-4" aria-label="Revisar antes de guardar">
+          <h2 className="text-lg font-bold">Revisar antes de guardar</h2>
+          <p className="text-sm text-on-surface-variant">Sucursal: <strong>{branches.find((b) => b.id === branchId)?.name}</strong> · {review.length} productos. Aún no se ha registrado ninguna entrada.</p>
+          {notes.trim() && <p className="text-sm text-on-surface-variant">Nota: {notes.trim()}</p>}
+          <div className="divide-y divide-outline-variant">
+            {review.map((item) => (
+              <div key={item.productId} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
+                <span className="font-semibold">{item.productName}</span>
+                <span className="text-right">{item.display}<span className="block text-xs text-on-surface-variant">Equivale a {item.equivalent}</span></span>
+              </div>
+            ))}
+          </div>
+          {uncertain && <p className="text-sm font-semibold text-error">El resultado de la conexión es incierto. Vuelve a intentar exactamente esta operación; no captures una nueva.</p>}
+          <div className="flex flex-wrap gap-3">
+            {!uncertain && <button type="button" disabled={saving} onClick={() => { setReview(null); setResult(null); operationId.current = null; }} className="rounded-lg border border-outline-variant px-4 py-3 font-semibold disabled:opacity-50">Editar cantidades</button>}
+            <button type="submit" disabled={saving} className="rounded-lg bg-primary px-5 py-3 font-semibold text-on-primary disabled:opacity-50">{saving ? "Guardando…" : uncertain ? "Reintentar sin duplicar" : "Confirmar y registrar entrada"}</button>
+          </div>
+        </section>
+      )}
+      {receipt && (
+        <section className="space-y-4 rounded-xl border border-outline-variant bg-background p-4" aria-label="Comprobante de entrada" role="status">
+          <h2 className="text-lg font-bold">Entrada registrada correctamente</h2>
+          <p className="text-sm text-on-surface-variant">{receipt.branch} · {receipt.time} · {receipt.items.length} productos guardados</p>
+          <div className="divide-y divide-outline-variant">
+            {receipt.items.map((item) => (
+              <div key={item.productId} className="flex flex-wrap justify-between gap-2 py-2 text-sm">
+                <span>{item.productName}</span><span className="text-right font-semibold">{item.display}<span className="block text-xs font-normal text-on-surface-variant">Equivale a {item.equivalent}</span></span>
+              </div>
+            ))}
+          </div>
+          <p className="break-all text-xs text-on-surface-variant">Folio: {receipt.id}</p>
+          <button type="button" onClick={() => { setReceipt(null); setResult(null); }} className="rounded-lg bg-primary px-5 py-3 font-semibold text-on-primary">Nueva entrada</button>
+        </section>
+      )}
     </form>
   );
 }
