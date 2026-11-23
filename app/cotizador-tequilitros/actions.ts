@@ -45,6 +45,15 @@ function isTequilitrosEventMetadata(notes: string | null): boolean {
   }
 }
 
+function quoteIdentityKey(quote: Pick<StoredQuoteData, "code" | "clientName" | "eventDate" | "saleAmount">): string {
+  return [
+    quote.code.trim().toUpperCase(),
+    quote.clientName.trim().toLocaleLowerCase("es-MX"),
+    quote.eventDate.slice(0, 10),
+    Number(quote.saleAmount ?? 0).toFixed(2),
+  ].join("|");
+}
+
 interface StoredQuoteData extends TequilitrosQuoteMetadata {
   id: string;
   code: string;
@@ -325,11 +334,14 @@ export async function registerDepositAction(input: {
           status: "CONFIRMED",
         };
 
-        // 1. Actualizar el registro en AuditEvent
-        await tx.auditEvent.update({
-          where: { id: auditRecord.id },
+        // 1. La bitácora es append-only: registrar una revisión de estatus,
+        // vinculada al ID inmutable de la cotización original.
+        await tx.auditEvent.create({
           data: {
+            actorId: user.id,
             action: "TEQUILITROS_QUOTE_CONFIRMED",
+            entityType: "TequilitrosQuoteStatus",
+            entityId: auditRecord.id,
             metadata: updatedMetadata as unknown as object,
           },
         });
@@ -376,19 +388,52 @@ export async function getQuotesListAction() {
   const user = await getCurrentUser();
   if (!user) return [];
 
-  // Leer todas las cotizaciones guardadas en AuditEvent
-  const records = await prisma.auditEvent.findMany({
-    where: { entityType: "TequilitrosQuote" },
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
+  // Las cotizaciones son snapshots inmutables. Sus cambios de estatus viven en
+  // revisiones append-only y los eventos oficiales son la fuente de respaldo
+  // para registros confirmados antes de adoptar las revisiones.
+  const [records, statusRecords, confirmedEvents] = await Promise.all([
+    prisma.auditEvent.findMany({
+      where: { entityType: "TequilitrosQuote" },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
+    prisma.auditEvent.findMany({
+      where: { entityType: "TequilitrosQuoteStatus" },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
+    prisma.serviceEvent.findMany({
+      where: { status: { notIn: ["CANCELLED", "DRAFT"] } },
+      select: { notes: true },
+    }),
+  ]);
 
-  return records.flatMap((rec) => {
-    const quote = parseStoredQuote(rec.metadata);
-    if (!quote) return [];
+  const statusByQuoteRecordId = new Map<string, StoredQuoteData>();
+  for (const record of statusRecords) {
+    if (statusByQuoteRecordId.has(record.entityId)) continue;
+    const status = parseStoredQuote(record.metadata);
+    if (status) statusByQuoteRecordId.set(record.entityId, status);
+  }
+
+  const confirmedEventByQuoteKey = new Map<string, StoredQuoteData>();
+  for (const event of confirmedEvents) {
+    const confirmedQuote = parseStoredQuote(event.notes);
+    if (confirmedQuote?.isContractConfirmed || confirmedQuote?.status === "CONFIRMED") {
+      confirmedEventByQuoteKey.set(quoteIdentityKey(confirmedQuote), confirmedQuote);
+    }
+  }
+
+  return records.flatMap((record) => {
+    const originalQuote = parseStoredQuote(record.metadata);
+    if (!originalQuote) return [];
+
+    const quote =
+      statusByQuoteRecordId.get(record.id) ??
+      confirmedEventByQuoteKey.get(quoteIdentityKey(originalQuote)) ??
+      originalQuote;
 
     return [{
-      id: quote.code || rec.id,
+      id: record.id,
       code: quote.code,
       clientName: quote.clientName,
       clientPhone: quote.clientPhone,
@@ -397,7 +442,7 @@ export async function getQuotesListAction() {
       guestCount: quote.guestCount,
       saleAmount: Number(quote.saleAmount ?? 0),
       status: quote.status,
-      createdAt: quote.createdAt || rec.createdAt.toISOString(),
+      createdAt: originalQuote.createdAt || record.createdAt.toISOString(),
       metadata: quote,
       isConfirmed: Boolean(quote.isContractConfirmed || quote.status === "CONFIRMED"),
     }];
@@ -424,6 +469,7 @@ export async function getCalendarMonthAction(year: number, month: number) {
   const quoteRecords = await prisma.auditEvent.findMany({
     where: { entityType: "TequilitrosQuote" },
   });
+  const confirmedQuoteKeys = new Set<string>();
 
   const mapByDay = new Map<string, DayAvailability>();
 
@@ -445,6 +491,8 @@ export async function getCalendarMonthAction(year: number, month: number) {
   // Contabilizar eventos confirmados oficiales
   for (const ev of confirmedEvents) {
     if (!isTequilitrosEventMetadata(ev.notes)) continue;
+    const confirmedQuote = parseStoredQuote(ev.notes);
+    if (confirmedQuote) confirmedQuoteKeys.add(quoteIdentityKey(confirmedQuote));
     const dateStr = ev.eventDate.toISOString().slice(0, 10);
     const dayItem = mapByDay.get(dateStr);
     if (!dayItem) continue;
@@ -465,7 +513,11 @@ export async function getCalendarMonthAction(year: number, month: number) {
   for (const rec of quoteRecords) {
     const quote = parseStoredQuote(rec.metadata);
     if (!quote) continue;
-    if (quote.isContractConfirmed || quote.status === "CONFIRMED") continue; // Ya contabilizado en ServiceEvent
+    if (
+      quote.isContractConfirmed ||
+      quote.status === "CONFIRMED" ||
+      confirmedQuoteKeys.has(quoteIdentityKey(quote))
+    ) continue; // Ya contabilizado en ServiceEvent
 
     const dateStr = quote.eventDate.slice(0, 10);
     const dayItem = mapByDay.get(dateStr);
@@ -501,13 +553,24 @@ export async function getEmployeeMetricsAction(): Promise<EmployeeLeaderboardIte
   const user = await getCurrentUser();
   if (!user) return [];
 
-  const records = await prisma.auditEvent.findMany({
-    where: { entityType: "TequilitrosQuote" },
-    select: {
-      actorId: true,
-      metadata: true,
-    },
-  });
+  const [records, confirmedEvents] = await Promise.all([
+    prisma.auditEvent.findMany({
+      where: { entityType: "TequilitrosQuote" },
+      select: { actorId: true, metadata: true },
+    }),
+    prisma.serviceEvent.findMany({
+      where: { status: { notIn: ["CANCELLED", "DRAFT"] } },
+      select: { notes: true },
+    }),
+  ]);
+
+  const confirmedQuoteKeys = new Set<string>();
+  for (const event of confirmedEvents) {
+    const quote = parseStoredQuote(event.notes);
+    if (quote?.isContractConfirmed || quote?.status === "CONFIRMED") {
+      confirmedQuoteKeys.add(quoteIdentityKey(quote));
+    }
+  }
 
   const workerMap = new Map<string, EmployeeLeaderboardItem>();
 
@@ -529,7 +592,11 @@ export async function getEmployeeMetricsAction(): Promise<EmployeeLeaderboardIte
     existing.quotesCount += 1;
     existing.totalQuotedAmount += amount;
 
-    if (quote.isContractConfirmed || quote.status === "CONFIRMED") {
+    if (
+      quote.isContractConfirmed ||
+      quote.status === "CONFIRMED" ||
+      confirmedQuoteKeys.has(quoteIdentityKey(quote))
+    ) {
       existing.confirmedContractsCount += 1;
       existing.totalConfirmedAmount += amount;
     }
