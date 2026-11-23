@@ -92,7 +92,7 @@ export default async function SucursalesInventoryPage() {
   const [products, recentEntries, dashboard] = await Promise.all([
     prisma.inventoryProduct.findMany({
       where: { isActive: true, archivedAt: null, trackStock: true },
-      select: { id: true, name: true, unit: true, minimumStock: true },
+      select: { id: true, name: true, unit: true, category: true, unitCost: true, minimumStock: true },
     }),
     prisma.inventoryEntry.findMany({
       where: branchFilter,
@@ -103,6 +103,10 @@ export default async function SucursalesInventoryPage() {
     getInventoryDashboardData(allowedBranchIds),
   ]);
 
+  const unpricedConsumables = products.filter((product) =>
+    (product.unitCost === null || Number(product.unitCost) <= 0) &&
+    !["Equipo de stand", "Herramientas", "Trastes"].includes(product.category),
+  );
   const matrix = await computeStockMatrix(products.map((p) => p.id), allowedBranchIds);
 
   const lowStockProducts = products
@@ -218,6 +222,26 @@ export default async function SucursalesInventoryPage() {
             ))}
           </div>
         </div>
+
+        {unpricedConsumables.length > 0 && (
+          <section className="rounded-2xl border border-secondary/40 bg-surface-container p-4 text-sm">
+            <h2 className="font-bold text-on-surface">Valorización incompleta: {unpricedConsumables.length} insumos sin costo</h2>
+            <p className="mt-1 text-on-surface-variant">
+              Los totales de consumo y existencias son estimaciones parciales hasta capturar costos reales.
+              No se asignó un costo ficticio ni se cambiaron existencias.
+            </p>
+            {user?.role === "ADMIN" && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {unpricedConsumables.map((product) => (
+                  <Link key={product.id} href={`/administration/inventory/products/${product.id}`}
+                    className="rounded-lg border border-outline-variant px-3 py-2 font-semibold text-primary hover:bg-surface-container-high">
+                    {product.name} · Registrar costo
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         {(negativeRows.length > 0 || countAttentionRows.length > 0) && (
           <section aria-labelledby="weekly-count-attention" className="rounded-2xl border border-secondary/35 bg-secondary/10 p-5">
