@@ -10,6 +10,7 @@ import {
 } from "../InventoryCharts";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 import { getInventoryDashboardData } from "../lib/dashboard";
+import { formatHumanInventoryQuantity } from "@/lib/inventory/units";
 import {
   ClipboardIcon,
   AlertIcon,
@@ -24,6 +25,9 @@ import { isInventoryCountCaptureRole } from "@/lib/permission-modules";
 import {
   formatBusinessDate,
 } from "@/lib/dateTime";
+
+const money = (value: number) =>
+  new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(value);
 
 const formatDate = (value: Date) =>
   formatBusinessDate(value, { day: "2-digit", month: "short" });
@@ -111,45 +115,45 @@ export default async function SucursalesInventoryPage() {
   const weekly = dashboard.weeklyAnalytics;
   const mostConsumedProduct = control.topProducts[0] ?? null;
   const mostConsumedProductWeekly = weekly.topProducts[0] ?? null;
-  const mostActiveBranch = [...control.branches].sort((a, b) => b.consumed - a.consumed)[0] ?? null;
-  const mostActiveBranchWeekly = [...weekly.branches].sort((a, b) => b.consumed - a.consumed)[0] ?? null;
-  const mostWastefulBranch = [...control.branches].sort((a, b) => b.waste - a.waste)[0] ?? null;
-  const mostMismatchedBranch = [...control.branches].sort((a, b) => b.mismatchUnits - a.mismatchUnits)[0] ?? null;
+  const mostActiveBranch = [...control.branches].sort((a, b) => b.consumedCost - a.consumedCost)[0] ?? null;
+  const mostActiveBranchWeekly = [...weekly.branches].sort((a, b) => b.consumedCost - a.consumedCost)[0] ?? null;
+  const mostWastefulBranch = [...control.branches].sort((a, b) => b.wasteCost - a.wasteCost)[0] ?? null;
+  const mostMismatchedBranch = [...control.branches].sort((a, b) => b.mismatches - a.mismatches)[0] ?? null;
   const mismatchProducts = [...control.topProducts]
     .filter((product) => product.mismatches > 0)
-    .sort((a, b) => b.mismatchUnits - a.mismatchUnits)
+    .sort((a, b) => b.mismatches - a.mismatches)
     .slice(0, 12);
   const branchComparison = [...control.branches]
-    .filter((branch) => branch.consumed > 0 || branch.waste > 0 || branch.mismatchUnits > 0)
-    .sort((a, b) => Math.max(b.consumed, b.waste, b.mismatchUnits) - Math.max(a.consumed, a.waste, a.mismatchUnits))
+    .filter((branch) => branch.consumedCost > 0 || branch.wasteCost > 0 || branch.mismatches > 0)
+    .sort((a, b) => Math.max(b.consumedCost, b.wasteCost) - Math.max(a.consumedCost, a.wasteCost))
     .slice(0, 10)
     .map((branch) => ({
       name: branch.name,
-      consumed: Math.round(branch.consumed * 10) / 10,
-      waste: Math.round(branch.waste * 10) / 10,
-      mismatchUnits: Math.round(branch.mismatchUnits * 10) / 10,
+      consumed: Math.round(branch.consumedCost * 10) / 10,
+      waste: Math.round(branch.wasteCost * 10) / 10,
+      mismatchUnits: branch.mismatches,
     }));
   const weeklyBranchById = new Map(weekly.branches.map((branch) => [branch.id, branch]));
   const branchPeriodComparison = control.branches
     .map((branch) => ({
       name: branch.name,
-      weekly: Math.round((weeklyBranchById.get(branch.id)?.consumed ?? 0) * 10) / 10,
-      monthly: Math.round(branch.consumed * 10) / 10,
+      weekly: Math.round((weeklyBranchById.get(branch.id)?.consumedCost ?? 0) * 10) / 10,
+      monthly: Math.round(branch.consumedCost * 10) / 10,
     }))
     .filter((branch) => branch.weekly > 0 || branch.monthly > 0)
     .sort((a, b) => b.monthly - a.monthly)
     .slice(0, 10);
   const productPeriodById = new Map<string, { name: string; weekly: number; monthly: number; unit: string }>();
   for (const product of weekly.topProducts) {
-    productPeriodById.set(product.id, { name: product.name, weekly: product.consumed, monthly: 0, unit: product.unit });
+    productPeriodById.set(product.id, { name: product.name, weekly: product.cost, monthly: 0, unit: product.baseUnit });
   }
   for (const product of control.topProducts) {
     const current = productPeriodById.get(product.id);
     productPeriodById.set(product.id, {
       name: product.name,
       weekly: current?.weekly ?? 0,
-      monthly: product.consumed,
-      unit: product.unit,
+      monthly: product.cost,
+      unit: product.baseUnit,
     });
   }
   const productPeriodComparison = Array.from(productPeriodById.values())
@@ -281,17 +285,17 @@ export default async function SucursalesInventoryPage() {
 
                   <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
                     <Card>
-                      <CardLabel>Consumo neto</CardLabel>
-                      <CardValue>{control.totals.consumedUnits.toFixed(1)}</CardValue>
+                      <CardLabel>Costo del consumo · 30 días</CardLabel>
+                      <CardValue>{money(control.totals.consumedCost)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        unidades · {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.consumedCost)}
+                        valor estimado según presentación comercial
                       </p>
                     </Card>
                     <Card>
-                      <CardLabel>Mermas</CardLabel>
-                      <CardValue>{control.totals.wasteUnits.toFixed(1)}</CardValue>
+                      <CardLabel>Costo de mermas · 30 días</CardLabel>
+                      <CardValue>{money(control.totals.wasteCost)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        costo {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(control.totals.wasteCost)}
+                        ajustes negativos registrados
                       </p>
                     </Card>
                     <Card>
@@ -307,7 +311,7 @@ export default async function SucursalesInventoryPage() {
                         {mostConsumedProduct?.name ?? "Sin datos"}
                       </p>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {mostConsumedProduct ? `${mostConsumedProduct.consumed.toFixed(1)} ${mostConsumedProduct.unit}` : "Todavía no hay salidas"}
+                        {mostConsumedProduct ? formatHumanInventoryQuantity(mostConsumedProduct.consumed, mostConsumedProduct.baseUnit) : "Todavía no hay salidas"}
                       </p>
                     </Card>
                     <Card>
@@ -316,12 +320,12 @@ export default async function SucursalesInventoryPage() {
                         {mostActiveBranch?.name ?? "Sin datos"}
                       </p>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {mostActiveBranch ? `${mostActiveBranch.consumed.toFixed(1)} unidades` : "Todavía no hay salidas"}
+                        {mostActiveBranch ? money(mostActiveBranch.consumedCost) : "Todavía no hay salidas"}
                       </p>
                     </Card>
                     <Card>
-                      <CardLabel>Entradas del periodo</CardLabel>
-                      <CardValue>{control.totals.receivedUnits.toFixed(1)}</CardValue>
+                      <CardLabel>Valor de entradas · 30 días</CardLabel>
+                      <CardValue>{money(control.totals.receivedCost)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
                         {control.totals.movements} movimientos registrados
                       </p>
@@ -330,26 +334,26 @@ export default async function SucursalesInventoryPage() {
 
                   <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
                     <Card>
-                      <CardLabel>Consumo · 7 días</CardLabel>
-                      <CardValue>{weekly.totals.consumedUnits.toFixed(1)}</CardValue>
+                      <CardLabel>Costo de consumo · 7 días</CardLabel>
+                      <CardValue>{money(weekly.totals.consumedCost)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
                         {weekly.totals.movements} movimientos
                       </p>
                     </Card>
                     <Card>
-                      <CardLabel>Entradas · 7 días</CardLabel>
-                      <CardValue>{weekly.totals.receivedUnits.toFixed(1)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">unidades recibidas</p>
+                      <CardLabel>Valor de entradas · 7 días</CardLabel>
+                      <CardValue>{money(weekly.totals.receivedCost)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">costo estimado en MXN</p>
                     </Card>
                     <Card>
-                      <CardLabel>Mermas · 7 días</CardLabel>
-                      <CardValue>{weekly.totals.wasteUnits.toFixed(1)}</CardValue>
+                      <CardLabel>Costo de mermas · 7 días</CardLabel>
+                      <CardValue>{money(weekly.totals.wasteCost)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">pérdidas registradas</p>
                     </Card>
                     <Card>
                       <CardLabel>Diferencias · 7 días</CardLabel>
                       <CardValue>{weekly.totals.mismatchCount}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">{weekly.totals.mismatchUnits.toFixed(1)} unidades</p>
+                      <p className="mt-1 text-xs text-on-surface-variant">comparaciones por producto; sin sumar ml, g y piezas</p>
                     </Card>
                     <Card>
                       <CardLabel>Producto líder · 7 días</CardLabel>
@@ -357,7 +361,7 @@ export default async function SucursalesInventoryPage() {
                         {mostConsumedProductWeekly?.name ?? "Sin datos"}
                       </p>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {mostConsumedProductWeekly ? `${mostConsumedProductWeekly.consumed.toFixed(1)} ${mostConsumedProductWeekly.unit}` : "Sin salidas"}
+                        {mostConsumedProductWeekly ? formatHumanInventoryQuantity(mostConsumedProductWeekly.consumed, mostConsumedProductWeekly.baseUnit) : "Sin salidas"}
                       </p>
                     </Card>
                     <Card>
@@ -366,14 +370,14 @@ export default async function SucursalesInventoryPage() {
                         {mostActiveBranchWeekly?.name ?? "Sin datos"}
                       </p>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {mostActiveBranchWeekly ? `${mostActiveBranchWeekly.consumed.toFixed(1)} unidades` : "Sin salidas"}
+                        {mostActiveBranchWeekly ? money(mostActiveBranchWeekly.consumedCost) : "Sin salidas"}
                       </p>
                     </Card>
                   </section>
 
                   <section className="grid gap-4 lg:grid-cols-2">
                     <Card>
-                      <CardLabel>Consumo por sucursal · semanal vs mensual</CardLabel>
+                      <CardLabel>Costo de consumo por sucursal (MXN) · 7 vs 30 días</CardLabel>
                       {branchPeriodComparison.length > 0 ? (
                         <InventoryPeriodComparisonChart data={branchPeriodComparison} />
                       ) : (
@@ -381,7 +385,7 @@ export default async function SucursalesInventoryPage() {
                       )}
                     </Card>
                     <Card>
-                      <CardLabel>Productos que más se mueven · semanal vs mensual</CardLabel>
+                      <CardLabel>Costo de productos consumidos (MXN) · 7 vs 30 días</CardLabel>
                       {productPeriodComparison.length > 0 ? (
                         <InventoryPeriodComparisonChart data={productPeriodComparison} />
                       ) : (
@@ -391,7 +395,7 @@ export default async function SucursalesInventoryPage() {
                   </section>
 
                   <Card>
-                    <CardLabel>Productos con más movimiento · semanal y mensual</CardLabel>
+                    <CardLabel>Productos con más costo de consumo · 7 y 30 días (MXN)</CardLabel>
                     {productPeriodRows.length === 0 ? (
                       <p className="mt-3 text-sm text-on-surface-variant">No hay consumo registrado en los periodos seleccionados.</p>
                     ) : (
@@ -409,8 +413,8 @@ export default async function SucursalesInventoryPage() {
                             {productPeriodRows.map((product) => (
                               <tr key={product.name}>
                                 <td className="py-3 font-semibold text-on-surface">{product.name}</td>
-                                <td className="py-3 text-right text-secondary">{product.weekly.toFixed(1)}</td>
-                                <td className="py-3 text-right text-on-surface-variant">{product.monthly.toFixed(1)}</td>
+                                <td className="py-3 text-right text-secondary">{money(product.weekly)}</td>
+                                <td className="py-3 text-right text-on-surface-variant">{money(product.monthly)}</td>
                                 <td className="py-3 text-right text-on-surface-variant">{product.unit}</td>
                               </tr>
                             ))}
@@ -422,12 +426,12 @@ export default async function SucursalesInventoryPage() {
 
                   <section className="grid gap-4 lg:grid-cols-3">
                     <Card>
-                      <CardLabel>Evolución · últimos 30 días</CardLabel>
-                      <InventoryFlowChart data={control.daily} />
+                      <CardLabel>Valor de movimientos (MXN) · últimos 30 días</CardLabel>
+                      <InventoryFlowChart data={control.dailyCost} />
                     </Card>
                     <Card>
-                      <CardLabel>Evolución · últimos 7 días</CardLabel>
-                      <InventoryFlowChart data={weekly.daily} />
+                      <CardLabel>Valor de movimientos (MXN) · últimos 7 días</CardLabel>
+                      <InventoryFlowChart data={weekly.dailyCost} />
                     </Card>
                     <Card>
                       <CardLabel>Tipos de movimiento</CardLabel>
@@ -443,7 +447,7 @@ export default async function SucursalesInventoryPage() {
 
                   <section className="grid gap-4 lg:grid-cols-2">
                     <Card>
-                      <CardLabel>Consumo, merma y diferencias por sucursal</CardLabel>
+                      <CardLabel>Costo de consumo y merma (MXN); diferencias por conteo</CardLabel>
                       {branchComparison.length > 0 ? (
                         <InventoryBranchComparisonChart data={branchComparison} />
                       ) : (
@@ -451,11 +455,12 @@ export default async function SucursalesInventoryPage() {
                       )}
                     </Card>
                     <Card>
-                      <CardLabel>Productos con más consumo</CardLabel>
+                      <CardLabel>Productos con mayor costo de consumo</CardLabel>
                       {control.topProducts.length > 0 ? (
                         <InventoryRankingChart
-                          data={control.topProducts.slice(0, 8).map((item) => ({ name: item.name, value: Math.round(item.consumed * 10) / 10 }))}
-                          valueLabel="Unidades consumidas"
+                          data={control.topProducts.slice(0, 8).map((item) => ({ name: item.name, value: Math.round(item.cost * 10) / 10 }))}
+                          valueLabel="Costo de consumo (MXN)"
+                          money
                         />
                       ) : (
                         <p className="py-12 text-center text-sm text-on-surface-variant">Sin consumo registrado.</p>
@@ -468,14 +473,14 @@ export default async function SucursalesInventoryPage() {
                       <CardLabel>Sucursal con más merma</CardLabel>
                       <p className="mt-3 text-lg font-bold text-on-surface">{mostWastefulBranch?.name ?? "Sin datos"}</p>
                       <p className="mt-1 text-sm text-on-surface-variant">
-                        {mostWastefulBranch ? `${mostWastefulBranch.waste.toFixed(1)} unidades · ${new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(mostWastefulBranch.wasteCost)}` : "Sin mermas registradas"}
+                        {mostWastefulBranch ? money(mostWastefulBranch.wasteCost) : "Sin mermas registradas"}
                       </p>
                     </Card>
                     <Card>
                       <CardLabel>Sucursal con más diferencias</CardLabel>
                       <p className="mt-3 text-lg font-bold text-on-surface">{mostMismatchedBranch?.name ?? "Sin datos"}</p>
                       <p className="mt-1 text-sm text-on-surface-variant">
-                        {mostMismatchedBranch ? `${mostMismatchedBranch.mismatches} productos · ${mostMismatchedBranch.shortageUnits.toFixed(1)} unidades faltantes` : "Sin diferencias registradas"}
+                        {mostMismatchedBranch ? `${mostMismatchedBranch.mismatches} renglones con diferencia` : "Sin diferencias registradas"}
                       </p>
                     </Card>
                     <Card>
@@ -519,11 +524,11 @@ export default async function SucursalesInventoryPage() {
                                   <td className="py-3 font-semibold text-on-surface">
                                     <span className="mr-2 text-xs text-outline">#{index + 1}</span>{branch.name}
                                   </td>
-                                  <td className="py-3 text-right text-secondary">{(weeklyBranchById.get(branch.id)?.consumed ?? 0).toFixed(1)}</td>
-                                  <td className="py-3 text-right text-on-surface-variant">{branch.consumed.toFixed(1)}</td>
+                                  <td className="py-3 text-right text-secondary">{money(weeklyBranchById.get(branch.id)?.consumedCost ?? 0)}</td>
+                                  <td className="py-3 text-right text-on-surface-variant">{money(branch.consumedCost)}</td>
                                   <td className="py-3 text-right text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.consumedCost)}</td>
-                                  <td className="py-3 text-right text-error">{branch.waste.toFixed(1)}</td>
-                                  <td className="py-3 text-right text-secondary">{branch.mismatches} · {branch.mismatchUnits.toFixed(1)}</td>
+                                  <td className="py-3 text-right text-error">{money(branch.wasteCost)}</td>
+                                  <td className="py-3 text-right text-secondary">{branch.mismatches} renglones</td>
                                   <td className="py-3 text-right text-on-surface-variant">{branch.lowStockCount}</td>
                                   <td className="py-3 text-right text-error">{branch.negativeProductCount}</td>
                                   <td className="py-3 text-right text-on-surface-variant">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 }).format(branch.currentStockValue)}</td>
@@ -697,19 +702,19 @@ export default async function SucursalesInventoryPage() {
 
                   <section className="mt-5 grid gap-4 grid-cols-2 lg:grid-cols-4">
                     <Card>
-                      <CardLabel>Consumo semanal</CardLabel>
-                      <CardValue>{weekly.totals.consumedUnits.toFixed(1)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">unidades en 7 días</p>
+                      <CardLabel>Costo de consumo semanal</CardLabel>
+                      <CardValue>{money(weekly.totals.consumedCost)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">MXN en 7 días</p>
                     </Card>
                     <Card>
-                      <CardLabel>Consumo mensual</CardLabel>
-                      <CardValue>{control.totals.consumedUnits.toFixed(1)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">unidades en 30 días</p>
+                      <CardLabel>Costo de consumo mensual</CardLabel>
+                      <CardValue>{money(control.totals.consumedCost)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">MXN en 30 días</p>
                     </Card>
                     <Card>
-                      <CardLabel>Merma semanal</CardLabel>
-                      <CardValue>{weekly.totals.wasteUnits.toFixed(1)}</CardValue>
-                      <p className="mt-1 text-xs text-on-surface-variant">unidades registradas</p>
+                      <CardLabel>Costo de merma semanal</CardLabel>
+                      <CardValue>{money(weekly.totals.wasteCost)}</CardValue>
+                      <p className="mt-1 text-xs text-on-surface-variant">MXN estimados</p>
                     </Card>
                     <Card>
                       <CardLabel>Diferencias mensuales</CardLabel>
