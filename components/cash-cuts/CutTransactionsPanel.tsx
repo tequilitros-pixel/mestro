@@ -138,7 +138,7 @@ export default function CutTransactionsPanel({
   const visibleSales = view === "live" ? ordered.slice(0, 10) : ordered.slice(0, historyLimit);
 
   return (
-    <section className="mb-6 space-y-3" aria-label="Transacciones y productos del corte">
+    <section id="transacciones-corte" className="mb-6 scroll-mt-20 space-y-3" aria-label="Transacciones y productos del corte">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-on-surface">

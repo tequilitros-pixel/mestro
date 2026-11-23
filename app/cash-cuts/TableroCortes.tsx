@@ -348,6 +348,9 @@ export default function TableroCortes({
                         <Link href={`/cash-cuts/daily/${c.id}`} className="font-semibold text-on-surface underline-offset-2 hover:underline">
                           Ver
                         </Link>
+                        <Link href={`/cash-cuts/daily/${c.id}#transacciones-corte`} className="ml-3 font-semibold text-primary hover:underline">
+                          {c.status === "ABIERTO" ? "En vivo" : "Transacciones"}
+                        </Link>
                         {canArchive && c.status !== "ABIERTO" && (
                           <button type="button" onClick={() => void archiveCut(c)} disabled={archivingId === c.id} className="ml-3 font-semibold text-primary hover:underline disabled:opacity-50">
                             {archivingId === c.id ? "Archivando..." : "Archivar"}
@@ -390,6 +393,10 @@ export default function TableroCortes({
                   <Link href={`/cash-cuts/daily/${c.id}`}
                     className="mt-4 flex min-h-11 items-center justify-center rounded-lg border border-outline-variant text-sm font-semibold text-on-surface transition hover:bg-surface-container">
                     Ver detalle
+                  </Link>
+                  <Link href={`/cash-cuts/daily/${c.id}#transacciones-corte`}
+                    className="mt-2 flex min-h-11 items-center justify-center rounded-lg border border-primary/50 bg-primary/10 text-sm font-bold text-primary">
+                    {c.status === "ABIERTO" ? "Ver transacciones en vivo" : "Ver transacciones"}
                   </Link>
                   {canArchive && c.status !== "ABIERTO" && (
                     <button type="button" onClick={() => void archiveCut(c)} disabled={archivingId === c.id} className="mt-2 flex min-h-11 w-full items-center justify-center rounded-lg border border-outline-variant text-sm font-semibold text-primary disabled:opacity-50">
