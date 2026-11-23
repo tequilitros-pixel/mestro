@@ -24,3 +24,26 @@ export function isPotentialInventoryCountOutlier(input: {
       : 1;
   return expected > 50 * Math.max(counted, presentation);
 }
+
+/**
+ * La captura inicial y el cierre NO deben aceptar silenciosamente incrementos
+ * masivos en unidades base. Una explicación explícita permite un alta legítima
+ * de gran volumen y queda guardada en el renglón de conteo / movimiento.
+ */
+export function isImplausibleInventoryIncrease(input: {
+  expected: number;
+  captured: number;
+  normalizedContentPerUnit: number | null;
+  costPerBaseUnit: number | null;
+}): boolean {
+  const { expected, captured, normalizedContentPerUnit, costPerBaseUnit } = input;
+  if (!Number.isFinite(expected) || !Number.isFinite(captured) || expected < 0 || captured <= expected) return false;
+  const factor = normalizedContentPerUnit !== null
+    && Number.isFinite(normalizedContentPerUnit)
+    && normalizedContentPerUnit > 0
+    ? normalizedContentPerUnit : 1;
+  const cost = costPerBaseUnit !== null && Number.isFinite(costPerBaseUnit) && costPerBaseUnit > 0
+    ? costPerBaseUnit : 0;
+  return captured > 50 * Math.max(expected, factor)
+    && (captured - expected) * cost >= 5000;
+}
