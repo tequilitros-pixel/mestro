@@ -2,16 +2,16 @@ import type { SyncSnapshot } from "./types";
 
 export function formatSyncStatusLabel(snapshot: SyncSnapshot): string {
   if (snapshot.syncError) {
-    return `Error de sincronización · ${snapshot.failed} con error · ${snapshot.pending} pendientes · Reintentar`;
+    return `Error de sincronización · ${snapshot.failed} con error · ${snapshot.pending} pendientes · Revisar`;
   }
   if (!snapshot.online) {
     const queued = snapshot.pending + snapshot.failed;
     return `Sin conexión${queued ? ` · ${queued} pendientes` : ""}`;
   }
-  if (snapshot.syncing) return `Sincronizando · ${snapshot.pending} pendientes`;
+  if (snapshot.syncing) return `Sincronizando / verificar envío · ${snapshot.pending} pendientes`;
   if (snapshot.failed) {
     const pending = snapshot.pending ? ` · ${snapshot.pending} pendientes` : "";
-    return `${snapshot.failed} con error${pending} · Reintentar`;
+    return `${snapshot.failed} con error${pending} · Revisar`;
   }
   return snapshot.pending ? `${snapshot.pending} pendientes` : "En línea";
 }
