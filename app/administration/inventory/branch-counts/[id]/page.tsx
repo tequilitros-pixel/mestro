@@ -11,7 +11,7 @@ import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresenta
 import { formatBusinessDateTime } from "@/lib/dateTime";
 import { inventoryCountTypeLabel, isProductIncludedInInventoryCount } from "@/lib/inventory/countScope";
 import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
-import { isPotentialInventoryCountOutlier } from "@/lib/inventory/countAudit";
+import { isPotentialInventoryCountOutlier, isImplausibleInventoryIncrease } from "@/lib/inventory/countAudit";
 
 export default async function CountDetailPage({
   params,
@@ -69,20 +69,23 @@ export default async function CountDetailPage({
     const expected = Number(item.previousQuantity ?? 0);
     const actual = item.quantityCounted === null ? null : Number(item.quantityCounted);
     const missing = actual === null ? 0 : Math.max(0, expected - actual);
-    const missingCost = missing * (costPerInventoryBaseUnit(item.product) ?? 0);
-    return {
-      missingCost,
-      requiresReview: isPotentialInventoryCountOutlier({
-        expected,
-        counted: actual,
-        normalizedContentPerUnit: item.product.normalizedContentPerUnit === null
-          ? null : Number(item.product.normalizedContentPerUnit),
-        missingCost,
-      }),
-    };
+    const surplus = actual === null ? 0 : Math.max(0, actual - expected);
+    const costPerBase = costPerInventoryBaseUnit(item.product) ?? 0;
+    const missingCost = missing * costPerBase;
+    const surplusCost = surplus * costPerBase;
+    const presentation = item.product.normalizedContentPerUnit === null
+      ? null : Number(item.product.normalizedContentPerUnit);
+    const requiresReview = isPotentialInventoryCountOutlier({
+      expected, counted: actual, normalizedContentPerUnit: presentation, missingCost,
+    }) || (actual !== null && isImplausibleInventoryIncrease({
+      expected: Math.max(0, expected), captured: actual,
+      normalizedContentPerUnit: presentation, costPerBaseUnit: costPerBase,
+    }));
+    return { missingCost, surplusCost, requiresReview };
   });
   const ordinaryShortage = differences.reduce((sum, diff) => sum + (diff.requiresReview ? 0 : diff.missingCost), 0);
-  const extraordinaryShortage = differences.reduce((sum, diff) => sum + (diff.requiresReview ? diff.missingCost : 0), 0);
+  const ordinarySurplus = differences.reduce((sum, diff) => sum + (diff.requiresReview ? 0 : diff.surplusCost), 0);
+  const extraordinaryDifference = differences.reduce((sum, diff) => sum + (diff.requiresReview ? diff.missingCost + diff.surplusCost : 0), 0);
   const fmtCurrency = (amount: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount);
   const hasUncomputedFlow = count.status === "CERRADO" &&
     count.declarations.length > 0 &&
@@ -130,9 +133,11 @@ export default async function CountDetailPage({
             <p className="text-sm font-semibold text-on-surface">Conciliación del conteo físico</p>
             <p className="mt-2 text-xs text-on-surface-variant">Faltantes estimados (no son ventas ni pérdidas comprobadas)</p>
             <p className="mt-1 text-2xl font-bold text-on-surface">{fmtCurrency(ordinaryShortage)}</p>
-            {extraordinaryShortage > 0 && (
+            <p className="mt-2 text-xs text-on-surface-variant">Sobrantes estimados</p>
+            <p className="mt-1 text-lg font-bold text-on-surface">{fmtCurrency(ordinarySurplus)}</p>
+            {extraordinaryDifference > 0 && (
               <p className="mt-2 text-sm font-semibold text-amber-400">
-                {fmtCurrency(extraordinaryShortage)} en diferencias extraordinarias por revisar
+                {fmtCurrency(extraordinaryDifference)} en diferencias extraordinarias por revisar
               </p>
             )}
             <p className="mt-2 text-xs text-on-surface-variant">
