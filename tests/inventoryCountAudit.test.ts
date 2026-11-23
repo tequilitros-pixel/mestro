@@ -45,3 +45,12 @@ test("no bloquea cambios normales ni cantidades sin evidencia financiera suficie
     expected: 1001000, counted: 1000, normalizedContentPerUnit: 1000, missingCost: 0,
   }), true);
 });
+
+test("señala 33 botellas de alto valor contadas desde saldo cero para revisión", () => {
+  assert.equal(isImplausibleInventoryIncrease({
+    expected: 0, captured: 33000, normalizedContentPerUnit: 1000, costPerBaseUnit: 800 / 1000,
+  }), true);
+  assert.equal(isImplausibleInventoryIncrease({
+    expected: 0, captured: 3000, normalizedContentPerUnit: 1000, costPerBaseUnit: 800 / 1000,
+  }), false);
+});
