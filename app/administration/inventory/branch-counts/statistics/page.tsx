@@ -695,7 +695,7 @@ export default async function BranchCountStatisticsPage({
             label="Coincidencia exacta"
             value={`${exactRate}%`}
             detail={`${exactRows.toLocaleString("es-MX")} de ${totalMeasured.toLocaleString("es-MX")} renglones iguales hasta el ml, g o pieza; no es un porcentaje de merma`}
-            highlight={exactRate >= 90 ? "success" : exactRate >= 75 ? "warning" : "error"}
+            highlight="normal"
           />
         </section>
 
@@ -802,8 +802,8 @@ export default async function BranchCountStatisticsPage({
                     <th className="px-3 py-2.5">Sucursal</th>
                     <th className="px-3 py-2.5 text-center">Estado / Riesgo</th>
                     <th className="px-3 py-2.5 text-center">Conteos</th>
-                    <th className="px-3 py-2.5 text-right">Exactitud</th>
-                    <th className="px-3 py-2.5 text-right">Productos Afectados</th>
+                    <th className="px-3 py-2.5 text-right">Coincidencia exacta</th>
+                    <th className="px-3 py-2.5 text-right">Renglones con faltante</th>
                     <th className="px-3 py-2.5 text-right">Faltantes estimados (MXN)</th>
                   </tr>
                 </thead>
@@ -831,13 +831,7 @@ export default async function BranchCountStatisticsPage({
                       </td>
                       <td className="px-3 py-3 text-right">
                         <span
-                          className={`font-semibold ${
-                            b.exactRate >= 90
-                              ? "text-emerald-400"
-                              : b.exactRate >= 75
-                              ? "text-amber-400"
-                              : "text-error"
-                          }`}
+                          className="font-semibold text-on-surface"
                         >
                           {b.exactRate}%
                         </span>
@@ -888,7 +882,7 @@ export default async function BranchCountStatisticsPage({
                     <th className="px-3 py-2.5">Sucursal</th>
                     <th className="px-3 py-2.5">Fecha</th>
                     <th className="px-3 py-2.5">Responsable</th>
-                    <th className="px-3 py-2.5 text-right">Exactitud</th>
+                    <th className="px-3 py-2.5 text-right">Coincidencia exacta</th>
                     <th className="px-3 py-2.5 text-right">Descuadres</th>
                     <th className="px-3 py-2.5 text-right">Faltante estimado (MXN)</th>
                     <th className="px-3 py-2.5 text-center">Acción</th>
@@ -913,13 +907,7 @@ export default async function BranchCountStatisticsPage({
                       <td className="px-3 py-3 text-on-surface-variant">{c.createdByName}</td>
                       <td className="px-3 py-3 text-right">
                         <span
-                          className={`font-semibold ${
-                            c.exactRate >= 90
-                              ? "text-emerald-400"
-                              : c.exactRate >= 75
-                              ? "text-amber-400"
-                              : "text-error"
-                          }`}
+                          className="font-semibold text-on-surface"
                         >
                           {c.exactRate}%
                         </span>
