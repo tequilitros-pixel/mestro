@@ -9,7 +9,7 @@ import {
   formatInventoryDashboardQuantity,
   type InventoryProductUnitConfig,
 } from "@/lib/inventory/units";
-import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
+import { costPerInventoryBaseUnit, resolveInventoryCountUnitCost } from "@/lib/accounting/inventoryCost";
 import { isPotentialInventoryCountOutlier, isImplausibleInventoryIncrease, countAmountInPesos } from "@/lib/inventory/countAudit";
 import { consolidateSaleConsumption } from "@/lib/inventory/saleConsumptionSummary";
 import CountDashboardCharts from "./CountDashboardCharts";
@@ -28,6 +28,7 @@ type CountAnalysisRow = {
   notes?: string | null;
   product: InventoryProductUnitConfig & { unitCost?: unknown; normalizedContentPerUnit?: unknown };
   unitCost: number;
+  snapshotInPresentation: boolean;
   expected: number;
   actual: number | null;
   variance: number | null;
@@ -223,9 +224,8 @@ export default async function BranchCountStatisticsPage({
       const expected = Number(item.previousQuantity ?? 0);
       const actual = item.quantityCounted === null ? null : Number(item.quantityCounted);
       const variance = actual === null ? null : actual - expected;
-      const baseCost =
-        costPerInventoryBaseUnit(item.product) ??
-        (item.unitCostAtTime ? Number(item.unitCostAtTime) : 0);
+      const snapshotCost = resolveInventoryCountUnitCost(item.product, item.unitCostAtTime);
+      const baseCost = snapshotCost.unitCost;
       const missing = variance === null ? 0 : Math.max(0, -variance);
       const surplus = variance === null ? 0 : Math.max(0, variance);
       const missingCost = countAmountInPesos(missing, baseCost);
@@ -259,6 +259,7 @@ export default async function BranchCountStatisticsPage({
         notes: item.notes,
         product: item.product,
         unitCost: baseCost,
+        snapshotInPresentation: snapshotCost.snapshotInPresentation,
         expected,
         actual,
         variance,
@@ -537,6 +538,7 @@ export default async function BranchCountStatisticsPage({
   const missingCostRows = rows.filter((row) =>
     row.actual !== null && row.variance !== 0 && row.unitCost <= 0,
   );
+  const presentationCostSnapshotRows = rows.filter((row) => row.snapshotInPresentation);
   const groupedDates = counts.reduce((map, count) => {
     const key = `${count.branchId}:${count.countDate.toISOString().slice(0, 10)}:${count.countType}`;
     const matches = map.get(key) ?? [];
@@ -724,7 +726,7 @@ export default async function BranchCountStatisticsPage({
           </DataCard>
         )}
 
-        {(legacyCounts.length > 0 || missingCostRows.length > 0 || repeatedCountDays.length > 0 || staleCaptureRows.length > 0) && (
+        {(legacyCounts.length > 0 || missingCostRows.length > 0 || repeatedCountDays.length > 0 || staleCaptureRows.length > 0 || presentationCostSnapshotRows.length > 0) && (
           <DataCard title="Calidad de datos del historial">
             <p className="mb-3 text-sm text-on-surface-variant">
               Advertencias de auditoría: estos datos pueden afectar la interpretación de los importes
@@ -735,6 +737,12 @@ export default async function BranchCountStatisticsPage({
                 <p><strong>{staleCaptureRows.length} productos en {staleCaptureCounts} conteos con movimientos posteriores a la captura.</strong>
                   {" "}La comparación con el saldo del cierre puede producir faltantes o sobrantes engañosos.
                   {" "}Estas diferencias se muestran en revisión y no se suman a faltantes ordinarios.
+                </p>
+              )}
+              {presentationCostSnapshotRows.length > 0 && (
+                <p><strong>{presentationCostSnapshotRows.length} registros históricos con costo de presentación en vez de costo por unidad base.</strong>
+                  {" "}El reporte normaliza esos importes al leerlos (por ejemplo, precio por botella dividido entre sus mililitros),
+                  sin modificar las capturas originales.
                 </p>
               )}
               {missingCostRows.length > 0 && (
