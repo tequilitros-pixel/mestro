@@ -10,7 +10,7 @@ import {
   type InventoryProductUnitConfig,
 } from "@/lib/inventory/units";
 import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
-import { isPotentialInventoryCountOutlier, isImplausibleInventoryIncrease } from "@/lib/inventory/countAudit";
+import { isPotentialInventoryCountOutlier, isImplausibleInventoryIncrease, countAmountInPesos } from "@/lib/inventory/countAudit";
 import { consolidateSaleConsumption } from "@/lib/inventory/saleConsumptionSummary";
 import CountDashboardCharts from "./CountDashboardCharts";
 
@@ -204,8 +204,8 @@ export default async function BranchCountStatisticsPage({
         (item.unitCostAtTime ? Number(item.unitCostAtTime) : 0);
       const missing = variance === null ? 0 : Math.max(0, -variance);
       const surplus = variance === null ? 0 : Math.max(0, variance);
-      const missingCost = missing * baseCost;
-      const surplusCost = surplus * baseCost;
+      const missingCost = countAmountInPesos(missing, baseCost);
+      const surplusCost = countAmountInPesos(surplus, baseCost);
       const presentation = item.product.normalizedContentPerUnit === null
         ? null : Number(item.product.normalizedContentPerUnit);
       const requiresReview = isPotentialInventoryCountOutlier({
