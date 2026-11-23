@@ -374,33 +374,46 @@ export async function getInventoryAnalytics(
       addConsumed(productValue, quantity, unitCost, reversal);
       addConsumed(branchValue, quantity, unitCost, reversal);
       if (day) {
-        if (reversal) day.consumedReversal += amount; if (dayCost) dayCost.consumedReversal += amount * unitCost;
-        else day.consumedOut += amount; if (dayCost) dayCost.consumedOut += amount * unitCost;
+        if (reversal) {
+          day.consumedReversal += amount;
+          if (dayCost) dayCost.consumedReversal += amount * unitCost;
+        } else {
+          day.consumedOut += amount;
+          if (dayCost) dayCost.consumedOut += amount * unitCost;
+        }
       }
     } else if (entry.type === "SALIDA_EVENTO" || entry.type === "REGRESO_EVENTO") {
       const reversal = entry.type === "REGRESO_EVENTO" || quantity > 0;
       addConsumed(productValue, quantity, unitCost, reversal);
       addConsumed(branchValue, quantity, unitCost, reversal);
       if (day) {
-        if (reversal) day.consumedReversal += amount; if (dayCost) dayCost.consumedReversal += amount * unitCost;
-        else day.consumedOut += amount; if (dayCost) dayCost.consumedOut += amount * unitCost;
+        if (reversal) {
+          day.consumedReversal += amount;
+          if (dayCost) dayCost.consumedReversal += amount * unitCost;
+        } else {
+          day.consumedOut += amount;
+          if (dayCost) dayCost.consumedOut += amount * unitCost;
+        }
       }
     } else if (entry.type === "AJUSTE" && quantity < 0) {
       addWaste(productValue, quantity, unitCost);
       addWaste(branchValue, quantity, unitCost);
-      if (day) day.waste += amount; if (dayCost) dayCost.waste += amount * unitCost;
+      if (day) day.waste += amount;
+        if (dayCost) dayCost.waste += amount * unitCost;
     } else if (entry.type === "TRASPASO") {
       if (quantity < 0) branchValue.transfersOut += amount;
       else branchValue.transfersIn += amount;
       if (quantity > 0) {
         addReceived(productValue, quantity, unitCost);
         addReceived(branchValue, quantity, unitCost);
-        if (day) day.received += amount; if (dayCost) dayCost.received += amount * unitCost;
+        if (day) day.received += amount;
+        if (dayCost) dayCost.received += amount * unitCost;
       }
     } else if (quantity > 0) {
       addReceived(productValue, quantity, unitCost);
       addReceived(branchValue, quantity, unitCost);
-      if (day) day.received += amount; if (dayCost) dayCost.received += amount * unitCost;
+      if (day) day.received += amount;
+        if (dayCost) dayCost.received += amount * unitCost;
     }
   }
 
@@ -428,27 +441,32 @@ export async function getInventoryAnalytics(
       case "SALE_CONSUMPTION":
         addConsumed(productValue, quantity, unitCost);
         addConsumed(branchValue, quantity, unitCost);
-        if (day) day.consumedOut += amount; if (dayCost) dayCost.consumedOut += amount * unitCost;
+        if (day) day.consumedOut += amount;
+        if (dayCost) dayCost.consumedOut += amount * unitCost;
         break;
       case "SALE_REVERSAL":
         addConsumed(productValue, quantity, unitCost, true);
         addConsumed(branchValue, quantity, unitCost, true);
-        if (day) day.consumedReversal += amount; if (dayCost) dayCost.consumedReversal += amount * unitCost;
+        if (day) day.consumedReversal += amount;
+        if (dayCost) dayCost.consumedReversal += amount * unitCost;
         break;
       case "EVENT_LOAD":
         addConsumed(productValue, quantity, unitCost);
         addConsumed(branchValue, quantity, unitCost);
-        if (day) day.consumedOut += amount; if (dayCost) dayCost.consumedOut += amount * unitCost;
+        if (day) day.consumedOut += amount;
+        if (dayCost) dayCost.consumedOut += amount * unitCost;
         break;
       case "EVENT_RETURN":
         addConsumed(productValue, quantity, unitCost, true);
         addConsumed(branchValue, quantity, unitCost, true);
-        if (day) day.consumedReversal += amount; if (dayCost) dayCost.consumedReversal += amount * unitCost;
+        if (day) day.consumedReversal += amount;
+        if (dayCost) dayCost.consumedReversal += amount * unitCost;
         break;
       case "ADJUSTMENT_OUT":
         addWaste(productValue, quantity, unitCost);
         addWaste(branchValue, quantity, unitCost);
-        if (day) day.waste += amount; if (dayCost) dayCost.waste += amount * unitCost;
+        if (day) day.waste += amount;
+        if (dayCost) dayCost.waste += amount * unitCost;
         break;
       case "TRANSFER_OUT":
         branchValue.transfersOut += amount;
@@ -457,14 +475,16 @@ export async function getInventoryAnalytics(
         branchValue.transfersIn += amount;
         addReceived(productValue, quantity, unitCost);
         addReceived(branchValue, quantity, unitCost);
-        if (day) day.received += amount; if (dayCost) dayCost.received += amount * unitCost;
+        if (day) day.received += amount;
+        if (dayCost) dayCost.received += amount * unitCost;
         break;
       case "RECEIPT":
       case "ADJUSTMENT_IN":
         if (quantity > 0) {
           addReceived(productValue, quantity, unitCost);
           addReceived(branchValue, quantity, unitCost);
-          if (day) day.received += amount; if (dayCost) dayCost.received += amount * unitCost;
+          if (day) day.received += amount;
+        if (dayCost) dayCost.received += amount * unitCost;
         }
         break;
       case "COUNT_CORRECTION":
