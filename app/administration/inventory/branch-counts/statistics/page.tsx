@@ -37,6 +37,8 @@ type CountAnalysisRow = {
   surplusCost: number;
   reviewCost: number;
   requiresReview: boolean;
+  staleCapture: boolean;
+  reviewReasons: string[];
   deviation: number;
 };
 
@@ -52,6 +54,7 @@ type CountSummaryItem = {
   missingProducts: number;
   missingCost: number;
   reviewCost: number;
+  staleRows: number;
   exactRate: number;
   justifiedCount: number;
   unjustifiedCount: number;
@@ -193,6 +196,27 @@ export default async function BranchCountStatisticsPage({
     }),
   ]);
 
+  // Comparar capturas físicas con movimientos posteriores hasta el cierre.
+  // Un saldo conciliado al cierre no equivale necesariamente al saldo en el
+  // momento del conteo. Las diferencias de esas capturas requieren revisión.
+  const postCaptureMovements = counts.length > 0
+    ? await prisma.$queryRaw<Array<{ countId: string; productId: string }>>`
+        SELECT DISTINCT i."countId" AS "countId", i."productId" AS "productId"
+        FROM "InventoryCountItem" i
+        JOIN "InventoryCount" c ON c.id = i."countId"
+        JOIN "InventoryMovement" m
+          ON m."branchId" = c."branchId"
+         AND m."inventoryProductId" = i."productId"
+         AND m."createdAt" > i."countedAt"
+         AND m."createdAt" < c."closedAt"
+         AND m."sourceId" <> c.id
+        WHERE i."countId" IN (${Prisma.join(counts.map((count) => count.id))})
+      `
+    : [];
+  const staleCaptureKeys = new Set(
+    postCaptureMovements.map((row) => `${row.countId}:${row.productId}`),
+  );
+
   // Análisis por renglón con costo unitario en moneda real ($ MXN)
   const rows: CountAnalysisRow[] = counts.flatMap((count) =>
     count.items.map((item) => {
@@ -208,7 +232,7 @@ export default async function BranchCountStatisticsPage({
       const surplusCost = countAmountInPesos(surplus, baseCost);
       const presentation = item.product.normalizedContentPerUnit === null
         ? null : Number(item.product.normalizedContentPerUnit);
-      const requiresReview = isPotentialInventoryCountOutlier({
+      const outlier = isPotentialInventoryCountOutlier({
         expected, counted: actual, normalizedContentPerUnit: presentation, missingCost,
       }) || (actual !== null && isImplausibleInventoryIncrease({
         expected: Math.max(0, expected),
@@ -216,6 +240,12 @@ export default async function BranchCountStatisticsPage({
         normalizedContentPerUnit: presentation,
         costPerBaseUnit: baseCost,
       }));
+      const staleCapture = staleCaptureKeys.has(`${count.id}:${item.productId}`);
+      const reviewReasons = [
+        ...(outlier ? ["Saldo extraordinario"] : []),
+        ...(staleCapture ? ["Hubo movimientos después de la captura física"] : []),
+      ];
+      const requiresReview = reviewReasons.length > 0;
       const reviewCost = requiresReview ? missingCost + surplusCost : 0;
 
       return {
@@ -238,6 +268,8 @@ export default async function BranchCountStatisticsPage({
         surplusCost,
         reviewCost,
         requiresReview,
+        staleCapture,
+        reviewReasons,
         deviation:
           variance === null
             ? 0
@@ -397,6 +429,7 @@ export default async function BranchCountStatisticsPage({
       const discrepantProducts = countRows.filter((r) => r.variance !== null && r.variance !== 0).length;
       const missingCost = countRows.reduce((sum, r) => sum + (r.requiresReview ? 0 : r.missingCost), 0);
       const reviewCost = countRows.reduce((sum, r) => sum + r.reviewCost, 0);
+      const staleRows = countRows.filter((r) => r.staleCapture).length;
       const justifiedCount = countRows.filter((r) => Boolean(r.notes?.trim())).length;
       const unjustifiedCount = countRows.filter((r) => r.missing > 0 && !r.requiresReview && !r.notes?.trim()).length;
 
@@ -412,6 +445,7 @@ export default async function BranchCountStatisticsPage({
         missingProducts,
         missingCost,
         reviewCost,
+        staleRows,
         exactRate,
         justifiedCount,
         unjustifiedCount,
@@ -460,7 +494,9 @@ export default async function BranchCountStatisticsPage({
   const totalMeasured = rows.filter((row) => row.actual !== null).length;
   const exactRows = rows.filter((row) => row.actual !== null && row.variance === 0).length;
   const exactRate = totalMeasured > 0 ? Math.round((exactRows / totalMeasured) * 100) : 0;
-  const reviewRows = rows.filter((row) => row.requiresReview).sort((a, b) => b.reviewCost - a.reviewCost);
+  const staleCaptureRows = rows.filter((row) => row.staleCapture);
+  const staleCaptureCounts = new Set(staleCaptureRows.map((row) => row.countId)).size;
+  const reviewRows = rows.filter((row) => row.requiresReview && row.reviewCost > 0).sort((a, b) => b.reviewCost - a.reviewCost);
   const totalReviewCost = reviewRows.reduce((sum, row) => sum + row.reviewCost, 0);
   const totalMissingCost = rows.reduce((sum, r) => sum + (r.requiresReview ? 0 : r.missingCost), 0);
   const totalSurplusCost = rows.reduce((sum, r) => sum + (r.requiresReview ? 0 : r.surplusCost), 0);
@@ -469,8 +505,8 @@ export default async function BranchCountStatisticsPage({
   const mostDifficultCount = countSummaries[0];
 
   const missingRows = rows.filter((row) => row.missing > 0 && !row.requiresReview).sort((a, b) => b.missingCost - a.missingCost);
-  const absentRows = rows.filter((row) => row.expected > 0 && row.actual === 0).sort((a, b) => b.expected - a.expected);
-  const deviationRows = rows.filter((row) => row.expected > 0 && row.deviation > 0.1).sort((a, b) => b.deviation - a.deviation);
+  const absentRows = rows.filter((row) => !row.requiresReview && row.expected > 0 && row.actual === 0).sort((a, b) => b.expected - a.expected);
+  const deviationRows = rows.filter((row) => !row.requiresReview && row.expected > 0 && row.deviation > 0.1).sort((a, b) => b.deviation - a.deviation);
 
   const dailySummary = [
     ...rows
