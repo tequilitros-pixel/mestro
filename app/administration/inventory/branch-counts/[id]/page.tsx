@@ -10,6 +10,8 @@ import { generateOperationId } from "@/lib/pos2/operationId";
 import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresentation";
 import { formatBusinessDateTime } from "@/lib/dateTime";
 import { inventoryCountTypeLabel, isProductIncludedInInventoryCount } from "@/lib/inventory/countScope";
+import { resolveInventoryCountUnitCost } from "@/lib/accounting/inventoryCost";
+import { isPotentialInventoryCountOutlier, isImplausibleInventoryIncrease, countAmountInPesos } from "@/lib/inventory/countAudit";
 
 export default async function CountDetailPage({
   params,
@@ -32,6 +34,7 @@ export default async function CountDetailPage({
       branch: true,
       closedBy: { select: { name: true, username: true } },
       items: { include: { product: true }, orderBy: { product: { name: "asc" } } },
+      declarations: { select: { id: true } },
     },
   });
 
@@ -60,10 +63,34 @@ export default async function CountDetailPage({
   const pendingItems = editable
     ? count.items.filter((item) => item.quantityCounted === null || item.countedAt === null)
     : [];
-  const totalCost = count.items.reduce(
-    (sum, item) => sum + (item.costTotal !== null ? Number(item.costTotal) : 0),
-    0,
-  );
+  // Los conteos físicos V2 registran una corrección, no el consumo semanal.
+  // La cantidad en "costTotal" ya no se alimenta en el flujo V2 y suele ser 0.
+  const differences = count.items.map((item) => {
+    const expected = Number(item.previousQuantity ?? 0);
+    const actual = item.quantityCounted === null ? null : Number(item.quantityCounted);
+    const missing = actual === null ? 0 : Math.max(0, expected - actual);
+    const surplus = actual === null ? 0 : Math.max(0, actual - expected);
+    const costPerBase = resolveInventoryCountUnitCost(item.product, item.unitCostAtTime).unitCost;
+    const missingCost = countAmountInPesos(missing, costPerBase);
+    const surplusCost = countAmountInPesos(surplus, costPerBase);
+    const presentation = item.product.normalizedContentPerUnit === null
+      ? null : Number(item.product.normalizedContentPerUnit);
+    const requiresReview = isPotentialInventoryCountOutlier({
+      expected, counted: actual, normalizedContentPerUnit: presentation, missingCost,
+    }) || (actual !== null && isImplausibleInventoryIncrease({
+      expected: Math.max(0, expected), captured: actual,
+      normalizedContentPerUnit: presentation, costPerBaseUnit: costPerBase,
+    }));
+    return { missingCost, surplusCost, requiresReview };
+  });
+  const ordinaryShortage = differences.reduce((sum, diff) => sum + (diff.requiresReview ? 0 : diff.missingCost), 0);
+  const ordinarySurplus = differences.reduce((sum, diff) => sum + (diff.requiresReview ? 0 : diff.surplusCost), 0);
+  const extraordinaryDifference = differences.reduce((sum, diff) => sum + (diff.requiresReview ? diff.missingCost + diff.surplusCost : 0), 0);
+  const fmtCurrency = (amount: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount);
+  const hasUncomputedFlow = count.status === "CERRADO" &&
+    count.declarations.length > 0 &&
+    count.items.every((item) => Number(item.entriesQuantity ?? 0) === 0 &&
+      Number(item.quantityConsumed ?? 0) === 0 && Number(item.costTotal ?? 0) === 0);
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
@@ -103,12 +130,22 @@ export default async function CountDetailPage({
 
         {isAdmin && count.status === "CERRADO" && (
           <div className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-            <p className="text-xs text-on-surface-variant">Costo total consumido esta semana</p>
-            <p className="mt-1 text-2xl font-bold text-tertiary-fixed-dim">
-              ${totalCost.toFixed(2)}
+            <p className="text-sm font-semibold text-on-surface">Conciliación del conteo físico</p>
+            <p className="mt-2 text-xs text-on-surface-variant">Faltantes estimados (no son ventas ni pérdidas comprobadas)</p>
+            <p className="mt-1 text-2xl font-bold text-on-surface">{fmtCurrency(ordinaryShortage)}</p>
+            <p className="mt-2 text-xs text-on-surface-variant">Sobrantes estimados</p>
+            <p className="mt-1 text-lg font-bold text-on-surface">{fmtCurrency(ordinarySurplus)}</p>
+            {extraordinaryDifference > 0 && (
+              <p className="mt-2 text-sm font-semibold text-amber-400">
+                {fmtCurrency(extraordinaryDifference)} en diferencias extraordinarias por revisar
+              </p>
+            )}
+            <p className="mt-2 text-xs text-on-surface-variant">
+              Comparación del saldo teórico al cierre contra el conteo físico, valorizada por unidad base.
+              {hasUncomputedFlow ? " Las entradas y el consumo por venta no se calculan en este corte; se consultan en Movimientos." : ""}
             </p>
           </div>
-        )}
+        )
 
         {editable && pendingItems.length > 0 && (
           <div
@@ -135,6 +172,7 @@ export default async function CountDetailPage({
             buildInventoryCountItemClientView(item, {
               status: count.status,
               canViewHistory: isAdmin,
+              hideUncomputedFlow: hasUncomputedFlow,
             }),
           )}
           countId={count.id}

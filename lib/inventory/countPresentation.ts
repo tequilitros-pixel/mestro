@@ -54,7 +54,7 @@ function asNumber(value: DecimalLike | null): number | null {
 
 export function buildInventoryCountItemClientView(
   item: InventoryCountItemRecord,
-  options: { status: "BORRADOR" | "CERRADO" | "ANULADO"; canViewHistory: boolean },
+  options: { status: "BORRADOR" | "CERRADO" | "ANULADO"; canViewHistory: boolean; hideUncomputedFlow?: boolean },
 ): InventoryCountItemClientView {
   const view: InventoryCountItemClientView = {
     id: item.id,
@@ -80,9 +80,9 @@ export function buildInventoryCountItemClientView(
     previousQuantity: asNumber(item.previousQuantity ?? 0),
     ...(options.status === "CERRADO"
       ? {
-          entriesQuantity: asNumber(item.entriesQuantity),
-          quantityConsumed: asNumber(item.quantityConsumed),
-          costTotal: asNumber(item.costTotal),
+          entriesQuantity: options.hideUncomputedFlow ? null : asNumber(item.entriesQuantity),
+          quantityConsumed: options.hideUncomputedFlow ? null : asNumber(item.quantityConsumed),
+          costTotal: options.hideUncomputedFlow ? null : asNumber(item.costTotal),
         }
       : {}),
   };

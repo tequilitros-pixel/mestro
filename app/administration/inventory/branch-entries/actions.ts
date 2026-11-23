@@ -100,6 +100,10 @@ export async function createInventoryEntryAction(
     return { success: true, message: "Entrada registrada correctamente.", id: String(outcome.result.id) };
   } catch (error) {
     console.error("Error creating inventory entry:", error);
+    if (error instanceof Error && error.message.startsWith("INVENTORY_INCREASE_NEEDS_REVIEW:")) {
+      const product = error.message.slice("INVENTORY_INCREASE_NEEDS_REVIEW:".length);
+      return { success: false, error: `La entrada de "${product}" es extraordinariamente grande. Verifica la cantidad y su unidad; si es correcta, agrega una nota justificando la entrada.` };
+    }
     return { success: false, error: error instanceof Error ? error.message : "No fue posible registrar la entrada." };
   }
 }
@@ -180,6 +184,10 @@ export async function createWeeklyInventoryReceiptAction(
   } catch (error) {
     console.error("Error creating weekly inventory receipt:", error);
     if (error instanceof Error) {
+      if (error.message.startsWith("WEEKLY_RECEIPT_REVIEW_REQUIRED:")) {
+        const product = error.message.slice("WEEKLY_RECEIPT_REVIEW_REQUIRED:".length);
+        return { success: false, error: `La entrada de "${product}" supera ampliamente lo habitual. Corrige la cantidad o escribe una nota específica que justifique este volumen.` };
+      }
       if (error.message === "WEEKLY_RECEIPT_DUPLICATE_PRODUCT") return { success: false, error: "Un producto aparece más de una vez en la captura." };
       if (error.message === "WEEKLY_RECEIPT_PRODUCT_NOT_AVAILABLE") return { success: false, error: "Uno de los productos ya no está activo o inventariable." };
       if (error.message === "WEEKLY_RECEIPT_UNIT_NOT_CONFIGURED") return { success: false, error: "Uno de los productos no tiene unidad base configurada." };

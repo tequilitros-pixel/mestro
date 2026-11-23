@@ -489,7 +489,7 @@ export default function CountItemRow({
                 <p className="text-sm text-on-surface-variant">
                   {item.entriesQuantity !== undefined && item.entriesQuantity !== null
                     ? item.entriesQuantity
-                    : "—"}
+                    : "No calculado"}
                 </p>
               </div>
             )}
@@ -500,7 +500,7 @@ export default function CountItemRow({
                 <p className="text-sm font-semibold text-on-surface">
                   {item.quantityConsumed !== undefined && item.quantityConsumed !== null
                     ? item.quantityConsumed
-                    : "—"}
+                    : "No calculado"}
                 </p>
                 {item.costTotal !== undefined && item.costTotal !== null && item.costTotal > 0 && (
                   <p className="text-xs text-tertiary-fixed-dim">

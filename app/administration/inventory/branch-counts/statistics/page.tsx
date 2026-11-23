@@ -9,7 +9,9 @@ import {
   formatInventoryDashboardQuantity,
   type InventoryProductUnitConfig,
 } from "@/lib/inventory/units";
-import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
+import { costPerInventoryBaseUnit, resolveInventoryCountUnitCost } from "@/lib/accounting/inventoryCost";
+import { isPotentialInventoryCountOutlier, isImplausibleInventoryIncrease, countAmountInPesos } from "@/lib/inventory/countAudit";
+import { consolidateSaleConsumption } from "@/lib/inventory/saleConsumptionSummary";
 import CountDashboardCharts from "./CountDashboardCharts";
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -26,11 +28,18 @@ type CountAnalysisRow = {
   notes?: string | null;
   product: InventoryProductUnitConfig & { unitCost?: unknown; normalizedContentPerUnit?: unknown };
   unitCost: number;
+  snapshotInPresentation: boolean;
   expected: number;
   actual: number | null;
   variance: number | null;
   missing: number;
   missingCost: number;
+  surplus: number;
+  surplusCost: number;
+  reviewCost: number;
+  requiresReview: boolean;
+  staleCapture: boolean;
+  reviewReasons: string[];
   deviation: number;
 };
 
@@ -45,6 +54,8 @@ type CountSummaryItem = {
   discrepantProducts: number;
   missingProducts: number;
   missingCost: number;
+  reviewCost: number;
+  staleRows: number;
   exactRate: number;
   justifiedCount: number;
   unjustifiedCount: number;
@@ -59,6 +70,7 @@ type BranchAuditRow = {
   exactRows: number;
   exactRate: number;
   missingCost: number;
+  reviewCost: number;
   riskLevel: "CRITICAL" | "ATTENTION" | "HEALTHY";
 };
 
@@ -94,7 +106,9 @@ export default async function BranchCountStatisticsPage({
   };
   const allHistory = value("all") === "1";
   const today = todayDateOnly();
-  const defaultFrom = addDaysToDateOnly(today, -29);
+  // Un resumen semanal debe mostrar siete días completos por defecto.
+  const defaultFrom = addDaysToDateOnly(today, -6);
+  const monthFrom = addDaysToDateOnly(today, -29);
   const fromParam = value("from");
   const toParam = value("to");
   const requestedFrom = isDate(fromParam) ? fromParam : defaultFrom;
@@ -113,14 +127,13 @@ export default async function BranchCountStatisticsPage({
   const countWhere: Prisma.InventoryCountWhereInput = {
     status: "CERRADO",
     branchId: branchFilter,
-    countType: selectedType,
+    countType: selectedType ?? "WEEKLY",
     ...(selectedEmployeeId ? { createdById: selectedEmployeeId } : {}),
     ...(dateFilter ? { countDate: dateFilter } : {}),
   };
   const movementWhere: Prisma.InventoryMovementWhereInput = {
     branchId: branchFilter,
-    movementType: InventoryMovementTypeV2.SALE_CONSUMPTION,
-    quantityDelta: { lt: 0 },
+    movementType: { in: [InventoryMovementTypeV2.SALE_CONSUMPTION, InventoryMovementTypeV2.SALE_REVERSAL] },
     ...(dateFilter ? { createdAt: dateFilter } : {}),
   };
   const branchWhere = allowedBranchIds === null ? { active: true } : { active: true, id: { in: allowedBranchIds } };
@@ -150,6 +163,7 @@ export default async function BranchCountStatisticsPage({
         countType: true,
         branch: { select: { name: true } },
         createdBy: { select: { id: true, name: true } },
+        declarations: { select: { id: true } },
         items: {
           select: {
             productId: true,
@@ -177,11 +191,34 @@ export default async function BranchCountStatisticsPage({
     }),
     prisma.inventoryMovement.groupBy({
       where: movementWhere,
-      by: ["branchId", "inventoryProductId", "unit"],
+      by: ["branchId", "inventoryProductId", "unit", "movementType"],
       _sum: { quantityDelta: true },
       _count: { _all: true },
     }),
   ]);
+
+  // Comparar capturas físicas con el saldo NETO de movimientos posteriores hasta el cierre.
+  // Un saldo conciliado al cierre no equivale necesariamente al saldo en el
+  // momento del conteo. Las diferencias de esas capturas requieren revisión.
+  const postCaptureMovements = counts.length > 0
+    ? await prisma.$queryRaw<Array<{ countId: string; productId: string }>>`
+        SELECT i."countId" AS "countId", i."productId" AS "productId"
+        FROM "InventoryCountItem" i
+        JOIN "InventoryCount" c ON c.id = i."countId"
+        JOIN "InventoryMovement" m
+          ON m."branchId" = c."branchId"
+         AND m."inventoryProductId" = i."productId"
+         AND m."createdAt" > i."countedAt"
+         AND m."createdAt" < c."closedAt"
+         AND m."sourceId" <> c.id
+        WHERE i."countId" IN (${Prisma.join(counts.map((count) => count.id))})
+        GROUP BY i."countId", i."productId"
+        HAVING SUM(m."quantityDelta") <> 0
+      `
+    : [];
+  const staleCaptureKeys = new Set(
+    postCaptureMovements.map((row) => `${row.countId}:${row.productId}`),
+  );
 
   // Análisis por renglón con costo unitario en moneda real ($ MXN)
   const rows: CountAnalysisRow[] = counts.flatMap((count) =>
@@ -189,11 +226,29 @@ export default async function BranchCountStatisticsPage({
       const expected = Number(item.previousQuantity ?? 0);
       const actual = item.quantityCounted === null ? null : Number(item.quantityCounted);
       const variance = actual === null ? null : actual - expected;
-      const baseCost =
-        costPerInventoryBaseUnit(item.product) ??
-        (item.unitCostAtTime ? Number(item.unitCostAtTime) : 0);
+      const snapshotCost = resolveInventoryCountUnitCost(item.product, item.unitCostAtTime);
+      const baseCost = snapshotCost.unitCost;
       const missing = variance === null ? 0 : Math.max(0, -variance);
-      const missingCost = missing * baseCost;
+      const surplus = variance === null ? 0 : Math.max(0, variance);
+      const missingCost = countAmountInPesos(missing, baseCost);
+      const surplusCost = countAmountInPesos(surplus, baseCost);
+      const presentation = item.product.normalizedContentPerUnit === null
+        ? null : Number(item.product.normalizedContentPerUnit);
+      const outlier = isPotentialInventoryCountOutlier({
+        expected, counted: actual, normalizedContentPerUnit: presentation, missingCost,
+      }) || (actual !== null && isImplausibleInventoryIncrease({
+        expected: Math.max(0, expected),
+        captured: actual,
+        normalizedContentPerUnit: presentation,
+        costPerBaseUnit: baseCost,
+      }));
+      const staleCapture = staleCaptureKeys.has(`${count.id}:${item.productId}`);
+      const reviewReasons = [
+        ...(outlier ? ["Saldo extraordinario"] : []),
+        ...(staleCapture ? ["Cambió el saldo después de la captura física"] : []),
+      ];
+      const requiresReview = reviewReasons.length > 0;
+      const reviewCost = requiresReview ? missingCost + surplusCost : 0;
 
       return {
         countId: count.id,
@@ -206,11 +261,18 @@ export default async function BranchCountStatisticsPage({
         notes: item.notes,
         product: item.product,
         unitCost: baseCost,
+        snapshotInPresentation: snapshotCost.snapshotInPresentation,
         expected,
         actual,
         variance,
         missing,
         missingCost,
+        surplus,
+        surplusCost,
+        reviewCost,
+        requiresReview,
+        staleCapture,
+        reviewReasons,
         deviation:
           variance === null
             ? 0
@@ -228,6 +290,7 @@ export default async function BranchCountStatisticsPage({
     branchId: string;
     inventoryProductId: string;
     unit: string;
+    movementType: InventoryMovementTypeV2;
     _sum: { quantityDelta: Prisma.Decimal | null };
     _count: { _all: number };
   }>;
@@ -255,35 +318,49 @@ export default async function BranchCountStatisticsPage({
   const productNames = new Map(productCodes.map((p) => [p.id, `${p.name} (${p.code})`]));
   const productConfigs = new Map(productCodes.map((p) => [p.id, p]));
 
-  // 1. TOP CONSUMO: Ordenado por valor financiero consumido ($) y velocidad de agotamiento
-  const consumption = consumptionGroupRows
+  // 1. TOP CONSUMO: un producto puede tener ventas en varias sucursales.
+  // Agrupamos por artículo+unidad y restamos las devoluciones antes de
+  // valorizar. Un movimiento de inventario no equivale a un ticket POS.
+  const branchNames = new Map(branches.map((b) => [b.id, b.name]));
+  const consumption = consolidateSaleConsumption(
+    consumptionGroupRows.map((group) => ({
+      inventoryProductId: group.inventoryProductId,
+      branchId: group.branchId,
+      unit: group.unit,
+      movementType: group.movementType as "SALE_CONSUMPTION" | "SALE_REVERSAL",
+      quantityDelta: Number(group._sum.quantityDelta ?? 0),
+      movements: group._count._all,
+    })),
+  )
     .map((group) => {
-      // A historical movement can remain after its catalog item was removed. Keep
-      // it visible with a neutral cost/unit configuration instead of inventing a
-      // cost or failing the entire statistics screen.
       const p = productConfigs.get(group.inventoryProductId) ?? {
         unit: group.unit,
         inventoryBaseUnit: group.unit,
         unitCost: null,
       };
-      const amount = Math.abs(Number(group._sum.quantityDelta ?? 0));
       const baseCost = costPerInventoryBaseUnit(p) ?? (p.unitCost ? Number(p.unitCost) : 0);
-      const totalCost = amount * baseCost;
       return {
-        id: group.inventoryProductId,
+        id: `${group.inventoryProductId}:${group.unit}`,
         name: productNames.get(group.inventoryProductId) ?? "Producto histórico",
         product: p,
-        amount,
-        totalCost,
-        count: group._count._all,
+        amount: group.amount,
+        totalCost: group.amount * baseCost,
+        count: group.saleMovements,
+        reversals: group.reversalMovements,
+        branches: group.branches.map((row) => ({
+          name: branchNames.get(row.branchId) ?? "Sucursal histórica",
+          amount: row.amount,
+        })),
       };
     })
+    .filter((product) => product.amount > 0)
     .sort((a, b) => b.totalCost - a.totalCost || b.amount - a.amount);
 
-  const branchNames = new Map(branches.map((b) => [b.id, b.name]));
   const consumptionByBranch = [
     ...consumptionGroupRows
       .reduce((map, group) => {
+        // Solo contar descuentos por venta: las devoluciones no son consumo.
+        if (group.movementType !== InventoryMovementTypeV2.SALE_CONSUMPTION) return map;
         const current = map.get(group.branchId) ?? {
           name: branchNames.get(group.branchId) ?? "Sucursal histórica",
           movements: 0,
@@ -307,6 +384,7 @@ export default async function BranchCountStatisticsPage({
       exactRows: 0,
       exactRate: 100,
       missingCost: 0,
+      reviewCost: 0,
       riskLevel: "HEALTHY",
     };
 
@@ -314,10 +392,13 @@ export default async function BranchCountStatisticsPage({
       cur.measuredRows += 1;
       if (row.variance === 0) cur.exactRows += 1;
     }
-    if (row.missing > 0) {
-      cur.affectedProducts += 1;
-      cur.missingRows += 1;
-      cur.missingCost += row.missingCost;
+    if (row.requiresReview) {
+      cur.reviewCost += row.reviewCost;
+    }
+    if (row.missing > 0 && !row.requiresReview) {
+        cur.affectedProducts += 1;
+        cur.missingRows += 1;
+        cur.missingCost += row.missingCost;
     }
     branchSummaryMap.set(row.branchName, cur);
   }
@@ -332,8 +413,9 @@ export default async function BranchCountStatisticsPage({
     .map((b) => {
       const exactRate = b.measuredRows > 0 ? Math.round((b.exactRows / b.measuredRows) * 100) : 100;
       let riskLevel: "CRITICAL" | "ATTENTION" | "HEALTHY" = "HEALTHY";
-      if (b.missingCost >= 1000 || exactRate < 80) riskLevel = "CRITICAL";
-      else if (b.missingCost >= 300 || exactRate < 92) riskLevel = "ATTENTION";
+      // La coincidencia exacta (hasta el ml/g) no es una medida de riesgo financiero.
+      if (b.missingCost >= 1000) riskLevel = "CRITICAL";
+      else if (b.missingCost >= 300 || b.reviewCost > 0) riskLevel = "ATTENTION";
       return { ...b, exactRate, riskLevel };
     })
     .sort((a, b) => b.missingCost - a.missingCost || b.missingRows - a.missingRows);
@@ -346,11 +428,13 @@ export default async function BranchCountStatisticsPage({
       const measured = countRows.filter((r) => r.actual !== null);
       const exactItems = measured.filter((r) => r.variance === 0).length;
       const exactRate = measured.length > 0 ? Math.round((exactItems / measured.length) * 100) : 0;
-      const missingProducts = countRows.filter((r) => r.missing > 0).length;
-      const discrepantProducts = countRows.filter((r) => r.variance !== 0).length;
-      const missingCost = countRows.reduce((sum, r) => sum + r.missingCost, 0);
+      const missingProducts = countRows.filter((r) => r.missing > 0 && !r.requiresReview).length;
+      const discrepantProducts = countRows.filter((r) => r.variance !== null && r.variance !== 0).length;
+      const missingCost = countRows.reduce((sum, r) => sum + (r.requiresReview ? 0 : r.missingCost), 0);
+      const reviewCost = countRows.reduce((sum, r) => sum + r.reviewCost, 0);
+      const staleRows = countRows.filter((r) => r.staleCapture).length;
       const justifiedCount = countRows.filter((r) => Boolean(r.notes?.trim())).length;
-      const unjustifiedCount = countRows.filter((r) => r.missing > 0 && !r.notes?.trim()).length;
+      const unjustifiedCount = countRows.filter((r) => r.missing > 0 && !r.requiresReview && !r.notes?.trim()).length;
 
       return {
         id: count.id,
@@ -363,6 +447,8 @@ export default async function BranchCountStatisticsPage({
         discrepantProducts,
         missingProducts,
         missingCost,
+        reviewCost,
+        staleRows,
         exactRate,
         justifiedCount,
         unjustifiedCount,
@@ -385,7 +471,7 @@ export default async function BranchCountStatisticsPage({
   >();
 
   for (const r of rows) {
-    if (r.missing > 0) {
+    if (r.missing > 0 && !r.requiresReview) {
       const cur = productLossMap.get(r.productId) ?? {
         productId: r.productId,
         productName: r.productName,
@@ -411,16 +497,19 @@ export default async function BranchCountStatisticsPage({
   const totalMeasured = rows.filter((row) => row.actual !== null).length;
   const exactRows = rows.filter((row) => row.actual !== null && row.variance === 0).length;
   const exactRate = totalMeasured > 0 ? Math.round((exactRows / totalMeasured) * 100) : 0;
-  const totalMissingCost = rows.reduce((sum, r) => sum + r.missingCost, 0);
-  const totalMissingProducts = rows.filter((r) => r.missing > 0).length;
+  const staleCaptureRows = rows.filter((row) => row.staleCapture);
+  const staleCaptureCounts = new Set(staleCaptureRows.map((row) => row.countId)).size;
+  const reviewRows = rows.filter((row) => row.requiresReview && row.reviewCost > 0).sort((a, b) => b.reviewCost - a.reviewCost);
+  const totalReviewCost = reviewRows.reduce((sum, row) => sum + row.reviewCost, 0);
+  const totalMissingCost = rows.reduce((sum, r) => sum + (r.requiresReview ? 0 : r.missingCost), 0);
+  const totalSurplusCost = rows.reduce((sum, r) => sum + (r.requiresReview ? 0 : r.surplusCost), 0);
+  const totalMissingProducts = rows.filter((r) => r.missing > 0 && !r.requiresReview).length;
   const worstBranch = branchSummary[0];
   const mostDifficultCount = countSummaries[0];
-  const topDepletingProduct = consumption[0];
-  const topLossProduct = topLossProducts[0];
 
-  const missingRows = rows.filter((row) => row.missing > 0).sort((a, b) => b.missingCost - a.missingCost);
-  const absentRows = rows.filter((row) => row.expected > 0 && row.actual === 0).sort((a, b) => b.expected - a.expected);
-  const deviationRows = rows.filter((row) => row.expected > 0 && row.deviation > 0.1).sort((a, b) => b.deviation - a.deviation);
+  const missingRows = rows.filter((row) => row.missing > 0 && !row.requiresReview).sort((a, b) => b.missingCost - a.missingCost);
+  const absentRows = rows.filter((row) => !row.requiresReview && row.expected > 0 && row.actual === 0).sort((a, b) => b.expected - a.expected);
+  const deviationRows = rows.filter((row) => !row.requiresReview && row.expected > 0 && row.deviation > 0.1).sort((a, b) => b.deviation - a.deviation);
 
   const dailySummary = [
     ...rows
@@ -431,7 +520,7 @@ export default async function BranchCountStatisticsPage({
           missingRows: 0,
           branches: new Set<string>(),
         };
-        if (row.missing > 0) {
+        if (row.missing > 0 && !row.requiresReview) {
           current.missingRows += 1;
           current.branches.add(row.branchName);
         }
@@ -446,6 +535,20 @@ export default async function BranchCountStatisticsPage({
       affectedBranches: day.branches.size,
     }))
     .reverse();
+
+  const legacyCounts = counts.filter((count) => count.declarations.length === 0);
+  const missingCostRows = rows.filter((row) =>
+    row.actual !== null && row.variance !== 0 && row.unitCost <= 0,
+  );
+  const presentationCostSnapshotRows = rows.filter((row) => row.snapshotInPresentation);
+  const groupedDates = counts.reduce((map, count) => {
+    const key = `${count.branchId}:${count.countDate.toISOString().slice(0, 10)}:${count.countType}`;
+    const matches = map.get(key) ?? [];
+    matches.push(count);
+    map.set(key, matches);
+    return map;
+  }, new Map<string, typeof counts>());
+  const repeatedCountDays = [...groupedDates.values()].filter((group) => group.length > 1);
 
   const periodLabel = allHistory ? "Todo el historial" : `${dateFrom} a ${dateTo}`;
   const filterSuffix = [
@@ -476,8 +579,8 @@ export default async function BranchCountStatisticsPage({
             </p>
             <h1 className="mt-1 text-3xl font-bold">Resumen Semanal de Auditoría de Conteos</h1>
             <p className="mt-2 max-w-3xl text-sm text-on-surface-variant">
-              Panel contable ejecutivo: identifica qué sucursal tiene problemas, qué conteo semanal
-              presenta mayor merma o descuadre, y qué insumo se está agotando más rápido.
+              Últimos 7 días por defecto. Los faltantes son estimaciones de diferencias entre el sistema y el conteo;
+              los saldos extraordinarios se identifican por separado hasta verificar su origen.
             </p>
           </div>
           <Link
@@ -499,7 +602,7 @@ export default async function BranchCountStatisticsPage({
               <Link href={quickPeriod(addDaysToDateOnly(today, -6))} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
                 7 días
               </Link>
-              <Link href={quickPeriod(defaultFrom)} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
+              <Link href={quickPeriod(monthFrom)} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
                 30 días
               </Link>
               <Link href={`/administration/inventory/branch-counts/statistics?all=1${filterQuery}`} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
@@ -537,7 +640,7 @@ export default async function BranchCountStatisticsPage({
             <label className="text-xs font-semibold text-on-surface-variant">
               Tipo de conteo
               <select name="type" defaultValue={selectedType ?? ""} className="mt-1 h-10 w-full rounded-lg border border-outline-variant bg-background px-3 text-sm text-on-surface">
-                <option value="">Semanal y mensual</option>
+                <option value="">Solo semanales (predeterminado)</option>
                 {COUNT_TYPES.map((t) => (
                   <option key={t} value={t}>{inventoryCountTypeLabel(t)}</option>
                 ))}
@@ -559,15 +662,15 @@ export default async function BranchCountStatisticsPage({
         {/* Tarjetas Ejecutivas de Decisión Rápida (Contaduría) */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <SummaryCard
-            label="Pérdida en Faltantes"
+            label="Faltantes estimados"
             value={formatMoney(totalMissingCost)}
-            detail={`${totalMissingProducts.toLocaleString("es-MX")} productos con descuadre`}
+            detail={`${totalMissingProducts.toLocaleString("es-MX")} renglones sin alertas extraordinarias ni capturas desactualizadas · pendientes de conciliar`}
             highlight="error"
           />
           <SummaryCard
             label="Sucursal con más Problemas"
             value={worstBranch?.name ?? "Sin incidencias"}
-            detail={worstBranch ? `${formatMoney(worstBranch.missingCost)} faltante (${worstBranch.missingRows} renglones)` : "Sin faltantes"}
+            detail={worstBranch ? `${formatMoney(worstBranch.missingCost)} estimados (${worstBranch.missingRows} renglones)` : "Sin faltantes"}
             highlight={worstBranch && worstBranch.missingCost > 0 ? "error" : "normal"}
           />
           <SummaryCard
@@ -577,24 +680,104 @@ export default async function BranchCountStatisticsPage({
             highlight={mostDifficultCount && mostDifficultCount.missingCost > 0 ? "error" : "normal"}
           />
           <SummaryCard
-            label="Mayor Merma / Fuga"
-            value={topLossProduct ? topLossProduct.productName : "Ninguno"}
-            detail={topLossProduct ? `${formatMoney(topLossProduct.totalMissingCost)} (${formatQuantity(-topLossProduct.totalMissing, topLossProduct.product)})` : "Sin pérdidas registradas"}
-            highlight={topLossProduct ? "warning" : "normal"}
+            label="Diferencias por revisar"
+            value={formatMoney(totalReviewCost)}
+            detail={`${reviewRows.length} partidas con diferencias en revisión · separadas de faltantes estimados`}
+            highlight={reviewRows.length > 0 ? "warning" : "normal"}
           />
           <SummaryCard
-            label="Mayor Agotamiento"
-            value={topDepletingProduct ? topDepletingProduct.name : "Sin consumo"}
-            detail={topDepletingProduct ? `${formatMoney(topDepletingProduct.totalCost)} (${formatQuantity(topDepletingProduct.amount, topDepletingProduct.product)})` : "Sin datos de ventas"}
+            label="Sobrantes estimados"
+            value={formatMoney(totalSurplusCost)}
+            detail="Aumentos físicos ordinarios frente al saldo teórico · pendientes de conciliar"
             highlight="normal"
           />
           <SummaryCard
-            label="Exactitud Global"
+            label="Coincidencia exacta"
             value={`${exactRate}%`}
-            detail={`${exactRows.toLocaleString("es-MX")} de ${totalMeasured.toLocaleString("es-MX")} exactos`}
-            highlight={exactRate >= 90 ? "success" : exactRate >= 75 ? "warning" : "error"}
+            detail={`${exactRows.toLocaleString("es-MX")} de ${totalMeasured.toLocaleString("es-MX")} renglones iguales hasta el ml, g o pieza; no es un porcentaje de merma`}
+            highlight="normal"
           />
         </section>
+
+        {reviewRows.length > 0 && (
+          <DataCard title="Revisar diferencias extraordinarias y capturas desactualizadas">
+            <p className="mb-4 text-sm text-on-surface-variant">
+              Los registros originales se conservan. Se separan los saldos extraordinarios y
+              las partidas donde el saldo cambió por ventas, entradas u otros movimientos entre la captura
+              física y el cierre. No es correcto reconocer esas diferencias como pérdidas
+              sin conciliarlas; el importe es bruto y no modifica las existencias.
+            </p>
+            <p className="mb-3 font-bold text-amber-400">{formatMoney(totalReviewCost)} pendientes de verificación ({reviewRows.length} registros)</p>
+            <div className="space-y-2">
+              {reviewRows.slice(0, 12).map((row) => (
+                <Link
+                  key={`${row.countId}:${row.productId}`}
+                  href={`/administration/inventory/branch-counts/${row.countId}`}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-outline-variant px-3 py-3 text-sm transition hover:bg-surface-container-high"
+                >
+                  <span className="min-w-0">
+                    <strong className="block">{row.productName} · {row.branchName}</strong>
+                    <span className="block text-xs text-on-surface-variant">{formatDate(row.countDate)} · {row.countCode}</span>
+                    <span className="block text-xs text-on-surface-variant">Teórico: {formatQuantity(row.expected, row.product)} · Contado: {formatQuantity(row.actual ?? 0, row.product)}</span>
+                    <span className="block text-xs font-medium text-amber-400">{row.reviewReasons.join(" · ")}</span>
+                  </span>
+                  <span className="font-bold text-amber-400">{row.surplus > 0 ? "Sobrante" : "Faltante"}: {formatMoney(row.reviewCost)} en revisión</span>
+                </Link>
+              ))}
+            </div>
+          </DataCard>
+        )}
+
+        {(legacyCounts.length > 0 || missingCostRows.length > 0 || repeatedCountDays.length > 0 || staleCaptureRows.length > 0 || presentationCostSnapshotRows.length > 0) && (
+          <DataCard title="Calidad de datos del historial">
+            <p className="mb-3 text-sm text-on-surface-variant">
+              Advertencias de auditoría: estos datos pueden afectar la interpretación de los importes
+              y porcentajes, pero no se alteran ni se eliminan automáticamente.
+            </p>
+            <div className="space-y-3 text-sm text-on-surface">
+              {staleCaptureRows.length > 0 && (
+                <p><strong>{staleCaptureRows.length} productos en {staleCaptureCounts} conteos con cambios netos de saldo posteriores a la captura.</strong>
+                  {" "}La comparación con el saldo del cierre puede producir faltantes o sobrantes engañosos.
+                  {" "}Estas diferencias se muestran en revisión y no se suman a faltantes ordinarios.
+                </p>
+              )}
+              {presentationCostSnapshotRows.length > 0 && (
+                <p><strong>{presentationCostSnapshotRows.length} registros históricos con costo de presentación en vez de costo por unidad base.</strong>
+                  {" "}El reporte normaliza esos importes al leerlos (por ejemplo, precio por botella dividido entre sus mililitros),
+                  sin modificar las capturas originales.
+                </p>
+              )}
+              {missingCostRows.length > 0 && (
+                <p><strong>{missingCostRows.length} renglones con diferencias sin costo configurado.</strong>
+                  {" "}Su diferencia física existe, pero el reporte no puede valorizarla en pesos.
+                  {" "}Productos: {[...new Set(missingCostRows.map((row) => row.productName))].join(", ")}.
+                </p>
+              )}
+              {legacyCounts.length > 0 && (
+                <div>
+                  <p><strong>{legacyCounts.length} conteos históricos sin declaraciones de conciliación V2.</strong>
+                    {" "}Conservar como historial; revisar la trazabilidad antes de usarlos como referencia contable.
+                  </p>
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    {legacyCounts.map((count) => count.code).join(" · ")}
+                  </p>
+                </div>
+              )}
+              {repeatedCountDays.length > 0 && (
+                <div>
+                  <p><strong>{repeatedCountDays.length} fechas con más de un conteo cerrado en la misma sucursal.</strong>
+                    {" "}No se debe interpretar cada uno como una semana distinta.
+                  </p>
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    {repeatedCountDays.map((group) =>
+                      `${group[0].branch.name}: ${formatDate(group[0].countDate)} (${group.map((count) => count.code).join(", ")})`,
+                    ).join(" · ")}
+                  </p>
+                </div>
+              )}
+            </div>
+          </DataCard>
+        )}
 
         {/* Gráficos de tendencias */}
         <CountDashboardCharts
@@ -619,9 +802,9 @@ export default async function BranchCountStatisticsPage({
                     <th className="px-3 py-2.5">Sucursal</th>
                     <th className="px-3 py-2.5 text-center">Estado / Riesgo</th>
                     <th className="px-3 py-2.5 text-center">Conteos</th>
-                    <th className="px-3 py-2.5 text-right">Exactitud</th>
-                    <th className="px-3 py-2.5 text-right">Productos Afectados</th>
-                    <th className="px-3 py-2.5 text-right">Pérdida en Faltantes ($)</th>
+                    <th className="px-3 py-2.5 text-right">Coincidencia exacta</th>
+                    <th className="px-3 py-2.5 text-right">Renglones con faltante</th>
+                    <th className="px-3 py-2.5 text-right">Faltantes estimados (MXN)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant">
@@ -648,13 +831,7 @@ export default async function BranchCountStatisticsPage({
                       </td>
                       <td className="px-3 py-3 text-right">
                         <span
-                          className={`font-semibold ${
-                            b.exactRate >= 90
-                              ? "text-emerald-400"
-                              : b.exactRate >= 75
-                              ? "text-amber-400"
-                              : "text-error"
-                          }`}
+                          className="font-semibold text-on-surface"
                         >
                           {b.exactRate}%
                         </span>
@@ -673,6 +850,11 @@ export default async function BranchCountStatisticsPage({
                           <span className="text-error">{formatMoney(b.missingCost)}</span>
                         ) : (
                           <span className="text-emerald-400">$0.00</span>
+                        )}
+                        {b.reviewCost > 0 && (
+                          <span className="block text-xs font-medium text-amber-400">
+                            {formatMoney(b.reviewCost)} en revisión
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -700,9 +882,9 @@ export default async function BranchCountStatisticsPage({
                     <th className="px-3 py-2.5">Sucursal</th>
                     <th className="px-3 py-2.5">Fecha</th>
                     <th className="px-3 py-2.5">Responsable</th>
-                    <th className="px-3 py-2.5 text-right">Exactitud</th>
+                    <th className="px-3 py-2.5 text-right">Coincidencia exacta</th>
                     <th className="px-3 py-2.5 text-right">Descuadres</th>
-                    <th className="px-3 py-2.5 text-right">Faltante en Dinero ($)</th>
+                    <th className="px-3 py-2.5 text-right">Faltante estimado (MXN)</th>
                     <th className="px-3 py-2.5 text-center">Acción</th>
                   </tr>
                 </thead>
@@ -725,13 +907,7 @@ export default async function BranchCountStatisticsPage({
                       <td className="px-3 py-3 text-on-surface-variant">{c.createdByName}</td>
                       <td className="px-3 py-3 text-right">
                         <span
-                          className={`font-semibold ${
-                            c.exactRate >= 90
-                              ? "text-emerald-400"
-                              : c.exactRate >= 75
-                              ? "text-amber-400"
-                              : "text-error"
-                          }`}
+                          className="font-semibold text-on-surface"
                         >
                           {c.exactRate}%
                         </span>
@@ -748,7 +924,12 @@ export default async function BranchCountStatisticsPage({
                               </span>
                             ) : (
                               <span className="block text-[11px] text-emerald-400">
-                                Todo justificado
+                                Sin faltantes ordinarios sin justificar
+                              </span>
+                            )}
+                            {c.staleRows > 0 && (
+                              <span className="block text-[11px] font-medium text-amber-400">
+                                {c.staleRows} capturas con movimientos posteriores
                               </span>
                             )}
                           </div>
@@ -761,6 +942,11 @@ export default async function BranchCountStatisticsPage({
                           <span className="text-error">{formatMoney(c.missingCost)}</span>
                         ) : (
                           <span className="text-emerald-400">$0.00</span>
+                        )}
+                        {c.reviewCost > 0 && (
+                          <span className="block text-xs font-medium text-amber-400">
+                            {formatMoney(c.reviewCost)} en revisión
+                          </span>
                         )}
                       </td>
                       <td className="px-3 py-3 text-center">
@@ -782,10 +968,9 @@ export default async function BranchCountStatisticsPage({
         {/* SECCIÓN 3: TOP PRODUCTOS CON MAYOR MERMA Y TOP PRODUCTOS MÁS AGOTADOS */}
         <section className="grid gap-4 lg:grid-cols-2">
           {/* Top Fuga / Merma */}
-          <DataCard title="Top Productos con Mayor Fuga o Merma ($ MXN)">
+          <DataCard title="Productos con faltantes estimados (MXN)">
             <p className="mb-3 text-xs text-on-surface-variant">
-              Insumos y productos que representan la mayor pérdida económica en los inventarios
-              semanales.
+              Diferencias ordinarias pendientes de conciliación. Los registros extraordinarios se muestran en el bloque de revisión.
             </p>
             {topLossProducts.length === 0 ? (
               <Empty />
@@ -824,9 +1009,9 @@ export default async function BranchCountStatisticsPage({
           </DataCard>
 
           {/* Top Consumo / Rotación rápida */}
-          <DataCard title="Top Productos que más Rápido se están Agotando">
+          <DataCard title="Productos con mayor consumo POS valorizado">
             <p className="mb-3 text-xs text-on-surface-variant">
-              Productos de mayor rotación y consumo por ventas o recetas dentro del periodo.
+              Ventas POS netas de devoluciones, agrupadas por producto entre sucursales. Importes a costo de inventario, no a precio de venta.
             </p>
             {consumption.length === 0 ? (
               <Empty />
@@ -843,8 +1028,13 @@ export default async function BranchCountStatisticsPage({
                           {idx + 1}. {item.name}
                         </p>
                         <p className="text-xs text-on-surface-variant">
-                          {item.count} órdenes o recetas aplicadas
+                          {item.count} movimientos de venta{item.reversals > 0 ? ` · ${item.reversals} devoluciones` : ""}
                         </p>
+                        {item.branches.length > 1 && (
+                          <p className="mt-1 text-[11px] text-on-surface-variant">
+                            {item.branches.map((row) => `${row.name}: ${formatQuantity(row.amount, item.product)}`).join(" · ")}
+                          </p>
+                        )}
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="font-bold text-primary">{formatMoney(item.totalCost)}</p>
@@ -861,9 +1051,9 @@ export default async function BranchCountStatisticsPage({
         </section>
 
         {/* SECCIÓN 4: PRIORIDAD DE REVISIÓN INDIVIDUAL (DESCUADRES MÁS FUERTES) */}
-        <DataCard title="Partidas Específicas con Mayor Descuadre Negativo">
+        <DataCard title="Partidas con mayor faltante estimado">
           <p className="mb-3 text-xs text-on-surface-variant">
-            Renglones individuales que ameritan investigación inmediata con el gerente de sucursal.
+            Diferencias físicas sin alertas extraordinarias ni movimientos posteriores a la captura, ordenadas por costo estimado. Deben conciliarse.
           </p>
           {missingRows.length === 0 ? (
             <Empty />
@@ -898,7 +1088,7 @@ export default async function BranchCountStatisticsPage({
 
         {/* SECCIÓN 5: DESVIACIONES Y PRODUCTOS AGOTADOS */}
         <section className="grid gap-4 lg:grid-cols-2">
-          <DataCard title="Productos que se agotaron totalmente (Conteo en Cero)">
+          <DataCard title="Productos contados en cero">
             <p className="mb-3 text-xs text-on-surface-variant">
               Insumos con existencia teórica en sistema que salieron en 0 en el conteo físico.
             </p>
@@ -907,7 +1097,7 @@ export default async function BranchCountStatisticsPage({
 
           <DataCard title="Desviaciones mayores al 10%">
             <p className="mb-3 text-xs text-on-surface-variant">
-              Discrepancia porcentual entre teórico y contado que excede la tolerancia habitual.
+              Discrepancia porcentual mayor al 10%, excluyendo partidas pendientes de revisión. Este umbral es solo un filtro de análisis, no una tolerancia aprobada.
             </p>
             <CountTable rows={deviationRows} mode="deviation" />
           </DataCard>
@@ -1029,6 +1219,11 @@ function CountTable({
             <tr key={`${row.countId}-${row.productId}`} className="border-t border-outline-variant">
               <td className="px-3 py-2">
                 <span className="font-semibold text-on-surface">{row.productName}</span>
+                {row.requiresReview && (
+                  <span className="block text-xs font-semibold text-amber-400">
+                    Saldo extraordinario: requiere revisión
+                  </span>
+                )}
                 {row.notes && (
                   <span className="block text-xs font-medium text-amber-500">
                     Motivo: {row.notes}

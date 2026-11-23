@@ -52,8 +52,8 @@ export default function CountDashboardCharts({
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" />
               <XAxis dataKey="name" stroke="var(--color-outline)" fontSize={11} />
               <YAxis allowDecimals={false} stroke="var(--color-outline)" fontSize={11} />
-              <Tooltip contentStyle={tooltipStyle} formatter={(value) => [Number(value), "Productos afectados"]} />
-              <Bar dataKey="affectedProducts" name="Productos afectados" fill="var(--color-error)" radius={[6, 6, 0, 0]} />
+              <Tooltip contentStyle={tooltipStyle} formatter={(value) => [Number(value), "Partidas con faltante"]} />
+              <Bar dataKey="affectedProducts" name="Partidas con faltante" fill="var(--color-error)" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}

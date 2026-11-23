@@ -12,6 +12,7 @@ import {
 import PageTabs from "@/components/ui/PageTabs";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 import { getInventoryAnalytics } from "./lib/analytics";
+import { formatHumanInventoryQuantity } from "@/lib/inventory/units";
 import {
   InventoryRankingChart,
   InventoryFlowChart,
@@ -74,7 +75,7 @@ export default async function InventoryPage() {
     getInventoryAnalytics(30, await getAccessibleBranchIds()),
     user.role === "ADMIN" ? Promise.resolve([]) : getUserModuleKeys(user.id),
   ]);
-  const { totals, topProducts, categories, branches, movementTypes, daily, lowStock, stale } =
+  const { totals, topProducts, categories, branches, movementTypes, dailyCost, lowStock, stale } =
     analytics;
 
   const visibleSections = sections.filter((section) => {
@@ -142,7 +143,7 @@ export default async function InventoryPage() {
                       <CardLabel>Consumo del periodo</CardLabel>
                       <CardValue>{money(totals.consumedCost)}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {units(totals.consumedUnits)} unidades salidas
+                        valor estimado por presentación comercial
                       </p>
                     </Card>
 
@@ -150,7 +151,7 @@ export default async function InventoryPage() {
                       <CardLabel>Movimientos</CardLabel>
                       <CardValue>{totals.movements}</CardValue>
                       <p className="mt-1 text-xs text-on-surface-variant">
-                        {units(totals.receivedUnits)} unidades entradas
+                        {money(totals.receivedCost)} en entradas
                       </p>
                     </Card>
 
@@ -187,19 +188,19 @@ export default async function InventoryPage() {
                   ) : (
                     <>
                       <Card>
-                        <CardLabel>Entradas y salidas por día</CardLabel>
-                        <InventoryFlowChart data={daily} />
+                        <CardLabel>Valor de entradas y salidas por día (MXN)</CardLabel>
+                        <InventoryFlowChart data={dailyCost} money />
                       </Card>
 
                       <div className="grid gap-4 lg:grid-cols-2">
                         <Card>
-                          <CardLabel>Productos más usados</CardLabel>
+                          <CardLabel>Productos con más movimientos</CardLabel>
                           <InventoryRankingChart
-                            data={topProducts.slice(0, 8).map((p) => ({
+                            data={[...topProducts].sort((a, b) => b.movements - a.movements).slice(0, 8).map((p) => ({
                               name: p.name,
-                              value: Math.round(p.consumed * 10) / 10,
+                              value: p.movements,
                             }))}
-                            valueLabel="Consumo"
+                            valueLabel="Movimientos"
                           />
                         </Card>
 
@@ -237,13 +238,13 @@ export default async function InventoryPage() {
                     <>
                       <div className="grid gap-4 lg:grid-cols-2">
                         <Card>
-                          <CardLabel>Top 10 por unidades consumidas</CardLabel>
+                          <CardLabel>Top 10 por movimientos de inventario</CardLabel>
                           <InventoryRankingChart
-                            data={topProducts.slice(0, 10).map((p) => ({
+                            data={[...topProducts].sort((a, b) => b.movements - a.movements).slice(0, 10).map((p) => ({
                               name: p.name,
-                              value: Math.round(p.consumed * 10) / 10,
+                              value: p.movements,
                             }))}
-                            valueLabel="Unidades"
+                            valueLabel="Movimientos"
                           />
                         </Card>
 
@@ -296,16 +297,13 @@ export default async function InventoryPage() {
                                     {product.category}
                                   </td>
                                   <td className="py-3 text-right font-bold text-on-surface">
-                                    {units(product.consumed)}{" "}
-                                    <span className="text-xs font-normal text-outline">
-                                      {product.unit}
-                                    </span>
+                                    {formatHumanInventoryQuantity(product.consumed, product.baseUnit)}
                                   </td>
                                   <td className="py-3 text-right text-on-surface-variant">
                                     {money(product.cost)}
                                   </td>
                                   <td className="py-3 text-right text-on-surface-variant">
-                                    {units(product.stock)}
+                                    {formatHumanInventoryQuantity(product.stock, product.baseUnit)}
                                   </td>
                                   <td className="py-3 text-right">
                                     {product.daysOfCover !== null ? (
@@ -368,13 +366,13 @@ export default async function InventoryPage() {
                         </Card>
 
                         <Card>
-                          <CardLabel>Unidades por categoría</CardLabel>
+                          <CardLabel>Movimientos por categoría</CardLabel>
                           <InventoryRankingChart
                             data={categories.map((c) => ({
                               name: c.name,
-                              value: Math.round(c.consumed * 10) / 10,
+                              value: c.movements,
                             }))}
-                            valueLabel="Unidades"
+                            valueLabel="Movimientos"
                           />
                         </Card>
                       </div>
@@ -408,7 +406,7 @@ export default async function InventoryPage() {
                                     {money(category.cost)}
                                   </p>
                                   <p className="text-xs text-on-surface-variant">
-                                    {units(category.consumed)} unidades
+                                    {category.movements} movimientos
                                   </p>
                                 </div>
                               </div>
@@ -476,7 +474,7 @@ export default async function InventoryPage() {
                                     {money(branch.cost)}
                                   </p>
                                   <p className="text-xs text-on-surface-variant">
-                                    {units(branch.consumed)} unidades
+                                    {branch.movements} movimientos
                                   </p>
                                 </div>
                               </div>
@@ -649,8 +647,8 @@ export default async function InventoryPage() {
                   ) : (
                     <>
                       <Card>
-                        <CardLabel>Entradas y salidas por día</CardLabel>
-                        <InventoryFlowChart data={daily} />
+                        <CardLabel>Valor de entradas y salidas por día (MXN)</CardLabel>
+                        <InventoryFlowChart data={dailyCost} money />
                       </Card>
 
                       <div className="grid gap-4 lg:grid-cols-2">
@@ -680,7 +678,7 @@ export default async function InventoryPage() {
                                     {type.movements} movimientos
                                   </span>
                                   <span className="text-xs text-on-surface-variant">
-                                    {units(type.units)} unidades
+                                    sin sumar ml, g y piezas
                                   </span>
                                 </span>
                               </div>

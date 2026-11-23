@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { computeStockMatrix, totalStockByProduct } from "./stock";
+import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
 import {
   addBusinessDays,
   businessDayStart,
@@ -113,6 +114,7 @@ export type InventoryAnalytics = {
     movements: number;
     consumedUnits: number;
     receivedUnits: number;
+    receivedCost: number;
     consumedCost: number;
     wasteUnits: number;
     wasteCost: number;
@@ -130,6 +132,7 @@ export type InventoryAnalytics = {
     code: string;
     category: string;
     unit: string;
+    baseUnit: string;
     consumed: number;
     received: number;
     waste: number;
@@ -153,6 +156,8 @@ export type InventoryAnalytics = {
   branches: InventoryBranchAnalytics[];
   movementTypes: Array<{ name: string; movements: number; units: number }>;
   daily: Array<{ date: string; label: string; consumed: number; received: number; waste: number }>;
+  /** Daily movement values in MXN, unlike physical quantities, can be aggregated across products. */
+  dailyCost: Array<{ date: string; label: string; consumed: number; received: number; waste: number }>;
   lowStock: Array<{
     id: string;
     name: string;
@@ -272,7 +277,7 @@ export async function getInventoryAnalytics(
   const [products, branches, entries, v2Movements, balances, declarations, branchMinimums, lastMovements, lastV2Movements] = await Promise.all([
     prisma.inventoryProduct.findMany({
       where: { archivedAt: null, trackStock: true },
-      select: { id: true, code: true, name: true, category: true, unit: true, unitCost: true, minimumStock: true, isActive: true },
+      select: { id: true, code: true, name: true, category: true, unit: true, unitCost: true, inventoryBaseUnit: true, normalizedContentPerUnit: true, minimumStock: true, isActive: true },
       orderBy: { name: "asc" },
     }),
     prisma.branch.findMany({ where: branchWhere, orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -319,11 +324,13 @@ export async function getInventoryAnalytics(
   const branchAcc = new Map<string, BranchAccumulator>();
   const typeAcc = new Map<string, { movements: number; units: number }>();
   const dailyAcc = new Map<string, { consumedOut: number; consumedReversal: number; received: number; waste: number }>();
+  const dailyCostAcc = new Map<string, { consumedOut: number; consumedReversal: number; received: number; waste: number }>();
 
   for (const branch of branches) branchAcc.set(branch.id, emptyBranchAccumulator(branch.id, branch.name));
   for (let index = days - 1; index >= 0; index -= 1) {
     const date = addBusinessDays(today, -index);
     dailyAcc.set(date, { consumedOut: 0, consumedReversal: 0, received: 0, waste: 0 });
+    dailyCostAcc.set(date, { consumedOut: 0, consumedReversal: 0, received: 0, waste: 0 });
   }
 
   function productAccumulator(productId: string) {
@@ -350,11 +357,13 @@ export async function getInventoryAnalytics(
     const product = productById.get(entry.productId);
     if (!product || balanceKeys.has(`${entry.branchId}:${entry.productId}`)) return;
     const quantity = Number(entry.quantity);
-    const unitCost = entry.unitCost !== null ? Number(entry.unitCost) : Number(product.unitCost ?? 0);
+    const unitCost = entry.unitCost !== null ? Number(entry.unitCost) : (costPerInventoryBaseUnit(product) ?? 0);
     const amount = Math.abs(quantity);
     const productValue = productAccumulator(entry.productId);
     const branchValue = branchAccumulator(entry.branchId, entry.branch?.name);
-    const day = dailyAcc.get(formatBusinessDateOnly(entry.entryDate));
+    const dayKey = formatBusinessDateOnly(entry.entryDate);
+    const day = dailyAcc.get(dayKey);
+    const dayCost = dailyCostAcc.get(dayKey);
 
     productValue.movements += 1;
     branchValue.movements += 1;
@@ -365,21 +374,32 @@ export async function getInventoryAnalytics(
       addConsumed(productValue, quantity, unitCost, reversal);
       addConsumed(branchValue, quantity, unitCost, reversal);
       if (day) {
-        if (reversal) day.consumedReversal += amount;
-        else day.consumedOut += amount;
+        if (reversal) {
+          day.consumedReversal += amount;
+          if (dayCost) dayCost.consumedReversal += amount * unitCost;
+        } else {
+          day.consumedOut += amount;
+          if (dayCost) dayCost.consumedOut += amount * unitCost;
+        }
       }
     } else if (entry.type === "SALIDA_EVENTO" || entry.type === "REGRESO_EVENTO") {
       const reversal = entry.type === "REGRESO_EVENTO" || quantity > 0;
       addConsumed(productValue, quantity, unitCost, reversal);
       addConsumed(branchValue, quantity, unitCost, reversal);
       if (day) {
-        if (reversal) day.consumedReversal += amount;
-        else day.consumedOut += amount;
+        if (reversal) {
+          day.consumedReversal += amount;
+          if (dayCost) dayCost.consumedReversal += amount * unitCost;
+        } else {
+          day.consumedOut += amount;
+          if (dayCost) dayCost.consumedOut += amount * unitCost;
+        }
       }
     } else if (entry.type === "AJUSTE" && quantity < 0) {
       addWaste(productValue, quantity, unitCost);
       addWaste(branchValue, quantity, unitCost);
       if (day) day.waste += amount;
+        if (dayCost) dayCost.waste += amount * unitCost;
     } else if (entry.type === "TRASPASO") {
       if (quantity < 0) branchValue.transfersOut += amount;
       else branchValue.transfersIn += amount;
@@ -387,11 +407,13 @@ export async function getInventoryAnalytics(
         addReceived(productValue, quantity, unitCost);
         addReceived(branchValue, quantity, unitCost);
         if (day) day.received += amount;
+        if (dayCost) dayCost.received += amount * unitCost;
       }
     } else if (quantity > 0) {
       addReceived(productValue, quantity, unitCost);
       addReceived(branchValue, quantity, unitCost);
       if (day) day.received += amount;
+        if (dayCost) dayCost.received += amount * unitCost;
     }
   }
 
@@ -402,10 +424,14 @@ export async function getInventoryAnalytics(
     if (!product) continue;
     const quantity = Number(movement.quantityDelta);
     const amount = Math.abs(quantity);
-    const unitCost = Number(product.unitCost ?? 0);
+    // InventoryMovement stores ML/G/UNIT. Catalog prices are for a bottle,
+    // bag or commercial presentation; never multiply base units by that price.
+    const unitCost = costPerInventoryBaseUnit(product) ?? 0;
     const productValue = productAccumulator(movement.inventoryProductId);
     const branchValue = branchAccumulator(movement.branchId, branchById.get(movement.branchId)?.name);
-    const day = dailyAcc.get(formatBusinessDateOnly(movement.createdAt));
+    const dayKey = formatBusinessDateOnly(movement.createdAt);
+    const day = dailyAcc.get(dayKey);
+    const dayCost = dailyCostAcc.get(dayKey);
 
     productValue.movements += 1;
     branchValue.movements += 1;
@@ -416,26 +442,31 @@ export async function getInventoryAnalytics(
         addConsumed(productValue, quantity, unitCost);
         addConsumed(branchValue, quantity, unitCost);
         if (day) day.consumedOut += amount;
+        if (dayCost) dayCost.consumedOut += amount * unitCost;
         break;
       case "SALE_REVERSAL":
         addConsumed(productValue, quantity, unitCost, true);
         addConsumed(branchValue, quantity, unitCost, true);
         if (day) day.consumedReversal += amount;
+        if (dayCost) dayCost.consumedReversal += amount * unitCost;
         break;
       case "EVENT_LOAD":
         addConsumed(productValue, quantity, unitCost);
         addConsumed(branchValue, quantity, unitCost);
         if (day) day.consumedOut += amount;
+        if (dayCost) dayCost.consumedOut += amount * unitCost;
         break;
       case "EVENT_RETURN":
         addConsumed(productValue, quantity, unitCost, true);
         addConsumed(branchValue, quantity, unitCost, true);
         if (day) day.consumedReversal += amount;
+        if (dayCost) dayCost.consumedReversal += amount * unitCost;
         break;
       case "ADJUSTMENT_OUT":
         addWaste(productValue, quantity, unitCost);
         addWaste(branchValue, quantity, unitCost);
         if (day) day.waste += amount;
+        if (dayCost) dayCost.waste += amount * unitCost;
         break;
       case "TRANSFER_OUT":
         branchValue.transfersOut += amount;
@@ -445,6 +476,7 @@ export async function getInventoryAnalytics(
         addReceived(productValue, quantity, unitCost);
         addReceived(branchValue, quantity, unitCost);
         if (day) day.received += amount;
+        if (dayCost) dayCost.received += amount * unitCost;
         break;
       case "RECEIPT":
       case "ADJUSTMENT_IN":
@@ -452,6 +484,7 @@ export async function getInventoryAnalytics(
           addReceived(productValue, quantity, unitCost);
           addReceived(branchValue, quantity, unitCost);
           if (day) day.received += amount;
+        if (dayCost) dayCost.received += amount * unitCost;
         }
         break;
       case "COUNT_CORRECTION":
@@ -487,7 +520,7 @@ export async function getInventoryAnalytics(
     if (!productMap) continue;
     for (const product of products) {
       const stock = productMap.get(product.id) ?? 0;
-      branchValue.currentStockValue += stock * Number(product.unitCost ?? 0);
+      branchValue.currentStockValue += stock * (costPerInventoryBaseUnit(product) ?? 0);
       if (stock > 0) branchValue.stockedProducts += 1;
       if (stock <= 0) branchValue.outOfStockCount += 1;
       if (stock < 0) branchValue.negativeProductCount += 1;
@@ -528,6 +561,7 @@ export async function getInventoryAnalytics(
         code: product.code,
         category: product.category,
         unit: product.unit,
+        baseUnit: product.inventoryBaseUnit ?? product.unit,
         consumed,
         received: acc.received,
         waste: acc.waste,
@@ -541,7 +575,7 @@ export async function getInventoryAnalytics(
         daysOfCover: coverageOf(stock, consumed),
       }];
     })
-    .sort((a, b) => b.consumed - a.consumed);
+    .sort((a, b) => b.cost - a.cost || a.name.localeCompare(b.name, "es"));
 
   const lowStock = products
     .filter((product) => product.isActive)
@@ -589,9 +623,17 @@ export async function getInventoryAnalytics(
       outOfStockCount: branch.outOfStockCount,
       negativeProductCount: branch.negativeProductCount,
     }))
-    .sort((a, b) => b.consumed - a.consumed || a.name.localeCompare(b.name));
+    .sort((a, b) => b.consumedCost - a.consumedCost || a.name.localeCompare(b.name));
 
   const daily = Array.from(dailyAcc.entries()).map(([date, value]) => ({
+    date,
+    label: formatCivilDate(`${date}T00:00:00.000Z`, { day: "2-digit", month: "short" }),
+    consumed: round(Math.max(0, value.consumedOut - value.consumedReversal)),
+    received: round(value.received),
+    waste: round(value.waste),
+  }));
+
+  const dailyCost = Array.from(dailyCostAcc.entries()).map(([date, value]) => ({
     date,
     label: formatCivilDate(`${date}T00:00:00.000Z`, { day: "2-digit", month: "short" }),
     consumed: round(Math.max(0, value.consumedOut - value.consumedReversal)),
@@ -607,6 +649,7 @@ export async function getInventoryAnalytics(
       movements: branchesResult.reduce((sum, branch) => sum + branch.movements, 0),
       consumedUnits: branchesResult.reduce((sum, branch) => sum + branch.consumed, 0),
       receivedUnits: branchesResult.reduce((sum, branch) => sum + branch.received, 0),
+      receivedCost: branchesResult.reduce((sum, branch) => sum + branch.receivedCost, 0),
       consumedCost: branchesResult.reduce((sum, branch) => sum + branch.consumedCost, 0),
       wasteUnits: branchesResult.reduce((sum, branch) => sum + branch.waste, 0),
       wasteCost: branchesResult.reduce((sum, branch) => sum + branch.wasteCost, 0),
@@ -626,10 +669,11 @@ export async function getInventoryAnalytics(
       waste: value.waste,
       products: value.products.size,
       movements: value.movements,
-    })).sort((a, b) => b.consumed - a.consumed),
+    })).sort((a, b) => b.cost - a.cost),
     branches: branchesResult,
     movementTypes: Array.from(typeAcc.entries()).map(([name, value]) => ({ name, ...value })).sort((a, b) => b.movements - a.movements),
     daily,
+    dailyCost,
     lowStock,
     stale,
   };

@@ -2,6 +2,9 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type CatalogBaseUnit } from "@prisma/client";
 import { appendAuditEvent } from "@/lib/pos2/audit";
+import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
+import { isImplausibleInventoryIncrease } from "@/lib/inventory/countAudit";
+import { countProductsNeedingRecapture } from "@/lib/inventory/countRecapture";
 
 function declarationOperationId(countId: string, itemId: string, countDate: Date) {
   const entropy = createHash("sha256")
@@ -67,6 +70,36 @@ export async function reconcileWeeklyCountCutover(
   for (const productId of [...new Set(count.items.map((item) => item.productId))].sort()) {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${count.branchId}:${productId}`},0))::text`;
   }
+  // Una captura física no puede reconciliarse directamente con el saldo del
+  // cierre si hubo ventas/entradas posteriores: eso produciría un doble ajuste.
+  // Exigir recapturar solo los productos cuyo saldo NETO cambió desde su
+  // timestamp de conteo. Todo ocurre bajo los mismos advisory locks del POS.
+  const countedItems = count.items.filter((item) =>
+    item.product.isActive && item.product.trackStock && item.product.inventoryBaseUnit && item.countedAt,
+  );
+  if (countedItems.length > 0) {
+    const oldest = new Date(Math.min(...countedItems.map((item) => item.countedAt!.getTime())));
+    const laterMovements = await tx.inventoryMovement.findMany({
+      where: {
+        branchId: count.branchId,
+        inventoryProductId: { in: countedItems.map((item) => item.productId) },
+        createdAt: { gt: oldest },
+      },
+      select: { inventoryProductId: true, quantityDelta: true, createdAt: true },
+    });
+    const staleProductIds = new Set(countProductsNeedingRecapture(
+      countedItems.map((item) => ({ productId: item.productId, countedAt: item.countedAt! })),
+      laterMovements,
+    ));
+    const staleItems = countedItems.filter((item) => staleProductIds.has(item.productId));
+    if (staleItems.length > 0) {
+      throw new Error(
+        "COUNT_RECAPTURE_REQUIRED:" + staleItems.length + ":" +
+        staleItems.slice(0, 4).map((item) => item.product.name).join(", "),
+      );
+    }
+  }
+
   const reconciled: ReconciledItem[] = [];
   for (const item of count.items) {
     const product = item.product;
@@ -77,9 +110,21 @@ export async function reconcileWeeklyCountCutover(
     if (counted.isNegative()) throw new Error("INVALID_COUNT");
 
     await tx.$executeRaw`INSERT INTO "InventoryBalance" ("id","branchId","inventoryProductId","quantity","unit","version","createdAt","updatedAt") VALUES (${randomUUID()},${count.branchId},${product.id},0,${product.inventoryBaseUnit}::"CatalogBaseUnit",1,NOW(),NOW()) ON CONFLICT ("branchId","inventoryProductId") DO NOTHING`;
-    const locked = await tx.$queryRaw<Array<{ id: string; quantity: Prisma.Decimal }>>`SELECT "id","quantity" FROM "InventoryBalance" WHERE "branchId"=${count.branchId} AND "inventoryProductId"=${product.id} FOR UPDATE`;
+    const locked = await tx.$queryRaw<Array<{ id: string; quantity: Prisma.Decimal; unit: CatalogBaseUnit }>>`SELECT "id","quantity","unit" FROM "InventoryBalance" WHERE "branchId"=${count.branchId} AND "inventoryProductId"=${product.id} FOR UPDATE`;
     const balance = locked[0];
     if (!balance) throw new Error("BALANCE_NOT_FOUND");
+    if (balance.unit !== product.inventoryBaseUnit) throw new Error("COUNT_UNIT_MISMATCH");
+
+    const normalizedFactor = product.normalizedContentPerUnit === null
+      ? null : Number(product.normalizedContentPerUnit);
+    if (isImplausibleInventoryIncrease({
+      expected: Math.max(0, Number(balance.quantity)),
+      captured: Number(counted),
+      normalizedContentPerUnit: normalizedFactor,
+      costPerBaseUnit: costPerInventoryBaseUnit(product),
+    }) && !item.notes?.trim()) {
+      throw new Error("COUNT_UNVERIFIED_INCREASE:" + product.name);
+    }
 
     const delta = counted.minus(balance.quantity);
     let movementId: string | null = null;
@@ -137,9 +182,11 @@ export async function reconcileWeeklyCountCutover(
       data: {
         previousQuantity: balance.quantity,
         entriesQuantity: 0,
-        quantityConsumed: 0,
-        unitCostAtTime: product.unitCost,
-        costTotal: 0,
+        // El snapshot registra costo por ML/G/UNIT, nunca por botella/bolsa.
+        unitCostAtTime: costPerInventoryBaseUnit(product),
+        // No se infiere el consumo semanal de una corrección de conteo.
+        quantityConsumed: null,
+        costTotal: null,
       },
     });
 

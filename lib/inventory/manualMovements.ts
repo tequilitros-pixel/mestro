@@ -7,6 +7,8 @@ import { groupInventoryDeltas } from "@/lib/pos2/inventory/domain";
 import { appendAuditEvent } from "@/lib/pos2/audit";
 import { getNormalizedContentPerUnit, type InventoryCaptureUnit } from "@/lib/inventory/units";
 import { normalizeInventoryCountCapture } from "@/lib/inventory/countCapture";
+import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
+import { isImplausibleInventoryIncrease } from "@/lib/inventory/countAudit";
 
 export function normalizeManualInventoryQuantity(product: InventoryProduct, quantity: number) {
   const label = product.unit.trim().toLocaleLowerCase("es-MX");
@@ -54,6 +56,21 @@ export async function recordManualInventoryMovement(input: {
         const outgoing = Boolean(input.toBranchId && branch === input.branchId);
         const quantity = outgoing ? -input.quantity : input.quantity;
         const balance = balances.find((item) => item.branchId === branch);
+        // Protege también las entradas individuales; de este flujo procedió
+        // una captura histórica de 10,000 litros en vez de una cantidad esperable.
+        if (!input.toBranchId && quantity > 0 && product.inventoryBaseUnit) {
+          const delta = normalizeManualInventoryQuantity(product, quantity);
+          const previous = Math.max(0, Number(balance?.quantity ?? 0));
+          if (isImplausibleInventoryIncrease({
+            expected: previous,
+            captured: previous + Number(delta),
+            normalizedContentPerUnit: product.normalizedContentPerUnit === null
+              ? null : Number(product.normalizedContentPerUnit),
+            costPerBaseUnit: costPerInventoryBaseUnit(product),
+          }) && !input.notes?.trim()) {
+            throw new Error("INVENTORY_INCREASE_NEEDS_REVIEW:" + product.name);
+          }
+        }
         if (balance) {
           if (!product.inventoryBaseUnit || balance.unit !== product.inventoryBaseUnit) throw new Error("La unidad del saldo no coincide con el producto.");
           const delta = normalizeManualInventoryQuantity(product, quantity);
@@ -129,7 +146,7 @@ export async function recordWeeklyInventoryReceiptBatch(input: {
       const productMap = new Map(products.map((product) => [product.id, product]));
       const balances = await tx.inventoryBalance.findMany({
         where: { branchId: input.branchId, inventoryProductId: { in: productIds } },
-        select: { inventoryProductId: true, unit: true },
+        select: { inventoryProductId: true, unit: true, quantity: true },
       });
       const balanceMap = new Map(balances.map((balance) => [balance.inventoryProductId, balance]));
       const prepared = normalizedItems.map((item) => {
@@ -145,6 +162,16 @@ export async function recordWeeklyInventoryReceiptBatch(input: {
         const balance = balanceMap.get(item.productId);
         if (balance && balance.unit !== product.inventoryBaseUnit) {
           throw new Error("WEEKLY_RECEIPT_UNIT_MISMATCH");
+        }
+        const previous = Math.max(0, Number(balance?.quantity ?? 0));
+        if (isImplausibleInventoryIncrease({
+          expected: previous,
+          captured: previous + Number(normalized.baseQuantity),
+          normalizedContentPerUnit: product.normalizedContentPerUnit === null
+            ? null : Number(product.normalizedContentPerUnit),
+          costPerBaseUnit: costPerInventoryBaseUnit(product),
+        }) && !input.notes?.trim()) {
+          throw new Error("WEEKLY_RECEIPT_REVIEW_REQUIRED:" + product.name);
         }
         return { item, product, normalized, isV2 };
       }).filter((row) => row.normalized.baseQuantity.gt(0));
