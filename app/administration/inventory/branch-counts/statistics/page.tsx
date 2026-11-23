@@ -94,7 +94,9 @@ export default async function BranchCountStatisticsPage({
   };
   const allHistory = value("all") === "1";
   const today = todayDateOnly();
-  const defaultFrom = addDaysToDateOnly(today, -29);
+  // Un resumen semanal debe mostrar siete días completos por defecto.
+  const defaultFrom = addDaysToDateOnly(today, -6);
+  const monthFrom = addDaysToDateOnly(today, -29);
   const fromParam = value("from");
   const toParam = value("to");
   const requestedFrom = isDate(fromParam) ? fromParam : defaultFrom;
@@ -113,7 +115,7 @@ export default async function BranchCountStatisticsPage({
   const countWhere: Prisma.InventoryCountWhereInput = {
     status: "CERRADO",
     branchId: branchFilter,
-    countType: selectedType,
+    countType: selectedType ?? "WEEKLY",
     ...(selectedEmployeeId ? { createdById: selectedEmployeeId } : {}),
     ...(dateFilter ? { countDate: dateFilter } : {}),
   };
@@ -476,7 +478,7 @@ export default async function BranchCountStatisticsPage({
             </p>
             <h1 className="mt-1 text-3xl font-bold">Resumen Semanal de Auditoría de Conteos</h1>
             <p className="mt-2 max-w-3xl text-sm text-on-surface-variant">
-              Panel contable ejecutivo: identifica qué sucursal tiene problemas, qué conteo semanal
+              Panel de los últimos 7 días por defecto: identifica qué sucursal tiene problemas, qué conteo semanal
               presenta mayor merma o descuadre, y qué insumo se está agotando más rápido.
             </p>
           </div>
@@ -499,7 +501,7 @@ export default async function BranchCountStatisticsPage({
               <Link href={quickPeriod(addDaysToDateOnly(today, -6))} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
                 7 días
               </Link>
-              <Link href={quickPeriod(defaultFrom)} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
+              <Link href={quickPeriod(monthFrom)} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
                 30 días
               </Link>
               <Link href={`/administration/inventory/branch-counts/statistics?all=1${filterQuery}`} className="rounded-lg border border-outline-variant px-2.5 py-1.5 hover:bg-surface-container-high">
@@ -537,7 +539,7 @@ export default async function BranchCountStatisticsPage({
             <label className="text-xs font-semibold text-on-surface-variant">
               Tipo de conteo
               <select name="type" defaultValue={selectedType ?? ""} className="mt-1 h-10 w-full rounded-lg border border-outline-variant bg-background px-3 text-sm text-on-surface">
-                <option value="">Semanal y mensual</option>
+                <option value="">Solo semanales (predeterminado)</option>
                 {COUNT_TYPES.map((t) => (
                   <option key={t} value={t}>{inventoryCountTypeLabel(t)}</option>
                 ))}
