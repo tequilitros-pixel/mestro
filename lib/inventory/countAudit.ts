@@ -30,6 +30,8 @@ export function isPotentialInventoryCountOutlier(input: {
  * La captura inicial y el cierre NO deben aceptar silenciosamente incrementos
  * masivos en unidades base. Una explicación explícita permite un alta legítima
  * de gran volumen y queda guardada en el renglón de conteo / movimiento.
+ * También alerta altas de inventario inicialmente en cero de al menos cinco
+ * presentaciones y $5,000 de valor, sin calificarlas automáticamente como merma.
  */
 export function isImplausibleInventoryIncrease(input: {
   expected: number;
@@ -45,8 +47,13 @@ export function isImplausibleInventoryIncrease(input: {
     ? normalizedContentPerUnit : 1;
   const cost = costPerBaseUnit !== null && Number.isFinite(costPerBaseUnit) && costPerBaseUnit > 0
     ? costPerBaseUnit : 0;
-  return captured > 50 * Math.max(expected, factor)
-    && ((captured - expected) * cost >= 5000 || captured - expected >= 1000 * factor);
+  const largeUnexplainedInitialStock = expected === 0
+    && captured >= 5 * factor
+    && (captured - expected) * cost >= 5000;
+  return largeUnexplainedInitialStock || (
+    captured > 50 * Math.max(expected, factor)
+    && ((captured - expected) * cost >= 5000 || captured - expected >= 1000 * factor)
+  );
 }
 
 /** Los importes del reporte se suman a partir de cada partida redondeada a centavos. */
