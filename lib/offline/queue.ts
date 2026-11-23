@@ -43,7 +43,7 @@ export async function enqueueOperation(
   operation: Omit<OfflineOperation, "attempts" | "status">,
 ) {
   await transactStore("readwrite", (store) =>
-    store.put({ ...operation, attempts: 0, status: "pending" } satisfies OfflineOperation),
+    store.add({ ...operation, attempts: 0, status: "pending" } satisfies OfflineOperation),
   );
   window.dispatchEvent(new Event("maestro:queue-changed"));
 }
