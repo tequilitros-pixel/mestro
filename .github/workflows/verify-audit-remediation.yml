@@ -19,7 +19,6 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
-          cache: 'pnpm'
       - name: Enable pinned pnpm
         run: |
           corepack enable
@@ -27,8 +26,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Generate Prisma types
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/no_database
         run: pnpm exec prisma generate
       - name: Check TypeScript
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/no_database
         run: pnpm exec tsc --noEmit
       - name: Regression tests
         run: |
