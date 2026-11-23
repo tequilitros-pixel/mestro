@@ -10,7 +10,7 @@ import { generateOperationId } from "@/lib/pos2/operationId";
 import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresentation";
 import { formatBusinessDateTime } from "@/lib/dateTime";
 import { inventoryCountTypeLabel, isProductIncludedInInventoryCount } from "@/lib/inventory/countScope";
-import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
+import { resolveInventoryCountUnitCost } from "@/lib/accounting/inventoryCost";
 import { isPotentialInventoryCountOutlier, isImplausibleInventoryIncrease, countAmountInPesos } from "@/lib/inventory/countAudit";
 
 export default async function CountDetailPage({
@@ -70,7 +70,7 @@ export default async function CountDetailPage({
     const actual = item.quantityCounted === null ? null : Number(item.quantityCounted);
     const missing = actual === null ? 0 : Math.max(0, expected - actual);
     const surplus = actual === null ? 0 : Math.max(0, actual - expected);
-    const costPerBase = costPerInventoryBaseUnit(item.product) ?? 0;
+    const costPerBase = resolveInventoryCountUnitCost(item.product, item.unitCostAtTime).unitCost;
     const missingCost = countAmountInPesos(missing, costPerBase);
     const surplusCost = countAmountInPesos(surplus, costPerBase);
     const presentation = item.product.normalizedContentPerUnit === null
