@@ -499,8 +499,8 @@ export default async function BranchCountStatisticsPage({
             </p>
             <h1 className="mt-1 text-3xl font-bold">Resumen Semanal de Auditoría de Conteos</h1>
             <p className="mt-2 max-w-3xl text-sm text-on-surface-variant">
-              Panel de los últimos 7 días por defecto: identifica qué sucursal tiene problemas, qué conteo semanal
-              presenta mayor merma o descuadre, y qué insumo se está agotando más rápido.
+              Últimos 7 días por defecto. Los faltantes son estimaciones de diferencias entre el sistema y el conteo;
+              los saldos extraordinarios se identifican por separado hasta verificar su origen.
             </p>
           </div>
           <Link
@@ -582,15 +582,15 @@ export default async function BranchCountStatisticsPage({
         {/* Tarjetas Ejecutivas de Decisión Rápida (Contaduría) */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <SummaryCard
-            label="Pérdida en Faltantes"
+            label="Faltantes estimados"
             value={formatMoney(totalMissingCost)}
-            detail={`${totalMissingProducts.toLocaleString("es-MX")} productos con descuadre`}
+            detail={`${totalMissingProducts.toLocaleString("es-MX")} renglones sin anomalías extraordinarias · pendientes de conciliar`}
             highlight="error"
           />
           <SummaryCard
             label="Sucursal con más Problemas"
             value={worstBranch?.name ?? "Sin incidencias"}
-            detail={worstBranch ? `${formatMoney(worstBranch.missingCost)} faltante (${worstBranch.missingRows} renglones)` : "Sin faltantes"}
+            detail={worstBranch ? `${formatMoney(worstBranch.missingCost)} estimados (${worstBranch.missingRows} renglones)` : "Sin faltantes"}
             highlight={worstBranch && worstBranch.missingCost > 0 ? "error" : "normal"}
           />
           <SummaryCard
@@ -600,10 +600,10 @@ export default async function BranchCountStatisticsPage({
             highlight={mostDifficultCount && mostDifficultCount.missingCost > 0 ? "error" : "normal"}
           />
           <SummaryCard
-            label="Mayor Merma / Fuga"
-            value={topLossProduct ? topLossProduct.productName : "Ninguno"}
-            detail={topLossProduct ? `${formatMoney(topLossProduct.totalMissingCost)} (${formatQuantity(-topLossProduct.totalMissing, topLossProduct.product)})` : "Sin pérdidas registradas"}
-            highlight={topLossProduct ? "warning" : "normal"}
+            label="Diferencias extraordinarias"
+            value={formatMoney(totalReviewCost)}
+            detail={`${reviewRows.length} registros en revisión · no incluidos en faltantes estimados`}
+            highlight={reviewRows.length > 0 ? "warning" : "normal"}
           />
           <SummaryCard
             label="Mayor Agotamiento"
@@ -618,6 +618,35 @@ export default async function BranchCountStatisticsPage({
             highlight={exactRate >= 90 ? "success" : exactRate >= 75 ? "warning" : "error"}
           />
         </section>
+
+        {reviewRows.length > 0 && (
+          <DataCard title="Revisar saldos extraordinarios antes de reconocer pérdidas">
+            <p className="mb-4 text-sm text-on-surface-variant">
+              Estos registros se conservan íntegros en sus conteos originales, pero su cantidad teórica
+              supera 50 veces la cantidad contada o una presentación comercial y la diferencia
+              estimada es de al menos $5,000. Son indicios para auditar posibles errores de captura,
+              unidades o saldo inicial; no son una corrección automática de existencias.
+              Se muestran aparte de los faltantes ordinarios para no distorsionar los rankings.
+            </p>
+            <p className="mb-3 font-bold text-amber-400">{formatMoney(totalReviewCost)} pendientes de verificación ({reviewRows.length} registros)</p>
+            <div className="space-y-2">
+              {reviewRows.slice(0, 12).map((row) => (
+                <Link
+                  key={`${row.countId}:${row.productId}`}
+                  href={`/administration/inventory/branch-counts/${row.countId}`}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-outline-variant px-3 py-3 text-sm transition hover:bg-surface-container-high"
+                >
+                  <span className="min-w-0">
+                    <strong className="block">{row.productName} · {row.branchName}</strong>
+                    <span className="block text-xs text-on-surface-variant">{formatDate(row.countDate)} · {row.countCode}</span>
+                    <span className="block text-xs text-on-surface-variant">Teórico: {formatQuantity(row.expected, row.product)} · Contado: {formatQuantity(row.actual ?? 0, row.product)}</span>
+                  </span>
+                  <span className="font-bold text-amber-400">{formatMoney(row.missingCost)} en revisión</span>
+                </Link>
+              ))}
+            </div>
+          </DataCard>
+        )}
 
         {/* Gráficos de tendencias */}
         <CountDashboardCharts
@@ -805,10 +834,9 @@ export default async function BranchCountStatisticsPage({
         {/* SECCIÓN 3: TOP PRODUCTOS CON MAYOR MERMA Y TOP PRODUCTOS MÁS AGOTADOS */}
         <section className="grid gap-4 lg:grid-cols-2">
           {/* Top Fuga / Merma */}
-          <DataCard title="Top Productos con Mayor Fuga o Merma ($ MXN)">
+          <DataCard title="Productos con faltantes estimados (MXN)">
             <p className="mb-3 text-xs text-on-surface-variant">
-              Insumos y productos que representan la mayor pérdida económica en los inventarios
-              semanales.
+              Diferencias ordinarias pendientes de conciliación. Los registros extraordinarios se muestran en el bloque de revisión.
             </p>
             {topLossProducts.length === 0 ? (
               <Empty />
@@ -884,9 +912,9 @@ export default async function BranchCountStatisticsPage({
         </section>
 
         {/* SECCIÓN 4: PRIORIDAD DE REVISIÓN INDIVIDUAL (DESCUADRES MÁS FUERTES) */}
-        <DataCard title="Partidas Específicas con Mayor Descuadre Negativo">
+        <DataCard title="Partidas con mayor faltante estimado">
           <p className="mb-3 text-xs text-on-surface-variant">
-            Renglones individuales que ameritan investigación inmediata con el gerente de sucursal.
+            Diferencias físicas sin señales de anomalía extraordinaria, ordenadas por costo estimado. Deben conciliarse con los responsables.
           </p>
           {missingRows.length === 0 ? (
             <Empty />
@@ -921,7 +949,7 @@ export default async function BranchCountStatisticsPage({
 
         {/* SECCIÓN 5: DESVIACIONES Y PRODUCTOS AGOTADOS */}
         <section className="grid gap-4 lg:grid-cols-2">
-          <DataCard title="Productos que se agotaron totalmente (Conteo en Cero)">
+          <DataCard title="Productos contados en cero">
             <p className="mb-3 text-xs text-on-surface-variant">
               Insumos con existencia teórica en sistema que salieron en 0 en el conteo físico.
             </p>
