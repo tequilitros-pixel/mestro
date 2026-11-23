@@ -158,6 +158,7 @@ export default async function BranchCountStatisticsPage({
       orderBy: { countDate: "desc" },
       select: {
         id: true,
+        branchId: true,
         code: true,
         countDate: true,
         countType: true,
