@@ -4,6 +4,7 @@ import { Prisma, type CatalogBaseUnit } from "@prisma/client";
 import { appendAuditEvent } from "@/lib/pos2/audit";
 import { costPerInventoryBaseUnit } from "@/lib/accounting/inventoryCost";
 import { isImplausibleInventoryIncrease } from "@/lib/inventory/countAudit";
+import { countProductsNeedingRecapture } from "@/lib/inventory/countRecapture";
 
 function declarationOperationId(countId: string, itemId: string, countDate: Date) {
   const entropy = createHash("sha256")
@@ -86,14 +87,11 @@ export async function reconcileWeeklyCountCutover(
       },
       select: { inventoryProductId: true, quantityDelta: true, createdAt: true },
     });
-    const staleItems = countedItems.filter((item) => {
-      const delta = laterMovements.reduce((sum, movement) =>
-        movement.inventoryProductId === item.productId &&
-        movement.createdAt.getTime() > item.countedAt!.getTime()
-          ? sum.plus(movement.quantityDelta) : sum,
-      new Prisma.Decimal(0));
-      return !delta.isZero();
-    });
+    const staleProductIds = new Set(countProductsNeedingRecapture(
+      countedItems.map((item) => ({ productId: item.productId, countedAt: item.countedAt! })),
+      laterMovements,
+    ));
+    const staleItems = countedItems.filter((item) => staleProductIds.has(item.productId));
     if (staleItems.length > 0) {
       throw new Error(
         "COUNT_RECAPTURE_REQUIRED:" + staleItems.length + ":" +
