@@ -100,7 +100,7 @@ async function mutateOperation<T>(
 /** Reclama solamente operaciones pendientes, de manera indivisible. */
 export async function claimQueuedOperation(id: string): Promise<OfflineOperation | null> {
   return mutateOperation(id, ["pending"], (operation, store) => {
-    store.put({ ...operation, status: "syncing" } satisfies OfflineOperation);
+    store.put({ ...operation, status: "syncing", syncStartedAt: new Date().toISOString() } satisfies OfflineOperation);
     return operation;
   });
 }
@@ -112,6 +112,7 @@ export async function failClaimedOperation(id: string, reason: string) {
       status: "failed",
       attempts: operation.attempts + 1,
       lastError: reason,
+      syncStartedAt: undefined,
     } satisfies OfflineOperation);
     return true;
   })) === true;
@@ -141,6 +142,25 @@ export async function cancelQueuedOperation(id: string, reason?: string) {
 export async function retryQueuedOperation(id: string) {
   return (await mutateOperation(id, ["failed"], (operation, store) => {
     store.put({ ...operation, status: "pending", lastError: undefined } satisfies OfflineOperation);
+    return true;
+  })) === true;
+}
+
+/**
+ * El servidor pudo haber cobrado aunque el navegador se cerrara.
+ * Solo una acción explícita del usuario marca una operación antigua
+ * "syncing" como fallida para iniciar una conciliación MANUAL.
+ */
+export async function flagInterruptedOperationForReview(id: string) {
+  return (await mutateOperation(id, ["syncing"], (operation, store) => {
+    const timestamp = new Date(operation.syncStartedAt ?? operation.createdAt).getTime();
+    if (Number.isFinite(timestamp) && Date.now() - timestamp < 5 * 60_000) return false;
+    store.put({
+      ...operation,
+      status: "failed",
+      lastError: "Sin confirmación del servidor. Revisa el historial de ventas antes de reintentar.",
+      syncStartedAt: undefined,
+    } satisfies OfflineOperation);
     return true;
   })) === true;
 }
