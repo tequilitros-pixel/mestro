@@ -378,6 +378,15 @@ export async function closeInventoryCountAction(
         error: `Revisa la cantidad de "${unexpectedIncrease[1]}": supera ampliamente lo esperado. Corrígela o agrega una justificación específica al renglón antes de cerrar.`,
       };
     }
+    const outdatedRows = error instanceof Error
+      ? /^COUNT_RECAPTURE_REQUIRED:(\\d+):(.+)$/.exec(error.message)
+      : null;
+    if (outdatedRows) {
+      return {
+        success: false,
+        error: `Cambiaron las existencias de ${outdatedRows[1]} productos después de contarlos (${outdatedRows[2]}). Vuelve a registrar su cantidad física antes de cerrar; así se respetan las ventas y entradas posteriores.`,
+      };
+    }
     const missingProductsMatch = error instanceof Error
       ? /^COUNT_PRODUCTS_MISSING:(\d+)$/.exec(error.message)
       : null;
