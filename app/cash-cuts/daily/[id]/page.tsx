@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card, CardLabel, CardValue } from "@/components/ui/Card";
 import DenominationWizard from "@/components/cash-cuts/DenominationWizard";
+import CutTransactionsPanel from "@/components/cash-cuts/CutTransactionsPanel";
 import type { CashDenominationCount } from "@/lib/cash-cuts/denominations";
 import {
   ReceiptIcon,
@@ -298,6 +299,8 @@ function ClosedCutSummary({ cashCut }: { cashCut: CashCut }) {
         </div>
       </section>
 
+      <CutTransactionsPanel cashCutId={cashCut.id} initialSales={posSales} isOpen={false} />
+
       <section>
         <h2 className="mb-3 text-base font-bold text-on-surface">Productos vendidos</h2>
         {productRows.length > 0 ? (
@@ -555,6 +558,7 @@ const load = useCallback(async () => {
       </div>
 
       <OpenCashSummary cashCut={cashCut} />
+      <CutTransactionsPanel cashCutId={cashCut.id} initialSales={cashCut.posSales ?? []} isOpen />
 
       <Stepper current={step} cashCut={cashCut} onSelect={setStep} />
 
