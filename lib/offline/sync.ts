@@ -1,6 +1,6 @@
 "use client";
 
-import { listOperations, removeOperation, updateOperation } from "./queue";
+import { claimQueuedOperation, completeClaimedOperation, failClaimedOperation, listOperations } from "./queue";
 
 let activeSync: Promise<void> | null = null;
 
@@ -19,23 +19,28 @@ async function runSync() {
   if (!navigator.onLine) return;
 
   const operations = await listOperations();
-  let blocked = false;
-  const failedSaleIds = new Set<string>();
-
-  for (const operation of operations) {
+  // Mantener el orden del dispositivo: una operación fallida o interrumpida
+  // exige conciliación antes de enviar las siguientes. Las canceladas quedan
+  // como evidencia local y jamás se transmiten.
+  for (const queued of operations) {
     if (!navigator.onLine) break;
-    const saleId = String((operation.payload as Record<string, unknown>).saleId ?? "");
-    // Un recibo electrónico sólo puede salir después de que su venta esté
-    // confirmada. Nunca enviamos un comprobante de un cobro que el servidor
-    // rechazó o que sigue pendiente de sincronizar.
-    if (operation.kind === "pos.sale.email" && failedSaleIds.has(saleId)) continue;
-    // No adelantar ventas a una apertura/cierre de caja que quedó pendiente.
-    if (blocked && operation.kind.startsWith("cash-cut.")) break;
-    // Las ventas y correos de recibo son independientes; conserva el orden de los demás eventos.
-    if (blocked && operation.kind !== "pos.sale.create" && operation.kind !== "pos.sale.email") continue;
+    if (queued.status === "cancelled") continue;
+    if (queued.status === "failed" || queued.status === "syncing") break;
+    if (queued.status !== "pending") continue;
 
-    const syncing = { ...operation, status: "syncing" as const };
-    await updateOperation(syncing);
+    // Un recibo depende de la venta que lo originó. Si esa venta sigue en
+    // la cola (incluso en otra pestaña), no se adelanta el correo.
+    if (queued.kind === "pos.sale.email") {
+      const saleId = String((queued.payload as Record<string, unknown>).saleId ?? "");
+      if (operations.some((item) =>
+        item.kind === "pos.sale.create" &&
+        (item.id === saleId || String((item.payload as Record<string, unknown>).saleId ?? "") === saleId) &&
+        item.status !== "cancelled",
+      )) break;
+    }
+
+    const operation = await claimQueuedOperation(queued.id);
+    if (!operation) break; // Otro tab ya lo tomó, canceló o actualizó.
 
     try {
       // Las colas antiguas podían asignar dos IDs al mismo cobro. No sabemos
@@ -87,23 +92,20 @@ async function runSync() {
         throw new Error(message ?? `Error de sincronización (${response.status})`);
       }
 
-      await removeOperation(operation.id);
+      await completeClaimedOperation(operation.id);
       try {
         localStorage.setItem("maestro:last-synced-at", new Date().toISOString());
       } catch {
         // Un fallo del indicador no debe volver a encolar una venta confirmada.
       }
     } catch (error) {
-      if (operation.kind === "pos.sale.create") failedSaleIds.add(operation.id);
-      await updateOperation({
-        ...operation,
-        attempts: operation.attempts + 1,
-        status: "failed",
-        lastError: error instanceof Error ? error.message : "Error desconocido",
-      });
-
-      blocked = true;
-      if (operation.kind.startsWith("cash-cut.")) break;
+      await failClaimedOperation(
+        operation.id,
+        error instanceof Error ? error.message : "Error desconocido",
+      );
+      // No sincronizar movimientos dependientes ni otras ventas hasta que
+      // se reconcilie o se reintente explícitamente la operación fallida.
+      break;
     }
   }
 }
