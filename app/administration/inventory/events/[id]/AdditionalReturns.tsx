@@ -61,8 +61,8 @@ function ReturnRow({ eventId, row, locked }: { eventId: string; row: AdditionalR
         </p>
       </div>
       <label className="text-xs text-on-surface-variant">
-        Cerradas que regresan
-        <input required type="number" inputMode="decimal" min="0" max={row.quantity} step="0.001" value={returned} onChange={(event) => { setReturned(event.target.value); setSaved(false); }} disabled={locked || saving} className="mt-1 w-full rounded-lg border border-outline-variant bg-background px-2 py-2 text-sm text-on-surface" />
+        Cantidad que regresa (admite fracciones)
+        <input required type="text" inputMode="decimal" min="0" max={row.quantity} step="0.001" value={returned} onChange={(event) => { setReturned(event.target.value); setSaved(false); }} disabled={locked || saving} className="mt-1 w-full rounded-lg border border-outline-variant bg-background px-2 py-2 text-sm text-on-surface" />
       </label>
       <label className="text-xs text-on-surface-variant">
         Remanente abierto ({openUnit})
@@ -79,7 +79,7 @@ export default function AdditionalReturns({ eventId, rows, locked }: { eventId: 
   return (
     <section className="rounded-2xl border border-outline-variant bg-surface-container p-5">
       <h3 className="text-lg font-semibold text-on-surface">Regreso de cargas adicionales</h3>
-      <p className="mt-1 text-sm text-on-surface-variant">Registra cada carga adicional por separado antes de confirmar el regreso del evento.</p>
+      <p className="mt-1 text-sm text-on-surface-variant">Puedes registrar una fracción, por ejemplo 0.3 de un bote. Si ya la incluiste, deja el remanente en cero.</p>
       <div className="mt-3">
         {rows.map((row) => <ReturnRow key={row.id} eventId={eventId} row={row} locked={locked} />)}
       </div>

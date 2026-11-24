@@ -18,8 +18,8 @@ export default function EventPhaseConfirm({
   const [error, setError] = useState("");
 
   async function confirm() {
-    if (phase === "regreso" && document.querySelector('[data-event-addition-dirty="true"]')) {
-      setError("Guarda los regresos de las cargas adicionales antes de confirmar.");
+    if (phase === "regreso" && document.querySelector('[data-event-addition-dirty="true"], [data-event-return-dirty="true"]')) {
+      setError("Guarda los regresos pendientes antes de confirmar.");
       return;
     }
     setSaving(true);
