@@ -186,7 +186,7 @@ export default function ChecklistItemRow({
         {item.isCustom && <span className="text-xs text-on-surface-variant">Producto adicional</span>}
       </div>
 
-      <p className="order-3 text-xs text-on-surface-variant md:order-none md:text-sm">{presentation}</p>
+      <p className="order-3 text-xs text-on-surface-variant md:order-none md:text-sm">{presentation}{item.handlingUnit === "PAQUETE" && item.contentUnit === "PIEZAS" && item.contentPerUnit && <span className="block">{((isReturn ? sent : sentValue) * item.contentPerUnit).toLocaleString("es-MX")} piezas de salida</span>}</p>
       <div className="order-4 md:order-none">
         {isReturn ? (
           <p className="text-sm text-on-surface-variant">{quantityLabel(sent, handlingUnit)}</p>

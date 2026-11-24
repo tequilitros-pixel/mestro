@@ -17,7 +17,7 @@ export default async function RecountDetailPage({
     include: {
       event: { select: { id: true, clientName: true, location: true, eventDate: true } },
       items: {
-        include: { eventItem: { select: { productName: true, unit: true } } },
+        include: { eventItem: { select: { productName: true, unit: true, handlingUnit: true } } },
       },
     },
   });
@@ -30,7 +30,7 @@ export default async function RecountDetailPage({
     .map((item) => ({
       id: item.id,
       productName: item.eventItem.productName,
-      unit: item.eventItem.unit,
+      unit: item.eventItem.handlingUnit === "PAQUETE" ? "paquetes" : item.eventItem.unit,
       counted: Number(item.countedQuantity),
       missing: Number(item.missingQuantity),
     }))

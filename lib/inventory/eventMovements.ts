@@ -5,6 +5,8 @@ import { groupInventoryDeltas } from "@/lib/pos2/inventory/domain";
 import { appendAuditEvent } from "@/lib/pos2/audit";
 import { normalizeManualInventoryQuantity, requireLegacyInventoryAvailable } from "@/lib/inventory/manualMovements";
 
+import { getPiecePresentationSize } from "@/lib/inventory/units";
+
 export async function applyEventInventoryMovement(tx: Prisma.TransactionClient, input: {
   item: ServiceEventItem; branchId: string; actorId: string; operationId: string;
   eventId: string; returning: boolean;
@@ -17,10 +19,12 @@ export async function applyEventInventoryMovement(tx: Prisma.TransactionClient, 
   const open = input.returning ? Number(item.returnedOpenQuantity ?? 0) : 0;
   if (!closed && !open) return;
   const snapshot = { ...product, unit: item.unit, handlingUnit: item.handlingUnit, contentPerUnit: item.contentPerUnit, contentUnit: item.contentUnit, normalizedContentPerUnit: null };
-  let legacyQuantity = closed;
+  const packageSize = getPiecePresentationSize(snapshot);
+  const legacyUsesPieces = packageSize !== null && /^(piezas?|pzas?|unidad(?:es)?|units?)$/i.test(product.unit);
+  let legacyQuantity = legacyUsesPieces ? closed * packageSize! : closed;
   if (balance) {
     if (!product.inventoryBaseUnit || balance.unit !== product.inventoryBaseUnit) throw new Error("La unidad del saldo no coincide con el producto del evento.");
-    const amount = normalizeManualInventoryQuantity(snapshot, closed).plus(open);
+    const amount = (packageSize ? new Prisma.Decimal(closed).times(packageSize) : normalizeManualInventoryQuantity(snapshot, closed)).plus(open);
     const delta = input.returning ? amount : amount.negated();
     await applyInventoryBatchInTransaction(tx, { branchId: input.branchId, actorId: input.actorId, operationId: input.operationId,
       movements: groupInventoryDeltas([{ inventoryProductId: product.id, quantityDelta: delta.toString(), unit: product.inventoryBaseUnit,
@@ -34,7 +38,7 @@ export async function applyEventInventoryMovement(tx: Prisma.TransactionClient, 
     const factor = product.inventoryBaseUnit ? normalizeManualInventoryQuantity(snapshot, 1).toNumber()
       : Number(item.contentPerUnit ?? 0) * (["L", "KG"].includes(item.contentUnit ?? "") ? 1000 : 1);
     if (!(factor > 0)) throw new Error("La presentación del evento no permite convertir el remanente.");
-    legacyQuantity += open / factor;
+    legacyQuantity += legacyUsesPieces ? open : open / (packageSize ?? factor);
   }
   if (!balance && !input.returning) await requireLegacyInventoryAvailable(tx, input.branchId, product.id, legacyQuantity, item.unit);
   await tx.inventoryEntry.create({ data: { branchId: input.branchId, productId: product.id,

@@ -67,7 +67,7 @@ export default async function EventDetailPage({
     prisma.inventoryProduct.findMany({
     where: { isActive: true, archivedAt: null },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, unit: true, itemType: true, trackStock: true },
+    select: { id: true, name: true, unit: true, itemType: true, trackStock: true, handlingUnit: true, contentUnit: true, contentPerUnit: true },
     }),
     getAccessibleBranchIds(),
     prisma.eventSaleConsumption.findMany({ where: { eventId: id, reversedAt: null }, select: { productId: true, quantity: true, unit: true, product: { select: { name: true } } } }),
@@ -120,11 +120,13 @@ export default async function EventDetailPage({
     row.used += Number(sale.quantity);
   }
   const currentStockRows = [...stock.values()].map((row) => {
-    const sent = row.sent / row.factor;
-    const used = row.used / row.factor;
-    const returned = row.returned / row.factor;
+    const piecesPerPack = row.unit === "UNIT" && row.factor > 1 ? row.factor : null;
+    const displayFactor = piecesPerPack ? 1 : row.factor;
+    const sent = row.sent / displayFactor;
+    const used = row.used / displayFactor;
+    const returned = row.returned / displayFactor;
     const { expected, difference } = reconcileEventReturn(sent, used, returned);
-    return { ...row, sent, used, returned, damaged: row.damaged / row.factor, remaining: expected, difference };
+    return { ...row, piecesPerPack, displayUnit: piecesPerPack ? "piezas" : row.displayUnit, sent, used, returned, damaged: row.damaged / displayFactor, remaining: expected, difference };
   }).sort((a, b) => a.name.localeCompare(b.name, "es"));
   const fmtStock = (value: number) => new Intl.NumberFormat("es-MX", { maximumFractionDigits: 6 }).format(value);
   const stockPanel = (
@@ -143,7 +145,7 @@ export default async function EventDetailPage({
             {currentStockRows.map((row) => (
               <tr key={row.productId}>
                 <td className="p-3 font-medium">{row.name}<p className="text-xs text-on-surface-variant">{row.displayUnit}</p></td>
-                <td className="p-3 text-right">{row.compatible ? fmtStock(row.sent) : "Revisar unidad"}</td>
+                <td className="p-3 text-right">{row.compatible ? fmtStock(row.sent) : "Revisar unidad"}{row.compatible && row.piecesPerPack && <small className="block">{fmtStock(row.sent / row.piecesPerPack)} × {fmtStock(row.piecesPerPack)} piezas</small>}</td>
                 <td className="p-3 text-right">{row.compatible ? fmtStock(row.used) : "Revisar unidad"}</td>
                 <td className={`p-3 text-right font-bold ${row.remaining < 0 ? "text-error" : "text-on-surface"}`}>{row.compatible ? fmtStock(row.remaining) : "Pendiente"}</td>
                 {event.returnConfirmedAt && <>
@@ -159,8 +161,13 @@ export default async function EventDetailPage({
     </section>
   );
 
-  const consumableProducts = products.filter((p) => p.itemType !== "EQUIPMENT");
-  const equipmentProducts = products.filter((p) => p.itemType === "EQUIPMENT");
+  const eventProducts = products.map(({ id, name, unit, handlingUnit, contentUnit, contentPerUnit, itemType, trackStock }) => ({
+    id, name, itemType, trackStock,
+    unit: handlingUnit === "PAQUETE" && contentUnit === "PIEZAS" && contentPerUnit
+      ? `paquetes de ${contentPerUnit} piezas` : unit,
+  }));
+  const consumableProducts = eventProducts.filter((p) => p.itemType !== "EQUIPMENT");
+  const equipmentProducts = eventProducts.filter((p) => p.itemType === "EQUIPMENT");
 
   const sentCount = event.items.filter((i) => i.checkedOut).length;
   const returnedCount = event.items.filter((i) => i.checkedIn).length;
@@ -173,7 +180,7 @@ export default async function EventDetailPage({
       productId: item.productId,
       name: item.productName,
       category: item.product.category,
-      unit: item.unit,
+      unit: item.handlingUnit === "PAQUETE" ? "paquetes" : item.unit,
       itemType: item.itemType,
       sent: Number(item.sentQuantity ?? item.plannedQuantity),
       returned: item.checkedIn ? Number(item.returnedQuantity ?? 0) : 0,
@@ -187,7 +194,7 @@ export default async function EventDetailPage({
       productId: addition.productId ?? addition.id,
       name: addition.product?.name ?? addition.temporaryName ?? "Producto adicional",
       category: addition.product?.category ?? addition.temporaryCategory ?? "Sin categoría",
-      unit: addition.product?.unit ?? addition.handlingUnit?.toLocaleLowerCase("es-MX") ?? "unidades",
+      unit: addition.handlingUnit === "PAQUETE" ? "paquetes" : addition.product?.unit ?? addition.handlingUnit?.toLocaleLowerCase("es-MX") ?? "unidades",
       itemType: addition.product?.itemType ?? "CONSUMABLE",
       sent: Number(addition.quantityOriginal),
       normalizedPerUnit: Number(addition.normalizedQuantity) / Number(addition.quantityOriginal),
@@ -235,7 +242,7 @@ export default async function EventDetailPage({
   // tiene sentido recontar día a día.
   const recountableItems = event.items
     .filter((item) => item.checkedOut && item.itemType !== "EQUIPMENT")
-    .map((item) => ({ id: item.id, productName: item.productName, unit: item.unit }));
+    .map((item) => ({ id: item.id, productName: item.productName, unit: item.handlingUnit === "PAQUETE" ? "paquetes" : item.unit }));
 
   const nextDayNumber = (event.recounts[0]?.dayNumber ?? 0) + 1;
   const pendingRecounts = event.recounts.filter((r) => r.status === "PENDIENTE").length;
@@ -323,7 +330,7 @@ export default async function EventDetailPage({
         <AdditionalSupplyForm
           eventId={event.id}
           operationId={generateOperationId()}
-          products={products.filter((product) => product.itemType !== "EQUIPMENT" && product.trackStock).map(({ id, name, unit }) => ({ id, name, unit }))}
+          products={consumableProducts.filter((product) => product.trackStock)}
           branches={sourceBranches}
         />
       )}
@@ -351,7 +358,7 @@ export default async function EventDetailPage({
         rows={activeAdditions.filter((addition) => addition.sourceType === "ENVIO_SUCURSAL").map((addition) => ({
           id: addition.id,
           productName: addition.product?.name ?? addition.temporaryName ?? "Producto adicional",
-          unit: addition.product?.unit ?? "unidades",
+          unit: addition.handlingUnit === "PAQUETE" ? "paquetes" : addition.product?.unit ?? "unidades",
           sourceBranchName: addition.sourceBranch?.name ?? "Sucursal no disponible",
           quantity: Number(addition.quantityOriginal),
           returned: Number(addition.returnedQuantity),
