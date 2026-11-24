@@ -13,7 +13,7 @@ import AdditionalReturns from "./AdditionalReturns";
 import EventSummary from "./EventSummary";
 import { ListChecksIcon } from "@/components/ui/icons";
 import { formatBusinessDate, formatBusinessDateTime } from "@/lib/dateTime";
-import { basePerUnit, buildEventConsumption, type EventConsumptionItem } from "@/lib/inventory/eventAnalytics";
+import { basePerUnit, buildEventConsumption, reconcileEventReturn, type EventConsumptionItem } from "@/lib/inventory/eventAnalytics";
 import { generateOperationId } from "@/lib/pos2/operationId";
 
 function eventBaseUnit(contentUnit: string | null, fallback: string) {
@@ -81,15 +81,15 @@ export default async function EventDetailPage({
 
   const stock = new Map<string, {
     productId: string; name: string; unit: string; sent: number; used: number;
-    returned: number; damaged: number; compatible: boolean;
+    returned: number; damaged: number; compatible: boolean; factor: number; displayUnit: string;
   }>();
-  function stockRow(productId: string, name: string, unit: string) {
+  function stockRow(productId: string, name: string, unit: string, factor = 1, displayUnit = unit) {
     const existing = stock.get(productId);
     if (existing) {
       if (existing.unit !== unit) existing.compatible = false;
       return existing;
     }
-    const row = { productId, name, unit, sent: 0, used: 0, returned: 0, damaged: 0, compatible: true };
+    const row = { productId, name, unit, factor, displayUnit, sent: 0, used: 0, returned: 0, damaged: 0, compatible: true };
     stock.set(productId, row);
     return row;
   }
@@ -98,8 +98,10 @@ export default async function EventDetailPage({
     if (sent <= 0) continue;
     const presentation = { unit: item.unit, contentPerUnit: Number(item.contentPerUnit), contentUnit: item.contentUnit };
     const unit = eventBaseUnit(item.contentUnit, item.product.inventoryBaseUnit ?? item.unit);
-    const row = stockRow(item.productId, item.productName, unit);
     const factor = basePerUnit(presentation);
+    const label = item.handlingUnit?.toLocaleLowerCase("es-MX") ?? item.unit;
+    const displayUnit = factor > 1 && item.contentUnit ? `${label} de ${Number(item.contentPerUnit)} ${item.contentUnit.toLowerCase()}` : label;
+    const row = stockRow(item.productId, item.productName, unit, factor, displayUnit);
     row.sent += sent * factor;
     row.returned += Number(item.returnedQuantity) * factor + Number(item.returnedOpenQuantity);
     row.damaged += Number(item.damagedQuantity) * factor;
@@ -107,9 +109,9 @@ export default async function EventDetailPage({
   for (const addition of event.addedProducts) {
     if (addition.status !== "ACTIVO") continue;
     const unit = addition.product?.inventoryBaseUnit ?? eventBaseUnit(addition.contentUnit, addition.product?.unit ?? "Unidad");
-    const row = stockRow(addition.productId ?? addition.id, addition.product?.name ?? addition.temporaryName ?? "Producto adicional", unit);
     const amount = Number(addition.normalizedQuantity);
     const factor = amount / Number(addition.quantityOriginal);
+    const row = stockRow(addition.productId ?? addition.id, addition.product?.name ?? addition.temporaryName ?? "Producto adicional", unit, factor, addition.handlingUnit?.toLowerCase() ?? addition.product?.unit ?? unit);
     row.sent += amount;
     row.returned += Number(addition.returnedQuantity) * factor + Number(addition.returnedOpenQuantity);
   }
@@ -117,34 +119,37 @@ export default async function EventDetailPage({
     const row = stockRow(sale.productId, sale.product.name, sale.unit);
     row.used += Number(sale.quantity);
   }
-  const currentStockRows = [...stock.values()].map((row) => ({
-    ...row, remaining: row.sent - row.used,
-    difference: row.returned + row.damaged - (row.sent - row.used),
-  })).sort((a, b) => a.name.localeCompare(b.name, "es"));
-  const fmtStock = (value: number) => new Intl.NumberFormat("es-MX", { maximumFractionDigits: 3 }).format(value);
+  const currentStockRows = [...stock.values()].map((row) => {
+    const sent = row.sent / row.factor;
+    const used = row.used / row.factor;
+    const returned = row.returned / row.factor;
+    const { expected, difference } = reconcileEventReturn(sent, used, returned);
+    return { ...row, sent, used, returned, damaged: row.damaged / row.factor, remaining: expected, difference };
+  }).sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const fmtStock = (value: number) => new Intl.NumberFormat("es-MX", { maximumFractionDigits: 6 }).format(value);
   const stockPanel = (
     <section className="space-y-3 rounded-2xl border border-outline-variant bg-surface-container p-5">
-      <h2 className="text-xl font-bold text-on-surface">Inventario operativo del evento</h2>
+      <h2 className="text-xl font-bold text-on-surface">Conciliación de inventario del evento</h2>
       <p className="text-sm text-on-surface-variant">
         {event.checkoutConfirmedAt ? "Carga confirmada y adicionales vigentes." : "Carga planeada pendiente de confirmar."} El teórico descuenta las recetas cobradas.
-        {event.returnConfirmedAt && " Al cierre, la diferencia compara lo regresado y lo dañado con el teórico. Un negativo indica menos producto documentado del esperado."}
+        {event.returnConfirmedAt && " El regreso físico incluye envases cerrados y remanentes abiertos. El descuadre compara el regreso físico con el esperado."}
       </p>
       <div className="max-h-96 overflow-auto rounded-xl border border-outline-variant">
         <table className="w-full min-w-[540px] text-sm">
           <thead className="sticky top-0 bg-surface-container-high text-on-surface-variant">
-            <tr><th className="p-3 text-left">Producto</th><th className="p-3 text-right">Carga</th><th className="p-3 text-right">Consumo POS</th><th className="p-3 text-right">Teórico</th>{event.returnConfirmedAt && <><th className="p-3 text-right">Regreso físico</th><th className="p-3 text-right">Dañado</th><th className="p-3 text-right">Diferencia</th></>}</tr>
+            <tr><th className="p-3 text-left">Producto</th><th className="p-3 text-right">Enviado al evento</th><th className="p-3 text-right">Consumo POS</th><th className="p-3 text-right">Regreso esperado</th>{event.returnConfirmedAt && <><th className="p-3 text-right">Regreso físico</th><th className="p-3 text-right">Dañado</th><th className="p-3 text-right">Descuadre</th></>}</tr>
           </thead>
           <tbody className="divide-y divide-outline-variant">
             {currentStockRows.map((row) => (
               <tr key={row.productId}>
-                <td className="p-3 font-medium">{row.name}<p className="text-xs text-on-surface-variant">{row.unit}</p></td>
+                <td className="p-3 font-medium">{row.name}<p className="text-xs text-on-surface-variant">{row.displayUnit}</p></td>
                 <td className="p-3 text-right">{row.compatible ? fmtStock(row.sent) : "Revisar unidad"}</td>
                 <td className="p-3 text-right">{row.compatible ? fmtStock(row.used) : "Revisar unidad"}</td>
                 <td className={`p-3 text-right font-bold ${row.remaining < 0 ? "text-error" : "text-on-surface"}`}>{row.compatible ? fmtStock(row.remaining) : "Pendiente"}</td>
                 {event.returnConfirmedAt && <>
                   <td className="p-3 text-right">{row.compatible ? fmtStock(row.returned) : "—"}</td>
                   <td className="p-3 text-right">{row.compatible ? fmtStock(row.damaged) : "—"}</td>
-                  <td className="p-3 text-right font-bold">{row.compatible ? fmtStock(row.difference) : "—"}</td>
+                  <td className="p-3 text-right font-bold">{!row.compatible ? "Revisar unidad" : row.remaining < 0 ? `Revisar carga: el POS la supera por ${fmtStock(-row.remaining)} (${row.displayUnit})` : row.difference === 0 ? "Cuadra" : `${row.difference < 0 ? "Faltante" : "Sobrante"} de ${fmtStock(Math.abs(row.difference))} (${row.displayUnit})`}</td>
                 </>}
               </tr>
             ))}

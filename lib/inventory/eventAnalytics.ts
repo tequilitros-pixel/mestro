@@ -98,3 +98,9 @@ export function buildEventConsumption(items: EventConsumptionItem[]): EventConsu
     }))
     .sort((a, b) => b.consumedCost - a.consumedCost || a.name.localeCompare(b.name, "es-MX"));
 }
+
+/** All three amounts use the same presentation. Damage is documented separately. */
+export function reconcileEventReturn(sent: number, usedByPos: number, returned: number) {
+  const expected = sent - usedByPos;
+  return { expected, difference: Math.round((returned - expected) * 1000000) / 1000000 };
+}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildEventConsumption, type EventConsumptionItem } from "../lib/inventory/eventAnalytics";
+import { buildEventConsumption, reconcileEventReturn, type EventConsumptionItem } from "../lib/inventory/eventAnalytics";
 
 const water: EventConsumptionItem = {
   productId: "water",
@@ -69,4 +69,10 @@ test("convierte las piezas de un evento según su presentación histórica", () 
   const [cups] = buildEventConsumption([{ ...water, unit: "Pieza", contentPerUnit: 25,
     contentUnit: "PIEZAS", sent: 6, returned: 3, returnedOpenBase: 4 }]);
   assert.equal(cups.consumed, 2.84);
+});
+
+test("compara inventario físico contra lo que debería regresar por ventas", () => {
+  assert.deepEqual(reconcileEventReturn(10, 4, 5), { expected: 6, difference: -1 });
+  assert.deepEqual(reconcileEventReturn(10, 4, 7), { expected: 6, difference: 1 });
+  assert.deepEqual(reconcileEventReturn(10, 4, 6), { expected: 6, difference: 0 });
 });
