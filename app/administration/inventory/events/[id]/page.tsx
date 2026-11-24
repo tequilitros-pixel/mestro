@@ -13,9 +13,19 @@ import AdditionalReturns from "./AdditionalReturns";
 import EventSummary from "./EventSummary";
 import { ListChecksIcon } from "@/components/ui/icons";
 import { formatBusinessDate, formatBusinessDateTime } from "@/lib/dateTime";
-import { buildEventConsumption, type EventConsumptionItem } from "@/lib/inventory/eventAnalytics";
-import { eventItemAmount } from "@/lib/inventory/eventCashCutStock";
+import { basePerUnit, buildEventConsumption, type EventConsumptionItem } from "@/lib/inventory/eventAnalytics";
 import { generateOperationId } from "@/lib/pos2/operationId";
+
+function eventBaseUnit(contentUnit: string | null, fallback: string) {
+  if (contentUnit === "L" || contentUnit === "ML") return "ML";
+  if (contentUnit === "KG" || contentUnit === "G") return "G";
+  if (contentUnit === "PIEZAS") return "UNIT";
+  const label = fallback.trim().toLowerCase();
+  if (["l", "lt", "litro", "litros", "ml", "mililitro", "mililitros"].includes(label)) return "ML";
+  if (["kg", "kilogramo", "kilogramos", "g", "gr", "gramo", "gramos"].includes(label)) return "G";
+  if (["pza", "pieza", "piezas", "unidad", "unidades"].includes(label)) return "UNIT";
+  return fallback;
+}
 
 export default async function EventDetailPage({
   params,
@@ -42,7 +52,7 @@ export default async function EventDetailPage({
       addedProducts: {
         orderBy: { addedAt: "asc" },
         include: {
-          product: { select: { name: true, category: true, unit: true, itemType: true } },
+          product: { select: { name: true, category: true, unit: true, itemType: true, inventoryBaseUnit: true } },
           sourceBranch: { select: { name: true } },
         },
       },
@@ -60,7 +70,7 @@ export default async function EventDetailPage({
     select: { id: true, name: true, unit: true, itemType: true, trackStock: true },
     }),
     getAccessibleBranchIds(),
-    prisma.eventSaleConsumption.findMany({ where: { eventId: id, reversedAt: null }, select: { productId: true, quantity: true, unit: true } }),
+    prisma.eventSaleConsumption.findMany({ where: { eventId: id, reversedAt: null }, select: { productId: true, quantity: true, unit: true, product: { select: { name: true } } } }),
   ]);
   const sourceBranches = await prisma.branch.findMany({
     where: { active: true, ...(allowedBranchIds === null ? {} : { id: { in: allowedBranchIds } }) },
@@ -69,69 +79,73 @@ export default async function EventDetailPage({
   });
 
 
-  // Stock operacional del evento: manifiesto enviado menos recetas cobradas.
-  // No se descuenta de Barra y las cancelaciones no cuentan como consumidas.
-  const stockByProduct = new Map<string, { name: string; sentBase: number; unit: string; factor: number }>();
-  for (const item of event.items) {
-    const sent = Number(item.sentQuantity ?? item.plannedQuantity);
-    if (sent <= 0) continue;
-    try {
-      const normalized = eventItemAmount(item, item.product);
-      const prev = stockByProduct.get(item.productId);
-      if (prev) prev.sentBase += normalized.amount.toNumber();
-      else stockByProduct.set(item.productId, {
-        name: item.productName,
-        sentBase: normalized.amount.toNumber(),
-        factor: normalized.factor.toNumber(),
-        unit: item.product.inventoryBaseUnit ?? item.unit,
-      });
-    } catch {
-      // Las unidades sin conversión no deben ocultar el resto del evento.
-      stockByProduct.set(item.productId, { name: item.productName, sentBase: sent, factor: 1, unit: item.unit });
+  const stock = new Map<string, {
+    productId: string; name: string; unit: string; sent: number; used: number;
+    returned: number; damaged: number; compatible: boolean;
+  }>();
+  function stockRow(productId: string, name: string, unit: string) {
+    const existing = stock.get(productId);
+    if (existing) {
+      if (existing.unit !== unit) existing.compatible = false;
+      return existing;
     }
+    const row = { productId, name, unit, sent: 0, used: 0, returned: 0, damaged: 0, compatible: true };
+    stock.set(productId, row);
+    return row;
   }
-  const soldByProduct = new Map<string, { quantity: number; unit: string }>();
-  for (const row of eventSaleRows) {
-    const old = soldByProduct.get(row.productId);
-    if (old && old.unit !== row.unit) continue; // unidades incompatibles: requieren conciliación manual
-    soldByProduct.set(row.productId, { quantity: (old?.quantity ?? 0) + Number(row.quantity), unit: row.unit });
+  for (const item of event.items) {
+    const sent = Number(item.sentQuantity ?? (event.checkoutConfirmedAt ? 0 : item.plannedQuantity));
+    if (sent <= 0) continue;
+    const presentation = { unit: item.unit, contentPerUnit: Number(item.contentPerUnit), contentUnit: item.contentUnit };
+    const unit = eventBaseUnit(item.contentUnit, item.product.inventoryBaseUnit ?? item.unit);
+    const row = stockRow(item.productId, item.productName, unit);
+    const factor = basePerUnit(presentation);
+    row.sent += sent * factor;
+    row.returned += Number(item.returnedQuantity) * factor + Number(item.returnedOpenQuantity);
+    row.damaged += Number(item.damagedQuantity) * factor;
   }
-  const currentStockRows = [...new Set([...stockByProduct.keys(), ...soldByProduct.keys()])].map((productId) => {
-    const manifest = stockByProduct.get(productId);
-    const sold = soldByProduct.get(productId);
-    const unit = manifest?.unit ?? sold?.unit ?? "Unidad";
-    const factor = manifest?.factor ?? 1;
-    const compatible = !sold || unit === sold.unit;
-    const sent = (manifest?.sentBase ?? 0) / factor;
-    const used = compatible ? (sold?.quantity ?? 0) / factor : 0;
-    return {
-      productId,
-      name: manifest?.name ?? products.find((product) => product.id === productId)?.name ?? "Producto no incluido",
-      sent, used, remaining: sent - used,
-      unit: manifest ? event.items.find((item) => item.productId === productId)?.unit ?? unit : unit,
-      compatible,
-    };
-  }).sort((a, b) => a.name.localeCompare(b.name, "es"));
+  for (const addition of event.addedProducts) {
+    if (addition.status !== "ACTIVO") continue;
+    const unit = addition.product?.inventoryBaseUnit ?? eventBaseUnit(addition.contentUnit, addition.product?.unit ?? "Unidad");
+    const row = stockRow(addition.productId ?? addition.id, addition.product?.name ?? addition.temporaryName ?? "Producto adicional", unit);
+    const amount = Number(addition.normalizedQuantity);
+    const factor = amount / Number(addition.quantityOriginal);
+    row.sent += amount;
+    row.returned += Number(addition.returnedQuantity) * factor + Number(addition.returnedOpenQuantity);
+  }
+  for (const sale of eventSaleRows) {
+    const row = stockRow(sale.productId, sale.product.name, sale.unit);
+    row.used += Number(sale.quantity);
+  }
+  const currentStockRows = [...stock.values()].map((row) => ({
+    ...row, remaining: row.sent - row.used,
+    difference: row.returned + row.damaged - (row.sent - row.used),
+  })).sort((a, b) => a.name.localeCompare(b.name, "es"));
   const fmtStock = (value: number) => new Intl.NumberFormat("es-MX", { maximumFractionDigits: 3 }).format(value);
   const stockPanel = (
     <section className="space-y-3 rounded-2xl border border-outline-variant bg-surface-container p-5">
       <h2 className="text-xl font-bold text-on-surface">Inventario operativo del evento</h2>
       <p className="text-sm text-on-surface-variant">
-        Productos cargados al evento menos ingredientes consumidos en ventas de sus cortes.
-        No son salidas adicionales de Barra. Los faltantes pueden seguir vendiéndose y quedan visibles en negativo.
+        {event.checkoutConfirmedAt ? "Carga confirmada y adicionales vigentes." : "Carga planeada pendiente de confirmar."} El teórico descuenta las recetas cobradas.
+        {event.returnConfirmedAt && " Al cierre, la diferencia compara lo regresado y lo dañado con el teórico. Un negativo indica menos producto documentado del esperado."}
       </p>
       <div className="max-h-96 overflow-auto rounded-xl border border-outline-variant">
         <table className="w-full min-w-[540px] text-sm">
           <thead className="sticky top-0 bg-surface-container-high text-on-surface-variant">
-            <tr><th className="p-3 text-left">Producto</th><th className="p-3 text-right">Enviado</th><th className="p-3 text-right">Vendido</th><th className="p-3 text-right">Restante</th></tr>
+            <tr><th className="p-3 text-left">Producto</th><th className="p-3 text-right">Carga</th><th className="p-3 text-right">Consumo POS</th><th className="p-3 text-right">Teórico</th>{event.returnConfirmedAt && <><th className="p-3 text-right">Regreso físico</th><th className="p-3 text-right">Dañado</th><th className="p-3 text-right">Diferencia</th></>}</tr>
           </thead>
           <tbody className="divide-y divide-outline-variant">
             {currentStockRows.map((row) => (
               <tr key={row.productId}>
                 <td className="p-3 font-medium">{row.name}<p className="text-xs text-on-surface-variant">{row.unit}</p></td>
-                <td className="p-3 text-right">{fmtStock(row.sent)}</td>
+                <td className="p-3 text-right">{row.compatible ? fmtStock(row.sent) : "Revisar unidad"}</td>
                 <td className="p-3 text-right">{row.compatible ? fmtStock(row.used) : "Revisar unidad"}</td>
                 <td className={`p-3 text-right font-bold ${row.remaining < 0 ? "text-error" : "text-on-surface"}`}>{row.compatible ? fmtStock(row.remaining) : "Pendiente"}</td>
+                {event.returnConfirmedAt && <>
+                  <td className="p-3 text-right">{row.compatible ? fmtStock(row.returned) : "—"}</td>
+                  <td className="p-3 text-right">{row.compatible ? fmtStock(row.damaged) : "—"}</td>
+                  <td className="p-3 text-right font-bold">{row.compatible ? fmtStock(row.difference) : "—"}</td>
+                </>}
               </tr>
             ))}
           </tbody>
@@ -171,6 +185,7 @@ export default async function EventDetailPage({
       unit: addition.product?.unit ?? addition.handlingUnit?.toLocaleLowerCase("es-MX") ?? "unidades",
       itemType: addition.product?.itemType ?? "CONSUMABLE",
       sent: Number(addition.quantityOriginal),
+      normalizedPerUnit: Number(addition.normalizedQuantity) / Number(addition.quantityOriginal),
       returned: addition.returnBranchId ? Number(addition.returnedQuantity) : 0,
       damaged: 0,
       returnedOpenBase: addition.returnBranchId ? Number(addition.returnedOpenQuantity ?? 0) : 0,

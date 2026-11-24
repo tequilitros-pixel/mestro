@@ -8,6 +8,7 @@ export type EventConsumptionItem = {
   returned: number;
   damaged: number;
   returnedOpenBase: number;
+  normalizedPerUnit?: number;
   contentPerUnit: number | null;
   contentUnit: string | null;
   unitCost: number | null;
@@ -28,15 +29,15 @@ export type EventConsumptionRow = {
   costKnown: boolean;
 };
 
-function basePerUnit(item: EventConsumptionItem) {
-  const unit = item.unit.trim().toLocaleLowerCase("es-MX");
-  if (["l", "lt", "litro", "litros", "kg", "kilogramo", "kilogramos"].includes(unit)) return 1000;
-  if (["ml", "mililitro", "mililitros", "g", "gr", "gramo", "gramos", "pza", "pieza", "piezas", "unidad", "unidades"].includes(unit)) return 1;
+export function basePerUnit(item: Pick<EventConsumptionItem, "unit" | "contentUnit" | "contentPerUnit" | "normalizedPerUnit">) {
+  if (item.normalizedPerUnit && item.normalizedPerUnit > 0) return item.normalizedPerUnit;
   const content = item.contentPerUnit;
   if (content !== null && content > 0) {
     if (item.contentUnit === "L" || item.contentUnit === "KG") return content * 1000;
     if (["ML", "G", "PIEZAS"].includes(item.contentUnit ?? "")) return content;
   }
+  const unit = item.unit.trim().toLocaleLowerCase("es-MX");
+  if (["l", "lt", "litro", "litros", "kg", "kilogramo", "kilogramos"].includes(unit)) return 1000;
   return 1;
 }
 
