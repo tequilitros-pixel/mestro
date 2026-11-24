@@ -35,6 +35,7 @@ export async function recordEventAdditionalMovement(
     where: { branchId_inventoryProductId: { branchId, inventoryProductId: product.id } },
   });
   let movementId: string | null = null;
+  const legacyUsesPieces = addition.handlingUnit === "PAQUETE" && addition.contentUnit === "PIEZAS" && /^(piezas?|pzas?|unidad(?:es)?|units?)$/i.test(product.unit);
   if (balance) {
     if (!product.inventoryBaseUnit || balance.unit !== product.inventoryBaseUnit) {
       throw new Error("La unidad del saldo no coincide con el producto agregado.");
@@ -58,7 +59,7 @@ export async function recordEventAdditionalMovement(
     movementId = movements[0]?.id ?? null;
   } else if (!returning) {
     await requireLegacyInventoryAvailable(
-      tx, branchId, product.id, original.toNumber(), product.unit,
+      tx, branchId, product.id, (legacyUsesPieces ? normalized : original).toNumber(), product.unit,
     );
   }
 
@@ -68,7 +69,7 @@ export async function recordEventAdditionalMovement(
       branchId,
       productId: product.id,
       type: returning ? "REGRESO_EVENTO" : "SALIDA_EVENTO",
-      quantity: commercialQuantity,
+      quantity: legacyUsesPieces ? (returning ? normalized : normalized.negated()) : commercialQuantity,
       notes: `Evento ${addition.eventId} · carga adicional ${addition.id} · ${returning ? "regreso" : "salida"}`,
     },
   });

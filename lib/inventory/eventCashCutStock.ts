@@ -2,6 +2,8 @@ import "server-only";
 import { Prisma, type CatalogBaseUnit, type InventoryProduct } from "@prisma/client";
 import { normalizeManualInventoryQuantity } from "@/lib/inventory/manualMovements";
 
+import { getPiecePresentationSize } from "@/lib/inventory/units";
+
 type Tx = Prisma.TransactionClient;
 type EventItem = {
   productId: string; productName: string; unit: string;
@@ -31,8 +33,9 @@ export function eventItemAmount(item: EventItem, product: InventoryProduct) {
     contentUnit: item.contentUnit,
     normalizedContentPerUnit: null,
   };
-  const factor = normalizeManualInventoryQuantity(snapshot, 1);
-  return { amount: captured.times(factor), factor, unit: item.unit };
+  const size = getPiecePresentationSize(snapshot);
+  const factor = size === null ? normalizeManualInventoryQuantity(snapshot, 1) : new Prisma.Decimal(size);
+  return { amount: captured.times(factor), factor, unit: size ? item.handlingUnit!.toLowerCase() : item.unit };
 }
 
 /**

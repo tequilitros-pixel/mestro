@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireModuleActionAccess } from "@/lib/auth";
 import { baseContent } from "@/lib/inventory/presentation";
 import { normalizeManualInventoryQuantity } from "@/lib/inventory/manualMovements";
-import { getNormalizedContentPerUnit } from "@/lib/inventory/units";
+import { getNormalizedContentPerUnit, getPiecePresentationSize } from "@/lib/inventory/units";
 import { recordEventAdditionalMovement } from "@/lib/inventory/eventAdditionalMovements";
 import { executeIdempotent } from "@/lib/pos2/idempotency";
 import { generateOperationId } from "@/lib/pos2/operationId";
@@ -13,6 +13,8 @@ import { generateOperationId } from "@/lib/pos2/operationId";
 class EventInputError extends Error {}
 
 function normalizedFactor(product: Parameters<typeof normalizeManualInventoryQuantity>[0]) {
+  const packageSize = getPiecePresentationSize(product);
+  if (packageSize) return new Prisma.Decimal(packageSize);
   if (product.inventoryBaseUnit) {
     try {
       return normalizeManualInventoryQuantity(product, 1);

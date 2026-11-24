@@ -13,9 +13,19 @@ import AdditionalReturns from "./AdditionalReturns";
 import EventSummary from "./EventSummary";
 import { ListChecksIcon } from "@/components/ui/icons";
 import { formatBusinessDate, formatBusinessDateTime } from "@/lib/dateTime";
-import { buildEventConsumption, type EventConsumptionItem } from "@/lib/inventory/eventAnalytics";
-import { eventItemAmount } from "@/lib/inventory/eventCashCutStock";
+import { basePerUnit, buildEventConsumption, reconcileEventReturn, type EventConsumptionItem } from "@/lib/inventory/eventAnalytics";
 import { generateOperationId } from "@/lib/pos2/operationId";
+
+function eventBaseUnit(contentUnit: string | null, fallback: string) {
+  if (contentUnit === "L" || contentUnit === "ML") return "ML";
+  if (contentUnit === "KG" || contentUnit === "G") return "G";
+  if (contentUnit === "PIEZAS") return "UNIT";
+  const label = fallback.trim().toLowerCase();
+  if (["l", "lt", "litro", "litros", "ml", "mililitro", "mililitros"].includes(label)) return "ML";
+  if (["kg", "kilogramo", "kilogramos", "g", "gr", "gramo", "gramos"].includes(label)) return "G";
+  if (["pza", "pieza", "piezas", "unidad", "unidades"].includes(label)) return "UNIT";
+  return fallback;
+}
 
 export default async function EventDetailPage({
   params,
@@ -42,7 +52,7 @@ export default async function EventDetailPage({
       addedProducts: {
         orderBy: { addedAt: "asc" },
         include: {
-          product: { select: { name: true, category: true, unit: true, itemType: true } },
+          product: { select: { name: true, category: true, unit: true, itemType: true, inventoryBaseUnit: true } },
           sourceBranch: { select: { name: true } },
         },
       },
@@ -57,10 +67,10 @@ export default async function EventDetailPage({
     prisma.inventoryProduct.findMany({
     where: { isActive: true, archivedAt: null },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, unit: true, itemType: true, trackStock: true },
+    select: { id: true, name: true, unit: true, itemType: true, trackStock: true, handlingUnit: true, contentUnit: true, contentPerUnit: true },
     }),
     getAccessibleBranchIds(),
-    prisma.eventSaleConsumption.findMany({ where: { eventId: id, reversedAt: null }, select: { productId: true, quantity: true, unit: true } }),
+    prisma.eventSaleConsumption.findMany({ where: { eventId: id, reversedAt: null }, select: { productId: true, quantity: true, unit: true, product: { select: { name: true } } } }),
   ]);
   const sourceBranches = await prisma.branch.findMany({
     where: { active: true, ...(allowedBranchIds === null ? {} : { id: { in: allowedBranchIds } }) },
@@ -69,69 +79,80 @@ export default async function EventDetailPage({
   });
 
 
-  // Stock operacional del evento: manifiesto enviado menos recetas cobradas.
-  // No se descuenta de Barra y las cancelaciones no cuentan como consumidas.
-  const stockByProduct = new Map<string, { name: string; sentBase: number; unit: string; factor: number }>();
-  for (const item of event.items) {
-    const sent = Number(item.sentQuantity ?? item.plannedQuantity);
-    if (sent <= 0) continue;
-    try {
-      const normalized = eventItemAmount(item, item.product);
-      const prev = stockByProduct.get(item.productId);
-      if (prev) prev.sentBase += normalized.amount.toNumber();
-      else stockByProduct.set(item.productId, {
-        name: item.productName,
-        sentBase: normalized.amount.toNumber(),
-        factor: normalized.factor.toNumber(),
-        unit: item.product.inventoryBaseUnit ?? item.unit,
-      });
-    } catch {
-      // Las unidades sin conversión no deben ocultar el resto del evento.
-      stockByProduct.set(item.productId, { name: item.productName, sentBase: sent, factor: 1, unit: item.unit });
+  const stock = new Map<string, {
+    productId: string; name: string; unit: string; sent: number; used: number;
+    returned: number; damaged: number; compatible: boolean; factor: number; displayUnit: string;
+  }>();
+  function stockRow(productId: string, name: string, unit: string, factor = 1, displayUnit = unit) {
+    const existing = stock.get(productId);
+    if (existing) {
+      if (existing.unit !== unit) existing.compatible = false;
+      return existing;
     }
+    const row = { productId, name, unit, factor, displayUnit, sent: 0, used: 0, returned: 0, damaged: 0, compatible: true };
+    stock.set(productId, row);
+    return row;
   }
-  const soldByProduct = new Map<string, { quantity: number; unit: string }>();
-  for (const row of eventSaleRows) {
-    const old = soldByProduct.get(row.productId);
-    if (old && old.unit !== row.unit) continue; // unidades incompatibles: requieren conciliación manual
-    soldByProduct.set(row.productId, { quantity: (old?.quantity ?? 0) + Number(row.quantity), unit: row.unit });
+  for (const item of event.items) {
+    const sent = Number(item.sentQuantity ?? (event.checkoutConfirmedAt ? 0 : item.plannedQuantity));
+    if (sent <= 0) continue;
+    const presentation = { unit: item.unit, contentPerUnit: Number(item.contentPerUnit), contentUnit: item.contentUnit };
+    const unit = eventBaseUnit(item.contentUnit, item.product.inventoryBaseUnit ?? item.unit);
+    const factor = basePerUnit(presentation);
+    const label = item.handlingUnit?.toLocaleLowerCase("es-MX") ?? item.unit;
+    const displayUnit = factor > 1 && item.contentUnit ? `${label} de ${Number(item.contentPerUnit)} ${item.contentUnit.toLowerCase()}` : label;
+    const row = stockRow(item.productId, item.productName, unit, factor, displayUnit);
+    row.sent += sent * factor;
+    row.returned += Number(item.returnedQuantity) * factor + Number(item.returnedOpenQuantity);
+    row.damaged += Number(item.damagedQuantity) * factor;
   }
-  const currentStockRows = [...new Set([...stockByProduct.keys(), ...soldByProduct.keys()])].map((productId) => {
-    const manifest = stockByProduct.get(productId);
-    const sold = soldByProduct.get(productId);
-    const unit = manifest?.unit ?? sold?.unit ?? "Unidad";
-    const factor = manifest?.factor ?? 1;
-    const compatible = !sold || unit === sold.unit;
-    const sent = (manifest?.sentBase ?? 0) / factor;
-    const used = compatible ? (sold?.quantity ?? 0) / factor : 0;
-    return {
-      productId,
-      name: manifest?.name ?? products.find((product) => product.id === productId)?.name ?? "Producto no incluido",
-      sent, used, remaining: sent - used,
-      unit: manifest ? event.items.find((item) => item.productId === productId)?.unit ?? unit : unit,
-      compatible,
-    };
+  for (const addition of event.addedProducts) {
+    if (addition.status !== "ACTIVO") continue;
+    const unit = addition.product?.inventoryBaseUnit ?? eventBaseUnit(addition.contentUnit, addition.product?.unit ?? "Unidad");
+    const amount = Number(addition.normalizedQuantity);
+    const factor = amount / Number(addition.quantityOriginal);
+    const row = stockRow(addition.productId ?? addition.id, addition.product?.name ?? addition.temporaryName ?? "Producto adicional", unit, factor, addition.handlingUnit?.toLowerCase() ?? addition.product?.unit ?? unit);
+    row.sent += amount;
+    row.returned += Number(addition.returnedQuantity) * factor + Number(addition.returnedOpenQuantity);
+  }
+  for (const sale of eventSaleRows) {
+    const row = stockRow(sale.productId, sale.product.name, sale.unit);
+    row.used += Number(sale.quantity);
+  }
+  const currentStockRows = [...stock.values()].map((row) => {
+    const piecesPerPack = row.unit === "UNIT" && row.factor > 1 ? row.factor : null;
+    const displayFactor = piecesPerPack ? 1 : row.factor;
+    const sent = row.sent / displayFactor;
+    const used = row.used / displayFactor;
+    const returned = row.returned / displayFactor;
+    const { expected, difference } = reconcileEventReturn(sent, used, returned);
+    return { ...row, piecesPerPack, displayUnit: piecesPerPack ? "piezas" : row.displayUnit, sent, used, returned, damaged: row.damaged / displayFactor, remaining: expected, difference };
   }).sort((a, b) => a.name.localeCompare(b.name, "es"));
-  const fmtStock = (value: number) => new Intl.NumberFormat("es-MX", { maximumFractionDigits: 3 }).format(value);
+  const fmtStock = (value: number) => new Intl.NumberFormat("es-MX", { maximumFractionDigits: 6 }).format(value);
   const stockPanel = (
     <section className="space-y-3 rounded-2xl border border-outline-variant bg-surface-container p-5">
-      <h2 className="text-xl font-bold text-on-surface">Inventario operativo del evento</h2>
+      <h2 className="text-xl font-bold text-on-surface">Conciliación de inventario del evento</h2>
       <p className="text-sm text-on-surface-variant">
-        Productos cargados al evento menos ingredientes consumidos en ventas de sus cortes.
-        No son salidas adicionales de Barra. Los faltantes pueden seguir vendiéndose y quedan visibles en negativo.
+        {event.checkoutConfirmedAt ? "Carga confirmada y adicionales vigentes." : "Carga planeada pendiente de confirmar."} El teórico descuenta las recetas cobradas.
+        {event.returnConfirmedAt && " El regreso físico incluye envases cerrados y remanentes abiertos. El descuadre compara el regreso físico con el esperado."}
       </p>
       <div className="max-h-96 overflow-auto rounded-xl border border-outline-variant">
         <table className="w-full min-w-[540px] text-sm">
           <thead className="sticky top-0 bg-surface-container-high text-on-surface-variant">
-            <tr><th className="p-3 text-left">Producto</th><th className="p-3 text-right">Enviado</th><th className="p-3 text-right">Vendido</th><th className="p-3 text-right">Restante</th></tr>
+            <tr><th className="p-3 text-left">Producto</th><th className="p-3 text-right">Enviado al evento</th><th className="p-3 text-right">Consumo POS</th><th className="p-3 text-right">Regreso esperado</th>{event.returnConfirmedAt && <><th className="p-3 text-right">Regreso físico</th><th className="p-3 text-right">Dañado</th><th className="p-3 text-right">Descuadre</th></>}</tr>
           </thead>
           <tbody className="divide-y divide-outline-variant">
             {currentStockRows.map((row) => (
               <tr key={row.productId}>
-                <td className="p-3 font-medium">{row.name}<p className="text-xs text-on-surface-variant">{row.unit}</p></td>
-                <td className="p-3 text-right">{fmtStock(row.sent)}</td>
+                <td className="p-3 font-medium">{row.name}<p className="text-xs text-on-surface-variant">{row.displayUnit}</p></td>
+                <td className="p-3 text-right">{row.compatible ? fmtStock(row.sent) : "Revisar unidad"}{row.compatible && row.piecesPerPack && <small className="block">{fmtStock(row.sent / row.piecesPerPack)} × {fmtStock(row.piecesPerPack)} piezas</small>}</td>
                 <td className="p-3 text-right">{row.compatible ? fmtStock(row.used) : "Revisar unidad"}</td>
                 <td className={`p-3 text-right font-bold ${row.remaining < 0 ? "text-error" : "text-on-surface"}`}>{row.compatible ? fmtStock(row.remaining) : "Pendiente"}</td>
+                {event.returnConfirmedAt && <>
+                  <td className="p-3 text-right">{row.compatible ? fmtStock(row.returned) : "—"}</td>
+                  <td className="p-3 text-right">{row.compatible ? fmtStock(row.damaged) : "—"}</td>
+                  <td className="p-3 text-right font-bold">{!row.compatible ? "Revisar unidad" : row.remaining < 0 ? `Revisar carga: el POS la supera por ${fmtStock(-row.remaining)} (${row.displayUnit})` : row.difference === 0 ? "Cuadra" : `${row.difference < 0 ? "Faltante" : "Sobrante"} de ${fmtStock(Math.abs(row.difference))} (${row.displayUnit})`}</td>
+                </>}
               </tr>
             ))}
           </tbody>
@@ -140,8 +161,13 @@ export default async function EventDetailPage({
     </section>
   );
 
-  const consumableProducts = products.filter((p) => p.itemType !== "EQUIPMENT");
-  const equipmentProducts = products.filter((p) => p.itemType === "EQUIPMENT");
+  const eventProducts = products.map(({ id, name, unit, handlingUnit, contentUnit, contentPerUnit, itemType, trackStock }) => ({
+    id, name, itemType, trackStock,
+    unit: handlingUnit === "PAQUETE" && contentUnit === "PIEZAS" && contentPerUnit
+      ? `paquetes de ${contentPerUnit} piezas` : unit,
+  }));
+  const consumableProducts = eventProducts.filter((p) => p.itemType !== "EQUIPMENT");
+  const equipmentProducts = eventProducts.filter((p) => p.itemType === "EQUIPMENT");
 
   const sentCount = event.items.filter((i) => i.checkedOut).length;
   const returnedCount = event.items.filter((i) => i.checkedIn).length;
@@ -154,7 +180,7 @@ export default async function EventDetailPage({
       productId: item.productId,
       name: item.productName,
       category: item.product.category,
-      unit: item.unit,
+      unit: item.handlingUnit === "PAQUETE" ? "paquetes" : item.unit,
       itemType: item.itemType,
       sent: Number(item.sentQuantity ?? item.plannedQuantity),
       returned: item.checkedIn ? Number(item.returnedQuantity ?? 0) : 0,
@@ -168,9 +194,10 @@ export default async function EventDetailPage({
       productId: addition.productId ?? addition.id,
       name: addition.product?.name ?? addition.temporaryName ?? "Producto adicional",
       category: addition.product?.category ?? addition.temporaryCategory ?? "Sin categoría",
-      unit: addition.product?.unit ?? addition.handlingUnit?.toLocaleLowerCase("es-MX") ?? "unidades",
+      unit: addition.handlingUnit === "PAQUETE" ? "paquetes" : addition.product?.unit ?? addition.handlingUnit?.toLocaleLowerCase("es-MX") ?? "unidades",
       itemType: addition.product?.itemType ?? "CONSUMABLE",
       sent: Number(addition.quantityOriginal),
+      normalizedPerUnit: Number(addition.normalizedQuantity) / Number(addition.quantityOriginal),
       returned: addition.returnBranchId ? Number(addition.returnedQuantity) : 0,
       damaged: 0,
       returnedOpenBase: addition.returnBranchId ? Number(addition.returnedOpenQuantity ?? 0) : 0,
@@ -215,7 +242,7 @@ export default async function EventDetailPage({
   // tiene sentido recontar día a día.
   const recountableItems = event.items
     .filter((item) => item.checkedOut && item.itemType !== "EQUIPMENT")
-    .map((item) => ({ id: item.id, productName: item.productName, unit: item.unit }));
+    .map((item) => ({ id: item.id, productName: item.productName, unit: item.handlingUnit === "PAQUETE" ? "paquetes" : item.unit }));
 
   const nextDayNumber = (event.recounts[0]?.dayNumber ?? 0) + 1;
   const pendingRecounts = event.recounts.filter((r) => r.status === "PENDIENTE").length;
@@ -303,7 +330,7 @@ export default async function EventDetailPage({
         <AdditionalSupplyForm
           eventId={event.id}
           operationId={generateOperationId()}
-          products={products.filter((product) => product.itemType !== "EQUIPMENT" && product.trackStock).map(({ id, name, unit }) => ({ id, name, unit }))}
+          products={consumableProducts.filter((product) => product.trackStock)}
           branches={sourceBranches}
         />
       )}
@@ -331,7 +358,7 @@ export default async function EventDetailPage({
         rows={activeAdditions.filter((addition) => addition.sourceType === "ENVIO_SUCURSAL").map((addition) => ({
           id: addition.id,
           productName: addition.product?.name ?? addition.temporaryName ?? "Producto adicional",
-          unit: addition.product?.unit ?? "unidades",
+          unit: addition.handlingUnit === "PAQUETE" ? "paquetes" : addition.product?.unit ?? "unidades",
           sourceBranchName: addition.sourceBranch?.name ?? "Sucursal no disponible",
           quantity: Number(addition.quantityOriginal),
           returned: Number(addition.returnedQuantity),
