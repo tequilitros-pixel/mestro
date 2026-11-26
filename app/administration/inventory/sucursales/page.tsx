@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/icons";
 import PageTabs from "@/components/ui/PageTabs";
 import { getAccessibleBranchIds, getCurrentUser } from "@/lib/auth";
-import { isInventoryCountCaptureRole } from "@/lib/permission-modules";
+import { canAccessModule, isInventoryCountCaptureRole } from "@/lib/permission-modules";
 import {
   formatBusinessDate,
 } from "@/lib/dateTime";
@@ -84,7 +84,9 @@ export default async function SucursalesInventoryPage() {
     (action) => action.adminOnly
       ? user?.role === "ADMIN"
       : action.captureRoleOnly
-        ? Boolean(user && isInventoryCountCaptureRole(user.role))
+        ? Boolean(user && (action.href.endsWith("MONTHLY")
+          ? isInventoryCountCaptureRole(user.role)
+          : canAccessModule(user.role, [...permissionKeys], action.permissionKey)))
         : user?.role === "ADMIN" || permissionKeys.has(action.permissionKey),
   );
   const branchFilter = allowedBranchIds === null ? {} : { branchId: { in: allowedBranchIds } };

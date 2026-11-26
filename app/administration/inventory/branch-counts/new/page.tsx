@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isInventoryCountCaptureRole } from "@/lib/permission-modules";
 import NewCountForm from "./NewCountForm";
 import { getAccessibleBranchIds, requireInventoryCountCaptureAccess } from "@/lib/auth";
 import { inventoryCountTypeLabel } from "@/lib/inventory/countScope";
@@ -8,9 +9,10 @@ export default async function NewCountPage({
 }: {
   searchParams: Promise<{ type?: string }>;
 }) {
-  await requireInventoryCountCaptureAccess();
+  const user = await requireInventoryCountCaptureAccess();
+  const allowMonthly = isInventoryCountCaptureRole(user.role);
   const requestedType = (await searchParams).type;
-  const countType = requestedType === "MONTHLY" ? "MONTHLY" : "WEEKLY";
+  const countType = allowMonthly && requestedType === "MONTHLY" ? "MONTHLY" : "WEEKLY";
   const allowedBranchIds = await getAccessibleBranchIds();
   const branches = await prisma.branch.findMany({
     where: {
@@ -33,7 +35,7 @@ export default async function NewCountPage({
           </p>
         </div>
 
-        <NewCountForm branches={branches} defaultCountType={countType} />
+        <NewCountForm allowMonthly={allowMonthly} branches={branches} defaultCountType={countType} />
       </div>
     </main>
   );

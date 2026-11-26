@@ -6,7 +6,8 @@ import {
   isInventoryManagerReadPath,
   isAdminOnlyPath,
   isAlwaysAvailablePath,
-  isInventoryCountCaptureRole,
+  INVENTORY_COUNT_PERMISSION,
+  canAccessModule,
 } from "@/lib/permission-modules";
 import {
   type IconProps,
@@ -732,8 +733,8 @@ export function isSubmenuItemVisible(
 ): boolean {
   if (role === "ADMIN") return true;
 
-  if (item.href === "/administration/inventory/branch-counts") {
-    return isInventoryCountCaptureRole(role);
+  if (item.href === INVENTORY_COUNT_PERMISSION) {
+    return canAccessModule(role, moduleKeys, INVENTORY_COUNT_PERMISSION);
   }
 
   // Compatibilidad con operadores antiguos: si todavía no tienen permisos

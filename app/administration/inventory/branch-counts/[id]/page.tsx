@@ -1,3 +1,4 @@
+import { isInventoryCountCaptureRole } from "@/lib/permission-modules";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import CountItemsList from "./CountItemsList";
@@ -42,7 +43,7 @@ export default async function CountDetailPage({
     notFound();
   }
 
-  if (user.role !== "ADMIN" && count.status !== "BORRADOR" && count.countType !== "WEEKLY") {
+  if (count.countType !== "WEEKLY" && (!isInventoryCountCaptureRole(user.role) || (user.role !== "ADMIN" && count.status !== "BORRADOR"))) {
     notFound();
   }
 

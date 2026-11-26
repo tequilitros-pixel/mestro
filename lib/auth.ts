@@ -8,7 +8,7 @@ import {
   canAccessModule,
   isConfigurablePermissionKey,
   isAdminOnlyPath,
-  isInventoryCountCaptureRole,
+  INVENTORY_COUNT_PERMISSION,
 } from "@/lib/permission-modules";
 
 
@@ -49,19 +49,15 @@ export async function requireAdminAction() {
 }
 
 export async function requireInventoryCountCaptureAccess() {
-  const user = await getCurrentUser();
-  if (!user || !isInventoryCountCaptureRole(user.role)) {
-    redirect(user ? "/profile" : "/login");
+  const user = await getCurrentUserWithAnyModuleAccess([INVENTORY_COUNT_PERMISSION]);
+  if (!user) {
+    redirect((await getCurrentUser()) ? "/profile" : "/login");
   }
   return user;
 }
 
 export async function requireInventoryCountCaptureActionAccess() {
-  const user = await getCurrentUser();
-  if (!user || !isInventoryCountCaptureRole(user.role)) {
-    throw new Error("PERMISSION_DENIED");
-  }
-  return user;
+  return requireModuleActionAccess(INVENTORY_COUNT_PERMISSION);
 }
 
 export async function requireModuleActionAccess(moduleKey: string) {

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { isBranchAllowed } from "@/lib/branches/access";
-import { isInventoryCountCaptureRole, isInventoryManagerReadPath } from "@/lib/permission-modules";
+import { canAccessModule, INVENTORY_COUNT_PERMISSION, isInventoryCountCaptureRole, isInventoryManagerReadPath } from "@/lib/permission-modules";
 import { formatCommercialPresentation, formatCommercialQuantity, formatInventoryDashboardQuantity } from "@/lib/inventory/units";
 import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility";
 
@@ -20,6 +20,12 @@ test("las lecturas permitidas no habilitan formularios nuevos", () => {
   assert.equal(isInventoryCountCaptureRole("GERENTE"), true);
   assert.equal(isInventoryCountCaptureRole("OPERATOR"), true);
   assert.equal(isInventoryCountCaptureRole("CONSULTA"), false);
+});
+
+test("el encargado requiere permiso explícito de conteo semanal", () => {
+  assert.equal(canAccessModule("ENCARGADO", [INVENTORY_COUNT_PERMISSION], INVENTORY_COUNT_PERMISSION), true);
+  assert.equal(canAccessModule("ENCARGADO", [], INVENTORY_COUNT_PERMISSION), false);
+  assert.equal(isInventoryCountCaptureRole("ENCARGADO"), false);
 });
 
 test("el conteo ciego oculta expected/system al gerente", () => {
