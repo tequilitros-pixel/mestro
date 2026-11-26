@@ -1,3 +1,5 @@
+export const INVENTORY_COUNT_PERMISSION = "/administration/inventory/branch-counts";
+
 export type PermissionModule = {
   key: string;
   label: string;
@@ -156,7 +158,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         label: "Inventario de sucursales · Traspasos",
       },
       {
-        key: "/administration/inventory/branch-counts",
+        key: INVENTORY_COUNT_PERMISSION,
         label: "Conteo semanal",
       },
     ],
@@ -181,8 +183,8 @@ export function canAccessModule(
 ): boolean {
   if (role === "ADMIN") return true;
 
-  if (moduleKey === "/administration/inventory/branch-counts") {
-    return isInventoryCountCaptureRole(role);
+  if (moduleKey === INVENTORY_COUNT_PERMISSION) {
+    return isInventoryCountCaptureRole(role) || (role === "ENCARGADO" && moduleKeys.includes(moduleKey));
   }
 
   const hasConfiguredPermissions = moduleKeys.some(isConfigurablePermissionKey);

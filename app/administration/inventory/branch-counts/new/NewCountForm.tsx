@@ -9,9 +9,11 @@ type Branch = { id: string; name: string };
 type CountType = "WEEKLY" | "MONTHLY";
 
 export default function NewCountForm({
+  allowMonthly,
   branches,
   defaultCountType,
 }: {
+  allowMonthly: boolean;
   branches: Branch[];
   defaultCountType: CountType;
 }) {
@@ -55,7 +57,7 @@ export default function NewCountForm({
           className="w-full rounded-xl border border-outline-variant bg-background px-4 py-3 text-sm text-on-surface outline-none transition focus:border-primary"
         >
           <option value="WEEKLY">Conteo semanal</option>
-          <option value="MONTHLY">Conteo mensual</option>
+          {allowMonthly && <option value="MONTHLY">Conteo mensual</option>}
         </select>
         <span className="block text-xs text-on-surface-variant">
           El semanal usa la clasificación administrable; el mensual incluye todo el inventario contable activo.

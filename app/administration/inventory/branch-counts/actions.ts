@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleBranchIds, requireInventoryCountCaptureActionAccess } from "@/lib/auth";
+import { isInventoryCountCaptureRole } from "@/lib/permission-modules";
 import { isBranchAllowed } from "@/lib/branches/access";
 import { parseDateOnly } from "@/lib/dateOnly";
 import { executeIdempotent } from "@/lib/pos2/idempotency";
@@ -17,8 +18,9 @@ import {
   inventoryCountTypeLabel,
 } from "@/lib/inventory/countScope";
 
-async function authorizeCountBranch(branchId: string) {
+async function authorizeCountBranch(branchId: string, countType: string) {
   const user = await requireInventoryCountCaptureActionAccess();
+  if (countType !== "WEEKLY" && !isInventoryCountCaptureRole(user.role)) throw new Error("PERMISSION_DENIED");
   const allowedBranchIds = await getAccessibleBranchIds();
   if (!isBranchAllowed(allowedBranchIds, branchId)) throw new Error("PERMISSION_DENIED");
   return user;
@@ -48,7 +50,7 @@ export async function createInventoryCountAction(
     if (!isInventoryCountType(countTypeRaw)) {
       return { success: false, error: "Selecciona un tipo de conteo válido." };
     }
-    const currentUser = await authorizeCountBranch(branchId);
+    const currentUser = await authorizeCountBranch(branchId, countTypeRaw);
 
     if (!countDateRaw) {
       return { success: false, error: "La fecha del conteo es obligatoria." };
@@ -141,10 +143,10 @@ export async function addInventoryCountProductAction(
 
     const scope = await prisma.inventoryCount.findUnique({
       where: { id: countId },
-      select: { branchId: true },
+      select: { branchId: true, countType: true },
     });
     if (!scope) return { success: false, error: "Conteo no encontrado." };
-    await authorizeCountBranch(scope.branchId);
+    await authorizeCountBranch(scope.branchId, scope.countType);
 
     const result = await prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>`SELECT "id", "status"::text FROM "InventoryCount" WHERE "id"=${countId} FOR UPDATE`;
@@ -216,10 +218,10 @@ export async function updateCountItemQuantityAction(
   try {
     const scopedItem = await prisma.inventoryCountItem.findUnique({
       where: { id: input.itemId },
-      select: { countId: true, count: { select: { branchId: true } } },
+      select: { countId: true, count: { select: { branchId: true, countType: true } } },
     });
     if (!scopedItem || scopedItem.countId !== input.countId) throw new Error("PERMISSION_DENIED");
-    await authorizeCountBranch(scopedItem.count.branchId);
+    await authorizeCountBranch(scopedItem.count.branchId, scopedItem.count.countType);
 
     const result = await prisma.$transaction(async (tx) => {
       const lockedCount = await tx.$queryRaw<Array<{ id: string; status: string }>>`SELECT "id", "status"::text FROM "InventoryCount" WHERE "id"=${input.countId} FOR UPDATE`;
@@ -302,10 +304,10 @@ export async function updateCountItemNotesAction(
   try {
     const scopedItem = await prisma.inventoryCountItem.findUnique({
       where: { id: itemId },
-      select: { countId: true, count: { select: { branchId: true } } },
+      select: { countId: true, count: { select: { branchId: true, countType: true } } },
     });
     if (!scopedItem || scopedItem.countId !== countId) throw new Error("PERMISSION_DENIED");
-    await authorizeCountBranch(scopedItem.count.branchId);
+    await authorizeCountBranch(scopedItem.count.branchId, scopedItem.count.countType);
 
     await prisma.$transaction(async (tx) => {
       const lockedCount = await tx.$queryRaw<Array<{ id: string; status: string }>>`SELECT "id", "status"::text FROM "InventoryCount" WHERE "id"=${countId} FOR UPDATE`;
@@ -334,13 +336,12 @@ export async function closeInventoryCountAction(
   operationId: string,
 ): Promise<ActionResult> {
   try {
-    const actor = await requireInventoryCountCaptureActionAccess();
     const scopedCount = await prisma.inventoryCount.findUnique({
       where: { id: countId },
       select: { branchId: true, countType: true },
     });
     if (!scopedCount) return { success: false, error: "Conteo no encontrado." };
-    await authorizeCountBranch(scopedCount.branchId);
+    const actor = await authorizeCountBranch(scopedCount.branchId, scopedCount.countType);
     if (actor.role !== "ADMIN" && scopedCount.countType !== "WEEKLY") {
       throw new Error("PERMISSION_DENIED");
     }
