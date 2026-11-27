@@ -9,6 +9,7 @@ import { getAccessibleBranchIds, requireInventoryCountCaptureAccess } from "@/li
 import { canViewInventoryCountSystemData } from "@/lib/inventory/countVisibility";
 import { generateOperationId } from "@/lib/pos2/operationId";
 import { buildInventoryCountItemClientView } from "@/lib/inventory/countPresentation";
+import { calculateWeeklyCountFlow, type WeeklyCountFlow, type WeeklyFlowMovement } from "@/lib/inventory/weeklyCountFlow";
 import { formatBusinessDateTime } from "@/lib/dateTime";
 import { inventoryCountTypeLabel, isProductIncludedInInventoryCount } from "@/lib/inventory/countScope";
 import { resolveInventoryCountUnitCost } from "@/lib/accounting/inventoryCost";
@@ -35,7 +36,7 @@ export default async function CountDetailPage({
       branch: true,
       closedBy: { select: { name: true, username: true } },
       items: { include: { product: true }, orderBy: { product: { name: "asc" } } },
-      declarations: { select: { id: true } },
+      declarations: { select: { inventoryProductId: true, unit: true } },
     },
   });
 
@@ -88,10 +89,62 @@ export default async function CountDetailPage({
   const ordinarySurplus = differences.reduce((sum, diff) => sum + (diff.requiresReview ? 0 : diff.surplusCost), 0);
   const extraordinaryDifference = differences.reduce((sum, diff) => sum + (diff.requiresReview ? diff.missingCost + diff.surplusCost : 0), 0);
   const fmtCurrency = (amount: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount);
-  const hasUncomputedFlow = count.status === "CERRADO" &&
-    count.declarations.length > 0 &&
-    count.items.every((item) => Number(item.entriesQuantity ?? 0) === 0 &&
+  // Reconstruct historical flows on read; never rewrite the ledger or physical count.
+  const weeklyFlows = new Map<string, WeeklyCountFlow | null>();
+  const usesLedger = count.countType === "WEEKLY" && count.declarations.length > 0;
+  if (isAdmin && usesLedger && count.status === "CERRADO" && count.closedAt) {
+    const previous = await prisma.inventoryCount.findFirst({
+      where: {
+        branchId: count.branchId,
+        countType: "WEEKLY",
+        status: "CERRADO",
+        closedAt: { lt: count.closedAt },
+      },
+      orderBy: { closedAt: "desc" },
+      select: {
+        closedAt: true,
+        declarations: { select: { inventoryProductId: true, declaredQuantity: true, unit: true } },
+      },
+    });
+    const previousByProduct = new Map(previous?.declarations.map((row) => [row.inventoryProductId, row]) ?? []);
+    const declaredByProduct = new Map(count.declarations.map((row) => [row.inventoryProductId, row]));
+    const movements = await prisma.inventoryMovement.findMany({
+      where: {
+        branchId: count.branchId,
+        inventoryProductId: { in: [...declaredByProduct.keys()] },
+        createdAt: { ...(previous?.closedAt ? { gt: previous.closedAt } : {}), lte: count.closedAt },
+      },
+      select: {
+        inventoryProductId: true, unit: true, movementType: true, quantityDelta: true,
+        balanceBefore: true, createdAt: true, sourceType: true, sourceId: true,
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    const movementsByProduct = new Map<string, WeeklyFlowMovement[]>();
+    for (const row of movements) {
+      const rows = movementsByProduct.get(row.inventoryProductId) ?? [];
+      rows.push({ ...row, quantityDelta: Number(row.quantityDelta), balanceBefore: Number(row.balanceBefore) });
+      movementsByProduct.set(row.inventoryProductId, rows);
+    }
+    for (const item of count.items) {
+      const declared = declaredByProduct.get(item.productId);
+      const prior = previousByProduct.get(item.productId);
+      weeklyFlows.set(item.id, declared && declared.unit === item.product.inventoryBaseUnit &&
+        item.previousQuantity !== null && (!prior || prior.unit === declared.unit)
+        ? calculateWeeklyCountFlow({
+            productId: item.productId, unit: declared.unit, countId: count.id,
+            initialQuantity: prior ? Number(prior.declaredQuantity) : null,
+            start: previous?.closedAt ?? null, end: count.closedAt,
+            expectedQuantity: Number(item.previousQuantity),
+            movements: movementsByProduct.get(item.productId) ?? [],
+          })
+        : null);
+    }
+  }
+  const hasUncomputedFlow = count.status === "CERRADO" && count.declarations.length > 0 &&
+    !usesLedger && count.items.every((item) => Number(item.entriesQuantity ?? 0) === 0 &&
       Number(item.quantityConsumed ?? 0) === 0 && Number(item.costTotal ?? 0) === 0);
+
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-on-surface">
@@ -143,7 +196,7 @@ export default async function CountDetailPage({
             )}
             <p className="mt-2 text-xs text-on-surface-variant">
               Comparación del saldo teórico al cierre contra el conteo físico, valorizada por unidad base.
-              {hasUncomputedFlow ? " Las entradas y el consumo por venta no se calculan en este corte; se consultan en Movimientos." : ""}
+              {usesLedger ? " Entradas = recepciones y traspasos recibidos; consumo POS neto de reversiones. Se calculan desde el conteo anterior (o saldo de apertura registrado) hasta el cierre. Otros movimientos se muestran por separado." : hasUncomputedFlow ? " Las entradas y el consumo por venta no se calculan en este corte; se consultan en Movimientos." : ""}
             </p>
           </div>
         )}
@@ -169,13 +222,26 @@ export default async function CountDetailPage({
         )}
 
         <CountItemsList
-          items={count.items.map((item) =>
-            buildInventoryCountItemClientView(item, {
+          items={count.items.map((item) => {
+            const view = buildInventoryCountItemClientView(item, {
               status: count.status,
               canViewHistory: isAdmin,
               hideUncomputedFlow: hasUncomputedFlow,
-            }),
-          )}
+            });
+            if (!isAdmin || !usesLedger || count.status !== "CERRADO") return view;
+            const flow = weeklyFlows.get(item.id);
+            return {
+              ...view,
+              initialQuantity: flow?.initialQuantity ?? null,
+              entriesQuantity: flow?.entriesQuantity ?? null,
+              quantityConsumed: flow?.quantityConsumed ?? null,
+              otherQuantity: flow?.otherQuantity ?? null,
+              flowReconciles: flow?.reconciles ?? null,
+              costTotal: flow && item.unitCostAtTime !== null
+                ? countAmountInPesos(Math.max(0, flow.quantityConsumed), resolveInventoryCountUnitCost(item.product, item.unitCostAtTime).unitCost)
+                : null,
+            };
+          })}
           countId={count.id}
           editable={editable}
           isAdmin={isAdmin}
