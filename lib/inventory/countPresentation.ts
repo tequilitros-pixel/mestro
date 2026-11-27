@@ -41,6 +41,9 @@ export type InventoryCountItemClientView = {
   quantityCounted: number;
   isCaptured: boolean;
   previousQuantity?: number;
+  initialQuantity?: number | null;
+  otherQuantity?: number | null;
+  flowReconciles?: boolean | null;
   entriesQuantity?: number | null;
   quantityConsumed?: number | null;
   costTotal?: number | null;

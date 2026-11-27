@@ -454,6 +454,14 @@ export default function CountItemRow({
             <div>
               {historyVisible && (
                 <>
+                  {item.initialQuantity !== undefined && (
+                    <>
+                      <span className="block text-xs text-on-surface-variant">Inicial</span>
+                      <p className="mb-2 text-sm text-on-surface-variant">
+                        {item.initialQuantity === null ? "Sin base histórica" : formatCountQuantity(item.initialQuantity, item)}
+                      </p>
+                    </>
+                  )}
                   <span className="block text-xs text-on-surface-variant">Teórico</span>
                   <p className="text-sm text-on-surface-variant">
                     {formatCountQuantity(theoretical, item)}
@@ -488,9 +496,18 @@ export default function CountItemRow({
                 <span className="block text-xs text-on-surface-variant">Entradas</span>
                 <p className="text-sm text-on-surface-variant">
                   {item.entriesQuantity !== undefined && item.entriesQuantity !== null
-                    ? item.entriesQuantity
+                    ? formatCountQuantity(item.entriesQuantity, item)
                     : "No calculado"}
                 </p>
+                {item.otherQuantity !== undefined && item.otherQuantity !== null && item.otherQuantity !== 0 && (
+                  <>
+                    <span className="mt-2 block text-xs text-on-surface-variant">Otros movimientos (neto)</span>
+                    <p className="text-sm text-on-surface-variant">{formatCountQuantity(item.otherQuantity, item)}</p>
+                  </>
+                )}
+                {item.flowReconciles === false && (
+                  <p className="mt-1 text-xs text-amber-400">Los movimientos no concilian con el saldo teórico; revisar historial.</p>
+                )}
               </div>
             )}
 
@@ -499,7 +516,7 @@ export default function CountItemRow({
                 <span className="block text-xs text-on-surface-variant">Consumido</span>
                 <p className="text-sm font-semibold text-on-surface">
                   {item.quantityConsumed !== undefined && item.quantityConsumed !== null
-                    ? item.quantityConsumed
+                    ? formatCountQuantity(item.quantityConsumed, item)
                     : "No calculado"}
                 </p>
                 {item.costTotal !== undefined && item.costTotal !== null && item.costTotal > 0 && (
