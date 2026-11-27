@@ -49,7 +49,9 @@ export async function createPaymentAction(data: FormData): Promise<PaymentAction
   const [branch, category] = await Promise.all([
     prisma.branch.findFirst({ where: { id: branchId, active: true }, select: { id: true, name: true } }),
     prisma.financialMovementCategory.findFirst({
-      where: { id: categoryId, isActive: true, direction: "EXPENSE", scope: "ACCOUNTING" },
+      // Keep this in sync with the categories offered by the accounting form:
+      // shared categories can be used both from cash operations and here.
+      where: { id: categoryId, isActive: true, direction: "EXPENSE", scope: { in: ["ACCOUNTING", "BOTH"] } },
       select: { id: true, name: true, requiresReason: true, requiresReceipt: true },
     }),
   ]);
