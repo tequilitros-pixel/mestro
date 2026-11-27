@@ -1,5 +1,6 @@
 "use server";
 
+import { parseReturnQuantity } from "@/lib/inventory/returnQuantity";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { requireModuleActionAccess } from "@/lib/auth";
@@ -139,7 +140,9 @@ export async function captureEventSupplyReturnAction(input: {
 }): Promise<AdditionalActionResult> {
   try {
     const user = await requireModuleActionAccess("/administration/inventory/events");
-    const returned = readQuantity(input.returnedQuantity, true);
+    const parsed = parseReturnQuantity(input.returnedQuantity);
+    if (parsed === null) throw new EventInputError("Captura el regreso con hasta tres decimales.");
+    const returned = readQuantity(String(parsed), true);
     const open = readQuantity(input.returnedOpenQuantity || "0", true);
     const { result } = await executeIdempotent({
       operationId: input.operationId,

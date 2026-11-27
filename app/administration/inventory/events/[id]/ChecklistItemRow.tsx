@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { parseReturnQuantity } from "@/lib/inventory/returnQuantity";
 import { useRouter } from "next/navigation";
 import { updatePlannedQuantityAction, updateReturnedQuantityAction, updateSentQuantityAction } from "../actions";
 import { CheckIcon } from "@/components/ui/icons";
@@ -29,7 +30,7 @@ const CONTENT_LABEL: Record<string, string> = {
   L: "L",
   G: "g",
   KG: "kg",
-  PIECES: "piezas",
+  PIEZAS: "piezas",
 };
 
 const HANDLING_LABEL: Record<string, string> = {
@@ -81,7 +82,10 @@ export default function ChecklistItemRow({
   const [saving, setSaving] = useState(false);
   const [plannedValue, setPlannedValue] = useState(item.plannedQuantity);
   const [sentValue, setSentValue] = useState(item.sentQuantity ?? item.plannedQuantity);
-  const [returnedValue, setReturnedValue] = useState(item.returnedQuantity ?? 0);
+  const [returnDraft, setReturnDraft] = useState(String(item.returnedQuantity ?? 0));
+  const [returnDirty, setReturnDirty] = useState(false);
+  const parsedReturn = parseReturnQuantity(returnDraft);
+  const returnedValue = parsedReturn ?? item.returnedQuantity ?? 0;
   const [openValue, setOpenValue] = useState(item.returnedOpenQuantity ?? 0);
   const [damagedValue, setDamagedValue] = useState(item.damagedQuantity ?? 0);
 
@@ -95,12 +99,13 @@ export default function ChecklistItemRow({
       ? `${handlingUnit[0].toLocaleUpperCase("es-MX")}${handlingUnit.slice(1)} de ${item.contentPerUnit} ${CONTENT_LABEL[item.contentUnit ?? ""] ?? ""}`
       : "Presentación sin configurar";
   const sent = item.sentQuantity ?? item.plannedQuantity;
-  const difference = isReturn ? sent - returnedValue - damagedValue : sentValue - plannedValue;
+  const openFactor = baseContent(item.contentPerUnit ?? 0, item.contentUnit);
+  const difference = isReturn ? sent - returnedValue - damagedValue - (openFactor > 0 ? openValue / openFactor : 0) : sentValue - plannedValue;
   const canEditPlanned = !isReturn && isAdmin && !locked;
   const hasOpenRemainder = item.contentPerUnit !== null && item.itemType !== "EQUIPMENT";
   const consumedBase = hasOpenRemainder
     ? Math.max(
-        (sent - returnedValue) * baseContent(item.contentPerUnit ?? 0, item.contentUnit) - openValue,
+        (sent - returnedValue - damagedValue) * baseContent(item.contentPerUnit ?? 0, item.contentUnit) - openValue,
         0,
       )
     : Math.max(sent - returnedValue - damagedValue, 0);
@@ -116,6 +121,10 @@ export default function ChecklistItemRow({
     : null;
 
   async function save(next?: { planned?: number; sent?: number; returned?: number; open?: number; damaged?: number }) {
+    if (isReturn && next?.returned === undefined && parsedReturn === null) {
+      showToast("Escribe la cantidad que regresó, por ejemplo 0.3. Usa 0 si no regresó nada.");
+      return;
+    }
     const nextPlanned = next?.planned ?? plannedValue;
     const nextSent = next?.sent ?? sentValue;
     const nextReturned = next?.returned ?? returnedValue;
@@ -132,6 +141,7 @@ export default function ChecklistItemRow({
       showToast(result.error);
       return;
     }
+    if (isReturn) setReturnDirty(false);
     if (!isReturn && next?.planned !== undefined && item.sentQuantity === null) {
       setSentValue(nextPlanned);
     }
@@ -141,7 +151,8 @@ export default function ChecklistItemRow({
   function changeQuantity(delta: number) {
     const next = Math.max(0, quantity + delta);
     if (isReturn) {
-      setReturnedValue(next);
+      setReturnDraft(String(next));
+      setReturnDirty(true);
       void save({ returned: next });
     } else {
       setSentValue(next);
@@ -164,7 +175,7 @@ export default function ChecklistItemRow({
         : "bg-surface-container-high text-on-surface-variant";
 
   return (
-    <article className="grid min-h-14 gap-3 border-b border-outline-variant px-3 py-3 last:border-b-0 transition-colors hover:bg-on-surface/[0.035] md:grid-cols-[2.5rem_minmax(13rem,1.8fr)_minmax(9rem,1fr)_8.5rem_12rem_8rem_7rem_6.5rem_2rem] md:items-center md:gap-2 md:py-2">
+    <article data-event-return-dirty={isReturn && (returnDirty || saving) ? "true" : undefined} className="grid min-h-14 gap-3 border-b border-outline-variant px-3 py-3 last:border-b-0 transition-colors hover:bg-on-surface/[0.035] md:grid-cols-[2.5rem_minmax(13rem,1.8fr)_minmax(9rem,1fr)_8.5rem_12rem_8rem_7rem_6.5rem_2rem] md:items-center md:gap-2 md:py-2">
       <div className="order-1 flex items-center md:order-none">
         <button
           type="button"
@@ -213,13 +224,19 @@ export default function ChecklistItemRow({
       <div className="order-5 flex items-center gap-1.5 md:order-none">
         <button type="button" onClick={() => changeQuantity(-1)} disabled={saving || locked || !canReview} className="h-8 w-8 rounded-md border border-outline-variant text-lg leading-none hover:bg-surface-container-high disabled:opacity-40">−</button>
         <input
-          aria-label={isReturn ? "Unidades cerradas que regresan" : "Cantidad realmente cargada"}
-          type="number"
+          aria-label={isReturn ? "Cantidad que regresa, admite fracciones" : "Cantidad realmente cargada"}
+          type={isReturn ? "text" : "number"}
+          inputMode="decimal"
           min="0"
           step="0.001"
-          value={quantity}
+          value={isReturn ? returnDraft : quantity}
           disabled={saving || locked || !canReview}
-          onChange={(event) => isReturn ? setReturnedValue(Number(event.target.value)) : setSentValue(Number(event.target.value))}
+          onChange={(event) => {
+            if (isReturn) {
+              setReturnDraft(event.target.value);
+              setReturnDirty(true);
+            } else setSentValue(Number(event.target.value));
+          }}
           onBlur={() => void save()}
           className="h-8 w-16 rounded-md border border-outline-variant bg-background px-1 text-center text-sm font-semibold text-on-surface outline-none focus:border-on-surface"
         />
@@ -243,7 +260,7 @@ export default function ChecklistItemRow({
 
       <div className="order-7 text-xs text-on-surface-variant md:order-none">
         {isReturn ? (
-          <span title={hasOpenRemainder ? `${consumedBase.toLocaleString("es-MX")} ${baseUnit(item.contentUnit)}` : undefined}>{friendlyConsumption ?? quantityLabel(consumedBase, handlingUnit)}</span>
+          <span title={hasOpenRemainder ? `${consumedBase.toLocaleString("es-MX")} ${baseUnit(item.contentUnit)}` : undefined}>{parsedReturn === null ? "—" : presentationBase === 1 ? quantityLabel(Number(consumedBase.toFixed(3)), handlingUnit) : friendlyConsumption ?? quantityLabel(consumedBase, handlingUnit)}</span>
         ) : (
           <span>—</span>
         )}

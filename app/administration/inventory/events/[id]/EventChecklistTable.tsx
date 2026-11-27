@@ -96,6 +96,7 @@ export default function EventChecklistTable({
           <h2 className="text-xl font-bold text-on-surface">{heading}</h2>
           <p className="mt-1 text-sm text-on-surface-variant">
             {reviewedCount} de {items.length} renglones revisados
+            {isReturn && <span className="block">Puedes escribir 0.3 de un bote u 11.5 botellas. Si ya incluiste la fracción, deja en cero el remanente.</span>}
           </p>
         </div>
         <button
@@ -209,7 +210,7 @@ export default function EventChecklistTable({
            */}
           <div className={`overflow-hidden rounded-xl border border-outline-variant bg-surface-container ${visibles === 0 ? "hidden" : ""}`}>
             <div className="hidden grid-cols-[2.5rem_minmax(13rem,1.8fr)_minmax(9rem,1fr)_8.5rem_12rem_8rem_7rem_6.5rem_2rem] gap-2 border-b border-outline-variant px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant md:grid">
-              <span>Verif.</span><span>Producto</span><span>Presentación</span><span>{isReturn ? "Salió" : "Necesario"}</span><span>{isReturn ? "Regresan cerradas" : "Cargado al remolque"}</span><span>{isReturn ? "Remanente" : "Diferencia"}</span><span>{isReturn ? "Consumo" : "Estado"}</span><span>{isReturn ? "Estado" : ""}</span><span>Acc.</span>
+              <span>Verif.</span><span>Producto</span><span>Presentación</span><span>{isReturn ? "Salió" : "Necesario"}</span><span>{isReturn ? "Cantidad que regresa" : "Cargado al remolque"}</span><span>{isReturn ? "Remanente" : "Diferencia"}</span><span>{isReturn ? "Consumo" : "Estado"}</span><span>{isReturn ? "Estado" : ""}</span><span>Acc.</span>
             </div>
             {items.map((item) => (
               <div key={item.id} hidden={!esVisible(item)}>
